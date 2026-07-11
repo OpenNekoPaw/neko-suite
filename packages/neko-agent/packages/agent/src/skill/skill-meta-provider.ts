@@ -1,5 +1,7 @@
 import type {
   ActiveSkillLifecycleProjection,
+  CreateSkillInput,
+  CreateSkillResult,
   Skill,
   SkillInjection,
   SkillLifecycleDeactivationRequest,
@@ -33,6 +35,7 @@ export interface ConversationSkillProviderEffects {
   }>;
   applySkillInjection(injection: SkillInjection, skill: Skill): void | Promise<void>;
   clearActiveSkill(): void | Promise<void>;
+  createSkill?(input: CreateSkillInput): Promise<CreateSkillResult>;
 }
 
 export interface ConversationSkillProviderOptions {
@@ -48,6 +51,7 @@ export function createConversationSkillProvider(
   options: ConversationSkillProviderOptions,
 ): ISkillProvider {
   const { skillService, effects, logger } = options;
+  const createSkill = effects.createSkill;
 
   return {
     listSkills: () =>
@@ -99,6 +103,12 @@ export function createConversationSkillProvider(
       }
     },
 
+    ...(createSkill
+      ? {
+          createSkill: (input: CreateSkillInput) => createSkill(input),
+        }
+      : {}),
+
     deactivateSkill: async (input) => {
       if (effects.deactivateLifecycleSkill) {
         const requestedSlot = input?.slot;
@@ -126,13 +136,19 @@ function isSkillLifecycleSlot(value: unknown): value is SkillLifecycleDeactivati
 }
 
 function projectSkillContextSummary(skill: Skill): SkillContextSummary {
+  const portable = skill.portableDefinition;
+  const interfaceMetadata = skill.nekoOverlay?.interface;
+  const relationships = skill.nekoOverlay?.relationships;
   return {
-    name: skill.name,
-    description: skill.description || '',
+    name: portable?.name ?? skill.name,
+    description: interfaceMetadata?.shortDescription ?? portable?.description ?? skill.description,
     ...(skill.domain ? { domain: skill.domain } : {}),
     ...(skill.referencedSkills && skill.referencedSkills.length > 0
       ? { relatedSkills: skill.referencedSkills }
       : {}),
     ...(skill.mediaWorkflow ? { mediaWorkflow: skill.mediaWorkflow } : {}),
+    ...(interfaceMetadata ? { interface: interfaceMetadata } : {}),
+    ...(relationships ? { relationships } : {}),
+    ...(skill.hostProjection ? { host: skill.hostProjection } : {}),
   };
 }

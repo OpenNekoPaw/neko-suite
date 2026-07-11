@@ -1,10 +1,16 @@
 import type {
   ConfiguredSkill,
   ConfiguredSlashCommand,
+  CreateSkillFailureCode,
+  CreateSkillInput,
+  CreateSkillResult,
   Skill,
+  SkillDiagnostic,
   SkillSource,
   SlashCommand,
 } from '@neko/shared';
+import { Buffer } from 'node:buffer';
+import { createHash, randomUUID } from 'node:crypto';
 import {
   appendSkillFileScanLoadResult,
   buildCommandFileCreationPlan,
@@ -29,7 +35,15 @@ import {
   type SkillPathTriggerMatch,
 } from './skill-file-projector';
 import type { LazyCommand, LazySkill } from './lazy-loader';
-import { resolvePersonalNekoContentDir, resolveProjectNekoContentDir } from '../workspace';
+import {
+  resolvePersonalAgentSkillsDir,
+  resolvePersonalNekoContentDir,
+  resolveProjectAgentSkillsDir,
+  resolveProjectNekoContentDir,
+} from '../workspace';
+import { serializeNekoSkillOverlay, validateNekoSkillOverlay } from './neko-skill-overlay';
+import { serializePortableSkillMarkdown, validatePortableSkillDefinition } from './portable-skill';
+import { validateSkillPackagePath, validateSkillResources } from './skill-package-path';
 
 export const SKILL_FILE_WATCH_DEBOUNCE_MS = 300;
 export const SKILL_PATH_TRIGGER_DEBOUNCE_MS = 300;
@@ -42,9 +56,10 @@ export interface SkillFileRuntimeDirentLike {
 export interface SkillFileRuntimeFs {
   mkdir(path: string, options: { recursive: true }): Promise<unknown>;
   access(path: string): Promise<unknown>;
-  writeFile(path: string, content: string, encoding: 'utf-8'): Promise<unknown>;
+  writeFile(path: string, content: string | Uint8Array, encoding?: 'utf-8'): Promise<unknown>;
   readFile(path: string, encoding: 'utf-8'): Promise<string>;
   rm(path: string, options: { recursive: true; force: true }): Promise<unknown>;
+  rename(oldPath: string, newPath: string): Promise<unknown>;
   unlink(path: string): Promise<unknown>;
   readdir(path: string, options: { withFileTypes: true }): Promise<SkillFileRuntimeDirentLike[]>;
   copyFile(src: string, dest: string): Promise<unknown>;
@@ -52,6 +67,7 @@ export interface SkillFileRuntimeFs {
 
 export interface SkillFileRuntimePath {
   join(...parts: string[]): string;
+  dirname(path: string): string;
 }
 
 export interface SkillFileRuntimeLoader {
@@ -78,13 +94,6 @@ export interface SkillFileRuntimeOptions {
   readonly homeDir: string;
   readonly getWorkspaceRoot?: () => string | null | undefined;
   readonly logger?: Partial<SkillFileRuntimeLogger>;
-}
-
-export interface CreateSkillFileInput {
-  skillName: string;
-  source: SkillFileSource;
-  content?: string;
-  description?: string;
 }
 
 export interface DuplicateSkillDirectoryInput {
@@ -120,7 +129,7 @@ export interface SkillFileRuntime {
   scanSkills(): Promise<SkillFileScanResult>;
   scanSkillsLazy(): Promise<LazySkillFileScanResult>;
   getSkills(): Promise<SkillFileScanResult>;
-  createSkillFile(input: CreateSkillFileInput): Promise<string>;
+  createSkill(input: CreateSkillInput): Promise<CreateSkillResult>;
   duplicateSkillDirectory(input: DuplicateSkillDirectoryInput): Promise<string>;
   deleteSkillDirectory(input: DeleteSkillDirectoryInput): Promise<boolean>;
   createCommandFile(input: CreateCommandFileInput): Promise<string>;
@@ -133,13 +142,25 @@ export function createSkillFileRuntime(options: SkillFileRuntimeOptions): SkillF
   return new DefaultSkillFileRuntime(options);
 }
 
+export class CreateSkillError extends Error {
+  readonly code: CreateSkillFailureCode;
+  readonly diagnostics: readonly SkillDiagnostic[];
+
+  constructor(code: CreateSkillFailureCode, diagnostics: readonly SkillDiagnostic[]) {
+    super(diagnostics.map((diagnostic) => diagnostic.message).join('\n'));
+    this.name = 'CreateSkillError';
+    this.code = code;
+    this.diagnostics = diagnostics;
+  }
+}
+
 class DefaultSkillFileRuntime implements SkillFileRuntime {
   private cachedResult: SkillFileScanResult | null = null;
 
   constructor(private readonly options: SkillFileRuntimeOptions) {}
 
   getUserSkillsDir(): string {
-    return resolvePersonalNekoContentDir(this.options.homeDir, 'skills');
+    return resolvePersonalAgentSkillsDir(this.options.homeDir);
   }
 
   getUserCommandsDir(): string {
@@ -147,7 +168,7 @@ class DefaultSkillFileRuntime implements SkillFileRuntime {
   }
 
   getWorkspaceSkillsDir(): string | null {
-    return resolveProjectNekoContentDir(this.getWorkspaceRoot(), 'skills');
+    return resolveProjectAgentSkillsDir(this.getWorkspaceRoot());
   }
 
   getWorkspaceCommandsDir(): string | null {
@@ -208,33 +229,143 @@ class DefaultSkillFileRuntime implements SkillFileRuntime {
     return this.cachedResult ?? this.scanSkills();
   }
 
-  async createSkillFile({
-    skillName,
-    source,
-    content,
-    description,
-  }: CreateSkillFileInput): Promise<string> {
+  async createSkill(input: CreateSkillInput): Promise<CreateSkillResult> {
+    const portableValidation = validatePortableSkillDefinition(input.skill);
+    if (!portableValidation.valid) {
+      throw new CreateSkillError('invalid-skill', portableValidation.diagnostics);
+    }
+    if (input.neko !== undefined) {
+      const overlayValidation = validateNekoSkillOverlay(input.neko);
+      if (!overlayValidation.valid) {
+        throw new CreateSkillError('invalid-overlay', overlayValidation.diagnostics);
+      }
+    }
+    const resourceDiagnostics = validateSkillResources(input.resources);
+    if (resourceDiagnostics.length > 0) {
+      const reserved = resourceDiagnostics.some(
+        (diagnostic) => diagnostic.code === 'skill-resource-path-reserved',
+      );
+      throw new CreateSkillError(
+        reserved ? 'reserved-resource-path' : 'invalid-resource-path',
+        resourceDiagnostics,
+      );
+    }
+
+    const basePath = this.getSkillsBasePath(input.target);
+    if (!basePath) {
+      throw new CreateSkillError('filesystem-error', [
+        creationDiagnostic('skill-root-unavailable', 'No workspace folder open for project skills'),
+      ]);
+    }
     const plan = buildSkillFileCreationPlan({
-      basePath: this.getSkillsBasePath(source),
-      skillName,
-      content,
-      description,
+      basePath,
+      skillName: input.skill.name,
       unavailableError: 'No workspace folder open for project skills',
     });
     if (plan.ok === false) {
-      throw new Error(plan.error);
+      throw new CreateSkillError('filesystem-error', [
+        creationDiagnostic('skill-root-unavailable', plan.error),
+      ]);
     }
 
-    await this.ensureDir(plan.skillDir);
-
-    if (await this.pathExists(plan.filePath)) {
-      this.options.logger?.info?.('Skill file already exists:', plan.filePath);
-      return plan.filePath;
+    if (await this.pathExists(plan.skillDir)) {
+      throw new CreateSkillError('skill-already-exists', [
+        creationDiagnostic(
+          'skill-already-exists',
+          `Skill directory already exists: ${plan.skillDir}`,
+          input.skill.name,
+        ),
+      ]);
     }
 
-    await this.options.fs.writeFile(plan.filePath, plan.fileContent, 'utf-8');
-    this.options.logger?.info?.('Created skill file:', plan.filePath);
-    return plan.filePath;
+    const skillMarkdown = serializePortableSkillMarkdown(input.skill);
+    const overlayYaml = input.neko === undefined ? null : serializeNekoSkillOverlay(input.neko);
+    const resources = prepareSkillResources(input.resources);
+    const tempDir = this.options.path.join(basePath, `.${input.skill.name}.tmp-${randomUUID()}`);
+
+    try {
+      await this.options.fs.mkdir(basePath, { recursive: true });
+      await this.options.fs.mkdir(tempDir, { recursive: true });
+      await this.options.fs.writeFile(
+        this.options.path.join(tempDir, 'SKILL.md'),
+        skillMarkdown,
+        'utf-8',
+      );
+      for (const resource of resources) {
+        const resourcePath = this.options.path.join(tempDir, ...resource.normalizedPath.split('/'));
+        await this.ensureParentDirectory(resourcePath);
+        await this.options.fs.writeFile(
+          resourcePath,
+          resource.content,
+          resource.encoding === 'utf8' ? 'utf-8' : undefined,
+        );
+      }
+      if (overlayYaml !== null) {
+        const overlayPath = this.options.path.join(tempDir, 'agents', 'neko.yaml');
+        await this.ensureParentDirectory(overlayPath);
+        await this.options.fs.writeFile(overlayPath, overlayYaml, 'utf-8');
+      }
+
+      try {
+        await this.options.fs.rename(tempDir, plan.skillDir);
+      } catch (error) {
+        if (await this.pathExists(plan.skillDir)) {
+          throw new CreateSkillError('atomic-commit-conflict', [
+            creationDiagnostic(
+              'skill-atomic-commit-conflict',
+              `Another creator committed Skill "${input.skill.name}" first.`,
+              input.skill.name,
+            ),
+          ]);
+        }
+        throw error;
+      }
+    } catch (error) {
+      let cleanupError: unknown;
+      try {
+        await this.options.fs.rm(tempDir, { recursive: true, force: true });
+      } catch (cleanupFailure) {
+        cleanupError = cleanupFailure;
+      }
+      if (error instanceof CreateSkillError && cleanupError === undefined) {
+        throw error;
+      }
+      const diagnostics = [
+        creationDiagnostic(
+          'skill-create-filesystem-error',
+          `Failed to create Skill "${input.skill.name}": ${formatError(error)}`,
+          input.skill.name,
+        ),
+      ];
+      if (cleanupError !== undefined) {
+        diagnostics.push(
+          creationDiagnostic(
+            'skill-create-cleanup-error',
+            `Failed to clean temporary Skill state: ${formatError(cleanupError)}`,
+            input.skill.name,
+          ),
+        );
+      }
+      throw new CreateSkillError(
+        error instanceof CreateSkillError ? error.code : 'filesystem-error',
+        error instanceof CreateSkillError
+          ? [...error.diagnostics, ...diagnostics.slice(1)]
+          : diagnostics,
+      );
+    }
+
+    const result: CreateSkillResult = {
+      source: input.target,
+      rootId: `${input.target}-agent-skills`,
+      relativePath: input.skill.name,
+      absolutePath: plan.skillDir,
+      fingerprint: fingerprintSkillPackage(skillMarkdown, overlayYaml, resources),
+      diagnostics: [],
+    };
+    this.cachedResult = null;
+    await this.scanSkills();
+    this.options.logger?.info?.('Created Skill package:', plan.skillDir);
+    return result;
   }
 
   async duplicateSkillDirectory({
@@ -255,9 +386,23 @@ class DefaultSkillFileRuntime implements SkillFileRuntime {
       throw new Error(`Skill directory already exists: ${plan.newSkillDir}`);
     }
 
-    await this.copyDirectory(sourceDir, plan.newSkillDir);
-    await this.normalizeDuplicatedSkillFile(plan.skillFilePath, newSkillName);
+    const targetRoot = this.options.path.dirname(plan.newSkillDir);
+    const tempDir = this.options.path.join(targetRoot, `.${newSkillName}.tmp-${randomUUID()}`);
+    try {
+      await this.ensureDir(targetRoot);
+      await this.copyDirectory(sourceDir, tempDir, true);
+      await this.normalizeDuplicatedSkillFile(
+        this.options.path.join(tempDir, 'SKILL.md'),
+        newSkillName,
+      );
+      await this.options.fs.rename(tempDir, plan.newSkillDir);
+    } catch (error) {
+      await this.options.fs.rm(tempDir, { recursive: true, force: true });
+      throw error;
+    }
 
+    this.cachedResult = null;
+    await this.scanSkills();
     this.options.logger?.info?.(`Duplicated skill directory: ${sourceDir} -> ${plan.newSkillDir}`);
     return plan.newSkillDir;
   }
@@ -280,6 +425,8 @@ class DefaultSkillFileRuntime implements SkillFileRuntime {
 
     try {
       await this.options.fs.rm(plan.skillDir, { recursive: true, force: true });
+      this.cachedResult = null;
+      await this.scanSkills();
       this.options.logger?.info?.('Deleted skill directory:', plan.skillDir);
       return true;
     } catch (error) {
@@ -379,8 +526,13 @@ class DefaultSkillFileRuntime implements SkillFileRuntime {
     } catch (error) {
       if (getErrorCode(error) !== 'EEXIST') {
         this.options.logger?.warn?.(`Failed to create directory: ${dirPath}`, error);
+        throw error;
       }
     }
+  }
+
+  private async ensureParentDirectory(filePath: string): Promise<void> {
+    await this.options.fs.mkdir(this.options.path.dirname(filePath), { recursive: true });
   }
 
   private async loadFromDirectory(
@@ -419,12 +571,15 @@ class DefaultSkillFileRuntime implements SkillFileRuntime {
     try {
       await this.options.fs.access(filePath);
       return true;
-    } catch {
-      return false;
+    } catch (error) {
+      if (getErrorCode(error) === 'ENOENT') {
+        return false;
+      }
+      throw error;
     }
   }
 
-  private async copyDirectory(src: string, dest: string): Promise<void> {
+  private async copyDirectory(src: string, dest: string, isRoot = false): Promise<void> {
     await this.ensureDir(dest);
 
     const entries = await this.options.fs.readdir(src, { withFileTypes: true });
@@ -439,6 +594,9 @@ class DefaultSkillFileRuntime implements SkillFileRuntime {
         }
         await this.copyDirectory(srcPath, destPath);
       } else {
+        if (isRoot && entry.name.toLowerCase() === 'manifest.json') {
+          continue;
+        }
         await this.options.fs.copyFile(srcPath, destPath);
       }
     }
@@ -448,16 +606,12 @@ class DefaultSkillFileRuntime implements SkillFileRuntime {
     skillFilePath: string,
     newSkillName: string,
   ): Promise<void> {
-    try {
-      const content = await this.options.fs.readFile(skillFilePath, 'utf-8');
-      await this.options.fs.writeFile(
-        skillFilePath,
-        normalizeDuplicatedSkillContent(content, newSkillName),
-        'utf-8',
-      );
-    } catch {
-      // Duplicated support folders may not contain a canonical SKILL.md.
-    }
+    const content = await this.options.fs.readFile(skillFilePath, 'utf-8');
+    await this.options.fs.writeFile(
+      skillFilePath,
+      normalizeDuplicatedSkillContent(content, newSkillName),
+      'utf-8',
+    );
   }
 }
 
@@ -468,4 +622,63 @@ function getErrorCode(error: unknown): string | undefined {
     typeof error.code === 'string'
     ? error.code
     : undefined;
+}
+
+function creationDiagnostic(code: string, message: string, path?: string): SkillDiagnostic {
+  return {
+    area: 'creation',
+    code,
+    severity: 'error',
+    message,
+    ...(path === undefined ? {} : { path }),
+  };
+}
+
+interface PreparedSkillResource {
+  readonly normalizedPath: string;
+  readonly encoding: 'utf8' | 'base64';
+  readonly content: string | Uint8Array;
+}
+
+function prepareSkillResources(
+  resources: CreateSkillInput['resources'],
+): readonly PreparedSkillResource[] {
+  return (resources ?? []).map((resource) => {
+    const validation = validateSkillPackagePath(resource.path, { rejectReserved: true });
+    if (!validation.valid || validation.normalizedPath === undefined) {
+      throw new Error(`Preflight accepted an invalid resource path: ${resource.path}`);
+    }
+    return {
+      normalizedPath: validation.normalizedPath,
+      encoding: resource.encoding,
+      content:
+        resource.encoding === 'utf8' ? resource.content : Buffer.from(resource.content, 'base64'),
+    };
+  });
+}
+
+function fingerprintSkillPackage(
+  skillMarkdown: string,
+  overlayYaml: string | null,
+  resources: readonly PreparedSkillResource[],
+): string {
+  const hash = createHash('sha256');
+  hash.update('SKILL.md\0');
+  hash.update(skillMarkdown);
+  if (overlayYaml !== null) {
+    hash.update('agents/neko.yaml\0');
+    hash.update(overlayYaml);
+  }
+  const sortedResources = [...resources].sort((left, right) =>
+    left.normalizedPath.localeCompare(right.normalizedPath),
+  );
+  for (const resource of sortedResources) {
+    hash.update(`${resource.normalizedPath}\0`);
+    hash.update(resource.content);
+  }
+  return `sha256:${hash.digest('hex')}`;
+}
+
+function formatError(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }

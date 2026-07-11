@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { ISkillRegistry, Skill } from '@neko/shared';
+import type { CreateSkillInput, CreateSkillResult, ISkillRegistry, Skill } from '@neko/shared';
 import type { LazySkill } from '../lazy-loader';
 import { SkillRegistry } from '../skill-registry';
 import { SkillRegistryPopulator } from '../skill-registry-populator';
@@ -27,6 +27,11 @@ function makeLazySkill(name: string): LazySkill {
     description: `${name} lazy description`,
     source: 'project',
     directoryPath: `/tmp/${name}`,
+    portableDefinition: {
+      name,
+      description: `${name} lazy description`,
+      body: `${name} content`,
+    },
     isLoaded: false,
     loadContent: async () => makeSkill(name),
   };
@@ -184,6 +189,51 @@ describe('skill runtime bootstrap', () => {
     expect(applied).toEqual(['conversation-1:storyboard']);
     expect(deactivation.success).toBe(true);
     expect(cleared).toEqual(['conversation-1']);
+  });
+
+  it('binds native creation to the current conversation without activating the created skill', async () => {
+    const registry = new SkillRegistry();
+    const bootstrap = createRuntimeSkillBootstrap({ registry });
+    const input: CreateSkillInput = {
+      target: 'personal',
+      skill: {
+        name: 'portable-notes',
+        description: 'Reusable note-taking guidance.',
+        body: '# Portable notes',
+      },
+    };
+    const result: CreateSkillResult = {
+      source: 'personal',
+      rootId: 'personal-agent-skills',
+      relativePath: 'portable-notes',
+      absolutePath: '/home/user/.agents/skills/portable-notes',
+      fingerprint: 'sha256:portable-notes',
+      diagnostics: [],
+    };
+    const state: RuntimeSkillProviderState = {
+      getActiveSkill: vi.fn(() => undefined),
+      applySkillInjection: vi.fn(),
+      clearActiveSkill: vi.fn(),
+      activateLifecycleSkill: vi.fn(),
+      deactivateLifecycleSkill: vi.fn(),
+      syncSkillLifecycleProjection: vi.fn(),
+      createSkill: vi.fn(async () => result),
+    };
+    const provider = bootstrap.createSkillProviderFactory(state)('conversation-creation');
+    const createSkill = provider.createSkill;
+    expect(createSkill).toBeTypeOf('function');
+    if (!createSkill) {
+      throw new Error('Expected native Skill creation to be available');
+    }
+
+    await expect(createSkill(input)).resolves.toEqual(result);
+
+    expect(state.createSkill).toHaveBeenCalledWith('conversation-creation', input);
+    expect(state.activateLifecycleSkill).not.toHaveBeenCalled();
+    expect(state.deactivateLifecycleSkill).not.toHaveBeenCalled();
+    expect(state.syncSkillLifecycleProjection).not.toHaveBeenCalled();
+    expect(state.applySkillInjection).not.toHaveBeenCalled();
+    expect(state.clearActiveSkill).not.toHaveBeenCalled();
   });
 
   it('syncs lifecycle projection after provider-driven lifecycle activation changes state', async () => {

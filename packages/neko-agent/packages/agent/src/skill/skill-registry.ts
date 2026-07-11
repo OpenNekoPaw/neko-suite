@@ -6,11 +6,20 @@
  * command namespace.
  */
 
-import type { Skill, ISkillRegistry } from '@neko/shared';
+import type { Skill, ISkillRegistry, SkillCatalogMeta } from '@neko/shared';
 import type { LazySkill } from './lazy-loader';
+import {
+  projectSkillHostProjection,
+  type SkillHostProjectionContextResolver,
+} from './skill-host-projection';
 import { getLogger } from '../utils/logger';
 
 const logger = getLogger('SkillRegistry');
+
+export interface SkillRegistryOptions {
+  /** Trusted Host policy/availability resolver. Author package metadata is not consulted. */
+  readonly resolveHostProjectionContext?: SkillHostProjectionContextResolver;
+}
 
 /**
  * Skill registry implementation
@@ -29,6 +38,8 @@ export class SkillRegistry implements ISkillRegistry {
   /** Lazy skill loaders indexed by name (for deferred content loading) */
   private lazySkills: Map<string, LazySkill> = new Map();
 
+  constructor(private readonly options: SkillRegistryOptions = {}) {}
+
   // ===========================================================================
   // Skill Operations
   // ===========================================================================
@@ -43,7 +54,7 @@ export class SkillRegistry implements ISkillRegistry {
     }
 
     this.lazySkills.delete(skill.name);
-    this.skills.set(skill.name, skill);
+    this.skills.set(skill.name, this.projectRegisteredSkill(skill));
   }
 
   unregisterSkill(name: string): void {
@@ -100,28 +111,26 @@ export class SkillRegistry implements ISkillRegistry {
   registerLazySkill(lazySkill: LazySkill): void {
     this.lazySkills.set(lazySkill.name, lazySkill);
 
-    // Register lightweight placeholder in the main skills map
-    this.skills.set(lazySkill.name, {
+    const placeholder: Skill = {
       name: lazySkill.name,
       description: lazySkill.description,
-      content: '', // placeholder — loaded on demand via ensureLoaded()
+      content: '',
       source: lazySkill.source,
       enabled: true,
-      icon: lazySkill.icon,
+      icon: lazySkill.nekoOverlay?.interface?.iconSmall ?? lazySkill.icon,
       directoryPath: lazySkill.directoryPath,
       entryPointKind: lazySkill.entryPointKind,
       command: lazySkill.command,
       argumentHint: lazySkill.argumentHint,
       supportsArguments: lazySkill.supportsArguments,
-      version: lazySkill.manifest?.version,
-      domain: lazySkill.manifest?.domain,
-      requiredSubpackages: lazySkill.manifest?.requiredSubpackages,
-      autoInvoke: lazySkill.manifest?.autoInvoke,
-      referencedAssets: lazySkill.manifest?.referencedAssets,
-      referencedSkills: lazySkill.manifest?.referencedSkills,
-      mediaWorkflow: lazySkill.manifest?.mediaWorkflow,
-      compliance: lazySkill.manifest?.compliance,
-    });
+      allowedTools: lazySkill.portableDefinition.allowedTools
+        ? [...lazySkill.portableDefinition.allowedTools]
+        : undefined,
+      portableDefinition: lazySkill.portableDefinition,
+      nekoOverlay: lazySkill.nekoOverlay,
+    };
+
+    this.skills.set(lazySkill.name, this.projectRegisteredSkill(placeholder));
   }
 
   /**
@@ -135,12 +144,13 @@ export class SkillRegistry implements ISkillRegistry {
     if (lazy && !lazy.isLoaded) {
       try {
         const fullSkill = await lazy.loadContent();
-        this.skills.set(name, fullSkill);
+        const projected = this.projectRegisteredSkill(fullSkill);
+        this.skills.set(name, projected);
         logger.debug('Lazy skill loaded', { name });
-        return fullSkill;
+        return projected;
       } catch (error) {
         logger.error('Failed to load lazy skill content', { name, error });
-        return this.skills.get(name); // return placeholder
+        return this.skills.get(name); // return the validated placeholder
       }
     }
     return this.skills.get(name);
@@ -166,4 +176,37 @@ export class SkillRegistry implements ISkillRegistry {
     this.skills.clear();
     this.lazySkills.clear();
   }
+
+  private projectRegisteredSkill(skill: Skill): Skill {
+    const hostProjection = projectSkillHostProjection(
+      skill,
+      this.options.resolveHostProjectionContext?.(skill),
+    );
+    return {
+      ...skill,
+      enabled: hostProjection.enabled,
+      catalog: projectCatalogMeta(skill.catalog, hostProjection),
+      hostProjection,
+    };
+  }
+}
+
+function projectCatalogMeta(
+  existing: SkillCatalogMeta | undefined,
+  host: NonNullable<Skill['hostProjection']>,
+): SkillCatalogMeta {
+  const role = existing?.role ?? 'standalone';
+  return {
+    role,
+    source: host.source,
+    visibility:
+      existing?.visibility ??
+      (role === 'persona' ? 'hidden' : role === 'focused-skill' ? 'advanced' : 'primary'),
+    editable: host.editable,
+    ...(existing?.groupId === undefined ? {} : { groupId: existing.groupId }),
+    ...(existing?.parentSkillIds === undefined
+      ? {}
+      : { parentSkillIds: [...existing.parentSkillIds] }),
+    actions: [...host.catalogActions],
+  };
 }

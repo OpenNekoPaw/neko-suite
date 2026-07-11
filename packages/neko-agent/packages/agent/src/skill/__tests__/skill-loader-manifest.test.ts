@@ -2,118 +2,239 @@ import { describe, expect, it } from 'vitest';
 import type { ISkillFileSystem } from '@neko/shared';
 import { SkillLoader } from '../skill-loader';
 
-describe('SkillLoader manifest metadata', () => {
-  it('merges sibling manifest.json metadata into fully loaded skills', async () => {
-    const loader = new SkillLoader(
-      new MemorySkillFs({
-        '/repo/.neko/skills/media-to-video/SKILL.md': `---
+const PORTABLE_SKILL = `---
 name: media-to-video
-description: Convert media inputs into video planning artifacts.
+description: Convert media inputs into video planning artifacts when a reusable workflow is needed.
+license: MIT
+compatibility: Requires a Neko media capability.
+metadata:
+  author: neko
+allowed-tools: Read Grep
 ---
 
 # Media to Video
+`;
+
+const NEKO_OVERLAY = `schema_version: 1
+interface:
+  display_name: Media to Video
+  short_description: Plan a video from source media.
+dependencies:
+  capabilities:
+    - id: media.inspect
+      requirement: required
+relationships:
+  skills:
+    - name: image-to-shot
+      relationship: delegates-to
+`;
+
+describe('SkillLoader portable packages', () => {
+  it('loads a minimal external Skill without a manifest or Neko overlay', async () => {
+    const fs = new MemorySkillFs({
+      '/repo/.agents/skills/plain/SKILL.md': `---
+name: plain
+description: Provide plain reusable guidance when a small Skill is sufficient.
+---
+
+Follow the requested workflow.
 `,
-        '/repo/.neko/skills/media-to-video/manifest.json': JSON.stringify({
-          version: '1.0.0',
-          domain: 'media',
-          referencedSkills: [{ id: 'comic-to-storyboard', relationship: 'delegator' }],
-          mediaWorkflow: {
-            acceptedModalities: ['comic'],
-            producedArtifacts: ['StoryboardTable'],
-            tags: ['media-to-video'],
-            costLevel: 'low',
-            riskLevel: 'low',
-          },
-        }),
-      }),
-    );
+    });
+    const loader = new SkillLoader(fs);
+
+    const skill = await loader.loadSkillFromDirectory('/repo/.agents/skills/plain', 'project');
+
+    expect(skill).toMatchObject({
+      name: 'plain',
+      description: 'Provide plain reusable guidance when a small Skill is sufficient.',
+      content: 'Follow the requested workflow.',
+      source: 'project',
+      directoryPath: '/repo/.agents/skills/plain',
+      enabled: true,
+      portableDefinition: {
+        name: 'plain',
+        description: 'Provide plain reusable guidance when a small Skill is sufficient.',
+        body: 'Follow the requested workflow.',
+      },
+    });
+    expect(skill?.nekoOverlay).toBeUndefined();
+  });
+
+  it('loads portable optional fields and a validated Neko overlay while ignoring poisoned manifests and other Host overlays', async () => {
+    const fs = new MemorySkillFs({
+      '/repo/.agents/skills/media-to-video/SKILL.md': PORTABLE_SKILL,
+      '/repo/.agents/skills/media-to-video/agents/neko.yaml': NEKO_OVERLAY,
+      '/repo/.agents/skills/media-to-video/agents/openai.yaml': 'not: [valid',
+      '/repo/.agents/skills/media-to-video/manifest.json': '{ invalid legacy poison',
+    });
+    const loader = new SkillLoader(fs);
 
     const skill = await loader.loadSkillFromDirectory(
-      '/repo/.neko/skills/media-to-video',
+      '/repo/.agents/skills/media-to-video',
       'project',
     );
 
     expect(skill).toMatchObject({
       name: 'media-to-video',
-      version: '1.0.0',
-      domain: 'media',
-      referencedSkills: [{ id: 'comic-to-storyboard', relationship: 'delegator' }],
-      mediaWorkflow: {
-        acceptedModalities: ['comic'],
-        producedArtifacts: ['StoryboardTable'],
+      allowedTools: ['Read', 'Grep'],
+      portableDefinition: {
+        license: 'MIT',
+        compatibility: 'Requires a Neko media capability.',
+        metadata: { author: 'neko' },
       },
-    });
-  });
-
-  it('exposes manifest metadata on lazy skill placeholders before full content load', async () => {
-    const loader = new SkillLoader(
-      new MemorySkillFs({
-        '/repo/.neko/skills/media-to-video': null,
-        '/repo/.neko/skills/media-to-video/SKILL.md': `---
-name: media-to-video
-description: Convert media inputs into video planning artifacts.
----
-
-# Media to Video
-`,
-        '/repo/.neko/skills/media-to-video/manifest.json': JSON.stringify({
-          version: '1.0.0',
-          domain: 'media',
-          referencedSkills: [{ id: 'image-to-shot', relationship: 'delegator' }],
-          mediaWorkflow: {
-            acceptedModalities: ['image'],
-            producedArtifacts: ['storyboard-plan-overlay'],
-          },
-        }),
-      }),
-    );
-
-    const result = await loader.loadLazyFromDirectory('/repo/.neko/skills', 'project');
-
-    expect(result.errors).toEqual([]);
-    expect(result.skills[0]).toMatchObject({
-      name: 'media-to-video',
-      manifest: {
-        referencedSkills: [{ id: 'image-to-shot', relationship: 'delegator' }],
-        mediaWorkflow: {
-          acceptedModalities: ['image'],
-          producedArtifacts: ['storyboard-plan-overlay'],
+      nekoOverlay: {
+        schemaVersion: 1,
+        interface: {
+          displayName: 'Media to Video',
+          shortDescription: 'Plan a video from source media.',
+        },
+        dependencies: {
+          capabilities: [{ id: 'media.inspect', requirement: 'required' }],
+        },
+        relationships: {
+          skills: [{ name: 'image-to-shot', relationship: 'delegates-to' }],
         },
       },
     });
+    expect(fs.readPaths).not.toContain('/repo/.agents/skills/media-to-video/manifest.json');
+    expect(fs.readPaths).not.toContain('/repo/.agents/skills/media-to-video/agents/openai.yaml');
   });
 
-  it('rejects manifest media workflow DSL fields during load', async () => {
-    const loader = new SkillLoader(
-      new MemorySkillFs({
-        '/repo/.neko/skills/media-to-video/SKILL.md': `---
-name: media-to-video
-description: Convert media inputs into video planning artifacts.
+  it('keeps lazy and full loading on the same portable and overlay validation path', async () => {
+    const fs = new MemorySkillFs({
+      '/repo/.agents/skills/media-to-video': null,
+      '/repo/.agents/skills/media-to-video/SKILL.md': PORTABLE_SKILL,
+      '/repo/.agents/skills/media-to-video/agents/neko.yaml': NEKO_OVERLAY,
+      '/repo/.agents/skills/media-to-video/manifest.json': JSON.stringify({
+        enabled: false,
+        trusted: true,
+        catalog: { actions: ['run'] },
+      }),
+    });
+    const loader = new SkillLoader(fs);
+
+    const result = await loader.loadLazyFromDirectory('/repo/.agents/skills', 'project');
+
+    expect(result.errors).toEqual([]);
+    expect(result.skills).toHaveLength(1);
+    expect(result.skills[0]).toMatchObject({
+      name: 'media-to-video',
+      source: 'project',
+      directoryPath: '/repo/.agents/skills/media-to-video',
+      portableDefinition: {
+        license: 'MIT',
+        metadata: { author: 'neko' },
+      },
+      nekoOverlay: {
+        schemaVersion: 1,
+        dependencies: {
+          capabilities: [{ id: 'media.inspect', requirement: 'required' }],
+        },
+      },
+      isLoaded: false,
+    });
+
+    const full = await result.skills[0]?.loadContent();
+    expect(full?.portableDefinition).toEqual(result.skills[0]?.portableDefinition);
+    expect(full?.nekoOverlay).toEqual(result.skills[0]?.nekoOverlay);
+    expect(fs.readPaths).not.toContain('/repo/.agents/skills/media-to-video/manifest.json');
+  });
+
+  it('keeps valid support file references contained within the Skill directory', async () => {
+    const fs = new MemorySkillFs({
+      '/repo/.agents/skills/plain/SKILL.md': `---
+name: plain
+description: Provide plain reusable guidance when a small Skill is sufficient.
 ---
 
-# Media to Video
+Read the [checklist](references/checklist.md) before proceeding.
 `,
-        '/repo/.neko/skills/media-to-video/manifest.json': JSON.stringify({
-          version: '1.0.0',
-          domain: 'media',
-          mediaWorkflow: {
-            acceptedModalities: ['comic'],
-            steps: ['inspect', 'structure'],
-          },
-        }),
-      }),
-    );
+      '/repo/.agents/skills/plain/references/checklist.md': '# Checklist',
+    });
+    const loader = new SkillLoader(fs);
+
+    const skill = await loader.loadSkillFromDirectory('/repo/.agents/skills/plain', 'project');
+
+    expect(skill?.supportFileRefs).toEqual(['references/checklist.md']);
+    expect(fs.existsPaths).toContain('/repo/.agents/skills/plain/references/checklist.md');
+  });
+
+  it.each([
+    ['../outside.md', 'skill-resource-path-traversal'],
+    ['/outside.md', 'skill-resource-path-absolute'],
+    [String.raw`C:\outside.md`, 'skill-resource-path-absolute'],
+    ['references/./checklist.md', 'skill-resource-path-traversal'],
+  ] as const)(
+    'fails visibly before filesystem access for invalid support file reference %s',
+    async (supportPath, diagnosticCode) => {
+      const content = `---
+name: plain
+description: Provide plain reusable guidance when a small Skill is sufficient.
+---
+
+Read [outside](${supportPath}) before proceeding.
+`;
+      const fs = new MemorySkillFs({
+        '/repo/.agents/skills/plain/SKILL.md': content,
+        '/repo/.agents/skills/outside.md': '# Outside',
+      });
+      const loader = new SkillLoader(fs);
+
+      await expect(
+        loader.loadSkillFromDirectory('/repo/.agents/skills/plain', 'project'),
+      ).rejects.toThrow(diagnosticCode);
+      expect(() =>
+        loader.loadSkillFromContent(content, 'project', '/repo/.agents/skills/plain'),
+      ).toThrow(diagnosticCode);
+      expect(fs.existsPaths).toEqual([]);
+    },
+  );
+
+  it('fails visibly on directory/frontmatter identity mismatch in full and lazy loading', async () => {
+    const fs = new MemorySkillFs({
+      '/repo/.agents/skills/wrong-name': null,
+      '/repo/.agents/skills/wrong-name/SKILL.md': PORTABLE_SKILL,
+    });
+    const loader = new SkillLoader(fs);
 
     await expect(
-      loader.loadSkillFromDirectory('/repo/.neko/skills/media-to-video', 'project'),
-    ).rejects.toThrow('mediaWorkflow.steps is not allowed');
+      loader.loadSkillFromDirectory('/repo/.agents/skills/wrong-name', 'project'),
+    ).rejects.toThrow('skill-directory-name-mismatch');
+
+    const lazy = await loader.loadLazyFromDirectory('/repo/.agents/skills', 'project');
+    expect(lazy.skills).toEqual([]);
+    expect(lazy.errors[0]?.details).toContain('skill-directory-name-mismatch');
+  });
+
+  it('fails visibly on invalid or unknown Neko overlay data in full and lazy loading', async () => {
+    const fs = new MemorySkillFs({
+      '/repo/.agents/skills/media-to-video': null,
+      '/repo/.agents/skills/media-to-video/SKILL.md': PORTABLE_SKILL,
+      '/repo/.agents/skills/media-to-video/agents/neko.yaml': `schema_version: 2
+trusted: true
+`,
+    });
+    const loader = new SkillLoader(fs);
+
+    await expect(
+      loader.loadSkillFromDirectory('/repo/.agents/skills/media-to-video', 'project'),
+    ).rejects.toThrow(/neko-overlay-(unknown-field|schema-unsupported)/);
+
+    const lazy = await loader.loadLazyFromDirectory('/repo/.agents/skills', 'project');
+    expect(lazy.skills).toEqual([]);
+    expect(lazy.errors[0]?.details).toContain('neko-overlay-unknown-field');
+    expect(lazy.errors[0]?.details).toContain('neko-overlay-schema-unsupported');
   });
 });
 
 class MemorySkillFs implements ISkillFileSystem {
+  readonly readPaths: string[] = [];
+  readonly existsPaths: string[] = [];
+
   constructor(private readonly files: Record<string, string | null>) {}
 
   async exists(path: string): Promise<boolean> {
+    this.existsPaths.push(path);
     if (Object.prototype.hasOwnProperty.call(this.files, path)) return true;
     const prefix = `${path}/`;
     return Object.keys(this.files).some((entry) => entry.startsWith(prefix));
@@ -132,9 +253,10 @@ class MemorySkillFs implements ISkillFileSystem {
   }
 
   async readFile(path: string): Promise<string> {
+    this.readPaths.push(path);
     const value = this.files[path];
     if (typeof value !== 'string') {
-      throw new Error(`File not found: ${path}`);
+      throw Object.assign(new Error(`File not found: ${path}`), { code: 'ENOENT' });
     }
     return value;
   }

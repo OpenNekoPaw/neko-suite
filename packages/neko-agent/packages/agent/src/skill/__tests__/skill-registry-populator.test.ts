@@ -90,6 +90,11 @@ describe('SkillRegistryPopulator', () => {
       description: 'Lazy skill',
       source: 'project',
       directoryPath: '/tmp/lazy-skill',
+      portableDefinition: {
+        name: 'lazy-skill',
+        description: 'Lazy skill',
+        body: 'lazy-skill content',
+      },
       isLoaded: false,
       loadContent: async () => makeSkill('lazy-skill', 'project'),
     };

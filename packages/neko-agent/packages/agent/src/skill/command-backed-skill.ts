@@ -40,6 +40,11 @@ export function createLazyCommandBackedSkill(command: LazyCommand): LazySkill {
     command: command.command,
     argumentHint: command.argumentHint,
     supportsArguments: Boolean(command.argumentHint),
+    portableDefinition: {
+      name: command.command,
+      description: command.description,
+      body: '',
+    },
     isLoaded: false,
     async loadContent(): Promise<Skill> {
       if (cachedSkill) {

@@ -10,14 +10,15 @@ import type {
   SlashCommand,
   SkillSource,
   SkillEntryPointKind,
-  SkillFrontmatter,
+  NekoSkillOverlay,
+  PortableSkillDefinition,
   CommandFrontmatter,
   SkillLoadError,
   ISkillFileSystem,
-  SkillManifest,
 } from '@neko/shared';
-import { validateSkillManifest } from '@neko/shared';
 import type { IMarkdownParser } from './markdown-parser';
+import { parseNekoSkillOverlay } from './neko-skill-overlay';
+import { parsePortableSkillMarkdown } from './portable-skill';
 import { getLogger } from '../utils/logger';
 
 const logger = getLogger('LazyLoader');
@@ -49,8 +50,10 @@ export interface LazySkill {
   argumentHint?: string;
   /** Frontmatter-level argument hint availability before full content loads */
   supportsArguments?: boolean;
-  /** Program-facing metadata loaded from manifest.json without loading SKILL.md body */
-  manifest?: SkillManifest;
+  /** Portable author-owned definition parsed from SKILL.md. */
+  portableDefinition: PortableSkillDefinition;
+  /** Optional validated Neko Host overlay. */
+  nekoOverlay?: NekoSkillOverlay;
   /** Whether content has been loaded */
   isLoaded: boolean;
   /** Load full skill content with support files */
@@ -253,29 +256,28 @@ export class LazyLoader implements ILazyLoader {
     loader: SkillContentLoader,
   ): Promise<LazySkill | null> {
     const content = await this.fs.readFile(skillFilePath);
-    const frontmatter = this.parser.parseFrontmatterOnly(content);
-
-    if (!frontmatter || !('name' in frontmatter) || 'command' in frontmatter) {
-      return null;
+    const parsed = parsePortableSkillMarkdown(content, {
+      directoryName: getDirectoryBasename(directoryPath),
+    });
+    if (!parsed.definition || !parsed.validation.valid) {
+      throw new Error(
+        `Invalid portable SKILL.md: ${formatSkillDiagnostics(parsed.validation.diagnostics)}`,
+      );
     }
 
-    // Now we know it's a SkillFrontmatter
-    const skillFrontmatter = frontmatter as SkillFrontmatter;
-    if (!skillFrontmatter.name || !skillFrontmatter.description) {
-      return null;
-    }
-    const manifest = await this.loadSkillManifest(directoryPath);
+    const portableDefinition = parsed.definition;
+    const nekoOverlay = await this.loadNekoSkillOverlay(directoryPath);
 
-    // Create lazy skill with deferred content loading
+    // Create lazy skill with deferred content loading.
     let cachedSkill: Skill | null = null;
 
     const lazySkill: LazySkill = {
-      name: skillFrontmatter.name,
-      description: skillFrontmatter.description,
-      icon: skillFrontmatter.icon,
+      name: portableDefinition.name,
+      description: portableDefinition.description,
       source,
       directoryPath,
-      manifest,
+      portableDefinition,
+      nekoOverlay,
       isLoaded: false,
 
       async loadContent(): Promise<Skill> {
@@ -283,7 +285,6 @@ export class LazyLoader implements ILazyLoader {
           return cachedSkill;
         }
 
-        // Load full skill with support files
         const skill = await loader(directoryPath, source);
         if (!skill) {
           throw new Error(`Failed to load skill content: ${directoryPath}`);
@@ -298,29 +299,25 @@ export class LazyLoader implements ILazyLoader {
     return lazySkill;
   }
 
-  private async loadSkillManifest(directoryPath: string): Promise<SkillManifest | undefined> {
-    const manifestPath = `${directoryPath}/manifest.json`;
-    const exists = await this.fs.exists(manifestPath);
-    if (!exists) return undefined;
-
-    const raw = await this.fs.readFile(manifestPath);
-    let parsed: unknown;
+  private async loadNekoSkillOverlay(directoryPath: string): Promise<NekoSkillOverlay | undefined> {
+    const overlayPath = `${directoryPath}/agents/neko.yaml`;
+    let raw: string;
     try {
-      parsed = JSON.parse(raw);
+      raw = await this.fs.readFile(overlayPath);
     } catch (error) {
+      if (isFileNotFoundError(error)) {
+        return undefined;
+      }
+      throw error;
+    }
+
+    const parsed = parseNekoSkillOverlay(raw);
+    if (!parsed.overlay || !parsed.validation.valid) {
       throw new Error(
-        `Failed to parse skill manifest.json: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
+        `Invalid agents/neko.yaml: ${formatSkillDiagnostics(parsed.validation.diagnostics)}`,
       );
     }
-
-    const manifest = parsed as SkillManifest;
-    const validation = validateSkillManifest(manifest);
-    if (!validation.valid) {
-      throw new Error(`Invalid skill manifest.json: ${validation.errors.join(', ')}`);
-    }
-    return manifest;
+    return parsed.overlay;
   }
 
   /**
@@ -369,6 +366,27 @@ export class LazyLoader implements ILazyLoader {
 
     return lazyCommand;
   }
+}
+
+function getDirectoryBasename(directoryPath: string): string {
+  const normalized = directoryPath.replace(/[\\/]+$/, '');
+  const segments = normalized.split(/[\\/]/);
+  return segments[segments.length - 1] ?? '';
+}
+
+function isFileNotFoundError(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    (error as { readonly code?: unknown }).code === 'ENOENT'
+  );
+}
+
+function formatSkillDiagnostics(
+  diagnostics: readonly { readonly code: string; readonly message: string }[],
+): string {
+  return diagnostics.map((diagnostic) => `${diagnostic.code}: ${diagnostic.message}`).join('; ');
 }
 
 /**

@@ -28,14 +28,19 @@ function makeLazySkill(overrides?: Partial<LazySkill>): LazySkill {
     content: '# Full skill content\n\nDetailed instructions here.',
     source: 'personal',
     enabled: true,
-    directoryPath: '/home/user/.neko/skills/test-skill',
+    directoryPath: '/home/user/.agents/skills/test-skill',
   };
 
   return {
     name: 'test-skill',
     description: 'A test skill',
     source: 'personal',
-    directoryPath: '/home/user/.neko/skills/test-skill',
+    directoryPath: '/home/user/.agents/skills/test-skill',
+    portableDefinition: {
+      name: 'test-skill',
+      description: 'A test skill',
+      body: '# Full skill content\n\nDetailed instructions here.',
+    },
     isLoaded: false,
     loadContent: vi.fn().mockResolvedValue(fullSkill),
     ...overrides,
@@ -55,13 +60,11 @@ describe('SkillRegistry — lazy loading', () => {
   describe('registerLazySkill()', () => {
     it('registers a lightweight placeholder in the skills map', () => {
       const lazy = makeLazySkill({
-        manifest: {
-          version: '1.0.0',
-          domain: 'media',
-          referencedSkills: [{ id: 'comic-to-storyboard', relationship: 'delegator' }],
-          mediaWorkflow: {
-            acceptedModalities: ['comic'],
-            producedArtifacts: ['StoryboardTable'],
+        nekoOverlay: {
+          schemaVersion: 1,
+          interface: { iconSmall: 'sparkle' },
+          relationships: {
+            skills: [{ name: 'comic-to-storyboard', relationship: 'delegator' }],
           },
         },
       });
@@ -72,12 +75,19 @@ describe('SkillRegistry — lazy loading', () => {
       expect(skill?.name).toBe('test-skill');
       expect(skill?.description).toBe('A test skill');
       expect(skill?.content).toBe(''); // placeholder
-      expect(skill?.referencedSkills).toEqual([
-        { id: 'comic-to-storyboard', relationship: 'delegator' },
+      expect(skill?.icon).toBe('sparkle');
+      expect(skill?.nekoOverlay?.relationships?.skills).toEqual([
+        { name: 'comic-to-storyboard', relationship: 'delegator' },
       ]);
-      expect(skill?.mediaWorkflow).toEqual({
-        acceptedModalities: ['comic'],
-        producedArtifacts: ['StoryboardTable'],
+      expect(skill?.hostProjection).toMatchObject({
+        source: 'personal',
+        provenance: 'user',
+        editable: true,
+        trusted: false,
+        location: {
+          rootId: 'personal-agent-skills',
+          relativePath: 'test-skill',
+        },
       });
     });
 

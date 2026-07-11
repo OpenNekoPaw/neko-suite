@@ -1,4 +1,11 @@
-import type { ISkillRegistry, IToolRegistry, Skill, SkillInjection } from '@neko/shared';
+import type {
+  CreateSkillInput,
+  CreateSkillResult,
+  ISkillRegistry,
+  IToolRegistry,
+  Skill,
+  SkillInjection,
+} from '@neko/shared';
 import type {
   ActiveSkillLifecycleProjection,
   SkillLifecycleDeactivationRequest,
@@ -108,6 +115,7 @@ export interface RuntimeSkillProviderState {
     skill: Skill,
   ): void | Promise<void>;
   clearActiveSkill(conversationId: string): void | Promise<void>;
+  createSkill?(conversationId: string, input: CreateSkillInput): Promise<CreateSkillResult>;
 }
 
 export interface RuntimeSkillBootstrap {
@@ -249,6 +257,7 @@ class DefaultRuntimeSkillBootstrap implements RuntimeSkillBootstrap {
       const syncSkillLifecycleProjection = state.syncSkillLifecycleProjection;
       const activateLifecycleSkill = state.activateLifecycleSkill;
       const deactivateLifecycleSkill = state.deactivateLifecycleSkill;
+      const createSkill = state.createSkill;
 
       return createConversationSkillProvider({
         skillService: this.skillService,
@@ -284,6 +293,11 @@ class DefaultRuntimeSkillBootstrap implements RuntimeSkillBootstrap {
           applySkillInjection: (injection, skill) =>
             state.applySkillInjection(conversationId, injection, skill),
           clearActiveSkill: () => state.clearActiveSkill(conversationId),
+          ...(createSkill
+            ? {
+                createSkill: (input: CreateSkillInput) => createSkill(conversationId, input),
+              }
+            : {}),
         },
         logger: this.logger,
       });

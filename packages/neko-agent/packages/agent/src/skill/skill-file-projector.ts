@@ -15,6 +15,9 @@ import type {
 import * as path from 'node:path';
 import type { LazyCommand, LazySkill } from './lazy-loader';
 import { matchSkillPaths } from './path-matcher';
+import { parsePortableSkillMarkdown, serializePortableSkillMarkdown } from './portable-skill';
+import { validateSkillPackagePath } from './skill-package-path';
+import { resolveAgentSkillsDir } from '../workspace/agent-skill-layout';
 import { resolveNekoContentDir, type NekoContentSource } from '../workspace/neko-content-layout';
 
 export type SkillFileSource = NekoContentSource;
@@ -66,12 +69,6 @@ export interface ToConfiguredSkillFileCatalogOptions {
   builtinSkills?: readonly Skill[];
 }
 
-export interface BuildSkillFileContentOptions {
-  skillName: string;
-  content?: string;
-  description?: string;
-}
-
 export interface SkillFileOperationFailurePlan {
   ok: false;
   error: string;
@@ -81,7 +78,7 @@ export interface SkillFileCreationPlan {
   ok: true;
   skillDir: string;
   filePath: string;
-  fileContent: string;
+  overlayFilePath: string;
 }
 
 export interface SkillDirectoryDuplicationPlan {
@@ -130,10 +127,9 @@ export interface SkillPathTriggerMatch {
   filePath: string;
 }
 
-const DEFAULT_SKILL_DESCRIPTION = 'A custom skill.';
 const SKILL_FILE_NAME = 'SKILL.md';
 const SKILL_COPY_EXCLUDED_DIRECTORIES = new Set(['__pycache__', 'node_modules', '.git']);
-const SKILL_WATCH_PATTERN = '**/*.md';
+const SKILL_WATCH_PATTERN = '**/*';
 const COMMAND_WATCH_PATTERN = '*.md';
 
 export function buildSkillFileScanPlan(input: {
@@ -210,47 +206,21 @@ export function buildSkillDirectoryLoadFailureResult<TSkill, TCommand>(input: {
   };
 }
 
-export function buildSkillFileContent({
-  skillName,
-  content,
-  description = DEFAULT_SKILL_DESCRIPTION,
-}: BuildSkillFileContentOptions): string {
-  if (content && content.trim().length > 0) {
-    return normalizeSkillFrontmatter(content, skillName, description);
+export function normalizeSkillFrontmatter(content: string, skillName: string): string {
+  const parsed = parsePortableSkillMarkdown(content);
+  if (!parsed.definition) {
+    throw new Error(
+      parsed.validation.diagnostics
+        .map((diagnostic) => `${diagnostic.code}: ${diagnostic.message}`)
+        .join('\n'),
+    );
   }
 
-  return `---
-name: "${skillName}"
-description: "${description}"
----
-
-# ${skillName}
-
-## Instructions
-
-Add your skill instructions here.
-`;
-}
-
-export function normalizeSkillFrontmatter(
-  content: string,
-  skillName: string,
-  description = DEFAULT_SKILL_DESCRIPTION,
-): string {
-  if (!hasFrontmatter(content)) {
-    return `---
-name: "${skillName}"
-description: "${description}"
----
-
-${content}`;
-  }
-
-  return upsertFrontmatterField(content, 'name', `"${skillName}"`);
+  return serializePortableSkillMarkdown({ ...parsed.definition, name: skillName });
 }
 
 export function normalizeDuplicatedSkillContent(content: string, newSkillName: string): string {
-  return removeDisabledFalse(normalizeSkillFrontmatter(content, newSkillName));
+  return normalizeSkillFrontmatter(content, newSkillName);
 }
 
 export function buildCommandFileContent(commandName: string, content?: string): string {
@@ -274,12 +244,15 @@ Add your command instructions here.
 export function buildSkillFileCreationPlan(input: {
   basePath: string | null | undefined;
   skillName: string;
-  content?: string;
-  description?: string;
   unavailableError: string;
 }): SkillFileCreationPlan | SkillFileOperationFailurePlan {
   if (!input.basePath) {
     return { ok: false, error: input.unavailableError };
+  }
+
+  const invalidName = validateSkillDirectoryName(input.skillName);
+  if (invalidName) {
+    return { ok: false, error: invalidName };
   }
 
   const skillDir = path.join(input.basePath, input.skillName);
@@ -287,11 +260,7 @@ export function buildSkillFileCreationPlan(input: {
     ok: true,
     skillDir,
     filePath: path.join(skillDir, SKILL_FILE_NAME),
-    fileContent: buildSkillFileContent({
-      skillName: input.skillName,
-      content: input.content,
-      description: input.description,
-    }),
+    overlayFilePath: path.join(skillDir, 'agents', 'neko.yaml'),
   };
 }
 
@@ -302,6 +271,11 @@ export function buildSkillDirectoryDuplicationPlan(input: {
 }): SkillDirectoryDuplicationPlan | SkillFileOperationFailurePlan {
   if (!input.basePath) {
     return { ok: false, error: input.unavailableError };
+  }
+
+  const invalidName = validateSkillDirectoryName(input.newSkillName);
+  if (invalidName) {
+    return { ok: false, error: invalidName };
   }
 
   const newSkillDir = path.join(input.basePath, input.newSkillName);
@@ -319,6 +293,11 @@ export function buildSkillDirectoryDeletionPlan(input: {
 }): SkillDirectoryDeletionPlan | SkillFileOperationFailurePlan {
   if (!input.basePath) {
     return { ok: false, error: input.unavailableError };
+  }
+
+  const invalidName = validateSkillDirectoryName(input.skillName);
+  if (invalidName) {
+    return { ok: false, error: invalidName };
   }
 
   return { ok: true, skillDir: path.join(input.basePath, input.skillName) };
@@ -363,9 +342,8 @@ export function buildSkillSupportFileOpenPlan(input: {
   filePath?: string;
   unavailableError?: string;
 }): SkillSupportFileOpenPlan | SkillFileOperationFailurePlan {
-  const basePath = resolveNekoContentDir({
+  const basePath = resolveAgentSkillsDir({
     source: input.source,
-    subdir: 'skills',
     homeDir: input.homeDir,
     workspaceRoot: input.workspaceRoot,
   });
@@ -376,6 +354,11 @@ export function buildSkillSupportFileOpenPlan(input: {
     };
   }
 
+  const invalidName = validateSkillDirectoryName(input.skillName);
+  if (invalidName) {
+    return { ok: false, error: invalidName };
+  }
+
   switch (input.fileType) {
     case 'skill':
       return {
@@ -383,21 +366,21 @@ export function buildSkillSupportFileOpenPlan(input: {
         filePath: path.join(basePath, input.skillName, SKILL_FILE_NAME),
       };
     case 'reference':
-      if (!input.filePath) {
-        return { ok: false, error: 'No file path provided for reference' };
-      }
-      return {
-        ok: true,
-        filePath: path.join(basePath, input.skillName, 'references', input.filePath),
-      };
+      return buildContainedSupportFilePlan(
+        basePath,
+        input.skillName,
+        'references',
+        input.filePath,
+        'reference',
+      );
     case 'script':
-      if (!input.filePath) {
-        return { ok: false, error: 'No file path provided for script' };
-      }
-      return {
-        ok: true,
-        filePath: path.join(basePath, input.skillName, 'scripts', input.filePath),
-      };
+      return buildContainedSupportFilePlan(
+        basePath,
+        input.skillName,
+        'scripts',
+        input.filePath,
+        'script',
+      );
   }
 }
 
@@ -475,35 +458,45 @@ export function resolveSkillPathTriggers({
   }));
 }
 
-function hasFrontmatter(content: string): boolean {
-  return /^---\s*\r?\n/.test(content);
-}
-
-function upsertFrontmatterField(content: string, key: string, value: string): string {
-  const blockMatch = content.match(/^---\s*\r?\n([\s\S]*?)\r?\n---/);
-  if (!blockMatch?.[0]) {
-    return content;
+function validateSkillDirectoryName(skillName: string): string | null {
+  const validation = validateSkillPackagePath(skillName);
+  if (
+    !validation.valid ||
+    validation.normalizedPath === undefined ||
+    validation.normalizedPath.includes('/')
+  ) {
+    return `Invalid Skill directory name: ${skillName}`;
   }
-
-  const block = blockMatch[0];
-  const fieldPattern = new RegExp(`^${escapeRegExp(key)}:\\s*.*$`, 'm');
-  const nextBlock = fieldPattern.test(block)
-    ? block.replace(fieldPattern, `${key}: ${value}`)
-    : block.replace(/^---\s*\r?\n/, `---\n${key}: ${value}\n`);
-
-  return `${nextBlock}${content.slice(block.length)}`;
+  return null;
 }
 
-function removeDisabledFalse(content: string): string {
-  return content.replace(/^enabled:\s*false\s*$/m, '').replace(/\n{3,}/g, '\n\n');
+function buildContainedSupportFilePlan(
+  basePath: string,
+  skillName: string,
+  supportDirectory: 'references' | 'scripts',
+  filePath: string | undefined,
+  fileType: 'reference' | 'script',
+): SkillSupportFileOpenPlan | SkillFileOperationFailurePlan {
+  if (!filePath) {
+    return { ok: false, error: `No file path provided for ${fileType}` };
+  }
+  const validation = validateSkillPackagePath(filePath);
+  if (!validation.valid || validation.normalizedPath === undefined) {
+    return { ok: false, error: `Invalid ${fileType} file path: ${filePath}` };
+  }
+  return {
+    ok: true,
+    filePath: path.join(
+      basePath,
+      skillName,
+      supportDirectory,
+      ...validation.normalizedPath.split('/'),
+    ),
+  };
 }
 
 function isPathInsideWorkspace(filePath: string, workspaceRoot: string): boolean {
   return filePath === workspaceRoot || filePath.startsWith(`${workspaceRoot}/`);
-}
-
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 function addSkillFileScanPlanEntry(
@@ -515,12 +508,19 @@ function addSkillFileScanPlanEntry(
     workspaceRoot?: string | null;
   },
 ): void {
-  const dirPath = resolveNekoContentDir({
-    source: input.source,
-    subdir: input.kind,
-    homeDir: input.homeDir,
-    workspaceRoot: input.workspaceRoot,
-  });
+  const dirPath =
+    input.kind === 'skills'
+      ? resolveAgentSkillsDir({
+          source: input.source,
+          homeDir: input.homeDir,
+          workspaceRoot: input.workspaceRoot,
+        })
+      : resolveNekoContentDir({
+          source: input.source,
+          subdir: 'commands',
+          homeDir: input.homeDir,
+          workspaceRoot: input.workspaceRoot,
+        });
 
   if (!dirPath) {
     return;

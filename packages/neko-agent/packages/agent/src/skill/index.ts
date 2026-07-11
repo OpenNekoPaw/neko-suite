@@ -4,7 +4,7 @@
  * This module provides two distinct concepts:
  *
  * 1. **Skill** - Agent-readable instruction set activated explicitly
- *    - Located in: `.skill/skill-name/SKILL.md` (project) or `~/.neko/skills/` (personal)
+ *    - Located in: `.agents/skills/skill-name/SKILL.md` (project) or `~/.agents/skills/` (personal)
  *    - Triggered by: User `$skill` invocation or Agent `ActivateSkill`
  *    - Arguments: NOT supported (no $ARGUMENTS, $1, $2)
  *    - File structure: skill-name/SKILL.md + support files
@@ -24,7 +24,13 @@
  */
 
 // Core exports
-export { SkillRegistry } from './skill-registry';
+export { SkillRegistry, type SkillRegistryOptions } from './skill-registry';
+export {
+  projectSkillHostProjection,
+  resolveNekoSkillCompatibility,
+  type SkillHostProjectionContext,
+  type SkillHostProjectionContextResolver,
+} from './skill-host-projection';
 export { SkillLoader, createNodeSkillLoader } from './skill-loader';
 export { type LazySkill, type LazyCommand, type LazySkillLoadResult } from './lazy-loader';
 export { SkillInjector } from './skill-injector';
@@ -147,7 +153,6 @@ export {
   buildCommandFileDeletionPlan,
   buildCommandFileOpenPlan,
   buildSkillFileScanPlan,
-  buildSkillFileContent,
   buildSkillFileCreationPlan,
   buildSkillDirectoryDeletionPlan,
   buildSkillDirectoryDuplicationPlan,
@@ -165,7 +170,6 @@ export {
   type SkillFileScanResultOf,
   type LazySkillFileScanResult,
   type ConfiguredSkillFileCatalog,
-  type BuildSkillFileContentOptions,
   type CommandFileCreationPlan,
   type CommandFileDeletionPlan,
   type CommandFileOpenPlan,
@@ -190,7 +194,6 @@ export {
   SKILL_PATH_TRIGGER_DEBOUNCE_MS,
   createSkillFileRuntime,
   type CreateCommandFileInput,
-  type CreateSkillFileInput,
   type DeleteCommandFileInput,
   type DeleteSkillDirectoryInput,
   type DuplicateSkillDirectoryInput,
@@ -331,3 +334,7 @@ export {
   SKILL_DIRECTORIES,
   COMMAND_DIRECTORIES,
 } from '@neko/shared';
+export * from './portable-skill';
+export * from './neko-skill-overlay';
+export * from './skill-package-path';
+export * from './legacy-skill-migration';

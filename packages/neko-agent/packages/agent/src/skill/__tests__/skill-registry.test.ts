@@ -33,7 +33,7 @@ describe('SkillRegistry', () => {
       registry.registerSkill(skill);
 
       const retrieved = registry.getSkill('my-skill');
-      expect(retrieved).toEqual(skill);
+      expect(retrieved).toEqual(expect.objectContaining(skill));
     });
 
     it('should throw error if skill has no name', () => {
@@ -74,7 +74,7 @@ describe('SkillRegistry', () => {
       registry.registerSkill(skill);
 
       const retrieved = registry.getSkill('my-skill');
-      expect(retrieved).toEqual(skill);
+      expect(retrieved).toEqual(expect.objectContaining(skill));
     });
 
     it('should return undefined for non-existent skill', () => {

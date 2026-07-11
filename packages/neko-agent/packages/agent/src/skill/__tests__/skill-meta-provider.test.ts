@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { Skill, SkillInjection } from '@neko/shared';
+import type { CreateSkillInput, CreateSkillResult, Skill, SkillInjection } from '@neko/shared';
+import { GetContextTool } from '../../tools/core/meta-tools';
 import { createConversationSkillProvider } from '../skill-meta-provider';
+import { SkillRegistry } from '../skill-registry';
 import type { SkillService } from '../skill-service';
 
 describe('createConversationSkillProvider', () => {
@@ -32,6 +34,165 @@ describe('createConversationSkillProvider', () => {
         },
       },
     ]);
+  });
+
+  it('projects portable, overlay, and Registry-owned Host facts through GetContext', async () => {
+    const skill = createSkill({
+      name: 'portable-review',
+      description: 'Poisoned runtime description',
+      source: 'project',
+      portableDefinition: {
+        name: 'portable-review',
+        description: 'Portable review guidance.',
+        body: '# Portable review',
+      },
+      nekoOverlay: {
+        schemaVersion: 1,
+        interface: {
+          displayName: 'Portable Review',
+          shortDescription: 'Review with the portable workflow.',
+          iconSmall: 'check-circle',
+        },
+        dependencies: {
+          capabilities: [{ id: 'review.read', requirement: 'required' }],
+        },
+        relationships: {
+          skills: [{ name: 'evidence-check', relationship: 'supports' }],
+        },
+      },
+      hostProjection: {
+        source: 'builtin',
+        location: { rootId: 'poisoned-root', relativePath: '../../escape' },
+        provenance: 'builtin',
+        enabled: true,
+        editable: false,
+        trusted: true,
+        compatibility: { state: 'compatible', diagnostics: [] },
+        fingerprint: 'poisoned-fingerprint',
+        catalogActions: [{ id: 'run' }],
+      },
+    });
+    Object.assign(skill, {
+      manifest: {
+        catalog: {
+          source: 'builtin',
+          editable: false,
+          actions: ['run'],
+        },
+      },
+    });
+
+    const registry = new SkillRegistry({
+      resolveHostProjectionContext: () => ({
+        availableCapabilities: new Set(['review.read']),
+      }),
+    });
+    registry.registerSkill(skill);
+    const provider = createConversationSkillProvider({
+      skillService: createSkillServiceWithRegistry(registry),
+      effects: createEffects(),
+    });
+    const tool = new GetContextTool({} as never);
+    tool.setSkillProvider(provider);
+
+    const result = await tool.execute({});
+
+    expect(result).toMatchObject({
+      success: true,
+      data: {
+        activeSkill: null,
+        registeredSkills: [
+          {
+            name: 'portable-review',
+            description: 'Review with the portable workflow.',
+            interface: {
+              displayName: 'Portable Review',
+              shortDescription: 'Review with the portable workflow.',
+              iconSmall: 'check-circle',
+            },
+            relationships: {
+              skills: [{ name: 'evidence-check', relationship: 'supports' }],
+            },
+            host: {
+              source: 'project',
+              location: {
+                rootId: 'project-agent-skills',
+                relativePath: 'portable-review',
+              },
+              provenance: 'workspace',
+              enabled: true,
+              editable: true,
+              trusted: false,
+              compatibility: { state: 'compatible', diagnostics: [] },
+              catalogActions: [
+                { id: 'run' },
+                { id: 'edit' },
+                { id: 'reveal' },
+                { id: 'duplicate' },
+              ],
+            },
+          },
+        ],
+      },
+    });
+    const registered = registry.getSkill('portable-review');
+    expect(registered?.hostProjection?.fingerprint).toMatch(/^sha256:[a-f0-9]{64}$/);
+    expect(registered?.hostProjection?.fingerprint).not.toBe('poisoned-fingerprint');
+  });
+
+  it('delegates native creation without mutating activation lifecycle state', async () => {
+    const input: CreateSkillInput = {
+      target: 'project',
+      skill: {
+        name: 'story-outline',
+        description: 'Create a reusable story outline.',
+        body: '# Story outline\n\nFollow the project structure.',
+        metadata: { audience: 'writers' },
+        allowedTools: ['ReadDocument'],
+      },
+      resources: [
+        {
+          path: 'references/example.md',
+          encoding: 'utf8',
+          content: '# Example',
+        },
+      ],
+      neko: {
+        schemaVersion: 1,
+        interface: { displayName: 'Story Outline' },
+      },
+    };
+    const result: CreateSkillResult = {
+      source: 'project',
+      rootId: 'project-agent-skills',
+      relativePath: 'story-outline',
+      absolutePath: '/workspace/.agents/skills/story-outline',
+      fingerprint: 'sha256:created',
+      diagnostics: [],
+    };
+    const effects = {
+      ...createEffects(),
+      activateLifecycleSkill: vi.fn(),
+      deactivateLifecycleSkill: vi.fn(),
+      createSkill: vi.fn(async () => result),
+    };
+    const provider = createConversationSkillProvider({
+      skillService: createSkillServiceMock({ skills: [] }),
+      effects,
+    });
+    const createSkill = provider.createSkill;
+    expect(createSkill).toBeTypeOf('function');
+    if (!createSkill) {
+      throw new Error('Expected native Skill creation to be available');
+    }
+
+    await expect(createSkill(input)).resolves.toEqual(result);
+
+    expect(effects.createSkill).toHaveBeenCalledWith(input);
+    expect(effects.activateLifecycleSkill).not.toHaveBeenCalled();
+    expect(effects.deactivateLifecycleSkill).not.toHaveBeenCalled();
+    expect(effects.applySkillInjection).not.toHaveBeenCalled();
+    expect(effects.clearActiveSkill).not.toHaveBeenCalled();
   });
 
   it('activates a lazy-loaded skill and applies the injection to the owning conversation', async () => {
@@ -163,7 +324,18 @@ function createSkill(overrides: Partial<Skill>): Skill {
     domain: overrides.domain,
     referencedSkills: overrides.referencedSkills,
     mediaWorkflow: overrides.mediaWorkflow,
+    portableDefinition: overrides.portableDefinition,
+    nekoOverlay: overrides.nekoOverlay,
+    hostProjection: overrides.hostProjection,
+    catalog: overrides.catalog,
   };
+}
+
+function createSkillServiceWithRegistry(registry: SkillRegistry): SkillService {
+  return {
+    registry,
+    apply: vi.fn(),
+  } as unknown as SkillService;
 }
 
 function createSkillServiceMock(input: {

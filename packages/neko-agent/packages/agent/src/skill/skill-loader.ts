@@ -3,14 +3,14 @@
  *
  * Directory structure:
  *
- * Skills (.neko/skills/):
- * - .neko/skills/ (project-level skills)
+ * Skills (.agents/skills/):
+ * - .agents/skills/ (project-level skills)
  *   - skill-name/
  *     - SKILL.md (main skill file)
  *     - reference.md (optional support file)
  *     - examples.md (optional support file)
  *
- * - ~/.neko/skills/ (personal skills)
+ * - ~/.agents/skills/ (personal skills)
  *   - Same structure as above
  *
  * Slash Commands (.neko/commands/):
@@ -34,17 +34,18 @@ import type {
   ToolsFileFrontmatter,
   SkillReference,
   SkillScript,
-  SkillManifest,
+  NekoSkillOverlay,
 } from '@neko/shared';
 import {
-  createSkill,
   createCommand,
   validateSkill,
   validateCommand,
-  validateSkillManifest,
   extractSupportFileRefs,
 } from '@neko/shared';
 import { MarkdownParser, type IMarkdownParser } from './markdown-parser';
+import { parseNekoSkillOverlay } from './neko-skill-overlay';
+import { parsePortableSkillMarkdown } from './portable-skill';
+import { validateSkillPackagePath } from './skill-package-path';
 import { LazyLoader, type ILazyLoader, type LazySkillLoadResult } from './lazy-loader';
 import type { LazySkill, LazyCommand } from './lazy-loader';
 import { getLogger } from '../utils/logger';
@@ -201,21 +202,20 @@ export class SkillLoader {
   async loadSkillFromDirectory(directoryPath: string, source: SkillSource): Promise<Skill | null> {
     const skillFilePath = `${directoryPath}/SKILL.md`;
     const content = await this.fs.readFile(skillFilePath);
-    const parsed = this.parser.parseMarkdown(content);
+    const directoryName = getDirectoryBasename(directoryPath);
+    const parsed = parsePortableSkillMarkdown(content, { directoryName });
 
-    if (!parsed || !parsed.frontmatter.name) {
-      throw new Error('Failed to parse SKILL.md: Invalid frontmatter');
+    if (!parsed.definition || !parsed.validation.valid) {
+      throw new Error(
+        `Invalid portable SKILL.md: ${formatSkillDiagnostics(parsed.validation.diagnostics)}`,
+      );
     }
 
-    // Check if it's actually a skill (not a command)
-    if ('command' in parsed.frontmatter) {
-      return null;
-    }
+    const definition = parsed.definition;
+    const overlay = await this.loadNekoSkillOverlay(directoryPath);
 
-    const frontmatter = parsed.frontmatter as SkillFrontmatter;
-
-    // Progressive Disclosure: Only extract support file references
-    const supportFileRefs = extractSupportFileRefs(parsed.content);
+    // Progressive Disclosure: Only extract support file references.
+    const supportFileRefs = extractValidatedSupportFileRefs(definition.body);
 
     // Validate that referenced files exist — check all refs in parallel.
     const validRefs: string[] = (
@@ -229,42 +229,29 @@ export class SkillLoader {
             }
             return fileExists ? ref : null;
           } catch {
-            // Ignore errors, file just won't be in validRefs
             return null;
           }
         }),
       )
     ).filter((ref): ref is string => ref !== null);
 
-    // Load tool definitions from tools-ref if specified
-    let toolDefinitions: SkillToolDefinition[] | undefined;
-    if (frontmatter['tools-ref']) {
-      const toolsFilePath = `${directoryPath}/${frontmatter['tools-ref']}`;
-      try {
-        toolDefinitions = await this.loadToolDefinitions(toolsFilePath);
-      } catch (error) {
-        logger.warn('Failed to load tools file', {
-          path: toolsFilePath,
-          error: error instanceof Error ? error.message : String(error),
-        });
-      }
-    }
-    const manifest = await this.loadSkillManifest(directoryPath);
-
-    const skill = createSkill(
-      frontmatter,
-      parsed.content,
+    const skill: Skill = {
+      name: definition.name,
+      description: definition.description,
+      content: definition.body,
+      supportFileRefs: validRefs.length > 0 ? validRefs : undefined,
+      allowedTools: definition.allowedTools ? [...definition.allowedTools] : undefined,
       source,
       directoryPath,
-      validRefs.length > 0 ? validRefs : undefined,
-      toolDefinitions,
-      manifest,
-    );
+      icon: overlay?.interface?.iconSmall,
+      enabled: true,
+      portableDefinition: definition,
+      nekoOverlay: overlay,
+    };
 
-    // Validate
     const validation = validateSkill(skill);
     if (!validation.valid) {
-      throw new Error(`Invalid skill: ${validation.errors.join(', ')}`);
+      throw new Error(`Invalid skill runtime projection: ${validation.errors.join(', ')}`);
     }
 
     if (validation.warnings.length > 0) {
@@ -277,37 +264,25 @@ export class SkillLoader {
     return skill;
   }
 
-  async loadSkillManifest(directoryPath: string): Promise<SkillManifest | undefined> {
-    const manifestPath = `${directoryPath}/manifest.json`;
-    const exists = await this.fs.exists(manifestPath);
-    if (!exists) {
-      return undefined;
+  private async loadNekoSkillOverlay(directoryPath: string): Promise<NekoSkillOverlay | undefined> {
+    const overlayPath = `${directoryPath}/agents/neko.yaml`;
+    let raw: string;
+    try {
+      raw = await this.fs.readFile(overlayPath);
+    } catch (error) {
+      if (isFileNotFoundError(error)) {
+        return undefined;
+      }
+      throw error;
     }
 
-    const raw = await this.fs.readFile(manifestPath);
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(raw);
-    } catch (error) {
+    const parsed = parseNekoSkillOverlay(raw);
+    if (!parsed.overlay || !parsed.validation.valid) {
       throw new Error(
-        `Failed to parse skill manifest.json: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
+        `Invalid agents/neko.yaml: ${formatSkillDiagnostics(parsed.validation.diagnostics)}`,
       );
     }
-
-    const manifest = parsed as SkillManifest;
-    const validation = validateSkillManifest(manifest);
-    if (!validation.valid) {
-      throw new Error(`Invalid skill manifest.json: ${validation.errors.join(', ')}`);
-    }
-    if (validation.warnings.length > 0) {
-      logger.warn('Skill manifest validation warnings', {
-        path: manifestPath,
-        warnings: validation.warnings.join(', '),
-      });
-    }
-    return manifest;
+    return parsed.overlay;
   }
 
   /**
@@ -530,25 +505,35 @@ export class SkillLoader {
     source: SkillSource = 'project',
     directoryPath?: string,
   ): Skill {
-    const parsed = this.parser.parseMarkdown(content);
+    const parsed = parsePortableSkillMarkdown(content, {
+      ...(directoryPath === undefined
+        ? {}
+        : { directoryName: getDirectoryBasename(directoryPath) }),
+    });
 
-    if (!parsed) {
-      throw new Error('Failed to parse skill content: Invalid frontmatter');
+    if (!parsed.definition || !parsed.validation.valid) {
+      throw new Error(
+        `Invalid portable skill content: ${formatSkillDiagnostics(parsed.validation.diagnostics)}`,
+      );
     }
 
-    const supportFileRefs = parsed.supportFileRefs.length > 0 ? parsed.supportFileRefs : undefined;
-
-    const skill = createSkill(
-      parsed.frontmatter as SkillFrontmatter,
-      parsed.content,
+    const definition = parsed.definition;
+    const supportFileRefs = extractValidatedSupportFileRefs(definition.body);
+    const skill: Skill = {
+      name: definition.name,
+      description: definition.description,
+      content: definition.body,
+      supportFileRefs: supportFileRefs.length > 0 ? supportFileRefs : undefined,
+      allowedTools: definition.allowedTools ? [...definition.allowedTools] : undefined,
       source,
       directoryPath,
-      supportFileRefs,
-    );
+      enabled: true,
+      portableDefinition: definition,
+    };
 
     const validation = validateSkill(skill);
     if (!validation.valid) {
-      throw new Error(`Invalid skill: ${validation.errors.join(', ')}`);
+      throw new Error(`Invalid skill runtime projection: ${validation.errors.join(', ')}`);
     }
 
     return skill;
@@ -603,6 +588,44 @@ export class SkillLoader {
     const content = await this.fs.readFile(filePath);
     return content.split('\n')[0];
   }
+}
+
+function getDirectoryBasename(directoryPath: string): string {
+  const normalized = directoryPath.replace(/[\\/]+$/, '');
+  const segments = normalized.split(/[\\/]/);
+  return segments[segments.length - 1] ?? '';
+}
+
+function isFileNotFoundError(error: unknown): boolean {
+  return typeof error === 'object' && error !== null && Reflect.get(error, 'code') === 'ENOENT';
+}
+
+function extractValidatedSupportFileRefs(content: string): string[] {
+  const normalizedRefs: string[] = [];
+  const seen = new Set<string>();
+
+  for (const ref of extractSupportFileRefs(content)) {
+    const validation = validateSkillPackagePath(ref);
+    if (!validation.valid || validation.normalizedPath === undefined) {
+      const detail =
+        validation.diagnostic === undefined
+          ? 'unknown support file path error'
+          : `${validation.diagnostic.code}: ${validation.diagnostic.message}`;
+      throw new Error(`Invalid Skill support file reference "${ref}": ${detail}`);
+    }
+    if (!seen.has(validation.normalizedPath)) {
+      seen.add(validation.normalizedPath);
+      normalizedRefs.push(validation.normalizedPath);
+    }
+  }
+
+  return normalizedRefs;
+}
+
+function formatSkillDiagnostics(
+  diagnostics: readonly { readonly code: string; readonly message: string }[],
+): string {
+  return diagnostics.map((diagnostic) => `${diagnostic.code}: ${diagnostic.message}`).join('; ');
 }
 
 /**

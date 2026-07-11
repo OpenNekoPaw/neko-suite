@@ -10,7 +10,6 @@ import {
   buildSkillDirectoryDeletionPlan,
   buildSkillDirectoryDuplicationPlan,
   buildSkillFileCreationPlan,
-  buildSkillFileContent,
   buildSkillSupportFileOpenPlan,
   createEmptySkillFileScanResult,
   normalizeDuplicatedSkillContent,
@@ -28,8 +27,8 @@ describe('skill-file-projector', () => {
           {
             source: 'personal',
             kind: 'skills',
-            dirPath: '/home/me/.neko/skills',
-            watchPattern: '**/*.md',
+            dirPath: '/home/me/.agents/skills',
+            watchPattern: '**/*',
           },
           {
             source: 'personal',
@@ -40,8 +39,8 @@ describe('skill-file-projector', () => {
           {
             source: 'project',
             kind: 'skills',
-            dirPath: '/repo/.neko/skills',
-            watchPattern: '**/*.md',
+            dirPath: '/repo/.agents/skills',
+            watchPattern: '**/*',
           },
           {
             source: 'project',
@@ -56,8 +55,8 @@ describe('skill-file-projector', () => {
         {
           source: 'personal',
           kind: 'skills',
-          dirPath: '/home/me/.neko/skills',
-          watchPattern: '**/*.md',
+          dirPath: '/home/me/.agents/skills',
+          watchPattern: '**/*',
         },
         {
           source: 'personal',
@@ -100,88 +99,44 @@ describe('skill-file-projector', () => {
     it('projects directory load failures', () => {
       expect(
         buildSkillDirectoryLoadFailureResult<Skill, SlashCommand>({
-          dirPath: '/repo/.neko/skills',
+          dirPath: '/repo/.agents/skills',
           operation: 'lazy-load',
           error: new Error('denied'),
         }),
       ).toEqual({
         skills: [],
         commands: [],
-        errors: [{ file: '/repo/.neko/skills', message: 'Failed to lazy-load: denied' }],
+        errors: [{ file: '/repo/.agents/skills', message: 'Failed to lazy-load: denied' }],
       });
-    });
-  });
-
-  describe('buildSkillFileContent', () => {
-    it('builds default SKILL.md content', () => {
-      const content = buildSkillFileContent({ skillName: 'review-pr' });
-
-      expect(content).toContain('name: "review-pr"');
-      expect(content).toContain('description: "A custom skill."');
-      expect(content).toContain('# review-pr');
-    });
-
-    it('adds frontmatter when provided content has none', () => {
-      const content = buildSkillFileContent({
-        skillName: 'storyboard',
-        description: 'Storyboard helper.',
-        content: 'Use panels and shots.',
-      });
-
-      expect(content).toBe(`---
-name: "storyboard"
-description: "Storyboard helper."
----
-
-Use panels and shots.`);
-    });
-
-    it('updates an existing frontmatter name', () => {
-      const content = buildSkillFileContent({
-        skillName: 'new-name',
-        content: `---
-name: "old-name"
-description: "Keep me"
----
-
-Body`,
-      });
-
-      expect(content).toContain('name: "new-name"');
-      expect(content).toContain('description: "Keep me"');
-      expect(content).toContain('Body');
-    });
-
-    it('inserts name into existing frontmatter that has no name', () => {
-      const content = buildSkillFileContent({
-        skillName: 'inserted',
-        content: `---
-description: "Only description"
----
-
-Body`,
-      });
-
-      expect(content).toContain('name: "inserted"\ndescription: "Only description"');
     });
   });
 
   describe('normalizeDuplicatedSkillContent', () => {
-    it('renames copied skill and removes disabled false', () => {
+    it('renames a portable Skill while preserving its author-owned definition', () => {
       const content = normalizeDuplicatedSkillContent(
         `---
-name: "source"
-enabled: false
-description: "Copied"
+name: source
+description: Copy this Skill when a variant is needed.
+license: MIT
+metadata:
+  owner: team
 ---
 
 Body`,
         'copy',
       );
 
-      expect(content).toContain('name: "copy"');
-      expect(content).not.toContain('enabled: false');
-      expect(content).toContain('description: "Copied"');
+      expect(content).toContain('name: copy');
+      expect(content).toContain('description: Copy this Skill when a variant is needed.');
+      expect(content).toContain('license: MIT');
+      expect(content).toContain('owner: team');
+      expect(content).toContain('Body');
+    });
+
+    it('fails visibly when copied SKILL.md is not portable-valid', () => {
+      expect(() => normalizeDuplicatedSkillContent('Body only', 'copy')).toThrow(
+        'skill-frontmatter-missing',
+      );
     });
   });
 
@@ -202,38 +157,38 @@ Body`,
     it('builds skill creation, duplication, and deletion plans', () => {
       expect(
         buildSkillFileCreationPlan({
-          basePath: '/repo/.neko/skills',
+          basePath: '/repo/.agents/skills',
           skillName: 'review',
           unavailableError: 'no workspace',
         }),
       ).toEqual({
         ok: true,
-        skillDir: '/repo/.neko/skills/review',
-        filePath: '/repo/.neko/skills/review/SKILL.md',
-        fileContent: expect.stringContaining('name: "review"'),
+        skillDir: '/repo/.agents/skills/review',
+        filePath: '/repo/.agents/skills/review/SKILL.md',
+        overlayFilePath: '/repo/.agents/skills/review/agents/neko.yaml',
       });
 
       expect(
         buildSkillDirectoryDuplicationPlan({
-          basePath: '/repo/.neko/skills',
+          basePath: '/repo/.agents/skills',
           newSkillName: 'copy',
           unavailableError: 'no workspace',
         }),
       ).toEqual({
         ok: true,
-        newSkillDir: '/repo/.neko/skills/copy',
-        skillFilePath: '/repo/.neko/skills/copy/SKILL.md',
+        newSkillDir: '/repo/.agents/skills/copy',
+        skillFilePath: '/repo/.agents/skills/copy/SKILL.md',
       });
 
       expect(
         buildSkillDirectoryDeletionPlan({
-          basePath: '/repo/.neko/skills',
+          basePath: '/repo/.agents/skills',
           skillName: 'review',
           unavailableError: 'no workspace',
         }),
       ).toEqual({
         ok: true,
-        skillDir: '/repo/.neko/skills/review',
+        skillDir: '/repo/.agents/skills/review',
       });
     });
 
@@ -274,7 +229,7 @@ Body`,
         }),
       ).toEqual({
         ok: true,
-        filePath: '/repo/.neko/skills/review/SKILL.md',
+        filePath: '/repo/.agents/skills/review/SKILL.md',
       });
 
       expect(
@@ -287,7 +242,7 @@ Body`,
         }),
       ).toEqual({
         ok: true,
-        filePath: '/home/me/.neko/skills/review/references/guide.md',
+        filePath: '/home/me/.agents/skills/review/references/guide.md',
       });
 
       expect(
@@ -321,6 +276,16 @@ Body`,
           fileType: 'script',
         }),
       ).toEqual({ ok: false, error: 'No file path provided for script' });
+
+      expect(
+        buildSkillSupportFileOpenPlan({
+          source: 'personal',
+          homeDir: '/home/me',
+          skillName: 'review',
+          fileType: 'reference',
+          filePath: '../escape.md',
+        }),
+      ).toEqual({ ok: false, error: 'Invalid reference file path: ../escape.md' });
 
       expect(
         buildCommandFileOpenPlan({
