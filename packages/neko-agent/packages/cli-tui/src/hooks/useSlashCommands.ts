@@ -32,7 +32,8 @@ import {
   type TuiCapabilityPorts,
 } from '../core/tui-command-router';
 import { detectTuiLocale } from '../core/tui-locale';
-import { TuiMessageQueueError, formatTuiQueueError } from '../core/message-queue';
+import { AgentMessageQueueOperationError } from '@neko/agent/runtime';
+import { formatTuiQueueError } from '../core/message-queue-format';
 import { useAgentStore } from '../stores/agent-store';
 import { useConfigStore } from '../stores/config-store';
 import { useConversationStore } from '../stores/conversation-store';
@@ -106,11 +107,11 @@ export function useSlashCommands(sessionActions: SlashCommandSessionActions): Sl
     async (input: string) => {
       if (isAgentRunning() && !isAllowedRunningCommand(input)) {
         const error = isSkillInvocation(input)
-          ? new TuiMessageQueueError(
+          ? new AgentMessageQueueOperationError(
               'not-queueable',
               'Skill invocations cannot be queued while an Agent turn is running.',
             )
-          : new TuiMessageQueueError(
+          : new AgentMessageQueueOperationError(
               'not-queueable',
               'Commands cannot be queued while an Agent turn is running.',
             );

@@ -50,6 +50,51 @@ export interface CreateAgentConversationMessageQueueOptions {
   readonly now?: () => number;
 }
 
+/** Runtime-owned binding between one Agent session and its active conversation queue. */
+export interface AgentRuntimeSessionMessageQueuePort {
+  current(): AgentConversationMessageQueue | null;
+  require(): AgentConversationMessageQueue;
+  bindConversation(conversationId: string): AgentConversationMessageQueue;
+  clear(): void;
+}
+
+export function createAgentRuntimeSessionMessageQueuePort(
+  conversationId?: string,
+): AgentRuntimeSessionMessageQueuePort {
+  let queue = conversationId ? createAgentConversationMessageQueue({ conversationId }) : null;
+
+  return {
+    current: () => queue,
+    require: () => {
+      if (!queue) {
+        throw new AgentMessageQueueOperationError(
+          'invalid-queue-operation',
+          'Agent runtime message queue requires an explicit conversation id.',
+        );
+      }
+      return queue;
+    },
+    bindConversation: (nextConversationId) => {
+      if (queue?.conversationId === nextConversationId) {
+        return queue;
+      }
+      if (queue && queue.snapshot().pendingCount > 0) {
+        throw new AgentMessageQueueOperationError(
+          'invalid-queue-operation',
+          `Cannot switch Agent runtime message queue from ${queue.conversationId} to ${nextConversationId} while pending messages exist.`,
+        );
+      }
+      queue?.clear();
+      queue = createAgentConversationMessageQueue({ conversationId: nextConversationId });
+      return queue;
+    },
+    clear: () => {
+      queue?.clear();
+      queue = null;
+    },
+  };
+}
+
 export function createAgentConversationMessageQueue(
   options: CreateAgentConversationMessageQueueOptions,
 ): AgentConversationMessageQueue {

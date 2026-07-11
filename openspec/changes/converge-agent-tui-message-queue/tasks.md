@@ -9,7 +9,7 @@
 - [x] 2.1 Add an Agent-local `MessageQueuePanel` directly above `InputEditor` with stable collapsed height and ordered content previews.
 - [x] 2.2 Wire promote/send-next and cancel controls to existing session queue operations while preserving composer focus.
 - [x] 2.3 Add edit-to-composer flow that does not silently overwrite a non-empty draft and rejects editing internal continuations visibly.
-- [ ] 2.4 Add Ink component tests for placement, empty hiding, truncation, action wiring, source-specific controls, and draft conflict handling.
+- [x] 2.4 Add Ink component tests for placement, empty hiding, truncation, action wiring, source-specific controls, and draft conflict handling.
 
 ## 3. Transcript Boundary Cleanup
 
@@ -33,14 +33,14 @@
 ## 6. Runtime Queue Convergence
 
 - [x] 6.1 Audit and define the minimal Agent runtime queue/session port used by both TUI and existing runtime queue consumers.
-- [ ] 6.2 Route TUI enqueue, snapshot, promote, edit, cancel, and release through the explicit-conversation runtime-owned queue port.
-- [ ] 6.3 Add canonical-path tests with the TUI-local queue path poisoned so any fallback fails visibly.
-- [ ] 6.4 Remove `messageQueueRef`, manual `drainQueuedPrompts`, package-local queue mutation ownership, and obsolete count-only compatibility paths.
+- [x] 6.2 Route TUI enqueue, snapshot, promote, edit, cancel, and release through the explicit-conversation runtime-owned queue port.
+- [x] 6.3 Add canonical-path tests with the TUI-local queue path poisoned so any fallback fails visibly.
+- [x] 6.4 Remove `messageQueueRef`, manual `drainQueuedPrompts`, package-local queue mutation ownership, and obsolete count-only compatibility paths.
 - [ ] 6.5 Run legacy-debt and unused-code checks proving the removed TUI-local queue path is no longer reachable.
 
 ## 7. Validation And Delivery
 
-- [ ] 7.1 Run focused cli-tui presenter, component, event-adapter, command-router, and session tests after each implementation batch.
-- [ ] 7.2 Run focused Agent runtime queue/turn tests and TypeScript checks for affected packages.
+- [x] 7.1 Run focused cli-tui presenter, component, event-adapter, command-router, and session tests after each implementation batch.
+- [x] 7.2 Run focused Agent runtime queue/turn tests and TypeScript checks for affected packages.
 - [ ] 7.3 Use `neko-agent-evaluation` to validate running-turn enqueue, mixed continuation ordering, cancellation, and transcript/source projection.
 - [ ] 7.4 Run `neko-quality-review`, record validation commands and residual risks, and confirm no Webview/Rust/durable-data boundary changed.

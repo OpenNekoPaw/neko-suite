@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   AgentMessageQueueOperationError,
   createAgentConversationMessageQueue,
+  createAgentRuntimeSessionMessageQueuePort,
 } from '../session/agent-message-queue';
 
 describe('AgentConversationMessageQueue', () => {
@@ -138,6 +139,42 @@ describe('AgentConversationMessageQueue', () => {
         updatedAt: 102,
         metadata: expect.objectContaining({ status: 'discarded' }),
       }),
+    );
+  });
+});
+
+describe('AgentRuntimeSessionMessageQueuePort', () => {
+  it('requires explicit conversation binding and preserves the same conversation queue', () => {
+    const port = createAgentRuntimeSessionMessageQueuePort();
+
+    expect(port.current()).toBeNull();
+    expect(() => port.require()).toThrow(
+      'Agent runtime message queue requires an explicit conversation id.',
+    );
+
+    const first = port.bindConversation('conv-1');
+    first.enqueue({ content: 'pending', source: 'user' });
+
+    expect(port.bindConversation('conv-1')).toBe(first);
+    expect(port.require().snapshot().pendingCount).toBe(1);
+  });
+
+  it('fails visibly instead of dropping pending messages when switching conversations', () => {
+    const port = createAgentRuntimeSessionMessageQueuePort('conv-1');
+    const first = port.require();
+    first.enqueue({ content: 'pending', source: 'user' });
+
+    expect(() => port.bindConversation('conv-2')).toThrow(
+      'Cannot switch Agent runtime message queue from conv-1 to conv-2 while pending messages exist.',
+    );
+    expect(port.require()).toBe(first);
+    expect(first.snapshot().pendingCount).toBe(1);
+
+    first.clear();
+    const second = port.bindConversation('conv-2');
+    expect(port.require()).toBe(second);
+    expect(second.snapshot()).toEqual(
+      expect.objectContaining({ conversationId: 'conv-2', pendingCount: 0 }),
     );
   });
 });

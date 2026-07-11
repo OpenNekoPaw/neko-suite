@@ -1,5 +1,6 @@
 import React from 'react';
 import { cleanup, render } from 'ink-testing-library';
+import { Box, Text } from 'ink';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { useAgentStore } from '../../stores/agent-store';
 import { MessageQueuePanel } from './MessageQueuePanel';
@@ -20,6 +21,34 @@ describe('MessageQueuePanel', () => {
   it('renders nothing for an empty queue', () => {
     const view = render(<MessageQueuePanel />);
     expect(view.lastFrame()).toBe('');
+  });
+
+  it('renders the queue panel immediately before the composer region', () => {
+    useAgentStore.getState().setMessageQueueSnapshot({
+      conversationId: 'conv-1',
+      pendingCount: 1,
+      version: 1,
+      items: [
+        {
+          id: 'queue-1',
+          conversationId: 'conv-1',
+          content: 'Queued before composer',
+          createdAt: 1,
+          source: 'user',
+        },
+      ],
+    });
+
+    const frame = render(
+      <Box flexDirection="column">
+        <Text>TRANSCRIPT_END</Text>
+        <MessageQueuePanel />
+        <Text>COMPOSER_START</Text>
+      </Box>,
+    ).lastFrame()!;
+
+    expect(frame.indexOf('TRANSCRIPT_END')).toBeLessThan(frame.indexOf('Queued before composer'));
+    expect(frame.indexOf('Queued before composer')).toBeLessThan(frame.indexOf('COMPOSER_START'));
   });
 
   it('shows ordered content above the composer without making ids primary copy', () => {

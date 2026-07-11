@@ -45,6 +45,9 @@ import {
   createAgentCapabilityRuntimeRegistries,
   createExternalResearchCapabilityProviderFromMcpConfig,
   createAgentRuntimeSession,
+  AgentMessageQueueOperationError,
+  type AgentConversationMessageQueue,
+  type AgentRuntimeSessionHandle,
 } from '@neko/agent/runtime';
 import {
   projectLlmParameters,
@@ -87,12 +90,7 @@ import {
 } from '../core/tui-capability-loader';
 import { detectTuiLocale } from '../core/tui-locale';
 import { formatTuiReferenceDiagnostics } from '../core/reference-diagnostics';
-import {
-  TuiMessageQueueError,
-  createTuiMessageQueue,
-  formatTuiQueueError,
-  type TuiMessageQueue,
-} from '../core/message-queue';
+import { formatTuiQueueError } from '../core/message-queue-format';
 import {
   connectTuiMcpServer,
   createTuiMcpServerSnapshots,
@@ -303,9 +301,7 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
   const conversationIdRef = useRef(createTuiConversationId(config.workDir));
   const conversationCreatedAtRef = useRef(Date.now());
   const conversationTitleRef = useRef('');
-  const messageQueueRef = useRef<TuiMessageQueue | null>(null);
-  const drainingQueueRef = useRef(false);
-  const queuePausedAfterCancelRef = useRef(false);
+  const runtimeSessionRef = useRef<AgentRuntimeSessionHandle | null>(null);
   const submitRef = useRef<AgentSessionHandle['submit'] | null>(null);
   const submitInternalContinuationRef = useRef<
     ((input: SubmitInternalContinuationInput) => Promise<void>) | null
@@ -480,10 +476,13 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
       conversationIdRef.current = record.id;
       conversationCreatedAtRef.current = record.createdAt;
       conversationTitleRef.current = record.title;
-      messageQueueRef.current = createTuiMessageQueue({ conversationId: record.id });
-      queuePausedAfterCancelRef.current = false;
+      const runtimeSession = runtimeSessionRef.current;
+      if (!runtimeSession) {
+        throw new Error('Agent runtime session is not initialized');
+      }
+      const queue = runtimeSession.messageQueue.bindConversation(record.id);
       useAgentStore.getState().setMessageQueuePausedAfterCancel(false);
-      useAgentStore.getState().setMessageQueueSnapshot(messageQueueRef.current.snapshot());
+      useAgentStore.getState().setMessageQueueSnapshot(queue.snapshot());
       useConversationStore
         .getState()
         .replaceMessages(projectAgentHistoryToTuiMessages(record.messages));
@@ -705,6 +704,7 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
           buildAgentRuntimeSessionFactoryConfig(sessionAssembly),
         );
         const session = runtimeSession.session;
+        runtimeSessionRef.current = runtimeSession;
         promptBuilderRef.current = runtimeSession.promptBuilder;
 
         sessionRef.current = session;
@@ -714,12 +714,9 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
             .getState()
             .replaceMessages(projectAgentHistoryToTuiMessages(resumeRecord.messages));
         }
-        messageQueueRef.current = createTuiMessageQueue({
-          conversationId: conversationIdRef.current,
-        });
-        queuePausedAfterCancelRef.current = false;
+        const messageQueue = runtimeSession.messageQueue.require();
         useAgentStore.getState().setMessageQueuePausedAfterCancel(false);
-        useAgentStore.getState().setMessageQueueSnapshot(messageQueueRef.current.snapshot());
+        useAgentStore.getState().setMessageQueueSnapshot(messageQueue.snapshot());
         mediaDeliveryHostRef.current?.dispose();
         const mediaDeliveryHost = new NodeMediaTaskDeliveryHost({
           ...(platformRef.current ? { platform: platformRef.current } : {}),
@@ -737,9 +734,20 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
                     recordTaskResultObservation: (input) =>
                       session.recordTaskResultObservation(input),
                     enqueuePendingMessage: (input) => {
-                      const queue = messageQueueRef.current;
-                      if (!queue) return null;
-                      const item = queue.enqueue(input.content);
+                      const runtimeSession = runtimeSessionRef.current;
+                      if (!runtimeSession) {
+                        throw new Error('Agent runtime session is not initialized');
+                      }
+                      const queue = runtimeSession.messageQueue.require();
+                      if (queue.conversationId !== input.conversationId) {
+                        throw new Error(
+                          `Task-result continuation conversation mismatch: expected ${queue.conversationId}, received ${input.conversationId}`,
+                        );
+                      }
+                      const item = queue.enqueue({
+                        content: input.content,
+                        source: input.source,
+                      });
                       const snapshot = queue.snapshot();
                       useAgentStore.getState().setMessageQueueSnapshot(snapshot);
                       syncWorkspaceRuntimeState({ status: 'running' });
@@ -846,6 +854,8 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
       streamRuntimeRef.current.dispose();
       taskManagerRef.current = null;
       useAgentStore.getState().setRunningTaskSummary(null);
+      runtimeSessionRef.current?.messageQueue.clear();
+      runtimeSessionRef.current = null;
       sessionRef.current?.dispose();
       platformRef.current?.dispose();
       mcpManagerRef.current?.disconnectAll().catch(() => {});
@@ -989,56 +999,53 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
     [persistCurrentConversation, refreshTaskSummary, syncWorkspaceRuntimeState],
   );
 
-  const setQueuePausedAfterCancel = useCallback((paused: boolean): void => {
-    queuePausedAfterCancelRef.current = paused;
-    useAgentStore.getState().setMessageQueuePausedAfterCancel(paused);
+  const requireRuntimeMessageQueue = useCallback((): AgentConversationMessageQueue => {
+    const runtimeSession = runtimeSessionRef.current;
+    if (!runtimeSession) {
+      throw new Error('Agent runtime session is not initialized');
+    }
+    return runtimeSession.messageQueue.require();
   }, []);
 
-  const drainQueuedPrompts = useCallback(async (): Promise<void> => {
-    if (queuePausedAfterCancelRef.current || drainingQueueRef.current) {
-      return;
-    }
-    drainingQueueRef.current = true;
-    try {
-      const queue = messageQueueRef.current;
-      const adapter = adapterRef.current;
-      if (!queue || !adapter) {
-        return;
-      }
+  const projectRuntimeMessageQueue = useCallback((queue: AgentConversationMessageQueue): void => {
+    useAgentStore
+      .getState()
+      .setMessageQueuePausedAfterCancel(queue.isPausedAfterActiveTurnCancel());
+    useAgentStore.getState().setMessageQueueSnapshot(queue.snapshot());
+  }, []);
 
-      for (;;) {
-        if (queuePausedAfterCancelRef.current) {
-          useAgentStore.getState().setMessageQueueSnapshot(queue.snapshot());
-          syncWorkspaceRuntimeState();
-          return;
-        }
-        const released = queue.dequeue();
-        if (!released) {
-          setQueuePausedAfterCancel(false);
-          useAgentStore.getState().setMessageQueueSnapshot(queue.snapshot());
-          syncWorkspaceRuntimeState();
-          return;
-        }
-        const snapshot = queue.snapshot();
-        useAgentStore.getState().setMessageQueueSnapshot(snapshot);
-        syncWorkspaceRuntimeState({ status: 'running' });
-        adapter.handleEvent({
-          type: 'messageQueued',
-          pendingCount: snapshot.pendingCount,
-          releasedQueuedMessageItem: released,
-          messageQueueSnapshot: snapshot,
-        } satisfies AgentEvent);
-        await executePrompt(released.content, {
-          source: normalizeTurnSource(released.source),
-          displayKind: released.displayKind,
-          ...(released.metadata ? { continuationMetadata: released.metadata } : {}),
-          ...(released.metadata ? { metadata: { continuation: released.metadata } } : {}),
-        });
-      }
-    } finally {
-      drainingQueueRef.current = false;
+  const releaseRuntimeQueuedPrompts = useCallback(async (): Promise<void> => {
+    const queue = requireRuntimeMessageQueue();
+    const adapter = adapterRef.current;
+    if (!adapter) {
+      throw new Error('Session event adapter is not initialized');
     }
-  }, [executePrompt, setQueuePausedAfterCancel, syncWorkspaceRuntimeState]);
+
+    await queue.drain(async (released) => {
+      const snapshot = queue.snapshot();
+      projectRuntimeMessageQueue(queue);
+      syncWorkspaceRuntimeState({ status: 'running' });
+      adapter.handleEvent({
+        type: 'messageQueued',
+        pendingCount: snapshot.pendingCount,
+        releasedQueuedMessageItem: released,
+        messageQueueSnapshot: snapshot,
+      } satisfies AgentEvent);
+      await executePrompt(released.content, {
+        source: normalizeTurnSource(released.source),
+        displayKind: released.displayKind,
+        ...(released.metadata ? { continuationMetadata: released.metadata } : {}),
+        ...(released.metadata ? { metadata: { continuation: released.metadata } } : {}),
+      });
+    });
+    projectRuntimeMessageQueue(queue);
+    syncWorkspaceRuntimeState();
+  }, [
+    executePrompt,
+    projectRuntimeMessageQueue,
+    requireRuntimeMessageQueue,
+    syncWorkspaceRuntimeState,
+  ]);
 
   const submit = useCallback(
     async (prompt: string, executionOverrides?: { metadata?: Record<string, unknown> }) => {
@@ -1055,14 +1062,10 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
       }
 
       if (session.isRunning() || useAgentStore.getState().status === 'running') {
-        const queue = messageQueueRef.current;
-        if (!queue) {
-          useConversationStore.getState().addError(new Error('Message queue is not initialized'));
-          return;
-        }
         try {
+          const queue = requireRuntimeMessageQueue();
           if (executionOverrides?.metadata && Object.keys(executionOverrides.metadata).length > 0) {
-            throw new TuiMessageQueueError(
+            throw new AgentMessageQueueOperationError(
               'not-queueable',
               'Prompts with execution metadata cannot be queued while an Agent turn is running.',
             );
@@ -1073,7 +1076,7 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
             displayKind: 'user-message',
           });
           const snapshot = queue.snapshot();
-          useAgentStore.getState().setMessageQueueSnapshot(snapshot);
+          projectRuntimeMessageQueue(queue);
           syncWorkspaceRuntimeState({ status: 'running' });
           adapter.handleEvent({
             type: 'messageQueued',
@@ -1092,7 +1095,7 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
 
       try {
         await executePrompt(prompt, { metadata: executionOverrides?.metadata, source: 'user' });
-        await drainQueuedPrompts();
+        await releaseRuntimeQueuedPrompts();
 
         if (useAgentStore.getState().executionMode === 'plan') {
           useUIStore.getState().showPlanReview();
@@ -1105,7 +1108,14 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
         syncWorkspaceRuntimeState({ status: 'error', phase: 'idle', errorMessage: err.message });
       }
     },
-    [drainQueuedPrompts, executePrompt, refreshTaskSummary, syncWorkspaceRuntimeState],
+    [
+      executePrompt,
+      projectRuntimeMessageQueue,
+      refreshTaskSummary,
+      releaseRuntimeQueuedPrompts,
+      requireRuntimeMessageQueue,
+      syncWorkspaceRuntimeState,
+    ],
   );
 
   const submitInternalContinuation = useCallback(
@@ -1127,10 +1137,7 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
       };
 
       if (session.isRunning() || useAgentStore.getState().status === 'running') {
-        const queue = messageQueueRef.current;
-        if (!queue) {
-          throw new Error('Message queue is not initialized');
-        }
+        const queue = requireRuntimeMessageQueue();
         const item = queue.enqueue({
           content: input.prompt,
           source: input.source,
@@ -1138,7 +1145,7 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
           metadata: continuationMetadata,
         });
         const snapshot = queue.snapshot();
-        useAgentStore.getState().setMessageQueueSnapshot(snapshot);
+        projectRuntimeMessageQueue(queue);
         syncWorkspaceRuntimeState({ status: 'running' });
         adapter.handleEvent({
           type: 'messageQueued',
@@ -1157,7 +1164,7 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
           continuationMetadata,
           metadata: { continuation: continuationMetadata },
         });
-        await drainQueuedPrompts();
+        await releaseRuntimeQueuedPrompts();
       } catch (error) {
         const err = error instanceof Error ? error : new Error(String(error));
         useAgentStore.getState().setError(err);
@@ -1166,24 +1173,33 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
         syncWorkspaceRuntimeState({ status: 'error', phase: 'idle', errorMessage: err.message });
       }
     },
-    [drainQueuedPrompts, executePrompt, refreshTaskSummary, syncWorkspaceRuntimeState],
+    [
+      executePrompt,
+      projectRuntimeMessageQueue,
+      refreshTaskSummary,
+      releaseRuntimeQueuedPrompts,
+      requireRuntimeMessageQueue,
+      syncWorkspaceRuntimeState,
+    ],
   );
 
   const cancel = useCallback(() => {
     const session = sessionRef.current;
+    const queue = runtimeSessionRef.current?.messageQueue.current();
     const wasRunning =
       Boolean(session?.isRunning()) || useAgentStore.getState().status === 'running';
     session?.cancel();
-    if (wasRunning && (messageQueueRef.current?.snapshot().pendingCount ?? 0) > 0) {
-      setQueuePausedAfterCancel(true);
+    if (wasRunning && queue && queue.snapshot().pendingCount > 0) {
+      queue.pauseAfterActiveTurnCancel();
+      projectRuntimeMessageQueue(queue);
     }
     useAgentStore.getState().setIdle();
     void refreshTaskSummary();
     syncWorkspaceRuntimeState({ status: 'idle', phase: 'idle' });
-  }, [refreshTaskSummary, setQueuePausedAfterCancel, syncWorkspaceRuntimeState]);
+  }, [projectRuntimeMessageQueue, refreshTaskSummary, syncWorkspaceRuntimeState]);
 
   const getMessageQueueSnapshot = useCallback(() => {
-    return messageQueueRef.current?.snapshot() ?? null;
+    return runtimeSessionRef.current?.messageQueue.current()?.snapshot() ?? null;
   }, []);
 
   const listTasks = useCallback(
@@ -1203,16 +1219,14 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
   );
 
   const resumeQueuedMessages = useCallback(async (): Promise<void> => {
-    const queue = messageQueueRef.current;
-    if (!queue) {
-      throw new Error('Message queue is not initialized');
-    }
-    setQueuePausedAfterCancel(false);
+    const queue = requireRuntimeMessageQueue();
+    queue.resume();
+    projectRuntimeMessageQueue(queue);
     if (queue.snapshot().pendingCount === 0) {
       return;
     }
     try {
-      await drainQueuedPrompts();
+      await releaseRuntimeQueuedPrompts();
     } catch (error) {
       const err = error instanceof Error ? error : new Error(String(error));
       useAgentStore.getState().setError(err);
@@ -1221,59 +1235,52 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
       syncWorkspaceRuntimeState({ status: 'error', phase: 'idle', errorMessage: err.message });
     }
   }, [
-    drainQueuedPrompts,
+    projectRuntimeMessageQueue,
     refreshTaskSummary,
-    setQueuePausedAfterCancel,
+    releaseRuntimeQueuedPrompts,
+    requireRuntimeMessageQueue,
     syncWorkspaceRuntimeState,
   ]);
 
   const promoteQueuedMessage = useCallback(
     (queueItemId: string) => {
-      const queue = messageQueueRef.current;
-      if (!queue) {
-        throw new Error('Message queue is not initialized');
-      }
+      const queue = requireRuntimeMessageQueue();
+      const wasPaused = queue.isPausedAfterActiveTurnCancel();
       const item = queue.promote(queueItemId);
-      useAgentStore.getState().setMessageQueueSnapshot(queue.snapshot());
+      if (wasPaused) {
+        queue.resume();
+      }
+      projectRuntimeMessageQueue(queue);
       syncWorkspaceRuntimeState();
-      if (queuePausedAfterCancelRef.current) {
-        void resumeQueuedMessages();
+      if (wasPaused) {
+        void releaseRuntimeQueuedPrompts();
       }
       return item;
     },
-    [resumeQueuedMessages, syncWorkspaceRuntimeState],
+    [
+      projectRuntimeMessageQueue,
+      releaseRuntimeQueuedPrompts,
+      requireRuntimeMessageQueue,
+      syncWorkspaceRuntimeState,
+    ],
   );
 
   const cancelQueuedMessage = useCallback(
     (queueItemId: string) => {
-      const queue = messageQueueRef.current;
-      if (!queue) {
-        throw new Error('Message queue is not initialized');
-      }
-      const item = queue.cancel(queueItemId);
-      const snapshot = queue.snapshot();
-      if (snapshot.pendingCount === 0) {
-        setQueuePausedAfterCancel(false);
-      }
-      useAgentStore.getState().setMessageQueueSnapshot(snapshot);
+      const queue = requireRuntimeMessageQueue();
+      const item = queue.remove(queueItemId);
+      projectRuntimeMessageQueue(queue);
       syncWorkspaceRuntimeState();
       return item;
     },
-    [setQueuePausedAfterCancel, syncWorkspaceRuntimeState],
+    [projectRuntimeMessageQueue, requireRuntimeMessageQueue, syncWorkspaceRuntimeState],
   );
 
   const discardQueuedContinuation = useCallback(
     (queueItemId: string) => {
-      const queue = messageQueueRef.current;
-      if (!queue) {
-        throw new Error('Message queue is not initialized');
-      }
+      const queue = requireRuntimeMessageQueue();
       const item = queue.discardContinuation(queueItemId);
-      const snapshot = queue.snapshot();
-      if (snapshot.pendingCount === 0) {
-        setQueuePausedAfterCancel(false);
-      }
-      useAgentStore.getState().setMessageQueueSnapshot(snapshot);
+      projectRuntimeMessageQueue(queue);
       useConversationStore.getState().addSystemMessage({
         content: `Continuation discarded: ${item.id}`,
         source: normalizeTurnSource(item.source),
@@ -1283,21 +1290,18 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
       syncWorkspaceRuntimeState();
       return item;
     },
-    [setQueuePausedAfterCancel, syncWorkspaceRuntimeState],
+    [projectRuntimeMessageQueue, requireRuntimeMessageQueue, syncWorkspaceRuntimeState],
   );
 
   const editQueuedMessage = useCallback(
     (queueItemId: string, content: string) => {
-      const queue = messageQueueRef.current;
-      if (!queue) {
-        throw new Error('Message queue is not initialized');
-      }
+      const queue = requireRuntimeMessageQueue();
       const item = queue.edit(queueItemId, content);
-      useAgentStore.getState().setMessageQueueSnapshot(queue.snapshot());
+      projectRuntimeMessageQueue(queue);
       syncWorkspaceRuntimeState();
       return item;
     },
-    [syncWorkspaceRuntimeState],
+    [projectRuntimeMessageQueue, requireRuntimeMessageQueue, syncWorkspaceRuntimeState],
   );
 
   const clearHistory = useCallback(() => {

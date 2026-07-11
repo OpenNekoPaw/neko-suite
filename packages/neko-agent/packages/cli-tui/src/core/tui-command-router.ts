@@ -13,7 +13,7 @@ import type { TuiArtifactReference } from './artifact-reference-formatter';
 import { formatTuiArtifactReference } from './artifact-reference-formatter';
 import type { CLIConfig } from './types';
 import { getProviderModels } from './config';
-import { formatTuiQueueError, formatTuiQueueSnapshot } from './message-queue';
+import { formatTuiQueueError, formatTuiQueueSnapshot } from './message-queue-format';
 import {
   handleSlashCommand,
   type MediaModelOverrides,

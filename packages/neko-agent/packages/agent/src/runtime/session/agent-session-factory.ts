@@ -45,6 +45,10 @@ import {
 } from '../subagent-runtime';
 import type { ModelTierResolver, SpecializedAgentPreset } from '../../subagent';
 import type { WorkspaceFileIgnoreRules } from '../../input/workspace-ignore';
+import {
+  createAgentRuntimeSessionMessageQueuePort,
+  type AgentRuntimeSessionMessageQueuePort,
+} from './agent-message-queue';
 
 export interface AgentRuntimeSessionFactoryLogger {
   warn(message: string, error?: unknown): void;
@@ -107,6 +111,7 @@ export interface AgentRuntimeSessionUpdateConfig extends Omit<
 
 export interface AgentRuntimeSessionHandle {
   session: ReturnType<typeof createAgentSessionWithRuntime>;
+  messageQueue: AgentRuntimeSessionMessageQueuePort;
   promptBuilder: SystemPromptBuilder;
   projectMemoryManager?: IProjectMemoryManager;
   toolGroupRegistry?: IToolGroupRegistry;
@@ -190,8 +195,11 @@ export async function createAgentRuntimeSession(
     ...(config.onActivationProgress ? { onActivationProgress: config.onActivationProgress } : {}),
   });
 
+  const messageQueue = createAgentRuntimeSessionMessageQueuePort(config.conversationId);
+
   return {
     session,
+    messageQueue,
     promptBuilder,
     ...(projectMemoryManager ? { projectMemoryManager } : {}),
     ...(config.capabilityRuntime?.toolGroupRegistry
@@ -258,6 +266,7 @@ export function updateAgentRuntimeSession(
 }
 
 export function unregisterAgentRuntimeSession(handle: AgentRuntimeSessionHandle): void {
+  handle.messageQueue.clear();
   handle.subAgentRuntime?.unregisterRuntime(handle.conversationId);
 }
 

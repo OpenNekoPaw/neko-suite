@@ -120,8 +120,10 @@ export {
 export {
   AgentMessageQueueOperationError,
   createAgentConversationMessageQueue,
+  createAgentRuntimeSessionMessageQueuePort,
   type AgentConversationMessageQueue,
   type AgentMessageQueueOperationErrorCode,
+  type AgentRuntimeSessionMessageQueuePort,
   type CreateAgentConversationMessageQueueOptions,
   type EnqueueAgentMessageInput,
 } from './session/agent-message-queue';

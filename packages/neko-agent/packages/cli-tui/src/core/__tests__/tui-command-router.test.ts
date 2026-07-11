@@ -9,7 +9,7 @@ import {
   type TuiCapabilityPorts,
 } from '../tui-command-router';
 import { DEFAULT_CLI_CONFIG } from '../types';
-import { createTuiMessageQueue } from '../message-queue';
+import { createAgentConversationMessageQueue } from '@neko/agent/runtime';
 
 describe('handleTuiControlCommand', () => {
   it('routes execution mode commands through the mode port', async () => {
@@ -325,9 +325,12 @@ describe('handleTuiControlCommand', () => {
   });
 
   it('lists and mutates queued messages through the queue port', async () => {
-    const queue = createTuiMessageQueue({ conversationId: 'conv-1', now: () => 1000 });
-    const first = queue.enqueue('first');
-    const second = queue.enqueue('second');
+    const queue = createAgentConversationMessageQueue({
+      conversationId: 'conv-1',
+      now: () => 1000,
+    });
+    const first = queue.enqueue({ content: 'first', source: 'user' });
+    const second = queue.enqueue({ content: 'second', source: 'user' });
     const context = createContext({ queue });
 
     const listed = await handleTuiControlCommand('/queue list', context);
@@ -355,12 +358,12 @@ describe('handleTuiControlCommand', () => {
   });
 
   it('reports stale queue item diagnostics visibly', async () => {
-    const queue = createTuiMessageQueue({ conversationId: 'conv-1' });
+    const queue = createAgentConversationMessageQueue({ conversationId: 'conv-1' });
     const context = createContext({ queue });
 
     const result = await handleTuiControlCommand('/queue cancel missing', context);
 
-    expect(result.error).toBe('stale-item: Unknown queue item: missing');
+    expect(result.error).toBe('stale-item: Queued message is no longer pending: missing');
   });
 
   it('lists MCP server connection status', async () => {
@@ -562,7 +565,7 @@ function createContext(
     readonly chatModelOptions?: readonly ChatModelOption[];
     readonly mediaModelOptions?: readonly ChatModelOption[];
     readonly selectedMenuItem?: string | null;
-    readonly queue?: ReturnType<typeof createTuiMessageQueue>;
+    readonly queue?: ReturnType<typeof createAgentConversationMessageQueue>;
     readonly tasks?: readonly Task[];
     readonly mcp?: TuiCommandRouterContext['ports']['mcp'];
     readonly capability?: TuiCapabilityPorts;
@@ -693,7 +696,7 @@ function createContext(
         ? {
             getSnapshot: () => overrides.queue!.snapshot(),
             promote: (queueItemId) => overrides.queue!.promote(queueItemId),
-            cancel: (queueItemId) => overrides.queue!.cancel(queueItemId),
+            cancel: (queueItemId) => overrides.queue!.remove(queueItemId),
             edit: (queueItemId, content) => overrides.queue!.edit(queueItemId, content),
           }
         : undefined,

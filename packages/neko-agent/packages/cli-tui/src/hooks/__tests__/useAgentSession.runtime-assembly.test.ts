@@ -6,6 +6,8 @@ import { Text } from 'ink';
 import { cleanup, render } from 'ink-testing-library';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AgentEvent } from '@neko/agent';
+import { createAgentRuntimeSessionMessageQueuePort } from '@neko/agent/runtime';
+import type { AgentConversationMessageQueue } from '@neko/agent/runtime';
 import type { AgentCapabilityProvider, IService } from '@neko/shared';
 import type { MediaTask } from '@neko/platform';
 import { DEFAULT_CLI_CONFIG, type CLIConfig } from '../../core/types';
@@ -16,6 +18,12 @@ import { useAgentSession, type AgentSessionHandle } from '../useAgentSession';
 const runtimeMocks = vi.hoisted(() => ({
   latestFactoryConfig: undefined as Record<string, unknown> | undefined,
   latestSession: undefined as Record<string, unknown> | undefined,
+  latestMessageQueue: undefined as AgentConversationMessageQueue | undefined,
+  queueEnqueue: vi.fn(),
+  queuePromote: vi.fn(),
+  queueRemove: vi.fn(),
+  queueEdit: vi.fn(),
+  queueDrain: vi.fn(),
   tokenCount: 0,
   executeEvents: [] as AgentEvent[],
   executionBlocker: undefined as Promise<void> | undefined,
@@ -71,7 +79,13 @@ let tempRoot: string;
 beforeEach(async () => {
   runtimeMocks.latestFactoryConfig = undefined;
   runtimeMocks.latestSession = undefined;
+  runtimeMocks.latestMessageQueue = undefined;
   runtimeMocks.latestTaskResultObservationRuntimeOptions = undefined;
+  runtimeMocks.queueEnqueue.mockReset();
+  runtimeMocks.queuePromote.mockReset();
+  runtimeMocks.queueRemove.mockReset();
+  runtimeMocks.queueEdit.mockReset();
+  runtimeMocks.queueDrain.mockReset();
   runtimeMocks.tokenCount = 0;
   runtimeMocks.executeEvents = [];
   runtimeMocks.executionBlocker = undefined;
@@ -112,9 +126,25 @@ beforeEach(async () => {
     async (config: Record<string, unknown>) => {
       runtimeMocks.latestFactoryConfig = config;
       const session = createMockAgentSession(runtimeMocks.tokenCount);
+      const messageQueue = createAgentRuntimeSessionMessageQueuePort(
+        String(config.conversationId ?? ''),
+      );
+      const queue = messageQueue.require();
       runtimeMocks.latestSession = session;
+      runtimeMocks.latestMessageQueue = queue;
+      runtimeMocks.queueEnqueue.mockImplementation(queue.enqueue.bind(queue));
+      runtimeMocks.queuePromote.mockImplementation(queue.promote.bind(queue));
+      runtimeMocks.queueRemove.mockImplementation(queue.remove.bind(queue));
+      runtimeMocks.queueEdit.mockImplementation(queue.edit.bind(queue));
+      runtimeMocks.queueDrain.mockImplementation(queue.drain.bind(queue));
+      queue.enqueue = runtimeMocks.queueEnqueue;
+      queue.promote = runtimeMocks.queuePromote;
+      queue.remove = runtimeMocks.queueRemove;
+      queue.edit = runtimeMocks.queueEdit;
+      queue.drain = runtimeMocks.queueDrain;
       return {
         session,
+        messageQueue,
         promptBuilder: createMockPromptBuilder(),
         effectiveSystemPrompt: String(config.systemPrompt ?? ''),
       };
@@ -292,6 +322,63 @@ describe('useAgentSession runtime assembly', () => {
     expect(useAgentStore.getState().usage).toEqual({ input: 1, output: 2, total: 3 });
   });
 
+  it('routes running task-result continuations through the runtime queue with continuation authorship', async () => {
+    runtimeMocks.executionBlocker = new Promise<void>((resolve) => {
+      runtimeMocks.releaseExecution = resolve;
+    });
+    let sessionHandle: AgentSessionHandle | undefined;
+
+    render(
+      React.createElement(RuntimeSessionProbe, {
+        config: {
+          ...DEFAULT_CLI_CONFIG,
+          workDir: tempRoot,
+          providerRequiresApiKey: false,
+        },
+        onReady: (session) => {
+          sessionHandle = session;
+        },
+      }),
+    );
+
+    await waitFor(() => Boolean(sessionHandle));
+    const activeTurn = sessionHandle!.submit('Active turn');
+    await waitFor(() => useAgentStore.getState().status === 'running');
+
+    const queue = runtimeMocks.latestMessageQueue!;
+    const agent = runtimeMocks.latestTaskResultObservationRuntimeOptions?.agents.get(
+      queue.conversationId,
+    );
+    const queued = agent?.enqueuePendingMessage?.({
+      conversationId: queue.conversationId,
+      content: 'Continue from task result',
+      source: 'task-result-continuation',
+    });
+
+    expect(queued).toEqual(
+      expect.objectContaining({
+        content: 'Continue from task result',
+        source: 'task-result-continuation',
+        displayKind: 'task-continuation',
+      }),
+    );
+    expect(runtimeMocks.queueEnqueue).toHaveBeenCalledWith({
+      content: 'Continue from task result',
+      source: 'task-result-continuation',
+    });
+    expect(sessionHandle!.getMessageQueueSnapshot()?.items).toEqual([
+      expect.objectContaining({ source: 'task-result-continuation' }),
+    ]);
+    expect(
+      useConversationStore
+        .getState()
+        .messages.some((message) => message.content === 'Continue from task result'),
+    ).toBe(false);
+
+    sessionHandle!.cancel();
+    await activeTurn;
+  });
+
   it('preserves and pauses queued user messages after cancellation until send-next resumes them', async () => {
     runtimeMocks.executionBlocker = new Promise<void>((resolve) => {
       runtimeMocks.releaseExecution = resolve;
@@ -318,6 +405,9 @@ describe('useAgentSession runtime assembly', () => {
 
     const queuedItem = sessionHandle!.getMessageQueueSnapshot()?.items[0];
     expect(queuedItem).toEqual(expect.objectContaining({ content: 'Queued follow-up' }));
+    expect(runtimeMocks.queueEnqueue).toHaveBeenCalledWith(
+      expect.objectContaining({ content: 'Queued follow-up', source: 'user' }),
+    );
     expect(
       useConversationStore
         .getState()
@@ -339,10 +429,12 @@ describe('useAgentSession runtime assembly', () => {
     ]);
 
     sessionHandle!.promoteQueuedMessage(queuedItem!.id);
+    expect(runtimeMocks.queuePromote).toHaveBeenCalledWith(queuedItem!.id);
     await waitFor(() => runtimeSession.execute.mock.calls.length === 2);
     await waitFor(() => sessionHandle!.getMessageQueueSnapshot()?.pendingCount === 0);
 
     expect(useAgentStore.getState().messageQueue.pausedAfterCancel).toBe(false);
+    expect(runtimeMocks.queueDrain).toHaveBeenCalled();
     expect(runtimeSession.execute.mock.calls[1]?.[0]).toBe('Queued follow-up');
     expect(
       useConversationStore
