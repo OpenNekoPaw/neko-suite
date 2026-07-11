@@ -213,10 +213,13 @@ export class ConversationMessageHandler {
     }
   }
 
-  async sendActiveConversation(): Promise<void> {
+  async sendActiveConversation(activation?: {
+    readonly activationId: number;
+    readonly tabStateRevision: number;
+  }): Promise<void> {
     const webview = this.deps.getWebview();
     if (webview) {
-      await this.deps.conversations.sendActiveConversation(webview);
+      await this.deps.conversations.sendActiveConversation(webview, activation);
     }
   }
 

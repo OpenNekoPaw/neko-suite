@@ -5,6 +5,11 @@ export type ConversationVisibility = 'foreground' | 'background';
 export type TimelineSynchronization = 'synchronized' | 'suspended' | 'unavailable';
 export type ConversationRetention = 'retained' | 'disposed';
 
+export type ForegroundConversationAvailability =
+  | { readonly kind: 'ready' }
+  | { readonly kind: 'loading' }
+  | { readonly kind: 'unavailable'; readonly diagnostic: string };
+
 export interface ConversationViewportSnapshot {
   readonly followMode: 'follow-tail' | 'detached';
   readonly anchorMessageId?: string;

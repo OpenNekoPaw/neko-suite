@@ -25,7 +25,7 @@ export function tryHandleSettingsRoute(
       return true;
 
     case 'updateTabState':
-      deps.updateTabState(message.openTabs, message.activeTabId);
+      deps.updateTabState(message);
       return true;
 
     default:

@@ -73,10 +73,8 @@ export interface UpdateTabStateRuntimeResult {
 }
 
 export type ChatRestorePlanAction =
-  | { type: 'syncActiveConversation' }
   | { type: 'syncCanvasAmbientScope' }
   | { type: 'sendConversationList' }
-  | { type: 'sendActiveConversation' }
   | { type: 'sendSettings' }
   | { type: 'postTabState'; message: TabStateMessage }
   | { type: 'sendActiveConversationTasks' }
@@ -85,6 +83,7 @@ export type ChatRestorePlanAction =
 
 export interface BuildChatRestorePlanInput {
   tabState: TabState;
+  tabStateRevision: number;
   hasWebview: boolean;
   pluginCommands?: NonNullable<PluginCommandsMessage['commands']>;
 }
@@ -184,8 +183,8 @@ export function buildChatPluginCommandsMessage(
   return buildPluginCommandsMessage(commands);
 }
 
-export function buildChatTabStateMessage(tabState: TabState): TabStateMessage {
-  return buildTabStateMessage(tabState);
+export function buildChatTabStateMessage(tabState: TabState, revision: number): TabStateMessage {
+  return buildTabStateMessage(tabState, revision);
 }
 
 export function buildInvalidWebviewPayloadMessage(): GlobalErrorMessage {
@@ -201,7 +200,10 @@ export function buildChatRestorePlan(input: BuildChatRestorePlanInput): ChatRest
 
   actions.push(
     { type: 'sendSettings' },
-    { type: 'postTabState', message: buildTabStateMessage(input.tabState) },
+    {
+      type: 'postTabState',
+      message: buildTabStateMessage(input.tabState, input.tabStateRevision),
+    },
   );
 
   actions.push({ type: 'sendActiveConversationTasks' }, { type: 'sendAgentStateSnapshot' });

@@ -46,7 +46,6 @@ import {
   buildChatTabStateMessage,
   buildInvalidWebviewPayloadMessage,
   createCapabilityRuntimeRefreshRuntime,
-  syncActiveConversationFromTabState,
   updateTabStateRuntime,
   type CapabilityRuntimeRefreshRuntime,
 } from '@neko/agent/runtime';
@@ -84,6 +83,7 @@ import {
   buildAgentSessionDiagnosticMessage,
   normalizeTabState,
   parseWebviewToExtensionMessage,
+  type ActivateConversationWebviewMessage,
   type CreativeAiConversationProjection,
   type Message,
   type OpenTab,
@@ -107,7 +107,7 @@ const AGENT_KEYBOARD_EDITABLE_OWNER_ID = 'neko.agent:assistant';
 let tabStateWriterOrdinal = 0;
 const SESSION_SCOPED_WEBVIEW_MESSAGE_TYPES = new Set([
   'sendMessage',
-  'switchConversation',
+  'activateConversation',
   'deleteConversation',
   'conversationLifecycle',
   'clearHistory',
@@ -982,7 +982,13 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
           dndBroker: this._dndBroker,
           refreshConfigSnapshot: () => this._refreshConfigSnapshot(webview, postMessageFn),
           sendTabState: () => this._sendTabState(),
-          updateTabState: (openTabs, activeTabId) => this._updateTabState(openTabs, activeTabId),
+          activateConversation: (message) => this._activateConversation(message),
+          updateTabState: (message) =>
+            this._updateTabState(
+              message.openTabs,
+              message.activeTabId,
+              message.expectedTabStateRevision,
+            ),
           syncCanvasAmbientScopeFromActiveConversation: () =>
             this._syncCanvasAmbientScopeFromActiveConversation(),
           resolveLifecycleCapabilityDescriptor: (capabilityId) =>
@@ -1010,23 +1016,18 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
     const webview = this._view?.webview;
     const plan = buildChatRestorePlan({
       tabState: this._tabState,
+      tabStateRevision: this._tabStateRevision,
       hasWebview: Boolean(webview),
       pluginCommands: this._pluginCommandsGetter?.(),
     });
 
     for (const action of plan.actions) {
       switch (action.type) {
-        case 'syncActiveConversation':
-          this._syncActiveConversationFromTabState();
-          break;
         case 'syncCanvasAmbientScope':
           this._syncCanvasAmbientScopeFromActiveConversation();
           break;
         case 'sendConversationList':
           this._conversationMessageHandler.sendConversationList();
-          break;
-        case 'sendActiveConversation':
-          void this._conversationMessageHandler.sendActiveConversation();
           break;
         case 'sendSettings':
           if (webview) {
@@ -1080,28 +1081,6 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
     }
   }
 
-  private _syncActiveConversationFromTabState(): void {
-    // Defensive sync for panel restore: normal tab switches send switchConversation
-    // before updateTabState, but restored tab state can replay without that message.
-    const sync = syncActiveConversationFromTabState(
-      { tabState: this._tabState },
-      {
-        hasConversation: (conversationId) => Boolean(this._conversations.get(conversationId)),
-        hasCharacterDialogueSession: (sessionId) => this._characterDialogue.hasSession(sessionId),
-        hasEmbodyCharacterSession: (sessionId) => this._embodyCharacter.hasSession(sessionId),
-        getActiveConversationId: () => this._conversations.getActiveId(),
-        switchConversation: (conversationId) => this._conversations.switchTo(conversationId),
-        shouldClearActiveConversationForEmptyTabState: (conversationId) =>
-          this._shouldClearActiveConversationForEmptyTabState(conversationId),
-        clearActiveConversation: () => this._conversations.clearActive(),
-      },
-    );
-    logger.debug('neko.agent.tab_state.sync.restore', {
-      ...this._getActiveTabLogIdentity(),
-      sync,
-    });
-  }
-
   private _syncCanvasAmbientScopeFromActiveConversation(): void {
     const conversationId = this._conversations.getActiveId();
     const nodes = conversationId ? setActiveCanvasAmbientScope(conversationId) : [];
@@ -1149,10 +1128,155 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
 
   private _sendTabState(): void {
     if (!this._view) return;
-    this._view.webview.postMessage(buildChatTabStateMessage(this._tabState));
+    this._view.webview.postMessage(
+      buildChatTabStateMessage(this._tabState, this._tabStateRevision),
+    );
   }
 
-  private _updateTabState(openTabs: OpenTab[], activeTabId: string | null): void {
+  private _activateConversation(message: ActivateConversationWebviewMessage): void {
+    const activeTab = message.tabState.openTabs.find((tab) => tab.id === message.tabId);
+    if (
+      message.tabState.activeTabId !== message.tabId ||
+      !activeTab ||
+      activeTab.conversationId !== message.conversationId ||
+      (activeTab.kind !== undefined && activeTab.kind !== 'chat')
+    ) {
+      this._postTabActivationDiagnostic({
+        code: 'invalid-conversation-activation',
+        action: 'activate-conversation',
+        message: 'Conversation activation does not match the requested ordinary Tab state.',
+        conversationId: message.conversationId,
+        tabId: message.tabId,
+      });
+      this._sendTabState();
+      return;
+    }
+    if (
+      !this._acceptExpectedTabStateRevision(message.expectedTabStateRevision, {
+        action: 'activate-conversation',
+        conversationId: message.conversationId,
+        tabId: message.tabId,
+      })
+    ) {
+      return;
+    }
+
+    const result = updateTabStateRuntime(
+      {
+        openTabs: message.tabState.openTabs,
+        activeTabId: message.tabState.activeTabId,
+      },
+      {
+        hasConversation: (conversationId) => Boolean(this._conversations.get(conversationId)),
+        hasCharacterDialogueSession: (sessionId) => this._characterDialogue.hasSession(sessionId),
+        hasEmbodyCharacterSession: (sessionId) => this._embodyCharacter.hasSession(sessionId),
+        getActiveConversationId: () => this._conversations.getActiveId(),
+        switchConversation: (conversationId) => this._conversations.switchTo(conversationId),
+        shouldClearActiveConversationForEmptyTabState: (conversationId) =>
+          this._shouldClearActiveConversationForEmptyTabState(conversationId),
+        clearActiveConversation: () => this._conversations.clearActive(),
+      },
+    );
+    if (
+      result.sync.kind !== 'switched' &&
+      !(result.sync.kind === 'skipped' && result.sync.reason === 'already-active')
+    ) {
+      this._postTabActivationDiagnostic({
+        code: 'invalid-conversation-activation',
+        action: 'activate-conversation',
+        message: `Host rejected conversation activation: ${result.sync.kind === 'skipped' ? result.sync.reason : result.sync.kind}.`,
+        conversationId: message.conversationId,
+        tabId: message.tabId,
+      });
+      this._sendTabState();
+      return;
+    }
+
+    this._tabState = result.tabState;
+    this._saveTabState();
+    this._syncCanvasAmbientScopeFromActiveConversation();
+    void this._conversationMessageHandler.sendActiveConversation({
+      activationId: message.activationId,
+      tabStateRevision: this._tabStateRevision,
+    });
+  }
+
+  private _acceptExpectedTabStateRevision(
+    expectedRevision: number,
+    request: {
+      readonly action: 'activate-conversation' | 'tab-state-mutation';
+      readonly conversationId?: string;
+      readonly tabId?: string;
+    },
+  ): boolean {
+    if (expectedRevision === this._tabStateRevision) return true;
+    this._postTabActivationDiagnostic({
+      code: 'stale-tab-state-revision',
+      action: request.action,
+      message: `Tab state revision mismatch: expected ${expectedRevision}, current ${this._tabStateRevision}.`,
+      ...(request.conversationId ? { conversationId: request.conversationId } : {}),
+      ...(request.tabId ? { tabId: request.tabId } : {}),
+    });
+    this._sendTabState();
+    return false;
+  }
+
+  private _postTabActivationDiagnostic(input: {
+    readonly code: 'stale-tab-state-revision' | 'invalid-conversation-activation';
+    readonly action: 'activate-conversation' | 'tab-state-mutation';
+    readonly message: string;
+    readonly conversationId?: string;
+    readonly tabId?: string;
+  }): void {
+    this._view?.webview.postMessage(
+      buildAgentSessionDiagnosticMessage({
+        code: input.code,
+        severity: 'error',
+        action: input.action,
+        message: input.message,
+        ...(input.conversationId ? { conversationId: input.conversationId } : {}),
+        ...(input.tabId ? { tabId: input.tabId } : {}),
+        activeConversationId: this._conversations.getActiveId() ?? null,
+        activeTabConversationId:
+          this._tabState.openTabs.find((tab) => tab.id === this._tabState.activeTabId)
+            ?.conversationId ?? null,
+      }),
+    );
+  }
+
+  private _updateTabState(
+    openTabs: OpenTab[],
+    activeTabId: string | null,
+    expectedRevision?: number,
+  ): void {
+    if (
+      expectedRevision !== undefined &&
+      !this._acceptExpectedTabStateRevision(expectedRevision, { action: 'tab-state-mutation' })
+    ) {
+      return;
+    }
+
+    const requestedActiveTab = activeTabId
+      ? openTabs.find((tab) => tab.id === activeTabId)
+      : undefined;
+    if (
+      expectedRevision !== undefined &&
+      requestedActiveTab &&
+      (requestedActiveTab.kind === undefined || requestedActiveTab.kind === 'chat') &&
+      requestedActiveTab.conversationId !== this._conversations.getActiveId()
+    ) {
+      this._postTabActivationDiagnostic({
+        code: 'invalid-conversation-activation',
+        action: 'tab-state-mutation',
+        message:
+          'Ordinary conversation activation must use the atomic activateConversation transaction.',
+        conversationId: requestedActiveTab.conversationId,
+        tabId: requestedActiveTab.id,
+      });
+      this._sendTabState();
+      return;
+    }
+
     const result = updateTabStateRuntime(
       { openTabs, activeTabId },
       {

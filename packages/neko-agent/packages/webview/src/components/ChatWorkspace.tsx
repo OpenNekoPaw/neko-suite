@@ -62,7 +62,10 @@ import {
   projectMediaModelSelectionForSessionModeChange,
 } from '@/presenters/config-message-presenter';
 import { isCharacterRoleConversationKind } from '@/presenters/character-role-session-presenter';
-import type { ConversationViewportSnapshot } from '@/render-lifecycle/conversation-render-contract';
+import type {
+  ConversationViewportSnapshot,
+  ForegroundConversationAvailability,
+} from '@/render-lifecycle/conversation-render-contract';
 
 // =============================================================================
 // Props
@@ -83,6 +86,7 @@ export interface ChatWorkspaceProps {
   activeConversationIdRef: MutableRefObject<string | null>;
   activeTabConversationId: string | null;
   isForegroundConversationActivationPending?: boolean;
+  foregroundConversationAvailability?: ForegroundConversationAvailability;
   conversationKind: ConversationKind;
   characterDialogueSession?: CharacterDialogueSessionProjection;
   embodyCharacterSession?: EmbodyCharacterSessionProjection;
@@ -175,6 +179,7 @@ export function ChatWorkspace({
   activeConversationId,
   activeTabConversationId,
   isForegroundConversationActivationPending = false,
+  foregroundConversationAvailability = { kind: 'ready' },
   conversationKind,
   characterDialogueSession,
   embodyCharacterSession,
@@ -260,7 +265,12 @@ export function ChatWorkspace({
   }, [sessionMutationConversationId]);
 
   useEffect(() => {
-    if (!isConversationSwitching || !hasActiveTabConversationMismatch || !activeTabConversationId) {
+    if (
+      !isConversationSwitching ||
+      isForegroundConversationActivationPending ||
+      !hasActiveTabConversationMismatch ||
+      !activeTabConversationId
+    ) {
       return;
     }
     onSessionDiagnostic?.(
@@ -278,6 +288,7 @@ export function ChatWorkspace({
     activeTabConversationId,
     hasActiveTabConversationMismatch,
     isConversationSwitching,
+    isForegroundConversationActivationPending,
     onSessionDiagnostic,
   ]);
 
@@ -744,6 +755,7 @@ export function ChatWorkspace({
         characterDialogueSession={characterDialogueSession}
         embodyCharacterSession={embodyCharacterSession}
         isConversationSwitching={isConversationSwitching}
+        foregroundConversationAvailability={foregroundConversationAvailability}
         activeSkill={
           !isCharacterRoleSession && activeSkill?.conversationId === sessionMutationConversationId
             ? activeSkill

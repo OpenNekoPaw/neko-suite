@@ -460,11 +460,15 @@ export class ConversationBridge {
   /**
    * Send active conversation to webview
    */
-  async sendActiveConversation(webview: vscode.Webview): Promise<void> {
+  async sendActiveConversation(
+    webview: vscode.Webview,
+    activation?: { readonly activationId: number; readonly tabStateRevision: number },
+  ): Promise<void> {
     const conversation = this._conversationManager.getActive();
     if (!conversation) {
       await webview.postMessage({
         type: 'activeConversation',
+        ...(activation ? { activation } : {}),
         conversation: null,
       });
       return;
@@ -472,6 +476,7 @@ export class ConversationBridge {
 
     await webview.postMessage({
       type: 'activeConversation',
+      ...(activation ? { activation } : {}),
       conversation: {
         id: conversation.id,
         title: conversation.title,

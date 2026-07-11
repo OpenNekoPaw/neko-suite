@@ -447,6 +447,7 @@ export type {
   ErrorMessage,
   ExtensionToWebviewMessage,
   ExternalMessage,
+  ActivateConversationWebviewMessage,
   FilePathWebviewMessage,
   GlobalErrorMessage,
   HistoryClearedMessage,

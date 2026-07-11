@@ -39,9 +39,8 @@ export function tryHandleConversationRoute(
       deps.syncCanvasAmbientScopeFromActiveConversation();
       return true;
 
-    case 'switchConversation':
-      deps.conversationMessageHandler.handleSwitchConversation(message.conversationId);
-      deps.syncCanvasAmbientScopeFromActiveConversation();
+    case 'activateConversation':
+      deps.activateConversation(message);
       return true;
 
     case 'deleteConversation':

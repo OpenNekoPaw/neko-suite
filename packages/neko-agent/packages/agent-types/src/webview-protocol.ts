@@ -176,7 +176,6 @@ export interface ConfirmToolWebviewMessage {
 
 export interface ConversationOnlyWebviewMessage {
   type:
-    | 'switchConversation'
     | 'clearHistory'
     | 'cancelMessage'
     | 'getTasks'
@@ -259,10 +258,20 @@ export interface UpdateSettingsWebviewMessage {
   conversationId?: string;
 }
 
+export interface ActivateConversationWebviewMessage {
+  type: 'activateConversation';
+  activationId: number;
+  conversationId: string;
+  tabId: string;
+  expectedTabStateRevision: number;
+  tabState: TabState;
+}
+
 export interface UpdateTabStateWebviewMessage {
   type: 'updateTabState';
   openTabs: OpenTab[];
   activeTabId: string | null;
+  expectedTabStateRevision: number;
 }
 
 export interface TaskActionWebviewMessage {
@@ -474,6 +483,7 @@ export type WebviewToExtensionMessage =
   | ConfirmToolWebviewMessage
   | ClearActiveSkillWebviewMessage
   | ConversationOnlyWebviewMessage
+  | ActivateConversationWebviewMessage
   | GetMessageQueueWebviewMessage
   | QueuedMessageActionWebviewMessage
   | DeleteConversationWebviewMessage
@@ -704,7 +714,9 @@ export type AgentSessionDiagnosticCode =
   | 'missing-session-identity'
   | 'active-tab-mismatch'
   | 'terminal-webview-delivery-unavailable'
-  | 'conversation-durability-failed';
+  | 'conversation-durability-failed'
+  | 'stale-tab-state-revision'
+  | 'invalid-conversation-activation';
 
 export interface AgentSessionDiagnosticMessage {
   type: 'sessionDiagnostic';
@@ -739,6 +751,10 @@ export interface ConversationLifecycleResultMessage {
 
 export interface ActiveConversationMessage {
   type: 'activeConversation';
+  activation?: {
+    activationId: number;
+    tabStateRevision: number;
+  };
   conversation?: {
     id: string;
     title?: string;
@@ -935,6 +951,7 @@ export interface SubAgentEventMessage {
 
 export interface TabStateMessage {
   type: 'tabState';
+  revision: number;
   tabState?: Partial<TabState>;
 }
 
@@ -1183,7 +1200,6 @@ const AGENT_SERVICE_TIERS: readonly AgentServiceTier[] = [
   'priority',
 ];
 const CONVERSATION_ONLY_MESSAGE_TYPES: readonly ConversationOnlyWebviewMessage['type'][] = [
-  'switchConversation',
   'clearHistory',
   'cancelMessage',
   'getTasks',
@@ -1238,6 +1254,7 @@ export const WEBVIEW_TO_EXTENSION_MESSAGE_TYPES = [
   ...PLAN_ACTION_MESSAGE_TYPES,
   ...PLAN_STEP_ACTION_MESSAGE_TYPES,
   'updateSettings',
+  'activateConversation',
   'updateTabState',
   ...TASK_ACTION_MESSAGE_TYPES,
   'openFile',
@@ -1640,9 +1657,10 @@ export function buildConfigChangedMessage(): ConfigChangedMessage {
   return { type: 'configChanged' };
 }
 
-export function buildTabStateMessage(tabState: TabState): TabStateMessage {
+export function buildTabStateMessage(tabState: TabState, revision: number): TabStateMessage {
   return {
     type: 'tabState',
+    revision,
     tabState: {
       openTabs: tabState.openTabs.map((tab) => ({ ...tab })),
       activeTabId: tabState.activeTabId,
@@ -1827,6 +1845,9 @@ export function parseWebviewToExtensionMessage(raw: unknown): WebviewToExtension
   }
   if (type === 'sendMessage') {
     return parseSendMessageWebviewMessage(raw);
+  }
+  if (type === 'activateConversation') {
+    return parseActivateConversationMessage(raw);
   }
   if (isEmptyMessageType(type)) {
     return { type };
@@ -2237,16 +2258,51 @@ function parseUpdateSettingsMessage(
   };
 }
 
+function parseActivateConversationMessage(
+  raw: Record<string, unknown>,
+): ActivateConversationWebviewMessage | null {
+  const activationId = nonNegativeInteger(raw.activationId);
+  const conversationId = requiredString(raw.conversationId);
+  const tabId = requiredString(raw.tabId);
+  const expectedTabStateRevision = nonNegativeInteger(raw.expectedTabStateRevision);
+  if (
+    activationId === null ||
+    !conversationId ||
+    !tabId ||
+    expectedTabStateRevision === null ||
+    !isRecord(raw.tabState)
+  ) {
+    return null;
+  }
+  const openTabs = parseOpenTabs(raw.tabState.openTabs);
+  const activeTabId = requiredString(raw.tabState.activeTabId);
+  if (!openTabs || !activeTabId) return null;
+  return {
+    type: 'activateConversation',
+    activationId,
+    conversationId,
+    tabId,
+    expectedTabStateRevision,
+    tabState: { openTabs, activeTabId },
+  };
+}
+
 function parseUpdateTabStateMessage(
   raw: Record<string, unknown>,
 ): UpdateTabStateWebviewMessage | null {
   const openTabs = parseOpenTabs(raw.openTabs);
-  if (!openTabs) return null;
+  const expectedTabStateRevision = nonNegativeInteger(raw.expectedTabStateRevision);
+  if (!openTabs || expectedTabStateRevision === null) return null;
   if (raw.activeTabId === null) {
-    return { type: 'updateTabState', openTabs, activeTabId: null };
+    return { type: 'updateTabState', openTabs, activeTabId: null, expectedTabStateRevision };
   }
   if (typeof raw.activeTabId !== 'string') return null;
-  return { type: 'updateTabState', openTabs, activeTabId: raw.activeTabId };
+  return {
+    type: 'updateTabState',
+    openTabs,
+    activeTabId: raw.activeTabId,
+    expectedTabStateRevision,
+  };
 }
 
 function parseTaskActionMessage(
@@ -3575,6 +3631,10 @@ function optionalNonNegativeInteger(value: unknown): number | undefined {
 
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0;
+}
+
+function nonNegativeInteger(value: unknown): number | null {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : null;
 }
 
 function requiredString(value: unknown): string | null {

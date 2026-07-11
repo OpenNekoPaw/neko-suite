@@ -78,6 +78,7 @@ export interface UseMessageHandlerProps {
   activeTabId: string | null;
   isTablessConversationViewRef: MutableRefObject<boolean>;
   pendingForegroundConversationActivationRef?: MutableRefObject<PendingForegroundConversationActivation | null>;
+  tabStateRevisionRef: MutableRefObject<number>;
   completeForegroundConversationActivation?: (conversationId: string) => void;
   requestQueuedMessageEdit?: (request: QueuedMessageEditRequest) => void;
   requestConfigSnapshot?: () => void;
@@ -141,6 +142,7 @@ export interface UseMessageHandlerProps {
   setPromptModeForConversation: (conversationId: string, mode: PromptMode) => void;
   setShowOnboarding: React.Dispatch<React.SetStateAction<boolean>>;
   setGlobalError: React.Dispatch<React.SetStateAction<string | null>>;
+  reportConversationDiagnostic: MessageHandlerContext['reportConversationDiagnostic'];
 
   // Refs - Context management
   conversationTokenCountRef: MutableRefObject<Map<string, number>>;
@@ -153,7 +155,7 @@ export interface UseMessageHandlerProps {
  */
 export interface UseMessageHandlerReturn {
   handleMessage: (event: MessageEvent<ExtensionToWebviewMessage>) => void;
-  flushTimelineRendering: () => void;
+  flushTimelineRendering: (conversationId?: string | null) => void;
   commitTimelineMarkdownSnapshot: (
     timeline: ActiveTurnTimelineState,
   ) => AgentMarkdownSessionPublication;
@@ -205,6 +207,7 @@ export function useMessageHandler(props: UseMessageHandlerProps): UseMessageHand
     activeTabId,
     isTablessConversationViewRef,
     pendingForegroundConversationActivationRef,
+    tabStateRevisionRef,
     completeForegroundConversationActivation,
     requestQueuedMessageEdit,
     requestConfigSnapshot,
@@ -246,6 +249,7 @@ export function useMessageHandler(props: UseMessageHandlerProps): UseMessageHand
     setPromptModeForConversation,
     setShowOnboarding,
     setGlobalError,
+    reportConversationDiagnostic,
     conversationTokenCountRef,
     conversationCompressingRef,
     forceContextUpdate,
@@ -353,6 +357,7 @@ export function useMessageHandler(props: UseMessageHandlerProps): UseMessageHand
       setPromptModeForConversation,
       setShowOnboarding,
       setGlobalError,
+      reportConversationDiagnostic,
       conversationTokenCountRef,
       conversationCompressingRef,
       forceUpdate: forceContextUpdate,
@@ -364,6 +369,7 @@ export function useMessageHandler(props: UseMessageHandlerProps): UseMessageHand
       releaseTurnRendering: renderRuntime.releaseTurn,
       disposeConversationRendering: renderRuntime.disposeConversation,
       pendingForegroundConversationActivationRef,
+      tabStateRevisionRef,
       completeForegroundConversationActivation,
       requestQueuedMessageEdit,
     }),
@@ -415,6 +421,7 @@ export function useMessageHandler(props: UseMessageHandlerProps): UseMessageHand
       setPromptModeForConversation,
       setShowOnboarding,
       setGlobalError,
+      reportConversationDiagnostic,
       conversationTokenCountRef,
       conversationCompressingRef,
       forceContextUpdate,
@@ -425,6 +432,7 @@ export function useMessageHandler(props: UseMessageHandlerProps): UseMessageHand
       conversationRenderCoordinator,
       renderRuntime,
       pendingForegroundConversationActivationRef,
+      tabStateRevisionRef,
       completeForegroundConversationActivation,
       requestQueuedMessageEdit,
     ],
@@ -445,9 +453,16 @@ export function useMessageHandler(props: UseMessageHandlerProps): UseMessageHand
     [registry, context],
   );
 
-  const flushTimelineRendering = useCallback(() => {
-    timelineRenderScheduler.flushAll();
-  }, [timelineRenderScheduler]);
+  const flushTimelineRendering = useCallback(
+    (conversationId?: string | null) => {
+      if (conversationId) {
+        timelineRenderScheduler.flushConversation(conversationId);
+        return;
+      }
+      timelineRenderScheduler.flushAll();
+    },
+    [timelineRenderScheduler],
+  );
 
   const commitTimelineMarkdownSnapshot = useCallback(
     (timeline: ActiveTurnTimelineState): AgentMarkdownSessionPublication =>

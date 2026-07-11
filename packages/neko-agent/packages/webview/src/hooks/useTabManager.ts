@@ -5,8 +5,13 @@
  * plus persistence of tab state to extension host.
  */
 
-import { useEffect, useRef, useCallback } from 'react';
-import type { OpenTab, ConversationSummary, TabType } from '@neko-agent/types';
+import { useRef, useCallback } from 'react';
+import type {
+  ActivateConversationWebviewMessage,
+  OpenTab,
+  ConversationSummary,
+  TabType,
+} from '@neko-agent/types';
 import { AgentHostMessages } from '@/messages';
 import { isCharacterRoleTab } from '@/presenters/character-role-session-presenter';
 
@@ -20,11 +25,15 @@ export interface UseTabManagerProps {
   setActiveTab: (tab: TabType) => void;
   onAllTabsClosed?: () => void;
   onBeforeTabActivation?: () => void;
-  onBeforeConversationActivation?: (conversationId: string) => void;
+  onBeforeConversationActivation?: (
+    request: Omit<ActivateConversationWebviewMessage, 'type' | 'tabState'>,
+  ) => void;
   onConversationActivated?: (conversationId: string) => void;
   onActivateCharacterRoleTab?: (tab: OpenTab) => void;
   hasLocalConversationActivity?: (conversationId: string) => boolean;
   onConfigSnapshotRequested?: () => void;
+  tabStateRevision: number;
+  onTabStateRevisionAllocated: (revision: number) => void;
 }
 
 export interface UseTabManagerReturn {
@@ -48,17 +57,49 @@ export function useTabManager({
   onActivateCharacterRoleTab,
   hasLocalConversationActivity,
   onConfigSnapshotRequested,
+  tabStateRevision,
+  onTabStateRevisionAllocated,
 }: UseTabManagerProps): UseTabManagerReturn {
-  // Sync tab state to extension for persistence across panel close/reopen
-  const isInitialTabStateRef = useRef(true);
-  useEffect(() => {
-    // Skip initial render to avoid overwriting restored state
-    if (isInitialTabStateRef.current) {
-      isInitialTabStateRef.current = false;
-      return;
-    }
-    AgentHostMessages.updateTabState(openTabs, activeTabId);
-  }, [openTabs, activeTabId]);
+  const optimisticTabStateRevisionRef = useRef(tabStateRevision);
+  const activationIdRef = useRef(0);
+  optimisticTabStateRevisionRef.current = Math.max(
+    optimisticTabStateRevisionRef.current,
+    tabStateRevision,
+  );
+
+  const beginTabStateMutation = useCallback((): number => {
+    const expectedRevision = optimisticTabStateRevisionRef.current;
+    const nextRevision = expectedRevision + 1;
+    optimisticTabStateRevisionRef.current = nextRevision;
+    onTabStateRevisionAllocated(nextRevision);
+    return expectedRevision;
+  }, [onTabStateRevisionAllocated]);
+
+  const persistTabState = useCallback(
+    (nextOpenTabs: OpenTab[], nextActiveTabId: string | null): void => {
+      AgentHostMessages.updateTabState(nextOpenTabs, nextActiveTabId, beginTabStateMutation());
+    },
+    [beginTabStateMutation],
+  );
+
+  const activateOrdinaryConversation = useCallback(
+    (nextOpenTabs: OpenTab[], tab: OpenTab): void => {
+      activationIdRef.current += 1;
+      const request = {
+        activationId: activationIdRef.current,
+        conversationId: tab.conversationId,
+        tabId: tab.id,
+        expectedTabStateRevision: beginTabStateMutation(),
+      };
+      onBeforeConversationActivation?.(request);
+      AgentHostMessages.activateConversation({
+        ...request,
+        tabState: { openTabs: nextOpenTabs, activeTabId: tab.id },
+      });
+      onConversationActivated?.(tab.conversationId);
+    },
+    [beginTabStateMutation, onBeforeConversationActivation, onConversationActivated],
+  );
 
   const handleOpenTab = useCallback(
     (conversationId: string, title: string) => {
@@ -68,11 +109,10 @@ export function useTabManager({
       if (existingTab) {
         setActiveTabId(existingTab.id);
         if (isCharacterRoleTab(existingTab)) {
+          persistTabState(openTabs, existingTab.id);
           onActivateCharacterRoleTab?.(existingTab);
         } else {
-          onBeforeConversationActivation?.(conversationId);
-          AgentHostMessages.switchConversation(conversationId);
-          onConversationActivated?.(conversationId);
+          activateOrdinaryConversation(openTabs, existingTab);
         }
       } else {
         const newTab: OpenTab = {
@@ -83,9 +123,7 @@ export function useTabManager({
         setOpenTabs((prev) => [...prev, newTab]);
         setActiveTabId(newTab.id);
         onConfigSnapshotRequested?.();
-        onBeforeConversationActivation?.(conversationId);
-        AgentHostMessages.switchConversation(conversationId);
-        onConversationActivated?.(conversationId);
+        activateOrdinaryConversation([...openTabs, newTab], newTab);
       }
       setActiveTab('chat');
     },
@@ -96,10 +134,10 @@ export function useTabManager({
       setActiveTab,
       onBeforeTabActivation,
       onBeforeTabOpen,
-      onBeforeConversationActivation,
-      onConversationActivated,
+      activateOrdinaryConversation,
       onActivateCharacterRoleTab,
       onConfigSnapshotRequested,
+      persistTabState,
     ],
   );
 
@@ -124,15 +162,13 @@ export function useTabManager({
 
       const tabIndex = openTabs.findIndex((t) => t.id === tabId);
       const newTabs = openTabs.filter((t) => t.id !== tabId);
-      const isClosingLastTab = newTabs.length === 0;
-
       if (tab.kind === 'character-dialogue') {
         AgentHostMessages.exitCharacterDialogueSession(tab.conversationId);
       } else if (tab.kind === 'embody-character') {
         AgentHostMessages.exitEmbodyCharacterSession(tab.conversationId);
       } else if (shouldDeleteEmptyConversation) {
         AgentHostMessages.deleteConversation(tab.conversationId, {
-          activateNext: !isClosingLastTab,
+          activateNext: false,
         });
       }
 
@@ -143,15 +179,17 @@ export function useTabManager({
         const newActiveTab = newTabs[newActiveIndex];
         setActiveTabId(newActiveTab.id);
         if (isCharacterRoleTab(newActiveTab)) {
+          persistTabState(newTabs, newActiveTab.id);
           onActivateCharacterRoleTab?.(newActiveTab);
         } else {
-          onBeforeConversationActivation?.(newActiveTab.conversationId);
-          AgentHostMessages.switchConversation(newActiveTab.conversationId);
-          onConversationActivated?.(newActiveTab.conversationId);
+          activateOrdinaryConversation(newTabs, newActiveTab);
         }
       } else if (newTabs.length === 0) {
         setActiveTabId(null);
+        persistTabState([], null);
         onAllTabsClosed?.();
+      } else {
+        persistTabState(newTabs, activeTabId);
       }
     },
     [
@@ -162,10 +200,10 @@ export function useTabManager({
       setActiveTabId,
       onAllTabsClosed,
       onBeforeTabActivation,
-      onBeforeConversationActivation,
-      onConversationActivated,
+      activateOrdinaryConversation,
       onActivateCharacterRoleTab,
       hasLocalConversationActivity,
+      persistTabState,
     ],
   );
 
@@ -177,11 +215,10 @@ export function useTabManager({
         onBeforeTabActivation?.();
         setActiveTabId(tabId);
         if (isCharacterRoleTab(tab)) {
+          persistTabState(openTabs, tab.id);
           onActivateCharacterRoleTab?.(tab);
         } else {
-          onBeforeConversationActivation?.(tab.conversationId);
-          AgentHostMessages.switchConversation(tab.conversationId);
-          onConversationActivated?.(tab.conversationId);
+          activateOrdinaryConversation(openTabs, tab);
         }
         setActiveTab('chat');
       }
@@ -192,9 +229,9 @@ export function useTabManager({
       setActiveTab,
       onBeforeTabActivation,
       onBeforeTabOpen,
-      onBeforeConversationActivation,
-      onConversationActivated,
+      activateOrdinaryConversation,
       onActivateCharacterRoleTab,
+      persistTabState,
     ],
   );
 

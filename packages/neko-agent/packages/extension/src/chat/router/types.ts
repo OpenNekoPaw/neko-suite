@@ -1,5 +1,8 @@
 import type * as vscode from 'vscode';
-import type { OpenTab } from '@neko-agent/types';
+import type {
+  ActivateConversationWebviewMessage,
+  UpdateTabStateWebviewMessage,
+} from '@neko-agent/types';
 import type { AgentCapabilityLifecycleDescriptor } from '@neko/shared';
 import type { DragDropBroker } from '../../services/DragDropBroker';
 import type { AgentMessageTurnHandler } from '../agentMessageTurnHandler';
@@ -32,7 +35,8 @@ export interface ChatWebviewMessageRouterDeps {
   readonly dndBroker: DragDropBroker;
   readonly refreshConfigSnapshot: () => void;
   readonly sendTabState: () => void;
-  readonly updateTabState: (openTabs: OpenTab[], activeTabId: string | null) => void;
+  readonly activateConversation: (message: ActivateConversationWebviewMessage) => void;
+  readonly updateTabState: (message: UpdateTabStateWebviewMessage) => void;
   readonly syncCanvasAmbientScopeFromActiveConversation: () => void;
   readonly resolveLifecycleCapabilityDescriptor?: (
     capabilityId: string,

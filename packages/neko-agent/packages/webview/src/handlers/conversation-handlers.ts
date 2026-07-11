@@ -91,6 +91,10 @@ const handleSessionDiagnostic: MessageHandler<'sessionDiagnostic'> = (
   message: AgentSessionDiagnosticMessage,
   context,
 ) => {
+  if (message.conversationId) {
+    context.reportConversationDiagnostic(message);
+    return;
+  }
   context.setGlobalError(`${message.code}: ${message.message}`);
 };
 
@@ -195,6 +199,7 @@ const handleActiveConversation: MessageHandler<'activeConversation'> = (
   const shouldActivateForeground = shouldActivateForegroundConversation(
     pendingForegroundActivation,
     conversationId,
+    message.activation,
   );
   const shouldCacheOnly = pendingForegroundActivation !== null && !shouldActivateForeground;
   const activeTab = findActiveTab(context.openTabs, context.activeTabId);
@@ -252,8 +257,11 @@ const handleActiveConversation: MessageHandler<'activeConversation'> = (
   }
 
   if (context.activeConversationIdRef.current !== projection.activeConversationId) {
-    // A pending frame belongs to the previous visible conversation and must commit before the view swaps.
-    context.timelineRenderScheduler?.flushAll();
+    // Only the previous foreground partition blocks this view swap. Background delivery remains independent.
+    const previousConversationId = context.activeConversationIdRef.current;
+    if (previousConversationId) {
+      context.timelineRenderScheduler?.flushConversation(previousConversationId);
+    }
   }
 
   const nextStreaming = conversationId
@@ -309,6 +317,12 @@ const handleActiveConversation: MessageHandler<'activeConversation'> = (
   context.setActiveTabId(projection.activeTabId);
   context.setActiveTab(projection.activeTab);
   if (conversationId && shouldActivateForeground) {
+    if (message.activation && context.tabStateRevisionRef) {
+      context.tabStateRevisionRef.current = Math.max(
+        context.tabStateRevisionRef.current,
+        message.activation.tabStateRevision,
+      );
+    }
     context.completeForegroundConversationActivation?.(conversationId);
   }
 

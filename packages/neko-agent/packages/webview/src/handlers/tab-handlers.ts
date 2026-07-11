@@ -16,10 +16,22 @@ import {
  * Handle 'tabState' message - Restore tab state from extension
  */
 const handleTabState: MessageHandler<'tabState'> = (message: TabStateMessage, context) => {
+  const revisionRef = context.tabStateRevisionRef;
+  if (!revisionRef) {
+    throw new Error('Tab state handling requires a Webview-owned revision ref.');
+  }
+  if (message.revision < revisionRef.current) {
+    return;
+  }
+  revisionRef.current = message.revision;
+
   if (message.tabState) {
-    // Save local UI state, then commit pending canonical Timeline frames before the view swap.
+    // Save local UI state, then commit only the previous foreground Timeline partition.
     persistCurrentVisibleConversation(context);
-    context.timelineRenderScheduler?.flushAll();
+    const previousConversationId = context.activeConversationIdRef.current;
+    if (previousConversationId) {
+      context.timelineRenderScheduler?.flushConversation(previousConversationId);
+    }
     const openTabs = message.tabState.openTabs ?? [];
     const { activeTabId } = message.tabState;
     const isEmptyTabState =

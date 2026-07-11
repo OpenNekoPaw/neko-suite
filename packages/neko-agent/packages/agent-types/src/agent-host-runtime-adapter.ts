@@ -35,7 +35,7 @@ export const AGENT_WEBVIEW_TO_HOST_MESSAGE_TYPES = [
   'searchProjectFiles',
   'confirmTool',
   'clearActiveSkill',
-  'switchConversation',
+  'activateConversation',
   'clearHistory',
   'cancelMessage',
   'getTasks',

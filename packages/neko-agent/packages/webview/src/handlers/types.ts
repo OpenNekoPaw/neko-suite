@@ -15,6 +15,7 @@ import type {
   SettingsState,
   AgentState,
   AgentQueuedMessageItem,
+  AgentSessionDiagnosticMessage,
 } from '@neko-agent/types';
 import type { ActiveTurnTimelineState } from '@/presenters/active-turn-timeline-presenter';
 import type { TimelineRenderCommitScheduler } from './timeline-render-commit-scheduler';
@@ -57,6 +58,8 @@ export type PendingForegroundConversationActivation =
   | {
       readonly reason: 'switch-conversation';
       readonly conversationId: string;
+      readonly activationId: number;
+      readonly tabStateRevision: number;
     };
 
 /**
@@ -135,6 +138,7 @@ export interface SkillContext {
 /** Global, non-conversation-scoped UI notifications */
 export interface GlobalNotificationContext {
   setGlobalError: React.Dispatch<React.SetStateAction<string | null>>;
+  reportConversationDiagnostic: (diagnostic: AgentSessionDiagnosticMessage) => void;
 }
 
 export interface QueuedMessageEditRequest {
@@ -168,6 +172,8 @@ export interface HelperContext {
     updater: NonCurrentConversationUpdater,
   ) => void;
   pendingForegroundConversationActivationRef?: MutableRefObject<PendingForegroundConversationActivation | null>;
+  /** Latest accepted or optimistically allocated Tab-state revision in this Webview realm. */
+  tabStateRevisionRef?: MutableRefObject<number>;
   completeForegroundConversationActivation?: (conversationId: string) => void;
   requestQueuedMessageEdit?: (request: QueuedMessageEditRequest) => void;
 }

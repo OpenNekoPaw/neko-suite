@@ -20,10 +20,14 @@ import type { AgentContextPayload } from '@neko/shared';
 import type { AmbientCanvasNodeProjection } from '@/presenters/plugin-transfer-presenter';
 import type { ActivationProgressTimeline } from '@/presenters/activation-progress-presenter';
 import type { ActiveSkillIndicator } from '@/components/ChatView/SkillIndicator';
-import type { ConversationViewportSnapshot } from '@/render-lifecycle/conversation-render-contract';
+import type {
+  ConversationViewportSnapshot,
+  ForegroundConversationAvailability,
+} from '@/render-lifecycle/conversation-render-contract';
 import { CharacterDialogueHeader } from '@/components/ChatView/CharacterDialogueHeader';
 import { EmbodyCharacterHeader } from '@/components/ChatView/EmbodyCharacterHeader';
 import { AgentRunStatus } from '@/components/ChatView/AgentRunStatus';
+import { useTranslation } from '@/i18n/I18nContext';
 import { projectMessageIdentities } from '@/components/ChatView/message-identity';
 import { TaskCard, BatchTaskCard } from '@/components/ChatView/TaskCard';
 import { SubAgentCard } from '@/components/ChatView/SubAgentCard';
@@ -41,6 +45,7 @@ interface ChatViewProps {
   characterDialogueSession?: CharacterDialogueSessionProjection;
   embodyCharacterSession?: EmbodyCharacterSessionProjection;
   isConversationSwitching?: boolean;
+  foregroundConversationAvailability?: ForegroundConversationAvailability;
   /** Active skill indicator */
   activeSkill?: ActiveSkillIndicator | null;
   activationProgress?: readonly ActivationProgressTimeline[];
@@ -105,6 +110,7 @@ export function ChatView({
   characterDialogueSession,
   embodyCharacterSession,
   isConversationSwitching = false,
+  foregroundConversationAvailability = { kind: 'ready' },
   activeSkill,
   activationProgress = [],
   viewport,
@@ -138,6 +144,7 @@ export function ChatView({
   onSelectedFileReferencesChange,
   agentState = null,
 }: ChatViewProps) {
+  const { t } = useTranslation();
   const isEmpty = messages.length === 0 && !isThinking && !activeSkill;
   const messageIdentities = useMemo(
     () =>
@@ -192,7 +199,16 @@ export function ChatView({
           onApproveAllPlanSteps={onApproveAllPlanSteps}
           onRejectAllPlanSteps={onRejectAllPlanSteps}
         >
-          {isEmpty ? (
+          {foregroundConversationAvailability.kind !== 'ready' ? (
+            <div
+              className="agent-chat-empty-scroll flex flex-1 items-center justify-center overflow-y-auto px-6 text-center text-sm text-[var(--vscode-descriptionForeground,var(--agent-fg-muted))]"
+              role={foregroundConversationAvailability.kind === 'loading' ? 'status' : 'alert'}
+            >
+              {foregroundConversationAvailability.kind === 'loading'
+                ? t('chat.conversation.loading')
+                : foregroundConversationAvailability.diagnostic}
+            </div>
+          ) : isEmpty ? (
             <div className="agent-chat-empty-scroll flex-1 overflow-y-auto">
               <ConversationWorkItemShelf
                 workItems={unanchoredWorkItems}
@@ -246,7 +262,7 @@ export function ChatView({
           onCancel={onCancel}
           entryPromptMenu={entryPromptMenu}
           onEntryPromptMenuChange={onEntryPromptMenuChange}
-          disabled={isConversationSwitching}
+          disabled={isConversationSwitching || foregroundConversationAvailability.kind !== 'ready'}
           attachedFiles={attachedFiles}
           onAttachedFilesChange={onAttachedFilesChange}
           selectedFileReferences={selectedFileReferences}

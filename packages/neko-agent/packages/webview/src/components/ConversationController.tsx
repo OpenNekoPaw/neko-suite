@@ -30,6 +30,7 @@ import {
   SettingsState,
   AgentState,
   AgentQueuedMessageItem,
+  type AgentSessionDiagnosticMessage,
   Message,
   OpenTab,
   PromptMode,
@@ -78,6 +79,7 @@ import {
   DEFAULT_CONVERSATION_VIEWPORT,
   type ConversationActivationSource,
   type ConversationViewportSnapshot,
+  type ForegroundConversationAvailability,
 } from '@/render-lifecycle/conversation-render-contract';
 import {
   applyUserMessageToConversationSummaries,
@@ -218,6 +220,12 @@ export function ConversationController({
     audio: 'none',
   });
   const [globalError, setGlobalError] = useState<string | null>(null);
+  const [conversationDiagnostics, setConversationDiagnostics] = useState<Map<string, string>>(
+    () => new Map(),
+  );
+  const [foregroundAvailabilityByConversation, setForegroundAvailabilityByConversation] = useState<
+    Map<string, ForegroundConversationAvailability>
+  >(() => new Map());
   const [entryAction, setEntryAction] = useState<EmptyStateEntryAction>('start-chat');
   const [entryInputValue, setEntryInputValue] = useState('');
   const entryInputValueRef = useRef('');
@@ -292,8 +300,36 @@ export function ConversationController({
   const isTablessConversationViewRef = useRef(false);
   const pendingForegroundConversationActivationRef =
     useRef<PendingForegroundConversationActivation | null>(null);
+  const tabStateRevisionRef = useRef(0);
   const [isForegroundConversationActivationPending, setIsForegroundConversationActivationPending] =
     useState(false);
+  const reportConversationDiagnostic = useCallback((diagnostic: AgentSessionDiagnosticMessage) => {
+    const conversationId = diagnostic.conversationId;
+    if (!conversationId) {
+      setGlobalError(`${diagnostic.code}: ${diagnostic.message}`);
+      return;
+    }
+    const message = `${diagnostic.code}: ${diagnostic.message}`;
+    setConversationDiagnostics((previous) => {
+      const next = new Map(previous);
+      next.set(conversationId, message);
+      return next;
+    });
+    const pending = pendingForegroundConversationActivationRef.current;
+    const rejectsPendingActivation =
+      pending?.reason === 'switch-conversation' &&
+      pending.conversationId === conversationId &&
+      (diagnostic.action === 'activate-conversation' ||
+        diagnostic.code === 'unknown-conversation' ||
+        diagnostic.code === 'deleted-conversation');
+    if (rejectsPendingActivation) {
+      setForegroundAvailabilityByConversation((previous) => {
+        const next = new Map(previous);
+        next.set(conversationId, { kind: 'unavailable', diagnostic: message });
+        return next;
+      });
+    }
+  }, []);
   const nextPendingSendRequestIdRef = useRef(0);
   const [pendingSendRequest, setPendingSendRequest] = useState<{
     id: number;
@@ -771,11 +807,24 @@ export function ConversationController({
 
   const completeForegroundConversationActivation = useCallback((conversationId: string) => {
     const pending = pendingForegroundConversationActivationRef.current;
-    if (!shouldActivateForegroundConversation(pending, conversationId)) {
-      return;
-    }
+    const matchesPending =
+      pending?.reason === 'switch-conversation'
+        ? pending.conversationId === conversationId
+        : shouldActivateForegroundConversation(pending, conversationId);
+    if (!matchesPending) return;
     pendingForegroundConversationActivationRef.current = null;
     setIsForegroundConversationActivationPending(false);
+    setForegroundAvailabilityByConversation((previous) => {
+      const next = new Map(previous);
+      next.set(conversationId, { kind: 'ready' });
+      return next;
+    });
+    setConversationDiagnostics((previous) => {
+      if (!previous.has(conversationId)) return previous;
+      const next = new Map(previous);
+      next.delete(conversationId);
+      return next;
+    });
   }, []);
 
   // ---- Message handler ----
@@ -795,6 +844,7 @@ export function ConversationController({
     activeTabId,
     isTablessConversationViewRef,
     pendingForegroundConversationActivationRef,
+    tabStateRevisionRef,
     completeForegroundConversationActivation,
     requestQueuedMessageEdit: (request) => {
       nextQueuedEditRequestIdRef.current += 1;
@@ -842,6 +892,7 @@ export function ConversationController({
     setPromptModeForConversation,
     setShowOnboarding,
     setGlobalError,
+    reportConversationDiagnostic,
     conversationTokenCountRef,
     conversationCompressingRef,
     forceContextUpdate: triggerForceUpdate,
@@ -1144,7 +1195,12 @@ export function ConversationController({
   }, []);
 
   const handleBeforeConversationActivation = useCallback(
-    (conversationId: string) => {
+    (request: {
+      conversationId: string;
+      activationId: number;
+      expectedTabStateRevision: number;
+    }) => {
+      const { conversationId } = request;
       setPendingSendRequest(null);
       setInitialEntryPromptMenuRequest(null);
       setInitialInputRequest(null);
@@ -1152,12 +1208,36 @@ export function ConversationController({
       pendingForegroundConversationActivationRef.current = {
         reason: 'switch-conversation',
         conversationId,
+        activationId: request.activationId,
+        tabStateRevision: request.expectedTabStateRevision + 1,
       };
       setIsForegroundConversationActivationPending(true);
       isTablessConversationViewRef.current = false;
-      commitConversationTabActivation(conversationId, 'ui-tab');
+      const hasRetainedProjection =
+        conversationRenderCoordinator.read(conversationId) !== undefined ||
+        conversationMessagesRef.current.has(conversationId) ||
+        conversationStreamingRef.current.has(conversationId);
+      setForegroundAvailabilityByConversation((previous) => {
+        const next = new Map(previous);
+        next.set(conversationId, hasRetainedProjection ? { kind: 'ready' } : { kind: 'loading' });
+        return next;
+      });
+      setConversationDiagnostics((previous) => {
+        if (!previous.has(conversationId)) return previous;
+        const next = new Map(previous);
+        next.delete(conversationId);
+        return next;
+      });
+      if (hasRetainedProjection) {
+        commitConversationTabActivation(conversationId, 'ui-tab');
+      }
     },
-    [commitConversationTabActivation],
+    [
+      commitConversationTabActivation,
+      conversationMessagesRef,
+      conversationRenderCoordinator,
+      conversationStreamingRef,
+    ],
   );
 
   const handleAllTabsClosed = useCallback(() => {
@@ -1277,8 +1357,8 @@ export function ConversationController({
     // Persist local UI-only state first; a pending canonical Timeline frame then overwrites
     // the cache with the newest delivery before the incoming tab reads it.
     persistCurrentVisibleConversation();
-    flushTimelineRendering();
-  }, [flushTimelineRendering, persistCurrentVisibleConversation]);
+    flushTimelineRendering(activeConversationIdRef.current);
+  }, [activeConversationIdRef, flushTimelineRendering, persistCurrentVisibleConversation]);
 
   const { handleOpenTab, handleCloseTab, handleSwitchTab } = useTabManager({
     openTabs,
@@ -1294,6 +1374,10 @@ export function ConversationController({
     onConversationActivated: requestConversationResourceSnapshot,
     onActivateCharacterRoleTab: activateCharacterRoleTab,
     onConfigSnapshotRequested: requestConfigSnapshot,
+    tabStateRevision: tabStateRevisionRef.current,
+    onTabStateRevisionAllocated: (revision) => {
+      tabStateRevisionRef.current = revision;
+    },
     hasLocalConversationActivity: (conversationId) => {
       const cachedMessages = conversationMessagesRef.current.get(conversationId);
       const cachedStreaming = conversationStreamingRef.current.get(conversationId);
@@ -1413,6 +1497,13 @@ export function ConversationController({
     [historyConversations],
   );
 
+  const foregroundConversationAvailability = visibleConversationId
+    ? (foregroundAvailabilityByConversation.get(visibleConversationId) ?? { kind: 'ready' })
+    : { kind: 'ready' as const };
+  const visibleConversationDiagnostic = visibleConversationId
+    ? (conversationDiagnostics.get(visibleConversationId) ?? null)
+    : null;
+
   return (
     <>
       {renderHeader({
@@ -1506,6 +1597,7 @@ export function ConversationController({
             activeConversationIdRef={activeConversationIdRef}
             activeTabConversationId={activeTabConversationId}
             isForegroundConversationActivationPending={isForegroundConversationActivationPending}
+            foregroundConversationAvailability={foregroundConversationAvailability}
             conversationKind={conversationKind}
             characterDialogueSession={activeOpenTab?.characterDialogueSession}
             embodyCharacterSession={embodyCharacterSession}
@@ -1568,13 +1660,22 @@ export function ConversationController({
             onQueuedEditConflict={() => {
               setGlobalError(t('chat.input.queueEditDraftConflict'));
             }}
-            onSessionDiagnostic={(diagnostic) => {
-              setGlobalError(`${diagnostic.code}: ${diagnostic.message}`);
-            }}
+            onSessionDiagnostic={reportConversationDiagnostic}
             // Session cleanup registration
             sessionCleanupRef={sessionCleanupRef}
           />
         )
+      ) : null}
+
+      {visibleConversationDiagnostic &&
+      foregroundConversationAvailability.kind !== 'unavailable' ? (
+        <div
+          className="fixed right-4 top-12 z-50 max-w-[360px] rounded-lg border border-[var(--vscode-inputValidation-errorBorder,var(--agent-border))] bg-[var(--vscode-inputValidation-errorBackground,var(--agent-elevated))] px-3 py-2 text-sm text-[var(--vscode-inputValidation-errorForeground,var(--agent-fg))] shadow-lg animate-slide-in"
+          role="alert"
+        >
+          <div className="font-medium">会话错误</div>
+          <div className="mt-1 opacity-90">{visibleConversationDiagnostic}</div>
+        </div>
       ) : null}
 
       {globalError ? (

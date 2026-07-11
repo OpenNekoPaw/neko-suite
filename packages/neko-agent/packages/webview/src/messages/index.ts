@@ -135,12 +135,11 @@ export const AgentHostMessages = {
     postWebviewMessage({ type: 'newConversation' });
   },
 
-  /**
-   * Switch to a different conversation
-   * @param conversationId - The conversation ID to switch to
-   */
-  switchConversation: (conversationId: string) => {
-    postConversationMessage({ type: 'switchConversation', conversationId });
+  /** Activate an ordinary conversation and its Tab projection atomically. */
+  activateConversation: (
+    request: Omit<import('@neko-agent/types').ActivateConversationWebviewMessage, 'type'>,
+  ) => {
+    postConversationMessage({ type: 'activateConversation', ...request });
   },
 
   /**
@@ -450,8 +449,14 @@ export const AgentHostMessages = {
   updateTabState: (
     openTabs: Array<import('@neko-agent/types').OpenTab>,
     activeTabId: string | null,
+    expectedTabStateRevision: number,
   ) => {
-    postWebviewMessage({ type: 'updateTabState', openTabs, activeTabId });
+    postWebviewMessage({
+      type: 'updateTabState',
+      openTabs,
+      activeTabId,
+      expectedTabStateRevision,
+    });
   },
 
   exitCharacterDialogueSession: (sessionId: string) => {

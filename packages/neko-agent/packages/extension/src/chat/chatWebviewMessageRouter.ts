@@ -20,7 +20,7 @@ export const CHAT_WEBVIEW_MESSAGE_ROUTER_TYPES = [
   'confirmTool',
   'cancelMessage',
   'newConversation',
-  'switchConversation',
+  'activateConversation',
   'deleteConversation',
   'conversationLifecycle',
   'getConversations',
