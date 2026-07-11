@@ -92,6 +92,7 @@ describe('creative media shared contracts', () => {
       operationId: 'generate-from-keyframes',
       level: 'unsupported',
       adapterId: 'provider-without-end-frame',
+      acceptedControls: ['start-frame'],
       diagnostics: [],
     };
     expect(validateCreativeMediaOperationSupport(support).diagnostics).toEqual([
@@ -115,6 +116,7 @@ describe('creative media shared contracts', () => {
       operationId: 'generate-from-keyframes',
       level: 'supported',
       adapterId: 'keyframe-provider',
+      acceptedControls: ['start-frame', 'end-frame', 'duration'],
       requirements: { requiredInputRoles: ['start-frame', 'end-frame'] },
       limits: { maxDurationSeconds: 8 },
       diagnostics: [],

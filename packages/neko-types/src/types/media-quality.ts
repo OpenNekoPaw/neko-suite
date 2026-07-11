@@ -89,6 +89,8 @@ export interface QualityIssue {
   readonly details?: Readonly<Record<string, unknown>>;
 }
 
+export type QualityGateIssue = QualityIssue;
+
 export interface QualityCoverage {
   readonly mode: 'complete' | 'sampled' | 'bounded-range' | 'structural-only';
   readonly mediaRange?: MediaTimeRange;
@@ -177,6 +179,12 @@ export interface QualityDiagnostic {
     | 'stale-quality-evidence'
     | 'invalid-quality-gate-result'
     | 'missing-required-evaluator'
+    | 'quality-evaluator-failed'
+    | 'partial-quality-coverage'
+    | 'quality-policy-manual-review'
+    | 'quality-repair-not-approved'
+    | 'quality-repair-limit-exceeded'
+    | 'quality-repair-lineage-invalid'
     | DurableResourceRefDiagnostic['code'];
   readonly severity: 'info' | 'warning' | 'error';
   readonly message: string;

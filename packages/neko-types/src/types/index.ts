@@ -409,4 +409,5 @@ export * from './creative-entity-asset-composition';
 
 export * from './durable-resource-ref';
 export * from './creative-media-operations';
+export * from './creative-media-capability-registry';
 export * from './media-quality';
