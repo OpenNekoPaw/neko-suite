@@ -23,6 +23,25 @@ describe('ConversationRenderCoordinator', () => {
     );
   });
 
+  it('publishes revision changes only to the owning conversation subscribers', () => {
+    const coordinator = new ConversationRenderCoordinator();
+    const listenerA = vi.fn();
+    const listenerB = vi.fn();
+    const unsubscribeA = coordinator.subscribeRevision('conv-a', listenerA);
+    coordinator.subscribeRevision('conv-b', listenerB);
+
+    coordinator.ingest(hostSnapshot('conv-a', 0, [message('a-1')]));
+
+    expect(coordinator.revision('conv-a')).toBe(1);
+    expect(coordinator.revision('conv-b')).toBe(0);
+    expect(listenerA).toHaveBeenCalledTimes(1);
+    expect(listenerB).not.toHaveBeenCalled();
+
+    unsubscribeA();
+    coordinator.ingest(hostSnapshot('conv-a', 1, [message('a-2')]));
+    expect(listenerA).toHaveBeenCalledTimes(1);
+  });
+
   it('keeps one foreground conversation and publishes only after visible state commits', () => {
     const events: string[] = [];
     const coordinator = new ConversationRenderCoordinator();

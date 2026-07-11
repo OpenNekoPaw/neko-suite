@@ -62,6 +62,34 @@ describe('tab display presenter', () => {
     expect(tabs[0]).not.toHaveProperty('displayStatus');
   });
 
+  it('prefers canonical render snapshots for background tab status', () => {
+    const projected = projectDisplayTabs({
+      openTabs: [{ id: 'tab-1', title: 'Background', conversationId: 'conv-1' }],
+      conversations: [],
+      activeConversationId: null,
+      activeMessages: [],
+      activeStreaming: { streamingMessageId: null, isThinking: false },
+      messagesByConversation: new Map([
+        ['conv-1', [{ id: 'legacy', role: 'assistant', content: 'done', timestamp: 1 }]],
+      ]),
+      streamingByConversation: new Map([
+        ['conv-1', { streamingMessageId: null, isThinking: false }],
+      ]),
+      renderSnapshotsByConversation: new Map([
+        [
+          'conv-1',
+          {
+            messages: [],
+            streaming: { streamingMessageId: 'stream-1', isThinking: true },
+          },
+        ],
+      ]),
+      agentStateByConversation: new Map(),
+    });
+
+    expect(projected[0]?.displayStatus).toBe('running');
+  });
+
   it('does not carry stale displayStatus from persisted tab records', () => {
     const tabs = [
       {

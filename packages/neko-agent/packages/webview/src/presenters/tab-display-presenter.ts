@@ -12,6 +12,11 @@ export type DisplayTab = OpenTab & {
   readonly displayStatus?: TabDisplayStatus;
 };
 
+export interface TabRenderStatusSnapshot {
+  readonly messages: readonly Message[];
+  readonly streaming: Pick<ConversationStreamingState, 'isThinking' | 'streamingMessageId'>;
+}
+
 export interface ProjectDisplayTabsInput {
   readonly openTabs: readonly OpenTab[];
   readonly conversations: readonly ConversationSummary[];
@@ -20,6 +25,7 @@ export interface ProjectDisplayTabsInput {
   readonly activeStreaming: ConversationStreamingState;
   readonly messagesByConversation: ReadonlyMap<string, readonly Message[]>;
   readonly streamingByConversation: ReadonlyMap<string, ConversationStreamingState>;
+  readonly renderSnapshotsByConversation?: ReadonlyMap<string, TabRenderStatusSnapshot>;
   readonly agentStateByConversation: ReadonlyMap<string, AgentState>;
 }
 
@@ -42,14 +48,17 @@ const TITLE_MAX_LENGTH = 50;
 export function projectDisplayTabs(input: ProjectDisplayTabsInput): DisplayTab[] {
   return input.openTabs.map((tab) => {
     const conversationId = tab.conversationId;
+    const renderSnapshot = input.renderSnapshotsByConversation?.get(conversationId);
     const messages =
-      conversationId === input.activeConversationId
+      renderSnapshot?.messages ??
+      (conversationId === input.activeConversationId
         ? input.activeMessages
-        : (input.messagesByConversation.get(conversationId) ?? []);
+        : (input.messagesByConversation.get(conversationId) ?? []));
     const streaming =
-      conversationId === input.activeConversationId
+      renderSnapshot?.streaming ??
+      (conversationId === input.activeConversationId
         ? input.activeStreaming
-        : input.streamingByConversation.get(conversationId);
+        : input.streamingByConversation.get(conversationId));
     const agentState = input.agentStateByConversation.get(conversationId);
     const summary = input.conversations.find((conversation) => conversation.id === conversationId);
     const displayStatus = resolveTabDisplayStatus({

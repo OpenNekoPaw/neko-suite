@@ -15,6 +15,7 @@ type DisposalMutation = Extract<ConversationRenderMutation, { readonly kind: 'di
 
 export class ConversationRenderCoordinator {
   private readonly snapshots = new Map<string, ConversationRenderSnapshot>();
+  private readonly revisionListeners = new Map<string, Set<() => void>>();
   private foregroundId: string | null = null;
 
   read(conversationId: string): ConversationRenderSnapshot | undefined {
@@ -23,6 +24,20 @@ export class ConversationRenderCoordinator {
 
   foregroundConversationId(): string | null {
     return this.foregroundId;
+  }
+
+  revision(conversationId: string): number {
+    return this.snapshots.get(conversationId)?.revision ?? 0;
+  }
+
+  subscribeRevision(conversationId: string, listener: () => void): () => void {
+    const listeners = this.revisionListeners.get(conversationId) ?? new Set<() => void>();
+    listeners.add(listener);
+    this.revisionListeners.set(conversationId, listeners);
+    return () => {
+      listeners.delete(listener);
+      if (listeners.size === 0) this.revisionListeners.delete(conversationId);
+    };
   }
 
   ingest(mutation: RevisionedMutation): ConversationRenderSnapshot {
@@ -50,6 +65,7 @@ export class ConversationRenderCoordinator {
     const next = createNextSnapshot(current, mutation);
     validateTimelineIdentity(next);
     this.snapshots.set(mutation.conversationId, next);
+    this.publishRevisions([mutation.conversationId]);
     return next;
   }
 
@@ -137,11 +153,13 @@ export class ConversationRenderCoordinator {
     };
     this.snapshots.set(mutation.conversationId, disposed);
     if (this.foregroundId === mutation.conversationId) this.foregroundId = null;
+    this.publishRevisions([mutation.conversationId]);
     return disposed;
   }
 
   private commitForegroundSnapshot(snapshot: ConversationRenderSnapshot): void {
     const previousForegroundId = this.foregroundId;
+    const changedConversationIds = [snapshot.conversationId];
     if (previousForegroundId && previousForegroundId !== snapshot.conversationId) {
       const previous = this.snapshots.get(previousForegroundId);
       if (previous?.retention === 'retained') {
@@ -150,10 +168,20 @@ export class ConversationRenderCoordinator {
           revision: previous.revision + 1,
           visibility: 'background',
         });
+        changedConversationIds.push(previousForegroundId);
       }
     }
     this.snapshots.set(snapshot.conversationId, snapshot);
     this.foregroundId = snapshot.conversationId;
+    this.publishRevisions(changedConversationIds);
+  }
+
+  private publishRevisions(conversationIds: readonly string[]): void {
+    for (const conversationId of new Set(conversationIds)) {
+      const listeners = this.revisionListeners.get(conversationId);
+      if (!listeners) continue;
+      for (const listener of [...listeners]) listener();
+    }
   }
 }
 

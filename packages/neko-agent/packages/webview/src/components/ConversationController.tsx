@@ -13,7 +13,15 @@
  * Extracted from the former 589-line AIAssistant component (ADR P0.1).
  */
 
-import { type ReactNode, useEffect, useCallback, useMemo, useState, useRef } from 'react';
+import {
+  type ReactNode,
+  useEffect,
+  useCallback,
+  useMemo,
+  useState,
+  useRef,
+  useSyncExternalStore,
+} from 'react';
 import type { AgentContextPayload } from '@neko/shared';
 import type { ConversationLifecycleAction } from '@neko/shared/types/creative-ai-invocation';
 import {
@@ -1259,6 +1267,47 @@ export function ConversationController({
     },
   });
 
+  const tabConversationIds = useMemo(
+    () => [...new Set(openTabs.map((tab) => tab.conversationId))],
+    [openTabs],
+  );
+  const subscribeTabRenderRevisions = useCallback(
+    (listener: () => void) => {
+      const unsubscribe = tabConversationIds.map((conversationId) =>
+        conversationRenderCoordinator.subscribeRevision(conversationId, listener),
+      );
+      return () => {
+        for (const dispose of unsubscribe) dispose();
+      };
+    },
+    [conversationRenderCoordinator, tabConversationIds],
+  );
+  const readTabRenderRevisionSignature = useCallback(
+    () =>
+      tabConversationIds
+        .map(
+          (conversationId) =>
+            `${conversationId}:${conversationRenderCoordinator.revision(conversationId)}`,
+        )
+        .join('|'),
+    [conversationRenderCoordinator, tabConversationIds],
+  );
+  const tabRenderRevisionSignature = useSyncExternalStore(
+    subscribeTabRenderRevisions,
+    readTabRenderRevisionSignature,
+    readTabRenderRevisionSignature,
+  );
+  const tabRenderSnapshots = useMemo(
+    () =>
+      new Map(
+        tabConversationIds.flatMap((conversationId) => {
+          const snapshot = conversationRenderCoordinator.read(conversationId);
+          return snapshot ? [[conversationId, snapshot] as const] : [];
+        }),
+      ),
+    [conversationRenderCoordinator, tabConversationIds, tabRenderRevisionSignature],
+  );
+
   const displayTabs = useMemo(
     () =>
       projectDisplayTabs({
@@ -1269,9 +1318,17 @@ export function ConversationController({
         activeStreaming: visibleSessionState.streaming,
         messagesByConversation: conversationMessagesRef.current,
         streamingByConversation: conversationStreamingRef.current,
+        renderSnapshotsByConversation: tabRenderSnapshots,
         agentStateByConversation: conversationAgentStateRef.current,
       }),
-    [openTabs, conversations, visibleConversationId, visibleSessionState, projectionVersion],
+    [
+      openTabs,
+      conversations,
+      visibleConversationId,
+      visibleSessionState,
+      projectionVersion,
+      tabRenderSnapshots,
+    ],
   );
   const historyConversations = useMemo(
     () =>
