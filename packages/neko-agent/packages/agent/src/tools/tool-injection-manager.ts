@@ -60,9 +60,13 @@ export class ToolInjectionManager implements IToolInjectionManager {
    * Create initial injection state
    */
   private createInitialState(): ToolInjectionState {
+    const categorizedAlwaysTools = this.categoryRegistry
+      .getToolsByLayer('always')
+      .map((tool) => tool.name);
+
     return {
       injectedTools: new Map<ToolInjectionLayer, string[]>([
-        ['always', [...CORE_TOOLS]],
+        ['always', [...new Set([...CORE_TOOLS, ...categorizedAlwaysTools])]],
         ['dynamic', []],
       ]),
       activeToolSets: [],

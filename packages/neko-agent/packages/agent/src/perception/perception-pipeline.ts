@@ -97,6 +97,7 @@ export class PerceptionPipeline {
       asset,
       ...(input.focus ? { focus: input.focus } : {}),
       ...(input.options ? { options: input.options } : {}),
+      ...(input.understandingModels ? { understandingModels: input.understandingModels } : {}),
     };
     const tasks: Array<Promise<PerceptionEvidenceEntry | undefined>> = [];
 

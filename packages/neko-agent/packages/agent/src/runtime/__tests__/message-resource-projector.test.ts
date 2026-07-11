@@ -107,6 +107,44 @@ describe('message resource projector', () => {
     });
   });
 
+  it('treats nested ResourceRef values as atomic stable identity during Webview projection', () => {
+    const resourceRef = {
+      id: 'generated-1',
+      scope: 'project',
+      provider: 'generated-asset',
+      kind: 'generated',
+      source: {
+        kind: 'generated-asset',
+        generatedAssetId: 'generated-1',
+        filePath: '/workspace/neko/generated/image/task_1_0.png',
+        metadata: {
+          path: '/workspace/neko/generated/image/task_1_0.png',
+          mimeType: 'image/png',
+        },
+      },
+      locator: { kind: 'generated-asset', assetId: 'generated-1' },
+      fingerprint: {
+        strategy: 'provider',
+        value: 'generated-1',
+        providerId: 'generated-asset',
+      },
+    };
+
+    expect(
+      projectResourceValue(
+        {
+          uri: '/workspace/neko/generated/image/task_1_0.png',
+          resourceRef,
+        },
+        { resolveLocalMediaPath: (path) => `webview://${path}` },
+      ),
+    ).toEqual({
+      uri: '/workspace/neko/generated/image/task_1_0.png',
+      renderUri: 'webview:///workspace/neko/generated/image/task_1_0.png',
+      resourceRef,
+    });
+  });
+
   it('projects tool result payloads in content blocks', () => {
     const messages: Message[] = [
       {

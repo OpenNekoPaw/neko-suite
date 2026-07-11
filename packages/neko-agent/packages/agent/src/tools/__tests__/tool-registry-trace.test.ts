@@ -263,6 +263,22 @@ describe('ToolRegistry argument normalization', () => {
   });
 });
 
+describe('ToolRegistry external research drift guard', () => {
+  it('fails visibly when external research tools are not registered', async () => {
+    const { ToolRegistry } = await import('../tool-registry');
+    const registry = new ToolRegistry();
+
+    await expect(registry.execute('WebSearch', { query: 'current references' })).resolves.toEqual({
+      success: false,
+      error: 'Tool not found: WebSearch',
+    });
+    await expect(registry.execute('WebFetch', { url: 'https://example.com' })).resolves.toEqual({
+      success: false,
+      error: 'Tool not found: WebFetch',
+    });
+  });
+});
+
 describe('ToolRegistry nested schema validation', () => {
   it('rejects array object items that miss required fields before execution', async () => {
     const { ToolRegistry } = await import('../tool-registry');

@@ -197,6 +197,21 @@ describe('validateSchema', () => {
     expect(errors).toHaveLength(0);
   });
 
+  it('should reject extra fields when additional properties are disabled', () => {
+    const errors = validateSchema(
+      { prompt: 'ok', extra: 42 },
+      { ...baseSchema, additionalProperties: false },
+    );
+
+    expect(errors).toEqual([
+      expect.objectContaining({
+        field: 'extra',
+        expected: 'declared field',
+        message: 'Unknown field: "extra"',
+      }),
+    ]);
+  });
+
   // --- Multiple errors ---
 
   it('should collect multiple errors', () => {

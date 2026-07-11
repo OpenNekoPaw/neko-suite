@@ -50,7 +50,7 @@ describe('GeminiVideoUnderstandingClient', () => {
           name: 'gemini-2.5-flash',
           providerId: 'google',
           type: 'llm' as const,
-          capabilities: ['chat', 'vision', 'video.understand'],
+          capabilities: ['chat', 'vision_video'],
           enabled: true,
         })),
       },
@@ -100,7 +100,7 @@ describe('GeminiVideoUnderstandingClient', () => {
       expect.objectContaining({
         providerId: 'google',
         modelId: 'gemini-flash',
-        modelCapabilities: ['chat', 'vision', 'video.understand'],
+        modelCapabilities: ['chat', 'vision_video'],
         responseFormat: { type: 'json_object' },
       }),
     );

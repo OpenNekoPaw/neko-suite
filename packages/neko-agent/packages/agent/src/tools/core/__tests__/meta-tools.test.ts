@@ -7,6 +7,7 @@ import type {
 import {
   ActivateSkillTool,
   DeactivateSkillTool,
+  CreateSkillTool,
   GetContextTool,
   SetExecutionModeTool,
 } from '../meta-tools';
@@ -280,6 +281,185 @@ describe('core meta tools', () => {
       error: 'Creation stage persona is cleared when its owning stage exits',
     });
     expect(deactivateSkill).toHaveBeenCalledWith({ recordId: 'record-stage' });
+  });
+
+  it('creates a complete portable Skill through the per-conversation provider', async () => {
+    const createSkill = vi.fn(async () => ({
+      source: 'project' as const,
+      rootId: 'project-agent-skills',
+      relativePath: 'story-review',
+      absolutePath: '/workspace/.agents/skills/story-review',
+      fingerprint: 'sha256:story-review',
+      diagnostics: [],
+    }));
+    const tool = new CreateSkillTool();
+    tool.setSkillProvider({
+      listSkills: vi.fn(),
+      getActiveSkill: vi.fn(),
+      activateSkill: vi.fn(),
+      deactivateSkill: vi.fn(),
+      createSkill,
+    });
+    const input = {
+      target: 'project',
+      skill: {
+        name: 'story-review',
+        description: 'Review story structure.',
+        body: '# Story Review\n\nReview the supplied story.',
+        metadata: { domain: 'story' },
+        allowedTools: ['Read'],
+      },
+      resources: [
+        {
+          path: 'references/checklist.md',
+          encoding: 'utf8',
+          content: '# Checklist',
+        },
+      ],
+      neko: {
+        schemaVersion: 1,
+        interface: { displayName: 'Story Review' },
+        dependencies: {
+          capabilities: [{ id: 'story.read', requirement: 'required' }],
+        },
+      },
+    };
+
+    await expect(tool.execute(input)).resolves.toEqual({
+      success: true,
+      data: {
+        created: true,
+        source: 'project',
+        rootId: 'project-agent-skills',
+        relativePath: 'story-review',
+        absolutePath: '/workspace/.agents/skills/story-review',
+        fingerprint: 'sha256:story-review',
+        diagnostics: [],
+      },
+    });
+    expect(createSkill).toHaveBeenCalledWith(input);
+  });
+
+  it('returns typed creation diagnostics from the Host provider', async () => {
+    const createSkill = vi.fn(async () => {
+      throw Object.assign(new Error('Skill directory already exists'), {
+        code: 'skill-already-exists',
+        diagnostics: [
+          {
+            area: 'creation',
+            code: 'skill-already-exists',
+            severity: 'error',
+            message: 'Skill directory already exists',
+            path: 'story-review',
+          },
+        ],
+      });
+    });
+    const tool = new CreateSkillTool();
+    tool.setSkillProvider({
+      listSkills: vi.fn(),
+      getActiveSkill: vi.fn(),
+      activateSkill: vi.fn(),
+      deactivateSkill: vi.fn(),
+      createSkill,
+    });
+
+    await expect(
+      tool.execute({
+        target: 'project',
+        skill: {
+          name: 'story-review',
+          description: 'Review story structure.',
+          body: '# Story Review',
+        },
+      }),
+    ).resolves.toEqual({
+      success: false,
+      error: 'Skill directory already exists',
+      data: {
+        code: 'skill-already-exists',
+        diagnostics: [
+          {
+            area: 'creation',
+            code: 'skill-already-exists',
+            severity: 'error',
+            message: 'Skill directory already exists',
+            path: 'story-review',
+          },
+        ],
+      },
+    });
+  });
+
+  it('rejects malformed native Skill creation input before provider invocation', async () => {
+    const createSkill = vi.fn();
+    const tool = new CreateSkillTool();
+    tool.setSkillProvider({
+      listSkills: vi.fn(),
+      getActiveSkill: vi.fn(),
+      activateSkill: vi.fn(),
+      deactivateSkill: vi.fn(),
+      createSkill,
+    });
+
+    await expect(
+      tool.execute({
+        target: 'project',
+        skill: {
+          name: 'story-review',
+          description: 'Review story structure.',
+        },
+      }),
+    ).resolves.toEqual({
+      success: false,
+      error: 'Invalid CreateSkill input',
+    });
+    expect(createSkill).not.toHaveBeenCalled();
+  });
+
+  it('rejects Host-owned or lifecycle fields instead of silently accepting them', async () => {
+    const createSkill = vi.fn();
+    const tool = new CreateSkillTool();
+    tool.setSkillProvider({
+      listSkills: vi.fn(),
+      getActiveSkill: vi.fn(),
+      activateSkill: vi.fn(),
+      deactivateSkill: vi.fn(),
+      createSkill,
+    });
+    const baseInput = {
+      target: 'project',
+      skill: {
+        name: 'story-review',
+        description: 'Review story structure.',
+        body: '# Story Review',
+      },
+    };
+
+    await expect(tool.execute({ ...baseInput, approval: 'approved' })).resolves.toEqual({
+      success: false,
+      error: 'Invalid CreateSkill input',
+    });
+    await expect(
+      tool.execute({
+        ...baseInput,
+        skill: { ...baseInput.skill, trusted: true },
+      }),
+    ).resolves.toEqual({
+      success: false,
+      error: 'Invalid CreateSkill input',
+    });
+    await expect(
+      tool.execute({
+        ...baseInput,
+        neko: { schemaVersion: 1, enabled: true },
+      }),
+    ).resolves.toEqual({
+      success: false,
+      error: 'Invalid CreateSkill input',
+    });
+    expect(createSkill).not.toHaveBeenCalled();
+    expect(tool.parameters.additionalProperties).toBe(false);
   });
 
   it('sets execution mode through the typed Agent meta tool provider path', async () => {

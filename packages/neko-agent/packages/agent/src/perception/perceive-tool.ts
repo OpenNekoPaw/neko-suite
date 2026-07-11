@@ -1,11 +1,13 @@
 import {
   BuiltinTool,
+  isResourceRef,
+  parseDocumentArchiveResourceRef,
   TOOL_NAMES_PERCEPTION,
   type PerceiveToolInput,
   type ToolParameters,
   type ToolResult,
 } from '@neko/shared';
-import type { IPerceptionPipeline } from './contracts';
+import type { IPerceptionPipeline, MediaUnderstandingModelOverrides } from './contracts';
 
 export const PERCEIVE_TOOL_NAME = TOOL_NAMES_PERCEPTION.PERCEIVE;
 
@@ -42,6 +44,15 @@ export class PerceiveTool extends BuiltinTool {
           assetId: { type: 'string' },
           uri: { type: 'string' },
           mimeType: { type: 'string' },
+          resourceRef: {
+            type: 'object',
+            description: 'Stable unified ResourceRef copied exactly from the producing tool.',
+          },
+          documentResourceRef: {
+            type: 'object',
+            description:
+              'Stable document-entry resource ref copied exactly from the producing tool.',
+          },
           label: { type: 'string' },
           timestampMs: { type: 'number' },
         },
@@ -79,10 +90,12 @@ export class PerceiveTool extends BuiltinTool {
       return this.error('`assetId` must be a non-empty string and `depth` must be 1 or 2');
     }
 
+    const understandingModels = readUnderstandingModels(input.options);
     const result = await this.pipeline.perceive({
       asset: { assetId: input.assetId, ...(input.ref ? { ref: input.ref } : {}) },
       focus: input.focus,
       options: input.options,
+      ...(understandingModels ? { understandingModels } : {}),
       policy: {
         timing: 'on-demand',
         layers: input.depth === 2 ? [0, 1, 2] : [0, 1],
@@ -101,6 +114,32 @@ export class PerceiveTool extends BuiltinTool {
   }
 }
 
+function readUnderstandingModels(
+  options: PerceiveToolInput['options'] | undefined,
+): MediaUnderstandingModelOverrides | undefined {
+  if (!isRecord(options)) return undefined;
+  const raw = options['understandingModels'];
+  if (!isRecord(raw)) return undefined;
+
+  const image = readUnderstandingModelOverride(raw['image']);
+  const audio = readUnderstandingModelOverride(raw['audio']);
+  const video = readUnderstandingModelOverride(raw['video']);
+  if (!image && !audio && !video) return undefined;
+  return {
+    ...(image ? { image } : {}),
+    ...(audio ? { audio } : {}),
+    ...(video ? { video } : {}),
+  };
+}
+
+function readUnderstandingModelOverride(value: unknown) {
+  if (!isRecord(value)) return undefined;
+  const providerId = readNonEmptyString(value['providerId']);
+  const modelId = readNonEmptyString(value['modelId']);
+  if (!providerId || !modelId) return undefined;
+  return { providerId, modelId };
+}
+
 function readPerceiveToolInput(args: Record<string, unknown>): PerceiveToolInput | undefined {
   const assetId = readNonEmptyString(args['assetId']);
   const depth = args['depth'];
@@ -109,8 +148,9 @@ function readPerceiveToolInput(args: Record<string, unknown>): PerceiveToolInput
   }
 
   const focus = readFocus(args['focus']);
-  const ref = readPerceptualAssetRef(args['ref']);
-  if (ref && ref.assetId !== assetId) {
+  const rawRef = args['ref'];
+  const ref = readPerceptualAssetRef(rawRef);
+  if ((rawRef !== undefined && !ref) || (ref && ref.assetId !== assetId)) {
     return undefined;
   }
   return {
@@ -138,12 +178,24 @@ function readPerceptualAssetRef(value: unknown): PerceiveToolInput['ref'] | unde
   if (!assetId || !uri || !mimeType) {
     return undefined;
   }
+  const resourceRefValue = value['resourceRef'];
+  const resourceRef = isResourceRef(resourceRefValue) ? resourceRefValue : undefined;
+  if (resourceRefValue !== undefined && !resourceRef) {
+    return undefined;
+  }
+  const documentResourceRefValue = value['documentResourceRef'];
+  const documentResourceRef = parseDocumentArchiveResourceRef(documentResourceRefValue);
+  if (documentResourceRefValue !== undefined && !documentResourceRef) {
+    return undefined;
+  }
   const label = readNonEmptyString(value['label']);
   const timestampMs = typeof value['timestampMs'] === 'number' ? value['timestampMs'] : undefined;
   return {
     assetId,
     uri,
     mimeType,
+    ...(resourceRef ? { resourceRef } : {}),
+    ...(documentResourceRef ? { documentResourceRef } : {}),
     ...(label ? { label } : {}),
     ...(timestampMs !== undefined ? { timestampMs } : {}),
   };

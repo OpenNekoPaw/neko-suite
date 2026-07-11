@@ -167,6 +167,39 @@ describe('registerMediaAgentTools', () => {
     );
   });
 
+  it('preserves runtime understanding model overrides in GenerateImage request metadata', async () => {
+    const registry = new ToolRegistry();
+    const media = createMediaMock();
+    registerMediaAgentTools(registry, media as never);
+
+    const result = await registry.execute(
+      'GenerateImage',
+      {
+        prompt: 'A playful cat',
+        providerId: 'openai-provider',
+        modelId: 'dalle-model',
+      },
+      {
+        metadata: {
+          understandingModels: {
+            image: { providerId: 'google', modelId: 'gemini-flash', category: 'llm' },
+          },
+        },
+      },
+    );
+
+    expect(result.success).toBe(true);
+    expect(media.generateImage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metadata: expect.objectContaining({
+          understandingModels: {
+            image: { providerId: 'google', modelId: 'gemini-flash', category: 'llm' },
+          },
+        }),
+      }),
+    );
+  });
+
   it('creates a distinct run lease for Agent background media tasks when the turn trace has no run id', async () => {
     const registry = new ToolRegistry();
     const media = createMediaMock();

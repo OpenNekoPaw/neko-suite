@@ -40,10 +40,22 @@ export interface MediaProbeResult {
   readonly materialCount?: number;
 }
 
+export interface MediaUnderstandingModelOverride {
+  readonly providerId: string;
+  readonly modelId: string;
+}
+
+export interface MediaUnderstandingModelOverrides {
+  readonly image?: MediaUnderstandingModelOverride;
+  readonly audio?: MediaUnderstandingModelOverride;
+  readonly video?: MediaUnderstandingModelOverride;
+}
+
 export interface PerceptionClientRequest {
   readonly asset: ResolvedPerceptualAsset;
   readonly focus?: PerceptionFocus;
   readonly options?: Readonly<Record<string, unknown>>;
+  readonly understandingModels?: MediaUnderstandingModelOverrides;
 }
 
 export interface PerceptualAssetRequest {
@@ -59,6 +71,7 @@ export interface PerceptionPipelineInput {
   readonly policy: PerceptionPolicy;
   readonly focus?: PerceptionFocus;
   readonly options?: Readonly<Record<string, unknown>>;
+  readonly understandingModels?: MediaUnderstandingModelOverrides;
   readonly cacheKey?: string;
 }
 

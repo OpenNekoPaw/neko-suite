@@ -4,7 +4,7 @@ import { GeminiMediaUnderstandingClient } from '../gemini-media-understanding-cl
 
 describe('GeminiMediaUnderstandingClient', () => {
   it('loads image refs and returns structured image understanding evidence', async () => {
-    const chat = vi.fn(async () => ({
+    const chat = vi.fn(async (_messages: Parameters<IService['chat']>[0]) => ({
       id: 'response-image',
       model: 'gemini-2.5-flash',
       message: {
@@ -36,7 +36,7 @@ describe('GeminiMediaUnderstandingClient', () => {
     }));
     const client = new GeminiMediaUnderstandingClient({
       service,
-      configManager: createConfigManager(['chat', 'vision', 'image.understand']),
+      configManager: createConfigManager(['chat', 'vision']),
       assetLoader: { load },
       now: () => 100,
     });
@@ -70,7 +70,7 @@ describe('GeminiMediaUnderstandingClient', () => {
       expect.objectContaining({
         providerId: 'google',
         modelId: 'gemini-flash',
-        modelCapabilities: ['chat', 'vision', 'image.understand'],
+        modelCapabilities: ['chat', 'vision'],
         responseFormat: { type: 'json_object' },
       }),
     );
@@ -85,6 +85,111 @@ describe('GeminiMediaUnderstandingClient', () => {
         cinematic: { score: 0.7, notes: 'The frame reads as a tense insert.' },
       }),
     });
+  });
+
+  it('uses per-request understanding model overrides without leaking routing metadata into the prompt', async () => {
+    let promptText = '';
+    const chat = vi.fn(async (messages: Parameters<IService['chat']>[0]) => {
+      const firstMessage = messages[0];
+      const firstContent = Array.isArray(firstMessage?.content)
+        ? firstMessage.content[0]
+        : undefined;
+      promptText =
+        typeof firstContent === 'object' &&
+        firstContent !== null &&
+        'text' in firstContent &&
+        typeof firstContent.text === 'string'
+          ? firstContent.text
+          : '';
+      return {
+        id: 'response-image',
+        model: 'gemini-image-pro',
+        message: {
+          role: 'assistant' as const,
+          content: JSON.stringify({
+            summary: 'A balanced production still.',
+            aestheticScore: 0.8,
+            cinematicScore: 0.7,
+            technicalQualityScore: 0.9,
+            strengths: ['controlled lighting'],
+            issues: ['minor compression'],
+            recommendations: ['export at a higher bitrate'],
+            tags: ['cinematic'],
+            notes: {
+              aesthetic: 'The palette is cohesive.',
+              cinematic: 'The frame has clear depth.',
+              technicalQuality: 'Detail is mostly preserved.',
+            },
+          }),
+        },
+        finishReason: 'stop' as const,
+        usage: { promptTokens: 1, completionTokens: 1, totalTokens: 2 },
+      };
+    });
+    const configManager = {
+      resolveModelRefForPurpose: vi.fn(() => ({
+        providerId: 'google',
+        modelId: 'gemini-flash',
+      })),
+      getModel: vi.fn((modelId: string) => ({
+        id: modelId,
+        name: modelId,
+        providerId: modelId === 'gemini-image-pro' ? 'google-pro' : 'google',
+        type: 'llm' as const,
+        capabilities: ['chat', 'vision'] satisfies ModelCapability[],
+        enabled: true,
+      })),
+    };
+    const client = new GeminiMediaUnderstandingClient({
+      service: createService(chat),
+      configManager,
+      assetLoader: {
+        load: async () => ({
+          kind: 'image' as const,
+          url: 'data:image/png;base64,abc',
+          mimeType: 'image/png',
+        }),
+      },
+    });
+
+    await client.describe({
+      asset: {
+        assetId: 'image-1',
+        modality: 'image',
+        mimeType: 'image/png',
+        ref: {
+          assetId: 'image-1',
+          uri: '${WORKSPACE}/frame.png',
+          mimeType: 'image/png',
+        },
+      },
+      options: {
+        frameDensity: 'sparse',
+        understandingModels: {
+          image: { providerId: 'google-pro', modelId: 'gemini-image-pro' },
+        },
+      },
+    });
+
+    expect(configManager.resolveModelRefForPurpose).not.toHaveBeenCalled();
+    expect(chat).toHaveBeenCalledWith(
+      expect.arrayContaining([
+        expect.objectContaining({
+          content: expect.arrayContaining([
+            expect.objectContaining({
+              type: 'text',
+              text: expect.stringContaining('frameDensity'),
+            }),
+          ]),
+        }),
+      ]),
+      expect.objectContaining({
+        providerId: 'google-pro',
+        modelId: 'gemini-image-pro',
+      }),
+    );
+    expect(promptText).toContain('frameDensity');
+    expect(promptText).not.toContain('understandingModels');
   });
 
   it('loads audio refs and returns structured audio understanding evidence', async () => {
@@ -121,7 +226,7 @@ describe('GeminiMediaUnderstandingClient', () => {
     }));
     const client = new GeminiMediaUnderstandingClient({
       service,
-      configManager: createConfigManager(['chat', 'audio.understand']),
+      configManager: createConfigManager(['chat', 'audio']),
       assetLoader: { load },
       now: () => 200,
     });
@@ -160,7 +265,7 @@ describe('GeminiMediaUnderstandingClient', () => {
       expect.objectContaining({
         providerId: 'google',
         modelId: 'gemini-flash',
-        modelCapabilities: ['chat', 'audio.understand'],
+        modelCapabilities: ['chat', 'audio'],
         responseFormat: { type: 'json_object' },
       }),
     );
@@ -180,7 +285,7 @@ describe('GeminiMediaUnderstandingClient', () => {
   it('fails visibly when the loaded asset kind does not match the request modality', async () => {
     const client = new GeminiMediaUnderstandingClient({
       service: createService(vi.fn()),
-      configManager: createConfigManager(['chat', 'audio.understand']),
+      configManager: createConfigManager(['chat', 'audio']),
       assetLoader: {
         load: async () => ({
           kind: 'image' as const,

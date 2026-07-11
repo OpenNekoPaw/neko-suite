@@ -25,6 +25,7 @@ interface ImageToolRequestInput {
   readonly target: GenerationTargetMetadata;
   readonly resolved: ResolvedGenerationPrompt;
   readonly transformMetadata?: Record<string, unknown>;
+  readonly executionMetadata?: Record<string, unknown>;
 }
 
 interface ResolvedGenerationPrompt {
@@ -278,6 +279,7 @@ function buildImageGenerationRequest(input: ImageToolRequestInput): ImageGenerat
     resolved: input.resolved,
     target: input.target,
     transformMetadata: input.transformMetadata,
+    executionMetadata: input.executionMetadata,
   });
 
   return {
@@ -308,15 +310,32 @@ function buildImageToolMetadata(input: {
   readonly resolved: ResolvedGenerationPrompt;
   readonly target: GenerationTargetMetadata;
   readonly transformMetadata?: Record<string, unknown>;
+  readonly executionMetadata?: Record<string, unknown>;
 }): Record<string, unknown> | undefined {
   const metadata = input.resolved.metadata
     ? withGenerationTargetMetadata(input.resolved.metadata, input.target)
     : undefined;
-  const withConversation = mergeAgentMediaTaskMetadata(metadata, input.lease);
+  const withUnderstandingModels = mergeRuntimeUnderstandingModels(
+    metadata,
+    input.executionMetadata,
+  );
+  const withConversation = mergeAgentMediaTaskMetadata(withUnderstandingModels, input.lease);
   if (!input.transformMetadata) return withConversation;
   return {
     ...(withConversation ?? {}),
     transformImage: input.transformMetadata,
+  };
+}
+
+function mergeRuntimeUnderstandingModels(
+  metadata: Record<string, unknown> | undefined,
+  executionMetadata: Record<string, unknown> | undefined,
+): Record<string, unknown> | undefined {
+  const understandingModels = executionMetadata?.understandingModels;
+  if (!isRecord(understandingModels)) return metadata;
+  return {
+    ...(metadata ?? {}),
+    understandingModels,
   };
 }
 
@@ -1002,6 +1021,7 @@ export function registerMediaAgentTools(
               lease,
               target: requestTarget,
               resolved,
+              executionMetadata: options?.metadata,
             }),
           });
           return {
@@ -1266,6 +1286,7 @@ export function registerMediaAgentTools(
               target: requestTarget,
               resolved,
               transformMetadata,
+              executionMetadata: options?.metadata,
             }),
           });
           return {

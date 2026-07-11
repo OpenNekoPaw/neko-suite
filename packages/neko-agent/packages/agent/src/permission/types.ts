@@ -147,9 +147,6 @@ export const DEFAULT_READ_ONLY_TOOLS = [
   'Glob',
   'Grep',
   'LS',
-  // Web research
-  'WebFetch',
-  'WebSearch',
   // Task/agent management (read-only)
   'Task',
   'TaskOutput',

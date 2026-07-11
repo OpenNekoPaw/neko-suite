@@ -151,7 +151,7 @@ export function matchesPattern(normalizedTool: string, pattern: string): boolean
   if (patternArg?.endsWith(':*')) {
     const cmdPrefix = patternArg.slice(0, -2);
     // Match "npm" or "npm run build" etc.
-    return callArg === cmdPrefix || callArg?.startsWith(cmdPrefix + ' ');
+    return callArg === cmdPrefix || callArg?.startsWith(cmdPrefix + ' ') === true;
   }
 
   // Handle ** glob pattern for paths (check before single * to avoid early match)

@@ -8,6 +8,7 @@ import type {
   AgentLegacyCreationTrace,
   AgentModelSlots,
   AgentMediaModelSelections,
+  MediaUnderstandingModelSelections,
   AgentPhase,
   MediaModelCategory,
   Message,
@@ -233,6 +234,7 @@ export interface ExecuteAgentTurnInput<
   readonly locale?: AgentRuntimePromptLocale | string;
   readonly mediaModel?: ModelRef<MediaModelCategory>;
   readonly mediaModels?: AgentMediaModelSelections;
+  readonly understandingModels?: MediaUnderstandingModelSelections;
   readonly imageAttachments?: readonly AgentBase64ImageAttachment[];
   readonly executionOverrides?: AgentMessageExecutionOverrides;
   readonly activeSkill?: AgentTurnActiveSkillState | null;
@@ -482,6 +484,8 @@ export async function executeAgentTurn<
     requestedProviderId: input.chatModel?.providerId,
     requestedModelId: input.chatModel?.modelId,
     requiredCapabilities: buildRequiredTurnCapabilities({
+      chatModel: input.chatModel,
+      understandingModels: input.understandingModels,
       imageAttachments: input.imageAttachments,
     }),
     getProvider: (providerId) => input.providerSource.getProvider(providerId),
@@ -595,6 +599,7 @@ export async function executeAgentTurn<
     executionOverrides: input.executionOverrides,
     mediaModel: input.mediaModel,
     mediaModels: input.mediaModels,
+    understandingModels: input.understandingModels,
     maxIterations: 200,
     autoExecuteTools: input.settings.autoExecuteTools,
     temperature: usesProjectedLlmOptions
@@ -1183,15 +1188,32 @@ function buildBlockingLifecycleProjectionMessage(
 }
 
 function buildRequiredTurnCapabilities(input: {
+  readonly chatModel?: ModelRef<'llm'>;
+  readonly understandingModels?: MediaUnderstandingModelSelections;
   readonly imageAttachments?: readonly AgentBase64ImageAttachment[];
 }): string[] {
   const capabilities = new Set<string>();
 
-  if ((input.imageAttachments?.length ?? 0) > 0) {
+  if (
+    (input.imageAttachments?.length ?? 0) > 0 &&
+    !hasDifferentUnderstandingModel(input.chatModel, input.understandingModels?.image)
+  ) {
     capabilities.add('vision');
   }
 
   return [...capabilities];
+}
+
+function hasDifferentUnderstandingModel(
+  chatModel: ModelRef<'llm'> | undefined,
+  understandingModel: ModelRef<'llm'> | undefined,
+): boolean {
+  return Boolean(
+    chatModel &&
+    understandingModel &&
+    (chatModel.providerId !== understandingModel.providerId ||
+      chatModel.modelId !== understandingModel.modelId),
+  );
 }
 
 function summarizeTurnImages(

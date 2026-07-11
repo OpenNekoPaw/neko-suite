@@ -79,7 +79,9 @@ describe('prompt golden snapshots', () => {
 
   it('base prompts keep domain-specific creative artifact contracts out of the default layer', () => {
     for (const prompt of [BUILTIN_DEFAULT_PROMPT_EN, BUILTIN_DEFAULT_PROMPT_ZH]) {
-      expect(prompt).toMatch(/Markdown Extensions And Generation Prompts|Markdown 扩展与生成提示词/);
+      expect(prompt).toMatch(
+        /Markdown Extensions And Generation Prompts|Markdown 扩展与生成提示词/,
+      );
       expect(prompt).toMatch(/shared Markdown\/profile|shared Markdown\/profile 层/);
       expect(prompt).toMatch(/@entity|@asset/);
       expect(prompt).toContain('![alt](resource-token#hint)');
@@ -87,6 +89,7 @@ describe('prompt golden snapshots', () => {
       expect(prompt).toMatch(/Structured Creative Artifacts|结构化创作产物/);
       expect(prompt).toMatch(/requires image-pixel evidence|需要图片像素证据/);
       expect(prompt).toMatch(/native multimodal attachment|原生多模态附件/);
+      expect(prompt).toContain('perception.perceive');
       expect(prompt).toMatch(/do not call `ReadImage` merely because|不要只因为看到了/);
       expect(prompt).toMatch(/stable `ResourceRef`|稳定 `ResourceRef`/);
       expect(prompt).toMatch(/independent from `ReadDocument`|与 `ReadDocument` 是独立工具/);

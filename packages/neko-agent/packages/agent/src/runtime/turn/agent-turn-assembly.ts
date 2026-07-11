@@ -2,6 +2,7 @@ import type {
   AgentLlmConfig,
   AgentLegacyCreationTrace,
   AgentMediaModelSelections,
+  MediaUnderstandingModelSelections,
   AgentModelSlots,
   AgentPhase,
   MediaModelCategory,
@@ -154,6 +155,7 @@ export interface AgentTurnAssemblyInput<
   readonly imageAttachments?: readonly AgentBase64ImageAttachment[];
   readonly mediaModel?: ModelRef<MediaModelCategory>;
   readonly mediaModels?: AgentMediaModelSelections;
+  readonly understandingModels?: MediaUnderstandingModelSelections;
   readonly executionOverrides?: AgentMessageExecutionOverrides;
   readonly settings: AgentTurnSettingsSource;
   readonly providers: AgentTurnProviderHost<TProvider>;
@@ -227,6 +229,7 @@ export function buildAgentTurnRuntimeInput<
     locale: normalizeAgentRuntimePromptLocale(input.locale),
     mediaModel: input.mediaModel,
     mediaModels: input.mediaModels,
+    understandingModels: input.understandingModels,
     imageAttachments: input.imageAttachments,
     executionOverrides: input.executionOverrides,
     activeSkill,

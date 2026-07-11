@@ -71,6 +71,24 @@ describe('ToolInjectionManager', () => {
       expect(alwaysTools).not.toContain('Bash');
     });
 
+    it('includes always-layer tools categorized before initialization', () => {
+      const reg = makeMockCategoryRegistry();
+      vi.mocked(reg.getToolsByLayer).mockReturnValue([
+        {
+          name: 'perception.perceive',
+          category: 'analysis',
+          layer: 'always',
+          tokenCost: 100,
+          active: false,
+        },
+      ]);
+
+      const mgr = new ToolInjectionManager(reg);
+
+      expect(mgr.getState().injectedTools.get('always')).toContain('perception.perceive');
+      expect(mgr.getToolsForTurn('inspect this image')).toContain('perception.perceive');
+    });
+
     it('has empty dynamic layer', () => {
       const state = manager.getState();
       const dynamicTools = state.injectedTools.get('dynamic');

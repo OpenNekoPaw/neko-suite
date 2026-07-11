@@ -37,7 +37,17 @@ export function validateSchema(
   // Validate each provided field against its property schema
   for (const [field, value] of Object.entries(args)) {
     const prop = schema.properties[field];
-    if (!prop) continue; // extra fields are allowed
+    if (!prop) {
+      if (schema.additionalProperties === false) {
+        errors.push({
+          field,
+          expected: 'declared field',
+          actual: value,
+          message: `Unknown field: "${field}"`,
+        });
+      }
+      continue;
+    }
 
     const fieldErrors = validateProperty(field, value, prop);
     errors.push(...fieldErrors);

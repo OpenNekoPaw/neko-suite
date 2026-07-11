@@ -266,10 +266,7 @@ export class PermissionHooks implements ExecutorHooks, IPermissionManager {
       toolCall,
       action: this.getActionDescription(toolCall),
       description: `Execute ${toolCall.name}`,
-      details: {
-        normalizedTool,
-        arguments: toolCall.arguments,
-      },
+      details: createConfirmationDetails(toolCall, normalizedTool),
       confirmationToken,
     };
 
@@ -340,7 +337,9 @@ export class PermissionHooks implements ExecutorHooks, IPermissionManager {
       case 'Edit':
         return `Edit file: ${args?.file_path || 'unknown'}`;
       case 'WebFetch':
-        return `Fetch URL: ${args?.url || 'unknown'}`;
+        return formatExternalResearchFetchAction(args);
+      case 'WebSearch':
+        return formatExternalResearchSearchAction(args);
       default:
         return `Execute ${name}`;
     }
@@ -351,6 +350,53 @@ export class PermissionHooks implements ExecutorHooks, IPermissionManager {
    */
   private generateToken(): string {
     return `perm_${Date.now()}_${++this.tokenCounter}`;
+  }
+}
+
+function createConfirmationDetails(
+  toolCall: ToolCallInfo,
+  normalizedTool: string,
+): Record<string, unknown> {
+  const args = toolCall.arguments ?? {};
+  if (toolCall.name === 'WebFetch' || toolCall.name === 'WebSearch') {
+    return {
+      normalizedTool,
+      arguments: args,
+      mode: args['mode'],
+      providerId: args['providerId'],
+      domain: args['domain'],
+      query: args['query'],
+      url: args['url'],
+    };
+  }
+  return {
+    normalizedTool,
+    arguments: args,
+  };
+}
+
+function formatExternalResearchFetchAction(args: Record<string, unknown> | undefined): string {
+  const url = typeof args?.['url'] === 'string' ? args['url'] : 'unknown';
+  const mode = typeof args?.['mode'] === 'string' ? args['mode'] : 'unknown-mode';
+  const providerId =
+    typeof args?.['providerId'] === 'string' ? args['providerId'] : 'unknown-provider';
+  const domain = typeof args?.['domain'] === 'string' ? args['domain'] : safeDomainFromUrl(url);
+  return `Fetch URL: ${url} (${mode}, ${providerId}, ${domain})`;
+}
+
+function formatExternalResearchSearchAction(args: Record<string, unknown> | undefined): string {
+  const query = typeof args?.['query'] === 'string' ? args['query'] : 'unknown';
+  const mode = typeof args?.['mode'] === 'string' ? args['mode'] : 'unknown-mode';
+  const providerId =
+    typeof args?.['providerId'] === 'string' ? args['providerId'] : 'unknown-provider';
+  return `Search web: ${query} (${mode}, ${providerId})`;
+}
+
+function safeDomainFromUrl(url: string): string {
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return 'unknown-domain';
   }
 }
 

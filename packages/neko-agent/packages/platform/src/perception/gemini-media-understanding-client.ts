@@ -17,6 +17,17 @@ export const VIDEO_UNDERSTANDING_PURPOSE = 'video.understand';
 
 type MediaUnderstandingModality = 'image' | 'audio' | 'video';
 
+interface MediaUnderstandingModelOverride {
+  readonly providerId: string;
+  readonly modelId: string;
+}
+
+interface MediaUnderstandingModelOverrides {
+  readonly image?: MediaUnderstandingModelOverride;
+  readonly audio?: MediaUnderstandingModelOverride;
+  readonly video?: MediaUnderstandingModelOverride;
+}
+
 export interface MediaUnderstandingPerceptionAsset {
   readonly assetId: string;
   readonly ref?: PerceptualAssetRef;
@@ -36,6 +47,7 @@ export interface MediaUnderstandingPerceptionRequest {
   readonly asset: MediaUnderstandingPerceptionAsset;
   readonly focus?: PerceptionFocus;
   readonly options?: Readonly<Record<string, unknown>>;
+  readonly understandingModels?: MediaUnderstandingModelOverrides;
 }
 
 export interface GeminiMediaUnderstandingClientConfig {
@@ -110,7 +122,7 @@ export class GeminiMediaUnderstandingClient {
     request: MediaUnderstandingPerceptionRequest,
     modality: 'image' | 'video',
   ): Promise<PerceptionEvidenceEntry> {
-    const modelRef = this.resolveModelRef(modality);
+    const modelRef = this.resolveModelRef(modality, request);
     const model = this.requireModel(modelRef, modality);
     const loaded = await this.loadAsset(request, modality);
 
@@ -170,7 +182,7 @@ export class GeminiMediaUnderstandingClient {
     request: MediaUnderstandingPerceptionRequest,
   ): Promise<PerceptionEvidenceEntry> {
     const modality = 'audio';
-    const modelRef = this.resolveModelRef(modality);
+    const modelRef = this.resolveModelRef(modality, request);
     const model = this.requireModel(modelRef, modality);
     const loaded = await this.loadAsset(request, modality);
 
@@ -227,7 +239,16 @@ export class GeminiMediaUnderstandingClient {
     };
   }
 
-  private resolveModelRef(modality: MediaUnderstandingModality): ModelRefConfig {
+  private resolveModelRef(
+    modality: MediaUnderstandingModality,
+    request: MediaUnderstandingPerceptionRequest,
+  ): ModelRefConfig {
+    const selected =
+      request.understandingModels?.[modality] ?? readOptionsModelOverride(request, modality);
+    if (selected) {
+      return selected;
+    }
+
     const purpose = getUnderstandingPurpose(modality);
     const ref = this.config.configManager.resolveModelRefForPurpose(purpose);
     if (!ref) {
@@ -297,7 +318,8 @@ function buildVisualUnderstandingPrompt(
 ): string {
   const structural = buildStructuralMetadata(request.asset);
   const focus = request.focus ?? (modality === 'image' ? 'composition' : 'visual');
-  const options = request.options ? `\nOptions: ${JSON.stringify(request.options)}` : '';
+  const promptOptions = buildPromptOptions(request.options);
+  const options = promptOptions ? `\nOptions: ${JSON.stringify(promptOptions)}` : '';
 
   return [
     `Analyze this ${modality === 'image' ? 'image or still frame' : 'video'} for a creative film workflow.`,
@@ -335,7 +357,8 @@ function buildVisualUnderstandingPrompt(
 function buildAudioUnderstandingPrompt(request: MediaUnderstandingPerceptionRequest): string {
   const structural = buildStructuralMetadata(request.asset);
   const focus = request.focus ?? 'audio';
-  const options = request.options ? `\nOptions: ${JSON.stringify(request.options)}` : '';
+  const promptOptions = buildPromptOptions(request.options);
+  const options = promptOptions ? `\nOptions: ${JSON.stringify(promptOptions)}` : '';
 
   return [
     'Analyze this audio for a creative film workflow.',
@@ -596,4 +619,32 @@ function indefiniteArticle(value: string): 'a' | 'an' {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function readNonEmptyString(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
+function buildPromptOptions(
+  options: Readonly<Record<string, unknown>> | undefined,
+): Readonly<Record<string, unknown>> | undefined {
+  if (!options) return undefined;
+  const { understandingModels: _understandingModels, ...promptOptions } = options;
+  return Object.keys(promptOptions).length > 0 ? promptOptions : undefined;
+}
+
+function readOptionsModelOverride(
+  request: MediaUnderstandingPerceptionRequest,
+  modality: MediaUnderstandingModality,
+): MediaUnderstandingModelOverride | undefined {
+  const override = request.options?.['understandingModels'];
+  if (!isRecord(override)) return undefined;
+  const selected = override[modality];
+  if (!isRecord(selected)) return undefined;
+  const providerId = readNonEmptyString(selected['providerId']);
+  const modelId = readNonEmptyString(selected['modelId']);
+  if (!providerId || !modelId) return undefined;
+  return { providerId, modelId };
 }

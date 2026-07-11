@@ -52,7 +52,7 @@ describe('agent-capability-injection-runtime', () => {
       builtin: [skill('draft')],
       market: [skill('storyboard', { source: 'market', version: '1.2.0' })],
       local: [
-        skill('local-review', { source: 'project', directoryPath: '.neko/skills/local-review' }),
+        skill('local-review', { source: 'project', directoryPath: '.agents/skills/local-review' }),
       ],
     });
 
@@ -70,8 +70,8 @@ describe('agent-capability-injection-runtime', () => {
       metadata: { skillSource: 'market' },
     });
     expect(local).toMatchObject({
-      identity: { sourceId: '.neko/skills/local-review' },
-      metadata: { skillSource: 'project', directoryPath: '.neko/skills/local-review' },
+      identity: { sourceId: '.agents/skills/local-review' },
+      metadata: { skillSource: 'project', directoryPath: '.agents/skills/local-review' },
     });
   });
 
@@ -167,7 +167,7 @@ describe('agent-capability-injection-runtime', () => {
             profileId: 'comic-shot-asset-prep',
             protocol: 'GenericTable',
             version: 1,
-            descriptorRef: '${WORKSPACE}/.neko/skills/comic/profiles/asset-prep.profile.json',
+            descriptorRef: '${WORKSPACE}/.agents/skills/comic/profiles/asset-prep.profile.json',
           },
         ],
         renderers: [

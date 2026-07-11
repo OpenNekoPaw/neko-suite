@@ -13,6 +13,7 @@
 export {
   ActivateSkillTool,
   DeactivateSkillTool,
+  CreateSkillTool,
   SetExecutionModeTool,
   GetContextTool,
   createCoreMetaTools,

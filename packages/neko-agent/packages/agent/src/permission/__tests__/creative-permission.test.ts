@@ -270,6 +270,28 @@ describe('PermissionRuleMatcher - plan mode with injected domain tools', () => {
     expect(matcher.check(makeToolCall('ListAssets')).decision).toBe('deny');
   });
 
+  it('does not treat external research tools as default read-only tools before registration', () => {
+    const matcher = new PermissionRuleMatcher(makePlanConfig());
+
+    expect(matcher.check(makeToolCall('WebSearch', { query: 'references' })).decision).toBe('deny');
+    expect(matcher.check(makeToolCall('WebFetch', { url: 'https://example.com' })).decision).toBe(
+      'deny',
+    );
+  });
+
+  it('allows registered external research tools in plan mode when caller injects them as read-only', () => {
+    const matcher = new PermissionRuleMatcher(
+      makePlanConfig({ readOnlyTools: [...DEFAULT_READ_ONLY_TOOLS, 'WebSearch', 'WebFetch'] }),
+    );
+
+    expect(matcher.check(makeToolCall('WebSearch', { query: 'references' })).decision).toBe(
+      'allow',
+    );
+    expect(matcher.check(makeToolCall('WebFetch', { url: 'https://example.com' })).decision).toBe(
+      'allow',
+    );
+  });
+
   it('still allows default read-only tools in plan mode', () => {
     const matcher = new PermissionRuleMatcher(makePlanConfig());
     expect(matcher.check(makeToolCall('Read')).decision).toBe('allow');
@@ -312,8 +334,8 @@ describe('DEFAULT_CREATIVE_TOOL_TRAITS', () => {
   });
 
   it('marks generation tools as network + irreversible', () => {
-    const generationTools = DEFAULT_CREATIVE_TOOL_TRAITS.filter(
-      (e) => e.name.startsWith('Generate'),
+    const generationTools = DEFAULT_CREATIVE_TOOL_TRAITS.filter((e) =>
+      e.name.startsWith('Generate'),
     );
     for (const entry of generationTools) {
       expect(entry.traits.locality).toBe('network');

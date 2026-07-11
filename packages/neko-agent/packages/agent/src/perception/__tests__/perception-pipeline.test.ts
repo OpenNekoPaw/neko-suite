@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { PerceptionEvidenceEntry } from '@neko/shared';
+import {
+  createResourceFingerprint,
+  createResourceRef,
+  type PerceptionEvidenceEntry,
+} from '@neko/shared';
 import type {
   MediaProbePort,
   PerceptionClientPort,
@@ -422,6 +426,101 @@ describe('PerceiveTool', () => {
       expect.objectContaining({
         success: true,
         perceptionCards: [expect.objectContaining({ assetId: 'asset-1' })],
+      }),
+    );
+  });
+
+  it('passes selected understanding models to the perception pipeline', async () => {
+    const pipeline = {
+      perceive: vi.fn(async () => ({
+        card: {
+          version: 1 as const,
+          assetId: 'asset-1',
+          modality: 'image' as const,
+          createdAt: 1,
+          layerStatus: {
+            layer0: 'complete' as const,
+            layer1: 'complete' as const,
+            layer2: 'skipped' as const,
+          },
+          structural: { format: 'png', mimeType: 'image/png', byteSize: 10 },
+        },
+      })),
+    };
+    const tool = new PerceiveTool({ pipeline, now: () => 20 });
+
+    await tool.execute({
+      assetId: 'asset-1',
+      depth: 1,
+      options: {
+        understandingModels: {
+          image: { providerId: 'google', modelId: 'gemini-image-understand' },
+        },
+      },
+    });
+
+    expect(pipeline.perceive).toHaveBeenCalledWith(
+      expect.objectContaining({
+        understandingModels: {
+          image: { providerId: 'google', modelId: 'gemini-image-understand' },
+        },
+      }),
+    );
+  });
+
+  it('preserves unified ResourceRef identity in explicit perception refs', async () => {
+    const pipeline = {
+      perceive: vi.fn(async () => ({
+        card: {
+          version: 1 as const,
+          assetId: 'asset-1',
+          modality: 'image' as const,
+          createdAt: 1,
+          layerStatus: {
+            layer0: 'complete' as const,
+            layer1: 'complete' as const,
+            layer2: 'skipped' as const,
+          },
+          structural: { format: 'png', mimeType: 'image/png', byteSize: 10 },
+        },
+      })),
+    };
+    const resourceRef = createResourceRef({
+      id: 'res-generated-1',
+      scope: 'project',
+      provider: 'generated-asset',
+      kind: 'generated',
+      source: {
+        kind: 'generated-asset',
+        generatedAssetId: 'generated-1',
+        filePath: '${WORKSPACE}/neko/generated/image/task_1_0.png',
+      },
+      locator: { kind: 'generated-asset', assetId: 'generated-1' },
+      fingerprint: createResourceFingerprint({
+        strategy: 'provider',
+        value: 'generated-1',
+        providerId: 'generated-asset',
+      }),
+    });
+    const tool = new PerceiveTool({ pipeline, now: () => 20 });
+
+    await tool.execute({
+      assetId: 'asset-1',
+      depth: 1,
+      ref: {
+        assetId: 'asset-1',
+        uri: 'generated-assets/non-existent-display-label.png',
+        mimeType: 'image/png',
+        resourceRef,
+      },
+    });
+
+    expect(pipeline.perceive).toHaveBeenCalledWith(
+      expect.objectContaining({
+        asset: {
+          assetId: 'asset-1',
+          ref: expect.objectContaining({ resourceRef }),
+        },
       }),
     );
   });

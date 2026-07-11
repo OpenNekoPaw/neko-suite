@@ -3,6 +3,7 @@
  *
  * With 1M context, all tools are always visible. Meta tools now focus on:
  * - GetContext: Current state overview (active skill lifecycle, registered skills, tool categories)
+ * - CreateSkill: Native typed creation of a complete portable Skill package
  * - ActivateSkill: AI-driven skill activation (injects lifecycle-scoped instructions)
  * - DeactivateSkill: Clear targeted active skill lifecycle records
  * - SetExecutionMode: AI-driven capability activation through typed intents
@@ -18,12 +19,23 @@ import type {
   IToolInjectionManager,
   RelatedSkill,
   SkillMediaWorkflowHint,
+  NekoSkillHostProjection,
+  NekoSkillInterfaceMetadata,
+  NekoSkillRelationships,
   ActiveSkillLifecycleRecordProjection,
   SkillLifecycleDiagnostic,
   SkillLifecycleSlot,
   ToolExecuteOptions,
+  CreateSkillFailure,
+  CreateSkillFailureCode,
+  CreateSkillInput,
+  CreateSkillResult,
+  NekoSkillOverlay,
+  PortableSkillDefinition,
+  SkillDiagnostic,
+  SkillResourceInput,
 } from '@neko/shared';
-import { BuiltinTool } from '@neko/shared';
+import { BuiltinTool, isAgentProfileKind, isAgentProfileRelationship } from '@neko/shared';
 import type { ExecutionMode } from '../../session/types';
 
 // =============================================================================
@@ -36,6 +48,12 @@ export interface SkillContextSummary {
   readonly domain?: string;
   readonly relatedSkills?: readonly RelatedSkill[];
   readonly mediaWorkflow?: SkillMediaWorkflowHint;
+  /** Optional Neko-authored display metadata; never contains Host runtime facts. */
+  readonly interface?: NekoSkillInterfaceMetadata;
+  /** Neko-authored discovery/composition relationships. */
+  readonly relationships?: NekoSkillRelationships;
+  /** Registry-projected Host facts for the current runtime. */
+  readonly host?: NekoSkillHostProjection;
 }
 
 export interface SkillActivationRequest {
@@ -77,6 +95,8 @@ export interface ISkillProvider {
     removedRecordIds?: readonly string[];
     diagnostics?: readonly SkillLifecycleDiagnostic[];
   }>;
+  /** Create a complete portable Skill package without activating it. */
+  createSkill?(input: CreateSkillInput): SkillProviderMaybePromise<CreateSkillResult>;
   /** Request an execution-mode change through an Agent-tool activation intent. */
   setExecutionMode?(input: {
     readonly mode: ExecutionMode;
@@ -168,6 +188,182 @@ export class GetContextTool extends BuiltinTool {
     }
 
     return this.success(result);
+  }
+}
+
+// =============================================================================
+// CreateSkill Tool
+// =============================================================================
+
+/**
+ * CreateSkill - Native typed creation of a complete portable Agent Skill package.
+ */
+export class CreateSkillTool extends BuiltinTool {
+  readonly name = 'CreateSkill';
+  readonly description =
+    'Create a complete portable Agent Skill package in the project or personal canonical Skill root. Creation writes the package atomically and makes it discoverable; it does not activate the Skill or grant permissions.';
+  readonly parameters: ToolParameters = {
+    type: 'object',
+    properties: {
+      target: {
+        type: 'string',
+        enum: ['project', 'personal'],
+        description: 'Canonical destination root for the new Skill package.',
+      },
+      skill: {
+        type: 'object',
+        description: 'Complete portable SKILL.md definition.',
+        properties: {
+          name: { type: 'string', description: 'Portable Skill directory and frontmatter name.' },
+          description: { type: 'string', description: 'Portable Skill discovery description.' },
+          body: { type: 'string', description: 'Complete Markdown instruction body.' },
+          license: { type: 'string', description: 'Optional license identifier or text.' },
+          compatibility: {
+            type: 'string',
+            description: 'Optional portable compatibility description.',
+          },
+          metadata: {
+            type: 'object',
+            description: 'Optional portable string metadata.',
+            additionalProperties: { type: 'string' },
+          },
+          allowedTools: {
+            type: 'array',
+            description: 'Optional portable allowed-tools identifiers.',
+            items: { type: 'string' },
+          },
+        },
+        required: ['name', 'description', 'body'],
+        additionalProperties: false,
+      },
+      resources: {
+        type: 'array',
+        description: 'Optional contained files under scripts/, references/, or assets/.',
+        items: {
+          type: 'object',
+          properties: {
+            path: { type: 'string' },
+            encoding: { type: 'string', enum: ['utf8', 'base64'] },
+            content: { type: 'string' },
+          },
+          required: ['path', 'encoding', 'content'],
+          additionalProperties: false,
+        },
+      },
+      neko: {
+        type: 'object',
+        description:
+          'Optional versioned Neko Host overlay for author-owned interface and relationships.',
+        properties: {
+          schemaVersion: { type: 'integer', enum: [1] },
+          interface: {
+            type: 'object',
+            properties: {
+              displayName: { type: 'string' },
+              shortDescription: { type: 'string' },
+              iconSmall: { type: 'string' },
+              defaultPrompt: { type: 'string' },
+            },
+            additionalProperties: false,
+          },
+          dependencies: {
+            type: 'object',
+            properties: {
+              capabilities: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  properties: {
+                    id: { type: 'string' },
+                    requirement: { type: 'string', enum: ['required', 'optional'] },
+                  },
+                  required: ['id', 'requirement'],
+                  additionalProperties: false,
+                },
+              },
+              profiles: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  properties: {
+                    id: { type: 'string' },
+                    kind: {
+                      type: 'string',
+                      enum: ['artifact', 'creation', 'provider-expression'],
+                    },
+                    relationship: {
+                      type: 'string',
+                      enum: ['consumes', 'produces', 'requires', 'prefers'],
+                    },
+                    versionRange: { type: 'string' },
+                  },
+                  required: ['id', 'kind', 'relationship'],
+                  additionalProperties: false,
+                },
+              },
+            },
+            additionalProperties: false,
+          },
+          relationships: {
+            type: 'object',
+            properties: {
+              skills: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  properties: {
+                    name: { type: 'string' },
+                    relationship: { type: 'string' },
+                  },
+                  required: ['name', 'relationship'],
+                  additionalProperties: false,
+                },
+              },
+            },
+            additionalProperties: false,
+          },
+        },
+        required: ['schemaVersion'],
+        additionalProperties: false,
+      },
+    },
+    required: ['target', 'skill'],
+    additionalProperties: false,
+  };
+  readonly category: ToolCategory = 'system';
+
+  private _skillProvider?: ISkillProvider;
+
+  setSkillProvider(provider: ISkillProvider): void {
+    this._skillProvider = provider;
+  }
+
+  async execute(args: Record<string, unknown>): Promise<ToolResult> {
+    const input = readCreateSkillInput(args);
+    if (!input) {
+      return this.error('Invalid CreateSkill input');
+    }
+    if (!this._skillProvider?.createSkill) {
+      return this.error('Skill creation is not initialized');
+    }
+
+    try {
+      const result = await this._skillProvider.createSkill(input);
+      return this.success({
+        created: true,
+        ...result,
+      });
+    } catch (error) {
+      const failure = readCreateSkillFailure(error);
+      if (!failure) {
+        throw error;
+      }
+      return {
+        success: false,
+        error: failure.diagnostics[0]?.message ?? `CreateSkill failed: ${failure.code}`,
+        data: failure,
+      };
+    }
   }
 }
 
@@ -403,10 +599,346 @@ export function createCoreMetaTools(
 ): Tool[] {
   return [
     new GetContextTool(categoryRegistry, skillRegistry),
+    new CreateSkillTool(),
     new ActivateSkillTool(),
     new DeactivateSkillTool(),
     new SetExecutionModeTool(),
   ];
+}
+
+function readCreateSkillInput(args: Record<string, unknown>): CreateSkillInput | null {
+  if (!hasOnlyProperties(args, ['target', 'skill', 'resources', 'neko'])) {
+    return null;
+  }
+  if (args.target !== 'project' && args.target !== 'personal') {
+    return null;
+  }
+  const skill = readPortableSkillDefinition(args.skill);
+  if (!skill) {
+    return null;
+  }
+  const resources = readSkillResources(args.resources);
+  if (args.resources !== undefined && !resources) {
+    return null;
+  }
+  const neko = readNekoSkillOverlay(args.neko);
+  if (args.neko !== undefined && !neko) {
+    return null;
+  }
+  return {
+    target: args.target,
+    skill,
+    ...(resources ? { resources } : {}),
+    ...(neko ? { neko } : {}),
+  };
+}
+
+function readPortableSkillDefinition(value: unknown): PortableSkillDefinition | null {
+  if (
+    !isRecord(value) ||
+    !hasOnlyProperties(value, [
+      'name',
+      'description',
+      'body',
+      'license',
+      'compatibility',
+      'metadata',
+      'allowedTools',
+    ])
+  ) {
+    return null;
+  }
+  if (
+    typeof value.name !== 'string' ||
+    typeof value.description !== 'string' ||
+    typeof value.body !== 'string'
+  ) {
+    return null;
+  }
+  if (value.license !== undefined && typeof value.license !== 'string') {
+    return null;
+  }
+  if (value.compatibility !== undefined && typeof value.compatibility !== 'string') {
+    return null;
+  }
+  const metadata = readStringRecord(value.metadata);
+  if (value.metadata !== undefined && !metadata) {
+    return null;
+  }
+  const allowedTools = readStringArray(value.allowedTools);
+  if (value.allowedTools !== undefined && !allowedTools) {
+    return null;
+  }
+  return {
+    name: value.name,
+    description: value.description,
+    body: value.body,
+    ...(typeof value.license === 'string' ? { license: value.license } : {}),
+    ...(typeof value.compatibility === 'string' ? { compatibility: value.compatibility } : {}),
+    ...(metadata ? { metadata } : {}),
+    ...(allowedTools ? { allowedTools } : {}),
+  };
+}
+
+function readSkillResources(value: unknown): readonly SkillResourceInput[] | null {
+  if (value === undefined) {
+    return null;
+  }
+  if (!Array.isArray(value)) {
+    return null;
+  }
+  const resources: SkillResourceInput[] = [];
+  for (const entry of value) {
+    if (
+      !isRecord(entry) ||
+      !hasOnlyProperties(entry, ['path', 'encoding', 'content']) ||
+      typeof entry.path !== 'string' ||
+      typeof entry.content !== 'string' ||
+      (entry.encoding !== 'utf8' && entry.encoding !== 'base64')
+    ) {
+      return null;
+    }
+    resources.push({
+      path: entry.path,
+      encoding: entry.encoding,
+      content: entry.content,
+    });
+  }
+  return resources;
+}
+
+function readNekoSkillOverlay(value: unknown): NekoSkillOverlay | null {
+  if (
+    !isRecord(value) ||
+    !hasOnlyProperties(value, ['schemaVersion', 'interface', 'dependencies', 'relationships']) ||
+    value.schemaVersion !== 1
+  ) {
+    return null;
+  }
+  const interfaceMetadata = readNekoSkillInterface(value.interface);
+  if (value.interface !== undefined && !interfaceMetadata) {
+    return null;
+  }
+  const dependencies = readNekoSkillDependencies(value.dependencies);
+  if (value.dependencies !== undefined && !dependencies) {
+    return null;
+  }
+  const relationships = readNekoSkillRelationships(value.relationships);
+  if (value.relationships !== undefined && !relationships) {
+    return null;
+  }
+  return {
+    schemaVersion: 1,
+    ...(interfaceMetadata ? { interface: interfaceMetadata } : {}),
+    ...(dependencies ? { dependencies } : {}),
+    ...(relationships ? { relationships } : {}),
+  };
+}
+
+function readNekoSkillInterface(value: unknown): NekoSkillOverlay['interface'] | null {
+  if (value === undefined) {
+    return null;
+  }
+  if (
+    !isRecord(value) ||
+    !hasOnlyProperties(value, ['displayName', 'shortDescription', 'iconSmall', 'defaultPrompt'])
+  ) {
+    return null;
+  }
+  const fields = ['displayName', 'shortDescription', 'iconSmall', 'defaultPrompt'] as const;
+  for (const field of fields) {
+    if (value[field] !== undefined && typeof value[field] !== 'string') {
+      return null;
+    }
+  }
+  return {
+    ...(typeof value.displayName === 'string' ? { displayName: value.displayName } : {}),
+    ...(typeof value.shortDescription === 'string'
+      ? { shortDescription: value.shortDescription }
+      : {}),
+    ...(typeof value.iconSmall === 'string' ? { iconSmall: value.iconSmall } : {}),
+    ...(typeof value.defaultPrompt === 'string' ? { defaultPrompt: value.defaultPrompt } : {}),
+  };
+}
+
+function readNekoSkillDependencies(value: unknown): NekoSkillOverlay['dependencies'] | null {
+  if (value === undefined) {
+    return null;
+  }
+  if (!isRecord(value) || !hasOnlyProperties(value, ['capabilities', 'profiles'])) {
+    return null;
+  }
+  const capabilities =
+    value.capabilities === undefined
+      ? undefined
+      : readNekoCapabilityDependencies(value.capabilities);
+  if (value.capabilities !== undefined && !capabilities) {
+    return null;
+  }
+  const profiles =
+    value.profiles === undefined ? undefined : readNekoProfileDependencies(value.profiles);
+  if (value.profiles !== undefined && !profiles) {
+    return null;
+  }
+  return {
+    ...(capabilities ? { capabilities } : {}),
+    ...(profiles ? { profiles } : {}),
+  };
+}
+
+function readNekoCapabilityDependencies(
+  value: unknown,
+): NonNullable<NekoSkillOverlay['dependencies']>['capabilities'] | null {
+  if (!Array.isArray(value)) {
+    return null;
+  }
+  const dependencies: Array<{ id: string; requirement: 'required' | 'optional' }> = [];
+  for (const entry of value) {
+    if (
+      !isRecord(entry) ||
+      !hasOnlyProperties(entry, ['id', 'requirement']) ||
+      typeof entry.id !== 'string' ||
+      (entry.requirement !== 'required' && entry.requirement !== 'optional')
+    ) {
+      return null;
+    }
+    dependencies.push({ id: entry.id, requirement: entry.requirement });
+  }
+  return dependencies;
+}
+
+function readNekoProfileDependencies(
+  value: unknown,
+): NonNullable<NekoSkillOverlay['dependencies']>['profiles'] | null {
+  if (!Array.isArray(value)) {
+    return null;
+  }
+  const dependencies: NonNullable<
+    NonNullable<NekoSkillOverlay['dependencies']>['profiles']
+  >[number][] = [];
+  for (const entry of value) {
+    if (
+      !isRecord(entry) ||
+      !hasOnlyProperties(entry, ['id', 'kind', 'relationship', 'versionRange']) ||
+      typeof entry.id !== 'string' ||
+      !isAgentProfileKind(entry.kind) ||
+      !isAgentProfileRelationship(entry.relationship) ||
+      (entry.versionRange !== undefined && typeof entry.versionRange !== 'string')
+    ) {
+      return null;
+    }
+    dependencies.push({
+      id: entry.id,
+      kind: entry.kind,
+      relationship: entry.relationship,
+      ...(typeof entry.versionRange === 'string' ? { versionRange: entry.versionRange } : {}),
+    });
+  }
+  return dependencies;
+}
+
+function readNekoSkillRelationships(value: unknown): NekoSkillOverlay['relationships'] | null {
+  if (value === undefined) {
+    return null;
+  }
+  if (!isRecord(value) || !hasOnlyProperties(value, ['skills'])) {
+    return null;
+  }
+  if (value.skills === undefined) {
+    return {};
+  }
+  if (!Array.isArray(value.skills)) {
+    return null;
+  }
+  const skills: Array<{ name: string; relationship: string }> = [];
+  for (const entry of value.skills) {
+    if (
+      !isRecord(entry) ||
+      !hasOnlyProperties(entry, ['name', 'relationship']) ||
+      typeof entry.name !== 'string' ||
+      typeof entry.relationship !== 'string'
+    ) {
+      return null;
+    }
+    skills.push({ name: entry.name, relationship: entry.relationship });
+  }
+  return { skills };
+}
+
+function readCreateSkillFailure(value: unknown): CreateSkillFailure | null {
+  if (!isRecord(value) || !isCreateSkillFailureCode(value.code)) {
+    return null;
+  }
+  if (!Array.isArray(value.diagnostics) || !value.diagnostics.every(isSkillDiagnostic)) {
+    return null;
+  }
+  return {
+    code: value.code,
+    diagnostics: value.diagnostics,
+  };
+}
+
+function isCreateSkillFailureCode(value: unknown): value is CreateSkillFailureCode {
+  return (
+    value === 'invalid-skill' ||
+    value === 'invalid-overlay' ||
+    value === 'invalid-resource-path' ||
+    value === 'reserved-resource-path' ||
+    value === 'skill-already-exists' ||
+    value === 'atomic-commit-conflict' ||
+    value === 'filesystem-error'
+  );
+}
+
+function isSkillDiagnostic(value: unknown): value is SkillDiagnostic {
+  return (
+    isRecord(value) &&
+    (value.area === 'portable' ||
+      value.area === 'overlay' ||
+      value.area === 'compatibility' ||
+      value.area === 'quality' ||
+      value.area === 'creation' ||
+      value.area === 'migration') &&
+    typeof value.code === 'string' &&
+    (value.severity === 'error' || value.severity === 'warning' || value.severity === 'info') &&
+    typeof value.message === 'string' &&
+    (value.path === undefined || typeof value.path === 'string')
+  );
+}
+
+function readStringRecord(value: unknown): Readonly<Record<string, string>> | null {
+  if (value === undefined) {
+    return null;
+  }
+  if (!isRecord(value)) {
+    return null;
+  }
+  const result: Record<string, string> = {};
+  for (const [key, entry] of Object.entries(value)) {
+    if (typeof entry !== 'string') {
+      return null;
+    }
+    result[key] = entry;
+  }
+  return result;
+}
+
+function readStringArray(value: unknown): readonly string[] | null {
+  if (value === undefined) {
+    return null;
+  }
+  return Array.isArray(value) && value.every((entry) => typeof entry === 'string') ? value : null;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function hasOnlyProperties(
+  value: Readonly<Record<string, unknown>>,
+  allowedProperties: readonly string[],
+): boolean {
+  return Object.keys(value).every((key) => allowedProperties.includes(key));
 }
 
 function readExecutionMode(value: unknown): ExecutionMode | null {

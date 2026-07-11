@@ -1,3 +1,4 @@
+import { isDocumentArchiveResourceRef, isResourceRef } from '@neko/shared';
 import type { Message, ToolCall } from '@neko-agent/types';
 
 const MEDIA_FILE_EXTENSIONS = [
@@ -194,6 +195,7 @@ function projectResourceValueInternal(
   }
 
   if (typeof value !== 'object') return value;
+  if (isResourceRef(value) || isDocumentArchiveResourceRef(value)) return value;
 
   if (visited.has(value)) return value;
   visited.add(value);
@@ -251,9 +253,10 @@ function isProjectableLocalMediaStringField(key: string, item: unknown): item is
 }
 
 function hasStableResourceRef(value: object): boolean {
+  if (!isRecord(value)) return false;
   return (
-    Object.prototype.hasOwnProperty.call(value, 'resourceRef') ||
-    Object.prototype.hasOwnProperty.call(value, 'documentResourceRef')
+    isResourceRef(value['resourceRef']) ||
+    isDocumentArchiveResourceRef(value['documentResourceRef'])
   );
 }
 

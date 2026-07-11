@@ -131,6 +131,10 @@ export const DEFAULT_CREATIVE_TOOL_TRAITS: ReadonlyArray<{ name: string; traits:
     traits: { cost: 'free', reversible: true, locality: 'local', impactLevel: 'none' },
   },
   {
+    name: 'CreateSkill',
+    traits: { cost: 'free', reversible: true, locality: 'local', impactLevel: 'low' },
+  },
+  {
     name: 'ActivateSkill',
     traits: { cost: 'free', reversible: true, locality: 'local', impactLevel: 'none' },
   },

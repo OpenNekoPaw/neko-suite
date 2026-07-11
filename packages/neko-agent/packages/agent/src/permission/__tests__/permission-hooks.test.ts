@@ -19,7 +19,7 @@ import type { SettingsHookLoader } from '../../hook-loader/settings-hook-loader'
 
 /** Build a minimal ToolCallInfo */
 function makeToolCall(name: string, args?: Record<string, unknown>, id = 'call_1'): ToolCallInfo {
-  return { id, name, arguments: args };
+  return { id, name, arguments: args ?? {}, index: 0 };
 }
 
 /** Build a PermissionConfig with sensible defaults */
@@ -986,7 +986,12 @@ describe('PermissionHooks', () => {
         onToolAskStarted,
       });
 
-      const toolCall = makeToolCall('WebFetch', { url: 'https://example.com' });
+      const toolCall = makeToolCall('WebFetch', {
+        url: 'https://example.com',
+        mode: 'live',
+        providerId: 'mcp:research',
+        domain: 'example.com',
+      });
       const execute = vi.fn();
 
       const resultPromise = hooks.onToolCall(toolCall, execute);
@@ -995,11 +1000,51 @@ describe('PermissionHooks', () => {
 
       expect(onToolAskStarted).toHaveBeenCalledWith(
         expect.objectContaining({
-          action: 'Fetch URL: https://example.com',
+          action: 'Fetch URL: https://example.com (live, mcp:research, example.com)',
+          details: expect.objectContaining({
+            mode: 'live',
+            providerId: 'mcp:research',
+            domain: 'example.com',
+            url: 'https://example.com',
+          }),
         }),
       );
 
       // Clean up
+      const pending = hooks.getPendingConfirmations();
+      hooks.confirmTool(pending[0]!.confirmationToken, false);
+      await resultPromise;
+    });
+
+    it('generates external research description for WebSearch tool', async () => {
+      const onToolAskStarted = vi.fn();
+      const hooks = new PermissionHooks({
+        config: makeConfig({ mode: 'ask', rules: { ask: ['WebSearch'] } }),
+        onToolAskStarted,
+      });
+
+      const resultPromise = hooks.onToolCall(
+        makeToolCall('WebSearch', {
+          query: 'kimono reference',
+          mode: 'indexed',
+          providerId: 'mcp:research',
+        }),
+        vi.fn(),
+      );
+
+      await new Promise((r) => setTimeout(r, 10));
+
+      expect(onToolAskStarted).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'Search web: kimono reference (indexed, mcp:research)',
+          details: expect.objectContaining({
+            query: 'kimono reference',
+            mode: 'indexed',
+            providerId: 'mcp:research',
+          }),
+        }),
+      );
+
       const pending = hooks.getPendingConfirmations();
       hooks.confirmTool(pending[0]!.confirmationToken, false);
       await resultPromise;
