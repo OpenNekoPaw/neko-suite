@@ -58,3 +58,6 @@ export type {
 } from './quality-review-validation';
 
 export * from './quality-gate-runtime';
+
+export { createCanonicalQualityCheckTools } from './canonical-quality-tools';
+export type { CanonicalQualityCheckToolsDeps } from './canonical-quality-tools';

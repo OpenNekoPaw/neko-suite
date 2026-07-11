@@ -21,6 +21,7 @@ export type AgentContentAccessCaller =
   | 'read-image'
   | 'read-document'
   | 'perception-asset-loader'
+  | 'quality-review'
   | 'attachment-processor'
   | 'media-preprocessor'
   | 'message-resource-projection'

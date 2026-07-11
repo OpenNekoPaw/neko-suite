@@ -51,6 +51,7 @@ import {
 import { createDocumentReadCapabilityProvider } from './tools/documentCapabilityProvider';
 import { createMediaReadCapabilityProvider } from './tools/mediaCapabilityProvider';
 import { createSemanticCoverageCapabilityProvider } from './tools/searchCapabilityProvider';
+import { createQualityCapabilityProvider } from './tools/qualityCapabilityProvider';
 import { createStatusBar } from './statusBar';
 import { registerMarketInstallTargets } from './market/registerMarketInstallTargets';
 import {
@@ -208,6 +209,15 @@ export async function activate(context: vscode.ExtensionContext): Promise<ISkill
   );
   capabilityDiscovery.registerProvider(
     createSemanticCoverageCapabilityProvider(),
+    agentOwnedCapabilityContext,
+  );
+  capabilityDiscovery.registerProvider(
+    createQualityCapabilityProvider({
+      createService: () => bootstrapResult.platform.createService(),
+      getContentAccessRuntime: () => agentContentAccess.runtime,
+      resolveModelForPurpose: (purpose) =>
+        bootstrapResult.platform.config.resolveModelRefForPurpose(purpose),
+    }),
     agentOwnedCapabilityContext,
   );
   capabilityDiscovery.registerProvider(

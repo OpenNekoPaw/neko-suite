@@ -1,7 +1,14 @@
 import { describe, expect, it, vi } from 'vitest';
-import { TOOL_NAMES_SYSTEM } from '@neko/shared';
+import { ToolCategoryRegistry, ToolGroupRegistry, ToolRegistry } from '@neko/agent';
+import {
+  MEDIA_QUALITY_CONTRACT_VERSION,
+  TOOL_NAMES_QUALITY,
+  TOOL_NAMES_SYSTEM,
+} from '@neko/shared';
 import { createDocumentReadCapabilityProvider } from '../documentCapabilityProvider';
 import { createMediaReadCapabilityProvider } from '../mediaCapabilityProvider';
+import { CapabilityDiscoveryService } from '../../services/capabilityDiscoveryService';
+import { createQualityCapabilityProvider } from '../qualityCapabilityProvider';
 import { createSemanticCoverageCapabilityProvider } from '../searchCapabilityProvider';
 
 const mocks = vi.hoisted(() => ({
@@ -34,10 +41,25 @@ const mocks = vi.hoisted(() => ({
   },
 }));
 
-vi.mock('vscode', () => ({
-  commands: {
-    executeCommand: vi.fn(),
-  },
+vi.mock('vscode', async () => {
+  const vscode = await import('../../__mocks__/vscode');
+  return {
+    ...vscode,
+    commands: {
+      ...vscode.commands,
+      executeCommand: vi.fn(),
+    },
+  };
+});
+
+vi.mock('../../base', () => ({
+  getRootLogger: () => ({
+    child: () => ({
+      info: vi.fn(),
+      warn: vi.fn(),
+      debug: vi.fn(),
+    }),
+  }),
 }));
 
 vi.mock('../../services/engineClientProvider', () => ({
@@ -79,6 +101,58 @@ describe('extension tool capability providers', () => {
         loadingTier: 'resident',
       }),
     ]);
+  });
+
+  it('registers canonical QualityCheck through the production capability registry path', async () => {
+    const toolRegistry = new ToolRegistry();
+    const capabilityDiscovery = new CapabilityDiscoveryService({
+      toolRegistry,
+      toolGroupRegistry: new ToolGroupRegistry(),
+      toolCategoryRegistry: new ToolCategoryRegistry(),
+      providerCardRegistry: {
+        register: vi.fn(),
+        unregister: vi.fn(),
+      },
+    });
+    const provider = createQualityCapabilityProvider({
+      createService: vi.fn(),
+      getContentAccessRuntime: vi.fn(),
+      resolveModelForPurpose: vi.fn().mockReturnValue(undefined),
+    });
+
+    capabilityDiscovery.registerProvider(provider, { extensionContext: {} });
+
+    expect(capabilityDiscovery.hasProvider('neko-agent-media-quality')).toBe(true);
+    const qualityCheck = toolRegistry.get(TOOL_NAMES_QUALITY.QUALITY_CHECK);
+    expect(qualityCheck).toBeDefined();
+    await expect(
+      qualityCheck?.execute({
+        target: {
+          version: MEDIA_QUALITY_CONTRACT_VERSION,
+          targetId: 'asset-cat',
+          kind: 'image',
+          resourceRef: {
+            id: 'asset:image:cat',
+            scope: 'project',
+            provider: 'project',
+            kind: 'media',
+            source: {
+              kind: 'file',
+              projectRelativePath: 'neko/generated/image/cat.png',
+            },
+            fingerprint: { strategy: 'hash', value: 'sha256:cat-v1' },
+          },
+          revision: 'rev-1',
+          contentDigest: 'sha256:cat-v1',
+        },
+      }),
+    ).resolves.toMatchObject({
+      success: true,
+      data: {
+        verdict: 'manual-review',
+        missingEvaluatorClasses: ['perception'],
+      },
+    });
   });
 
   it('exposes semantic coverage through the search-owned provider', () => {
