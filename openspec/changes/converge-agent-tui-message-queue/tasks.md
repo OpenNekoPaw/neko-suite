@@ -36,11 +36,24 @@
 - [x] 6.2 Route TUI enqueue, snapshot, promote, edit, cancel, and release through the explicit-conversation runtime-owned queue port.
 - [x] 6.3 Add canonical-path tests with the TUI-local queue path poisoned so any fallback fails visibly.
 - [x] 6.4 Remove `messageQueueRef`, manual `drainQueuedPrompts`, package-local queue mutation ownership, and obsolete count-only compatibility paths.
-- [ ] 6.5 Run legacy-debt and unused-code checks proving the removed TUI-local queue path is no longer reachable.
+- [x] 6.5 Run legacy-debt and unused-code checks proving the removed TUI-local queue path is no longer reachable.
 
 ## 7. Validation And Delivery
 
 - [x] 7.1 Run focused cli-tui presenter, component, event-adapter, command-router, and session tests after each implementation batch.
 - [x] 7.2 Run focused Agent runtime queue/turn tests and TypeScript checks for affected packages.
-- [ ] 7.3 Use `neko-agent-evaluation` to validate running-turn enqueue, mixed continuation ordering, cancellation, and transcript/source projection.
-- [ ] 7.4 Run `neko-quality-review`, record validation commands and residual risks, and confirm no Webview/Rust/durable-data boundary changed.
+- [x] 7.3 Use `neko-agent-evaluation` to validate running-turn enqueue, mixed continuation ordering, cancellation, and transcript/source projection.
+- [x] 7.4 Run `neko-quality-review`, record validation commands and residual risks, and confirm no Webview/Rust/durable-data boundary changed.
+
+## Validation Record (2026-07-11)
+
+- Focused Agent runtime queue/turn tests: 5 files, 77 tests passed.
+- Focused cli-tui presenter/component/adapter/router/session tests: 8 files, 79 tests passed.
+- `pnpm --filter @neko/cli build`: passed.
+- `pnpm --filter @neko/cli exec tsc --noEmit -p tsconfig.json`: workspace-wide check failed on pre-existing or parallel errors; filtering the affected queue/runtime files produced no errors.
+- `pnpm check:legacy-debt`: executed and failed on unrelated repository debt (`migrate-now` / `needs-review`); no removed TUI queue symbol was reported.
+- `pnpm check:unused`: executed and failed on unrelated repository-wide unused files/dependencies/exports; no removed TUI queue path was reported.
+- Legacy-path proof: repository search found no `createTuiMessageQueue`, `TuiMessageQueueError`, `messageQueueRef`, `drainQueuedPrompts`, `queuePausedAfterCancelRef`, `drainingQueueRef`, or `core/message-queue` import under Agent/TUI source.
+- `pnpm test:agent:eval`: 2 files, 31 key-free harness tests passed. This validates the harness only.
+- Real TUI Agent message-queue evaluation remains blocked: `protocol-smoke.mjs` rejects `kind: message-queue` with exit code 3 because multi-submit orchestration is not implemented, and no provider credentials are available. Focused path tests cover running-turn enqueue, continuation-before-user ordering, Escape pause/resume, runtime queue spies, and transcript/source projection; real provider-backed multi-turn behavior remains residual risk.
+- Quality review: L3 Agent workflow change; no blocking findings. Runtime owns queue identity/mutation/drain state, TUI owns intent/projection, and the package-local successful fallback was deleted. No Webview, Rust, Proto, CSP, durable project data, or process-restart persistence boundary changed.
