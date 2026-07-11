@@ -107,8 +107,6 @@ export interface ChatWorkspaceProps {
   // Session
   setActiveTab: React.Dispatch<React.SetStateAction<TabType>>;
   // Conversation session refs (for useConversationSession)
-  conversationMessagesRef: MutableRefObject<Map<string, unknown>>;
-  conversationStreamingRef: MutableRefObject<Map<string, unknown>>;
   conversationTokenCountRef: MutableRefObject<Map<string, number>>;
   conversationCompressingRef: MutableRefObject<Map<string, boolean>>;
   conversationAgentStateRef: MutableRefObject<Map<string, AgentState>>;
@@ -194,8 +192,6 @@ export function ChatWorkspace({
   workItems,
   pluginsAvailable,
   setActiveTab,
-  conversationMessagesRef,
-  conversationStreamingRef,
   conversationTokenCountRef,
   conversationCompressingRef,
   conversationAgentStateRef,
@@ -297,8 +293,6 @@ export function ChatWorkspace({
     activeConversationId: visibleSessionConversationId,
     inputValue,
     setInputValue,
-    conversationMessagesRef,
-    conversationStreamingRef,
     conversationTokenCountRef,
     conversationCompressingRef,
     conversationAgentStateRef,

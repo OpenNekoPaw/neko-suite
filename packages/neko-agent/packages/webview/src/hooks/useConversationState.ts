@@ -13,6 +13,10 @@ import type {
 } from '@neko-agent/types';
 import type { ActiveTurnTimelineState } from '@/presenters/active-turn-timeline-presenter';
 import { ConversationRenderCoordinator } from '@/render-lifecycle/conversation-render-coordinator';
+import {
+  commitConversationSnapshotProjection,
+  ingestConversationRenderSnapshot,
+} from '@/render-lifecycle/conversation-render-state-adapter';
 
 /**
  * Streaming state for a conversation
@@ -121,13 +125,22 @@ export function useConversationState(): UseConversationStateReturn {
   // Save current conversation state to maps when it changes
   useEffect(() => {
     if (activeConversationId) {
-      conversationMessagesRef.current.set(activeConversationId, messages);
-      conversationStreamingRef.current.set(activeConversationId, {
-        ...(conversationStreamingRef.current.get(activeConversationId) ?? {}),
-        streamingMessageId,
-        isThinking,
-        queuedMessageCount,
-        queuedMessages,
+      const snapshot = ingestConversationRenderSnapshot({
+        coordinator: conversationRenderCoordinator,
+        conversationId: activeConversationId,
+        messages,
+        streaming: {
+          ...(conversationStreamingRef.current.get(activeConversationId) ?? {}),
+          streamingMessageId,
+          isThinking,
+          queuedMessageCount,
+          queuedMessages,
+        },
+      });
+      commitConversationSnapshotProjection({
+        snapshot,
+        conversationMessagesRef,
+        conversationStreamingRef,
       });
     }
   }, [
@@ -137,6 +150,9 @@ export function useConversationState(): UseConversationStateReturn {
     isThinking,
     queuedMessageCount,
     queuedMessages,
+    conversationMessagesRef,
+    conversationRenderCoordinator,
+    conversationStreamingRef,
   ]);
 
   // Helper: add a single message
@@ -151,10 +167,6 @@ export function useConversationState(): UseConversationStateReturn {
     setIsThinking(false);
     setQueuedMessageCount(0);
     setQueuedMessages([]);
-    if (activeConversationIdRef.current) {
-      conversationMessagesRef.current.delete(activeConversationIdRef.current);
-      conversationStreamingRef.current.delete(activeConversationIdRef.current);
-    }
   }, []);
 
   return {

@@ -2,6 +2,7 @@
  * Character Dialogue session projection handlers.
  */
 
+import { discardConversationSnapshotProjection } from '@/render-lifecycle/conversation-render-state-adapter';
 import { defineHandler } from './types';
 import type { HandlerRegistration, MessageHandler } from './types';
 import type {
@@ -18,8 +19,11 @@ const handleCharacterDialogueSessionStarted: MessageHandler<'characterDialogueSe
   context,
 ) => {
   persistCurrentVisibleConversation(context);
-  context.conversationMessagesRef.current.delete(message.session.sessionId);
-  context.conversationStreamingRef.current.delete(message.session.sessionId);
+  discardConversationSnapshotProjection({
+    conversationId: message.session.sessionId,
+    conversationMessagesRef: context.conversationMessagesRef,
+    conversationStreamingRef: context.conversationStreamingRef,
+  });
   activateConversationTabView(context, message.session.sessionId, 'extension-active-conversation');
   context.setOpenTabs((prev) => [
     ...prev.filter((tab) => tab.id !== message.tab.id),

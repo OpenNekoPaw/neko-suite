@@ -17,8 +17,8 @@
 ## 3. Implement the Conversation Render Coordinator
 
 - [x] 3.1 Implement a pure `ConversationRenderCoordinator` with per-conversation immutable snapshots and focused read/ingest/prepare-activation/dispose operations.
-- [ ] 3.2 Move writes to `conversationMessagesRef` and `conversationStreamingRef` behind the coordinator while retaining transitional read adapters only where required.
-- [ ] 3.3 Integrate the existing Timeline frame scheduler so coalesced foreground and background commits advance only the owning conversation revision.
+- [x] 3.2 Move writes to `conversationMessagesRef` and `conversationStreamingRef` behind the coordinator while retaining transitional read adapters only where required.
+- [x] 3.3 Integrate the existing Timeline frame scheduler so coalesced foreground and background commits advance only the owning conversation revision.
 - [x] 3.4 Integrate Markdown `commitTimelineSnapshot()` through the narrow resource owner and preserve commit-visible-state-before-publish ordering.
 - [x] 3.5 Add diagnostics for stale revisions, wrong identities, unavailable ownership, missing Markdown owner, background foreground-write attempts, and illegal publication order.
 - [x] 3.6 Add coordinator unit tests proving conversation isolation, deterministic reconciliation, no-op matching snapshots, scoped resource cleanup, and fail-visible invalid states.
@@ -47,7 +47,7 @@
 - [x] 6.1 Implement and test separate conversation disposal, active-turn resource release, component detach, Webview realm teardown, and hide/reveal handling.
 - [x] 6.2 Ensure disposing one conversation clears only its scheduled frames, Markdown sessions/subscriptions, render snapshot, and viewport intent.
 - [x] 6.3 Make React StrictMode cleanup/remount reconstruct derived resources from canonical snapshots without treating effect cleanup as permanent conversation deletion.
-- [ ] 6.4 Remove writable direct access to migrated per-conversation maps and delete redundant activation/projector helpers inside the scoped replacement boundary.
+- [x] 6.4 Remove writable direct access to migrated per-conversation maps and delete redundant activation/projector helpers inside the scoped replacement boundary.
 - [x] 6.5 Add static/source tests or poisoned adapters proving production code cannot perform a successful foreground activation or background visible-state write outside the coordinator.
 - [ ] 6.6 Run `pnpm check:legacy-debt` and `pnpm check:unused`, fixing only debt introduced or exposed inside this change and recording unrelated worktree blockers.
 

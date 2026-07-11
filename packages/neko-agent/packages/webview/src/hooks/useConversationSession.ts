@@ -24,9 +24,6 @@ export interface UseConversationSessionProps {
   activeConversationId: string | null;
   inputValue: string;
   setInputValue: (value: string) => void;
-  // Refs shared with other hooks (conversation-level caches)
-  conversationMessagesRef: MutableRefObject<ClearableMap>;
-  conversationStreamingRef: MutableRefObject<ClearableMap>;
   conversationTokenCountRef: MutableRefObject<ClearableMap>;
   conversationCompressingRef: MutableRefObject<ClearableMap>;
   conversationAgentStateRef: MutableRefObject<ClearableMap>;
@@ -47,8 +44,6 @@ export function useConversationSession({
   activeConversationId,
   inputValue,
   setInputValue,
-  conversationMessagesRef,
-  conversationStreamingRef,
   conversationTokenCountRef,
   conversationCompressingRef,
   conversationAgentStateRef,
@@ -89,8 +84,6 @@ export function useConversationSession({
 
   const cleanupConversation = useCallback(
     (conversationId: string) => {
-      conversationMessagesRef.current.delete(conversationId);
-      conversationStreamingRef.current.delete(conversationId);
       conversationInputRef.current.delete(conversationId);
       conversationAttachmentsRef.current.delete(conversationId);
       conversationFileReferencesRef.current.delete(conversationId);
@@ -98,31 +91,17 @@ export function useConversationSession({
       conversationCompressingRef.current.delete(conversationId);
       conversationAgentStateRef.current.delete(conversationId);
     },
-    [
-      conversationMessagesRef,
-      conversationStreamingRef,
-      conversationTokenCountRef,
-      conversationCompressingRef,
-      conversationAgentStateRef,
-    ],
+    [conversationTokenCountRef, conversationCompressingRef, conversationAgentStateRef],
   );
 
   const cleanupAllConversations = useCallback(() => {
-    conversationMessagesRef.current.clear();
-    conversationStreamingRef.current.clear();
     conversationInputRef.current.clear();
     conversationAttachmentsRef.current.clear();
     conversationFileReferencesRef.current.clear();
     conversationTokenCountRef.current.clear();
     conversationCompressingRef.current.clear();
     conversationAgentStateRef.current.clear();
-  }, [
-    conversationMessagesRef,
-    conversationStreamingRef,
-    conversationTokenCountRef,
-    conversationCompressingRef,
-    conversationAgentStateRef,
-  ]);
+  }, [conversationTokenCountRef, conversationCompressingRef, conversationAgentStateRef]);
 
   return {
     attachedFiles,

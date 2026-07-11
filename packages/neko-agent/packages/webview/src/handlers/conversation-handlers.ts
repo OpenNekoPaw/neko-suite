@@ -32,11 +32,13 @@ import { shouldActivateForegroundConversation } from './foreground-activation';
 import { commitActiveTurnTimelineMarkdownSnapshot } from './conversation-tab-session-state';
 import { projectQueuedMessagesCleared } from '@/presenters/message-queue-presenter';
 import { getActiveTimelineForMessage } from './timeline-handlers';
+import { updateConversation } from './message-updater';
 import {
   commitConversationRenderActivation,
   commitConversationSnapshotProjection,
   createConversationMarkdownTimelineResourceOwner,
   createConversationVisibleStatePort,
+  discardConversationSnapshotProjection,
   ingestConversationRenderSnapshot,
 } from '@/render-lifecycle/conversation-render-state-adapter';
 
@@ -105,17 +107,14 @@ const handleHistoryCleared: MessageHandler<'historyCleared'> = (
   context.timelineRenderScheduler?.discardConversation(conversationId);
   context.markdownSessionRegistry?.disposeConversation(conversationId);
   const projection = projectHistoryClearedConversation();
-  if (context.isCurrentConversation(conversationId)) {
-    context.setMessages(projection.messages);
-    context.setStreamingMessageId(projection.streaming.streamingMessageId);
-    context.setIsThinking(projection.streaming.isThinking);
-    context.setQueuedMessageCount?.(projection.streaming.queuedMessageCount ?? 0);
-    context.conversationMessagesRef.current.delete(conversationId);
-    context.conversationStreamingRef.current.delete(conversationId);
-    return;
-  }
-
-  context.updateNonCurrentConversation(conversationId, () => projection);
+  updateConversation(context, conversationId, () => ({
+    messages: projection.messages,
+    streamingMessageId: projection.streaming.streamingMessageId,
+    isThinking: projection.streaming.isThinking,
+    queuedMessageCount: projection.streaming.queuedMessageCount,
+    queuedMessages: projection.streaming.queuedMessages,
+    activeTurnTimeline: null,
+  }));
 };
 
 /**
@@ -149,8 +148,11 @@ const handleConversationLifecycleResult: MessageHandler<'conversationLifecycleRe
       context.timelineRenderScheduler?.discardConversation(message.conversationId);
       context.markdownSessionRegistry?.disposeConversation(message.conversationId);
     }
-    context.conversationMessagesRef.current.delete(message.conversationId);
-    context.conversationStreamingRef.current.delete(message.conversationId);
+    discardConversationSnapshotProjection({
+      conversationId: message.conversationId,
+      conversationMessagesRef: context.conversationMessagesRef,
+      conversationStreamingRef: context.conversationStreamingRef,
+    });
   }
   context.setConversations((previous) => {
     if (state === 'deleted') {

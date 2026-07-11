@@ -623,8 +623,6 @@ function createProps(overrides: Partial<ChatWorkspaceProps> = {}): ChatWorkspace
     workItems: [],
     pluginsAvailable: {},
     setActiveTab: noop as React.Dispatch<React.SetStateAction<'chat'>>,
-    conversationMessagesRef: createRefWithCurrent(new Map()),
-    conversationStreamingRef: createRefWithCurrent(new Map()),
     conversationTokenCountRef: createRefWithCurrent(new Map()),
     conversationCompressingRef: createRefWithCurrent(new Map()),
     conversationAgentStateRef: createRefWithCurrent(new Map<string, AgentState>()),

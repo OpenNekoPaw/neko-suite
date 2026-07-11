@@ -70,6 +70,7 @@ import {
   createConversationMarkdownTimelineResourceOwner,
   createConversationVisibleStatePort,
   createRetainedConversationRenderActivation,
+  discardConversationSnapshotProjection,
   ingestConversationRenderSnapshot,
 } from '@/render-lifecycle/conversation-render-state-adapter';
 import {
@@ -697,8 +698,23 @@ export function ConversationController({
       return;
     }
 
-    conversationMessagesRef.current.delete(conversationId);
-    conversationStreamingRef.current.delete(conversationId);
+    const snapshot = ingestConversationRenderSnapshot({
+      coordinator: conversationRenderCoordinator,
+      conversationId,
+      messages: [],
+      streaming: {
+        streamingMessageId: null,
+        isThinking: false,
+        queuedMessageCount: 0,
+        queuedMessages: [],
+        activeTurnTimeline: null,
+      },
+    });
+    commitConversationSnapshotProjection({
+      snapshot,
+      conversationMessagesRef,
+      conversationStreamingRef,
+    });
     if (conversationId === activeConversationIdRef.current) {
       setMessages([]);
       setStreamingMessageId(null);
@@ -711,6 +727,7 @@ export function ConversationController({
     activeConversationIdRef,
     clearMessages,
     conversationMessagesRef,
+    conversationRenderCoordinator,
     conversationStreamingRef,
     setIsThinking,
     setMessages,
@@ -1188,8 +1205,11 @@ export function ConversationController({
     (conversationId: string) => {
       disposeConversationRendering(conversationId, 'conversation-delete');
       cleanupConversation(conversationId);
-      conversationMessagesRef.current.delete(conversationId);
-      conversationStreamingRef.current.delete(conversationId);
+      discardConversationSnapshotProjection({
+        conversationId,
+        conversationMessagesRef,
+        conversationStreamingRef,
+      });
       conversationAgentStateRef.current.delete(conversationId);
       setConversations((prev) => prev.filter((conversation) => conversation.id !== conversationId));
     },
@@ -1507,8 +1527,6 @@ export function ConversationController({
             pluginsAvailable={pluginsAvailable}
             // Session
             setActiveTab={setActiveTab}
-            conversationMessagesRef={conversationMessagesRef}
-            conversationStreamingRef={conversationStreamingRef}
             conversationTokenCountRef={conversationTokenCountRef}
             conversationCompressingRef={conversationCompressingRef}
             conversationAgentStateRef={conversationAgentStateRef}

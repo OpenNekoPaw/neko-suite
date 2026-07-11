@@ -8,6 +8,7 @@ import type {
 import type { Message } from '@neko-agent/types';
 import type { AgentWorkItemStore } from '@/components/AgentWorkItem';
 import type { PluginsAvailable } from '@/components/ChatView/SendToMenu';
+import { ConversationRenderCoordinator } from '@/render-lifecycle/conversation-render-coordinator';
 import { embodyCharacterSessionHandlers } from '../embody-character-session-handlers';
 import type { HandlerRegistration, MessageHandlerContext, StreamingState } from '../types';
 
@@ -142,6 +143,7 @@ function createContextHarness(options: ContextHarnessOptions): ContextHarness {
   const isTablessConversationViewRef = ref(false);
   const conversationMessagesRef = ref(new Map<string, Message[]>());
   const conversationStreamingRef = ref(new Map<string, StreamingState>());
+  const conversationRenderCoordinator = new ConversationRenderCoordinator();
   let workItems: AgentWorkItemStore = new Map();
   let pluginsAvailable: PluginsAvailable = {};
 
@@ -182,6 +184,7 @@ function createContextHarness(options: ContextHarnessOptions): ContextHarness {
     activeConversationIdRef,
     conversationMessagesRef,
     conversationStreamingRef,
+    conversationRenderCoordinator,
     openTabs,
     activeTabId,
     isTablessConversationViewRef,

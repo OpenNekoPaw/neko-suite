@@ -75,6 +75,17 @@ export function commitConversationSnapshotProjection(input: {
   );
 }
 
+export function discardConversationSnapshotProjection(input: {
+  readonly conversationId: string;
+  readonly conversationMessagesRef: MutableRefObject<Map<string, Message[]>>;
+  readonly conversationStreamingRef: MutableRefObject<
+    Map<string, ConversationRenderStreamingState>
+  >;
+}): void {
+  input.conversationMessagesRef.current.delete(input.conversationId);
+  input.conversationStreamingRef.current.delete(input.conversationId);
+}
+
 export function createRetainedConversationRenderActivation(input: {
   readonly conversationId: string;
   readonly cachedMessages?: readonly Message[];
