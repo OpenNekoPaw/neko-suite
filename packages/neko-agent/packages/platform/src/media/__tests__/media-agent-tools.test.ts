@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ToolRegistry } from '@neko/agent';
+import type { ResourceRef } from '@neko/shared';
 import type { MediaTask } from '../types';
 import { registerMediaAgentTools } from '../media-agent-tools';
 
@@ -621,6 +622,51 @@ describe('registerMediaAgentTools', () => {
     );
   });
 
+  it('passes canonical keyframe operation and stable ResourceRefs to GenerateVideo', async () => {
+    const registry = new ToolRegistry();
+    const media = createMediaMock();
+    registerMediaAgentTools(registry, media as never);
+    const startFrameRef = createResourceRef('asset:image:first-frame');
+    const endFrameRef = createResourceRef('asset:image:end-frame');
+
+    const result = await registry.execute('GenerateVideo', {
+      prompt: 'Animate between the approved keyframes',
+      operation: 'generate-from-keyframes',
+      startFrameRef,
+      endFrameRef,
+      providerId: 'dashscope-provider',
+      modelId: 'wan-keyframe-model',
+    });
+
+    expect(result.success).toBe(true);
+    expect(media.generateVideo).toHaveBeenCalledWith(
+      expect.objectContaining({
+        operation: 'generate-from-keyframes',
+        startFrameRef,
+        endFrameRef,
+      }),
+    );
+  });
+
+  it('fails visibly for malformed stable video refs instead of dropping them', async () => {
+    const registry = new ToolRegistry();
+    const media = createMediaMock();
+    registerMediaAgentTools(registry, media as never);
+
+    const result = await registry.execute('GenerateVideo', {
+      prompt: 'Animate the shot',
+      operation: 'generate-from-keyframes',
+      startFrameRef: { id: 'canvas-node-runtime-handle' },
+      endFrameRef: createResourceRef('asset:image:end-frame'),
+      providerId: 'dashscope-provider',
+      modelId: 'wan-keyframe-model',
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('startFrameRef must be a structurally valid ResourceRef');
+    expect(media.generateVideo).not.toHaveBeenCalled();
+  });
+
   it('uses runtime media model metadata when GenerateImage omits provider/model args', async () => {
     const registry = new ToolRegistry();
     const media = createMediaMock();
@@ -688,6 +734,17 @@ describe('registerMediaAgentTools', () => {
     );
   });
 });
+
+function createResourceRef(id: string): ResourceRef {
+  return {
+    id,
+    scope: 'project',
+    provider: 'workspace',
+    kind: 'media',
+    source: { kind: 'file', projectRelativePath: `assets/${id.replaceAll(':', '-')}.png` },
+    fingerprint: { strategy: 'hash', value: `sha256:${id}` },
+  };
+}
 
 function getPropertyDescription(
   tool: { parameters: Record<string, unknown> } | undefined,

@@ -23,6 +23,10 @@ import { ProviderRegistry } from '../provider/provider-registry';
 import { MediaRoutingManager } from './routing/media-routing-manager';
 import { createMediaTaskInput } from './media-task-executor';
 import { resolveImageGenerationType, resolveVideoGenerationType } from './media-generation-kind';
+import {
+  validateProviderImageRequest,
+  validateProviderVideoRequest,
+} from './media-operation-capabilities';
 
 /**
  * Extended task manager interface with updateOutputData support
@@ -180,6 +184,35 @@ export class MediaGenerationService {
 
     if (!routing) {
       throw new Error(`No available provider for ${generationType}`);
+    }
+
+    const provider = this.providerRegistry.getProviderConfig(routing.providerId);
+    if (!provider) {
+      throw new Error(`Configured media provider ${routing.providerId} is unavailable.`);
+    }
+    const capabilityDiagnostics = generationType.includes('video')
+      ? validateProviderVideoRequest(provider.type, request as VideoGenerationRequest)
+      : generationType.includes('image')
+        ? validateProviderImageRequest(provider.type, request as ImageGenerationRequest)
+        : [];
+    const capabilityErrors = capabilityDiagnostics.filter(
+      (diagnostic) => diagnostic.severity === 'error',
+    );
+    if (capabilityErrors.length > 0) {
+      throw new Error(
+        `Media provider capability negotiation failed: ${capabilityErrors
+          .map((diagnostic) => diagnostic.message)
+          .join('; ')}`,
+      );
+    }
+    if (capabilityDiagnostics.length > 0) {
+      request = {
+        ...request,
+        metadata: {
+          ...request.metadata,
+          capabilityDiagnostics,
+        },
+      };
     }
 
     // Create task input

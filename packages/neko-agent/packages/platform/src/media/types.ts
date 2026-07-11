@@ -5,8 +5,17 @@
  */
 
 import type { Model, Provider } from '../types/provider';
-import type { ITaskManager, ITaskRecoveryStorage, SerializableTask } from '@neko/shared';
-import type { TaskLifecycleMetadata } from '@neko/shared';
+import type {
+  ITaskManager,
+  ITaskRecoveryStorage,
+  SerializableTask,
+  TaskLifecycleMetadata,
+  ResourceRef,
+  ImageOperationId,
+  VideoOperationId,
+  ImageOutpaintExpansion,
+  ImageSplitProfileOptions,
+} from '@neko/shared';
 
 // =============================================================================
 // Generation Types
@@ -45,14 +54,7 @@ export type MediaOutputType = 'image' | 'video' | 'audio';
  * ControlNet conditioning mode
  */
 export type ControlMode =
-  | 'canny'
-  | 'depth'
-  | 'pose'
-  | 'normal'
-  | 'segment'
-  | 'lineart'
-  | 'softedge'
-  | 'scribble';
+  'canny' | 'depth' | 'pose' | 'normal' | 'segment' | 'lineart' | 'softedge' | 'scribble';
 
 /**
  * IP-Adapter reference for style/subject transfer
@@ -106,6 +108,8 @@ export interface RoutingPreference {
  * Image generation request
  */
 export interface ImageGenerationRequest extends MediaGenerationRequestBase {
+  /** Canonical image operation. Omit only for legacy request inference. */
+  operation?: ImageOperationId;
   /** Image width */
   width?: number;
   /** Image height */
@@ -142,12 +146,18 @@ export interface ImageGenerationRequest extends MediaGenerationRequestBase {
   ipAdapterRefs?: IPAdapterReference[];
   /** Natural language instruction for edit (e.g., "make it night time") */
   editInstruction?: string;
+  /** Explicit outpaint canvas expansion; required for the canonical outpaint operation. */
+  outpaintExpansion?: ImageOutpaintExpansion;
+  /** Explicit split profile and profile-specific options. */
+  splitOptions?: ImageSplitProfileOptions;
 }
 
 /**
  * Video generation request
  */
 export interface VideoGenerationRequest extends MediaGenerationRequestBase {
+  /** Canonical single-clip video operation. Omit only for legacy request inference. */
+  operation?: VideoOperationId;
   /** Video duration in seconds */
   duration?: number;
   /** Video resolution (e.g., "1920x1080") */
@@ -162,6 +172,12 @@ export interface VideoGenerationRequest extends MediaGenerationRequestBase {
   referenceImageBase64?: string;
   /** Reference image local URI/path for image-to-video; host materialization may convert it to base64 */
   referenceImageUri?: string;
+  /** Stable start frame identity, materialized by the host before provider execution. */
+  startFrameRef?: ResourceRef;
+  /** Stable end frame identity, materialized by the host before provider execution. */
+  endFrameRef?: ResourceRef;
+  /** Stable reference video identity, materialized by the host before provider execution. */
+  referenceVideoRef?: ResourceRef;
   /** Reference video URL for video-to-video */
   referenceVideoUrl?: string;
   /** Motion strength (0-1) */

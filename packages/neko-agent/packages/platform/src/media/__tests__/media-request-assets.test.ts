@@ -1,5 +1,6 @@
 import { pathToFileURL } from 'node:url';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import type { ResourceRef } from '@neko/shared';
 import {
   materializeImageRequestFileUris,
   materializeVideoRequestFileUris,
@@ -76,6 +77,61 @@ describe('media request asset materialization', () => {
     expect(request.referenceImageBase64).toBe('already-video-base64');
   });
 
+  it('materializes stable first/end frames and reference video through authorized ports', async () => {
+    const startFrameRef = createResourceRef('asset:image:start');
+    const endFrameRef = createResourceRef('asset:image:end');
+    const referenceVideoRef = createResourceRef('asset:video:source');
+    const readResourceAsBase64 = vi.fn(async (ref: ResourceRef) => `base64:${ref.id}`);
+    const resolveResourceUrl = vi.fn(async (ref: ResourceRef) => `authorized://${ref.id}`);
+
+    const request = await materializeVideoRequestFileUris(
+      {
+        prompt: 'keyframe transform',
+        startFrameRef,
+        endFrameRef,
+        referenceVideoRef,
+      },
+      {
+        readAsBase64: vi.fn(),
+        readResourceAsBase64,
+        resolveResourceUrl,
+      },
+    );
+
+    expect(request.startFrameImageBase64).toBe('base64:asset:image:start');
+    expect(request.endFrameImageBase64).toBe('base64:asset:image:end');
+    expect(request.sourceVideoUrl).toBe('authorized://asset:video:source');
+  });
+
+  it('rejects ambiguous stable and legacy video identities', async () => {
+    await expect(
+      materializeVideoRequestFileUris({
+        prompt: 'ambiguous keyframe',
+        startFrameRef: createResourceRef('asset:image:start'),
+        referenceImageUrl: 'https://example.invalid/start.png',
+      }),
+    ).rejects.toThrow('Stable startFrameRef cannot be combined');
+    await expect(
+      materializeVideoRequestFileUris({
+        prompt: 'ambiguous reference video',
+        referenceVideoRef: createResourceRef('asset:video:source'),
+        sourceVideoUrl: 'https://example.invalid/source.mp4',
+      }),
+    ).rejects.toThrow('Stable referenceVideoRef cannot be combined');
+  });
+
+  it('fails visibly when stable ResourceRef materialization is unavailable', async () => {
+    await expect(
+      materializeVideoRequestFileUris(
+        {
+          prompt: 'keyframes',
+          startFrameRef: createResourceRef('asset:image:start'),
+        },
+        { readAsBase64: vi.fn() },
+      ),
+    ).rejects.toThrow('requires authorized host materialization');
+  });
+
   it('fails visibly when file URI materialization has no host adapter', async () => {
     await expect(
       materializeImageRequestFileUris({
@@ -96,5 +152,16 @@ function createMaterializer(files: Record<string, string>) {
       if (value === undefined) throw new Error(`unexpected file: ${filePath}`);
       return Buffer.from(value).toString('base64');
     },
+  };
+}
+
+function createResourceRef(id: string): ResourceRef {
+  return {
+    id,
+    scope: 'project',
+    provider: 'workspace',
+    kind: 'media',
+    source: { kind: 'file', projectRelativePath: `assets/${id.replaceAll(':', '-')}` },
+    fingerprint: { strategy: 'hash', value: `sha256:${id}` },
   };
 }

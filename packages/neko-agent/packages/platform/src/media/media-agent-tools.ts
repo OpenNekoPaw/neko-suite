@@ -6,7 +6,13 @@
  * can subscribe to progress and notify the webview.
  */
 
-import { createAgentRunId, createTool } from '@neko/shared';
+import {
+  createAgentRunId,
+  createTool,
+  isResourceRef,
+  isVideoOperationId,
+  type ResourceRef,
+} from '@neko/shared';
 import type {
   AgentTaskResultDeliveryPolicy,
   GenerationIntent,
@@ -444,7 +450,15 @@ function readImageControlInputs(args: Record<string, unknown>): Record<string, u
 }
 
 function readVideoReferenceInputs(args: Record<string, unknown>): Record<string, unknown> {
+  const operation = readOptionalVideoOperation(args.operation);
+  const startFrameRef = readOptionalResourceRef(args.startFrameRef, 'startFrameRef');
+  const endFrameRef = readOptionalResourceRef(args.endFrameRef, 'endFrameRef');
+  const referenceVideoRef = readOptionalResourceRef(args.referenceVideoRef, 'referenceVideoRef');
   return {
+    ...(operation ? { operation } : {}),
+    ...(startFrameRef ? { startFrameRef } : {}),
+    ...(endFrameRef ? { endFrameRef } : {}),
+    ...(referenceVideoRef ? { referenceVideoRef } : {}),
     ...(readOptionalString(args.referenceImageUrl)
       ? { referenceImageUrl: readOptionalString(args.referenceImageUrl) }
       : {}),
@@ -482,6 +496,22 @@ function readVideoReferenceInputs(args: Record<string, unknown>): Record<string,
       ? { editInstruction: readOptionalString(args.editInstruction) }
       : {}),
   };
+}
+
+function readOptionalVideoOperation(value: unknown) {
+  if (value === undefined) return undefined;
+  if (!isVideoOperationId(value)) {
+    throw new Error(`GenerateVideo received unsupported canonical operation: ${String(value)}`);
+  }
+  return value;
+}
+
+function readOptionalResourceRef(value: unknown, fieldName: string): ResourceRef | undefined {
+  if (value === undefined) return undefined;
+  if (!isResourceRef(value)) {
+    throw new Error(`GenerateVideo ${fieldName} must be a structurally valid ResourceRef.`);
+  }
+  return value;
 }
 
 function readTransformImageReferenceArgs(args: Record<string, unknown>): Record<string, unknown> {
@@ -781,6 +811,7 @@ const MEDIA_TOOL_LOCALIZATION = {
           'Provider 表达适配模式。auto/agentic 使用 Agent prompt 上下文；native 直接发送提示词。',
         providerId: '可选显式 provider id，用于媒体路由。',
         modelId: '可选显式 model id，用于媒体路由。',
+        operation: '可选规范化单片段视频操作。',
         duration: '视频时长，单位秒，范围 1 到 30，默认 4。',
         resolution: '视频分辨率，默认 720p。',
         fps: '帧率，默认 24。',
@@ -788,6 +819,9 @@ const MEDIA_TOOL_LOCALIZATION = {
         referenceImageUrl: '可选远程参考图 URL，用于图生视频。',
         referenceImageUri: '可选宿主已解析的本地参考图 URI/path，用于图生视频。',
         referenceImageBase64: '可选参考图 base64 字节，不包含 data: 前缀。',
+        startFrameRef: '稳定首帧 ResourceRef，由宿主为 provider 授权物化。',
+        endFrameRef: '稳定尾帧 ResourceRef，由宿主为 provider 授权物化。',
+        referenceVideoRef: '稳定源/参考视频 ResourceRef，由宿主为 provider 授权物化。',
         referenceVideoUrl: '可选远程参考视频 URL，用于 video-to-video 生成。',
         startFrameImageBase64: '可选首帧图像 base64 字节，不包含 data: 前缀。',
         endFrameImageBase64: '可选尾帧图像 base64 字节，不包含 data: 前缀。',
@@ -1372,6 +1406,22 @@ export function registerMediaAgentTools(
             type: 'string',
             description: 'Optional explicit model id for media routing',
           },
+          operation: {
+            type: 'string',
+            enum: [
+              'generate-from-prompt',
+              'generate-from-image',
+              'generate-from-keyframes',
+              'transform',
+              'restyle',
+              'extend',
+              'enhance',
+              'trim',
+              'retime',
+              'prepare-for-timeline',
+            ],
+            description: 'Optional canonical single-clip video operation.',
+          },
           duration: {
             type: 'number',
             description: 'Video duration in seconds (1-30, default: 4)',
@@ -1401,6 +1451,21 @@ export function registerMediaAgentTools(
           referenceImageBase64: {
             type: 'string',
             description: 'Optional reference image bytes as base64 without a data: prefix',
+          },
+          startFrameRef: {
+            type: 'object',
+            description:
+              'Stable ResourceRef for the first frame; the host materializes it for the provider.',
+          },
+          endFrameRef: {
+            type: 'object',
+            description:
+              'Stable ResourceRef for the last frame; the host materializes it for the provider.',
+          },
+          referenceVideoRef: {
+            type: 'object',
+            description:
+              'Stable ResourceRef for a source/reference video; the host materializes it for the provider.',
           },
           referenceVideoUrl: {
             type: 'string',

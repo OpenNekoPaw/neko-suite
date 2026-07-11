@@ -6,7 +6,7 @@
  * unnecessary for a single-user desktop application.
  */
 
-import type { Model } from '../types/provider';
+import type { Model, Provider } from '../types/provider';
 import type { Adapter } from '../types/adapter';
 import type { ConfigManager } from '../config/config-manager';
 import type { ProviderProtocolProfile, ProviderType } from '@neko/shared';
@@ -39,6 +39,11 @@ export class ProviderRegistry {
       model?.protocol ??
       provider.type;
     return getAdapterRegistry().getForType(adapterType);
+  }
+
+  /** Resolve the configured provider for capability negotiation. */
+  getProviderConfig(providerId: string): Provider | undefined {
+    return this.configManager.getProvider(providerId);
   }
 
   /**

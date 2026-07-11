@@ -11,10 +11,11 @@ export function resolveImageGenerationType(request: ImageGenerationRequest): Med
 }
 
 export function resolveVideoGenerationType(request: VideoGenerationRequest): MediaGenerationType {
-  if (request.referenceVideoUrl || request.sourceVideoUrl) {
+  if (request.referenceVideoRef || request.referenceVideoUrl || request.sourceVideoUrl) {
     return 'video-to-video';
   }
   if (
+    request.startFrameRef ||
     request.referenceImageUrl ||
     request.referenceImageBase64 ||
     request.referenceImageUri ||
