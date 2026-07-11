@@ -32,42 +32,42 @@
 
 ## 4. Storyboard Source Normalization
 
-- [ ] 4.1 Implement prompt/text source adapters using Story planning APIs and map their results to the canonical Storyboard contract.
-- [ ] 4.2 Implement script/screenplay source adapter preserving scene boundaries, dialogue context, narrative order, and source trace.
-- [ ] 4.3 Implement document adapter using Content extraction and explicit routing to text, visual, comic, or mixed Storyboard profiles.
-- [ ] 4.4 Migrate comic/manga/webtoon OCR, panel segmentation, reading order, speech-bubble mapping, and continuity logic into `from-comic` without applying it to non-comic sources.
-- [ ] 4.5 Implement image-sequence Storyboard normalization with stable image ResourceRefs and ordered source trace.
-- [ ] 4.6 Implement revision-aware existing-Storyboard refinement for shot split, merge, reorder, rewrite, and reference changes.
-- [ ] 4.7 Add Canvas Storyboard projection adapter and tests proving Canvas node/render state is not canonical Storyboard truth.
-- [ ] 4.8 Update Cut handoff adapter to consume validated canonical Storyboard revisions without dual-writing Storyboard truth.
-- [ ] 4.9 Add fixture tests for prompt, prose, screenplay, PDF/document, comic/webtoon, image sequence, mixed document, and existing Storyboard sources.
+- [x] 4.1 Implement prompt/text source adapters using Story planning APIs and map their results to the canonical Storyboard contract.
+- [x] 4.2 Implement script/screenplay source adapter preserving scene boundaries, dialogue context, narrative order, and source trace.
+- [x] 4.3 Implement document adapter using Content extraction and explicit routing to text, visual, comic, or mixed Storyboard profiles.
+- [x] 4.4 Migrate comic/manga/webtoon OCR, panel segmentation, reading order, speech-bubble mapping, and continuity logic into `from-comic` without applying it to non-comic sources.
+- [x] 4.5 Implement image-sequence Storyboard normalization with stable image ResourceRefs and ordered source trace.
+- [x] 4.6 Implement revision-aware existing-Storyboard refinement for shot split, merge, reorder, rewrite, and reference changes.
+- [x] 4.7 Add Canvas Storyboard projection adapter and tests proving Canvas node/render state is not canonical Storyboard truth.
+- [x] 4.8 Update Cut handoff adapter to consume validated canonical Storyboard revisions without dual-writing Storyboard truth.
+- [x] 4.9 Add fixture tests for prompt, prose, screenplay, PDF/document, comic/webtoon, image sequence, mixed document, and existing Storyboard sources.
 
 ## 5. Image and Video Capability Convergence
 
-- [ ] 5.1 Add an Image operation capability registry that composes Media, Sketch, Canvas, and Engine adapters without cross-feature imports.
-- [ ] 5.2 Register and verify current Image generate, edit, inpaint, upscale, colorize, style-transfer, layer/composite, and background-related capabilities.
-- [ ] 5.3 Define and implement explicit outpaint behavior rather than relying on undocumented aspect-ratio or prompt substitution.
-- [ ] 5.4 Split image `split` into explicit grid/crop, comic-panel, and semantic-segmentation profiles, implementing only audited supported profiles and diagnosing the rest.
-- [ ] 5.5 Add a Video operation capability registry for prompt, image, keyframe, reference/video-to-video, transform/restyle, extend/enhance, and timeline preparation.
-- [ ] 5.6 Register current Media Provider video request fields, including stable first/end frame refs, reference video, edit instruction, motion, camera, shot scale, duration, and aspect ratio.
-- [ ] 5.7 Integrate Canvas ShotNode first/last-frame relationships through the canonical keyframe video operation without persisting Canvas runtime handles.
-- [ ] 5.8 Add Cut adapters for accepted generated clip insertion and single-clip timeline preparation while keeping timeline-wide edits in Cut/video-editing.
-- [ ] 5.9 Update provider adapters to declare operation support and fail visibly when end-frame, video transformation, enhancement, extension, or other requested controls are unavailable.
-- [ ] 5.10 Add capability-matrix tests proving unsupported fields are not silently dropped and provider-specific extensions do not leak into canonical Skill content.
+- [x] 5.1 Add an Image operation capability registry that composes Media, Sketch, Canvas, and Engine adapters without cross-feature imports.
+- [x] 5.2 Register and verify current Image generate, edit, inpaint, upscale, colorize, style-transfer, layer/composite, and background-related capabilities.
+- [x] 5.3 Define and implement explicit outpaint behavior rather than relying on undocumented aspect-ratio or prompt substitution.
+- [x] 5.4 Split image `split` into explicit grid/crop, comic-panel, and semantic-segmentation profiles, implementing only audited supported profiles and diagnosing the rest.
+- [x] 5.5 Add a Video operation capability registry for prompt, image, keyframe, reference/video-to-video, transform/restyle, extend/enhance, and timeline preparation.
+- [x] 5.6 Register current Media Provider video request fields, including stable first/end frame refs, reference video, edit instruction, motion, camera, shot scale, duration, and aspect ratio.
+- [x] 5.7 Integrate Canvas ShotNode first/last-frame relationships through the canonical keyframe video operation without persisting Canvas runtime handles.
+- [x] 5.8 Add Cut adapters for accepted generated clip insertion and single-clip timeline preparation while keeping timeline-wide edits in Cut/video-editing.
+- [x] 5.9 Update provider adapters to declare operation support and fail visibly when end-frame, video transformation, enhancement, extension, or other requested controls are unavailable.
+- [x] 5.10 Add capability-matrix tests proving unsupported fields are not silently dropped and provider-specific extensions do not leak into canonical Skill content.
 
 ## 6. Quality Core and External Perception Adapters
 
-- [ ] 6.1 Refactor Quality runtime entry points from canonical `mediaPath` inputs to `QualityTarget` ResourceRef/revision inputs with authorized materialization adapters.
-- [ ] 6.2 Split existing evaluation into typed structural, technical, perception, and policy evaluator ports plus a deterministic aggregator.
-- [ ] 6.3 Adapt current multimodal LLM image/video evaluation to the PerceptionEvaluator port and record provider/model/version/coverage in evidence.
-- [ ] 6.4 Adapt current CLIP consistency scorer to an optional local perception/screening adapter without making its score a complete Gate verdict.
-- [ ] 6.5 Adapt frame extraction/video probe and audio loudness/silence analysis to TechnicalEvaluator evidence.
-- [ ] 6.6 Add authorized external perception materialization that sends only required media/reference content and rejects arbitrary local paths or project archives.
-- [ ] 6.7 Implement image, video-clip, audio, Storyboard, cross-shot consistency, timeline/final-cut, project-artifact, and deliverable profile selection.
-- [ ] 6.8 Implement revision/content-digest comparison that marks QualityEvidence and Gate results stale after relevant asset or project edits.
-- [ ] 6.9 Separate read-only evaluation from approved repair execution, enforce bounded retries, preserve original evidence/assets, and produce new lineage-bearing revisions.
-- [ ] 6.10 Add rejection/migration-only handling for legacy `mediaPath` requests and poison tests proving default runtime cannot silently fall back.
-- [ ] 6.11 Add evaluator/aggregator tests for missing perception providers, technical failure with high visual score, partial sampling coverage, policy manual-review, and stale evidence.
+- [x] 6.1 Refactor Quality runtime entry points from canonical `mediaPath` inputs to `QualityTarget` ResourceRef/revision inputs with authorized materialization adapters.
+- [x] 6.2 Split existing evaluation into typed structural, technical, perception, and policy evaluator ports plus a deterministic aggregator.
+- [x] 6.3 Adapt current multimodal LLM image/video evaluation to the PerceptionEvaluator port and record provider/model/version/coverage in evidence.
+- [x] 6.4 Adapt current CLIP consistency scorer to an optional local perception/screening adapter without making its score a complete Gate verdict.
+- [x] 6.5 Adapt frame extraction/video probe and audio loudness/silence analysis to TechnicalEvaluator evidence.
+- [x] 6.6 Add authorized external perception materialization that sends only required media/reference content and rejects arbitrary local paths or project archives.
+- [x] 6.7 Implement image, video-clip, audio, Storyboard, cross-shot consistency, timeline/final-cut, project-artifact, and deliverable profile selection.
+- [x] 6.8 Implement revision/content-digest comparison that marks QualityEvidence and Gate results stale after relevant asset or project edits.
+- [x] 6.9 Separate read-only evaluation from approved repair execution, enforce bounded retries, preserve original evidence/assets, and produce new lineage-bearing revisions.
+- [x] 6.10 Add rejection/migration-only handling for legacy `mediaPath` requests and poison tests proving default runtime cannot silently fall back.
+- [x] 6.11 Add evaluator/aggregator tests for missing perception providers, technical failure with high visual score, partial sampling coverage, policy manual-review, and stale evidence.
 
 ## 7. Owning `.nk*` Project Validators
 
