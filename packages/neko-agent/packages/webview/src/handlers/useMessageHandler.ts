@@ -36,10 +36,14 @@ import type { BoundActiveSkillIndicator } from './types';
 import type { ActivationProgressTimeline } from '@/presenters/activation-progress-presenter';
 import type { ActiveTurnTimelineState } from '@/presenters/active-turn-timeline-presenter';
 import type { MediaModelSelection } from '@/hooks/useUIState';
+import type { ConversationRenderCoordinator } from '@/render-lifecycle/conversation-render-coordinator';
 import type { ExtensionToWebviewMessage } from './messages';
 import { AgentHostMessages, getAgentHostRuntimeAdapter } from '@/messages';
 import { readAgentTurnTimelineRecoveryRequests } from './timeline-recovery-state';
-import { createTimelineRenderCommitScheduler } from './timeline-render-commit-scheduler';
+import {
+  createTimelineRenderCommitScheduler,
+  type TimelineRenderCommitScheduler,
+} from './timeline-render-commit-scheduler';
 import {
   getAgentMarkdownSessionRegistry,
   type AgentMarkdownSessionPublication,
@@ -79,6 +83,7 @@ export interface UseMessageHandlerProps {
   streamingMessageIdRef: MutableRefObject<string | null>;
   conversationMessagesRef: MutableRefObject<Map<string, Message[]>>;
   conversationStreamingRef: MutableRefObject<Map<string, StreamingState>>;
+  conversationRenderCoordinator: ConversationRenderCoordinator;
 
   // State setters - Chat
   setMessages: React.Dispatch<React.SetStateAction<Message[]>>;
@@ -154,23 +159,26 @@ export interface UseMessageHandlerReturn {
  * Custom hook for message handling
  */
 export function useMessageHandler(props: UseMessageHandlerProps): UseMessageHandlerReturn {
-  const timelineRenderSchedulerRef = useRef<ReturnType<
-    typeof createTimelineRenderCommitScheduler
-  > | null>(null);
-  if (!timelineRenderSchedulerRef.current) {
-    timelineRenderSchedulerRef.current = createTimelineRenderCommitScheduler();
-  }
-  const timelineRenderScheduler = timelineRenderSchedulerRef.current;
+  const timelineRenderSchedulerOwnerRef = useRef<TimelineRenderCommitScheduler | null>(null);
+  timelineRenderSchedulerOwnerRef.current ??= createTimelineRenderCommitScheduler();
+  const timelineRenderSchedulerFacadeRef = useRef<TimelineRenderCommitScheduler | null>(null);
+  timelineRenderSchedulerFacadeRef.current ??= createRestartableTimelineRenderSchedulerFacade(
+    timelineRenderSchedulerOwnerRef,
+  );
+  const timelineRenderScheduler = timelineRenderSchedulerFacadeRef.current;
   const markdownSessionRegistry = getAgentMarkdownSessionRegistry();
   useEffect(() => {
+    if (timelineRenderSchedulerOwnerRef.current?.metrics().disposed !== false) {
+      timelineRenderSchedulerOwnerRef.current = createTimelineRenderCommitScheduler();
+    }
     for (const request of readAgentTurnTimelineRecoveryRequests(getAgentHostRuntimeAdapter())) {
       AgentHostMessages.requestAgentTurnTimelineSnapshot(request);
     }
     return () => {
-      timelineRenderScheduler.dispose();
+      timelineRenderSchedulerOwnerRef.current?.dispose();
       markdownSessionRegistry.disposeAll();
     };
-  }, []);
+  }, [markdownSessionRegistry]);
 
   const {
     messages,
@@ -190,6 +198,7 @@ export function useMessageHandler(props: UseMessageHandlerProps): UseMessageHand
     streamingMessageIdRef,
     conversationMessagesRef,
     conversationStreamingRef,
+    conversationRenderCoordinator,
     setMessages,
     setIsThinking,
     setStreamingMessageId,
@@ -322,6 +331,7 @@ export function useMessageHandler(props: UseMessageHandlerProps): UseMessageHand
       updateNonCurrentConversation,
       timelineRenderScheduler,
       markdownSessionRegistry,
+      conversationRenderCoordinator,
       pendingForegroundConversationActivationRef,
       completeForegroundConversationActivation,
       requestQueuedMessageEdit,
@@ -381,6 +391,7 @@ export function useMessageHandler(props: UseMessageHandlerProps): UseMessageHand
       updateNonCurrentConversation,
       timelineRenderScheduler,
       markdownSessionRegistry,
+      conversationRenderCoordinator,
       pendingForegroundConversationActivationRef,
       completeForegroundConversationActivation,
       requestQueuedMessageEdit,
@@ -417,6 +428,25 @@ export function useMessageHandler(props: UseMessageHandlerProps): UseMessageHand
   );
 
   return { handleMessage, flushTimelineRendering, commitTimelineMarkdownSnapshot };
+}
+
+function createRestartableTimelineRenderSchedulerFacade(
+  ownerRef: MutableRefObject<TimelineRenderCommitScheduler | null>,
+): TimelineRenderCommitScheduler {
+  const requireOwner = (): TimelineRenderCommitScheduler => {
+    const owner = ownerRef.current;
+    if (!owner) {
+      throw new Error('Timeline render scheduler owner is unavailable.');
+    }
+    return owner;
+  };
+  return {
+    enqueue: (message, commit) => requireOwner().enqueue(message, commit),
+    flushConversation: (conversationId) => requireOwner().flushConversation(conversationId),
+    flushAll: () => requireOwner().flushAll(),
+    dispose: () => requireOwner().dispose(),
+    metrics: () => requireOwner().metrics(),
+  };
 }
 
 function isForeignFeatureHostMessage(message: unknown): boolean {

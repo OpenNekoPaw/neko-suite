@@ -12,6 +12,7 @@ import type {
   OpenTab,
 } from '@neko-agent/types';
 import type { ActiveTurnTimelineState } from '@/presenters/active-turn-timeline-presenter';
+import { ConversationRenderCoordinator } from '@/render-lifecycle/conversation-render-coordinator';
 
 /**
  * Streaming state for a conversation
@@ -52,6 +53,7 @@ export interface ConversationStateRefs {
   streamingMessageIdRef: MutableRefObject<string | null>;
   conversationMessagesRef: MutableRefObject<Map<string, Message[]>>;
   conversationStreamingRef: MutableRefObject<Map<string, StreamingState>>;
+  conversationRenderCoordinator: ConversationRenderCoordinator;
 }
 
 /**
@@ -84,6 +86,9 @@ export function useConversationState(): UseConversationStateReturn {
   // Per-conversation state maps (preserve state when switching conversations)
   const conversationMessagesRef = useRef<Map<string, Message[]>>(new Map());
   const conversationStreamingRef = useRef<Map<string, StreamingState>>(new Map());
+  const conversationRenderCoordinatorRef = useRef<ConversationRenderCoordinator | null>(null);
+  conversationRenderCoordinatorRef.current ??= new ConversationRenderCoordinator();
+  const conversationRenderCoordinator = conversationRenderCoordinatorRef.current;
 
   // Current conversation's chat state
   const [messages, setMessages] = useState<Message[]>([]);
@@ -168,6 +173,7 @@ export function useConversationState(): UseConversationStateReturn {
     streamingMessageIdRef,
     conversationMessagesRef,
     conversationStreamingRef,
+    conversationRenderCoordinator,
     // Actions
     setMessages,
     setIsThinking,

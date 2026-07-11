@@ -1,5 +1,5 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
-import { useEffect } from 'react';
+import { StrictMode, useEffect } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import type { AgentContextPayload } from '@neko/shared';
 import type {
@@ -15,6 +15,7 @@ import {
   createAgentMarkdownSessionKey,
   getAgentMarkdownSessionRegistry,
 } from '@/markdown/agent-markdown-session-registry';
+import { ConversationRenderCoordinator } from '@/render-lifecycle/conversation-render-coordinator';
 import { ConversationController } from './ConversationController';
 
 const vscodeMocks = vi.hoisted(() => ({
@@ -608,6 +609,65 @@ describe('ConversationController entry state', () => {
     expect(screen.getByTestId('workspace-work-items').textContent).toBe('');
   });
 
+  it('routes all foreground activation sources through the render coordinator', () => {
+    vi.clearAllMocks();
+    const prepareActivation = vi.spyOn(
+      ConversationRenderCoordinator.prototype,
+      'prepareActivation',
+    );
+    render(<ConversationController {...createProps()} />);
+
+    const openTabs = [
+      { id: 'tab-a', title: 'Chat A', conversationId: 'conv-a' },
+      { id: 'tab-b', title: 'Chat B', conversationId: 'conv-b' },
+      {
+        id: 'tab-role',
+        title: 'Role C',
+        conversationId: 'conv-role',
+        kind: 'character-dialogue' as const,
+      },
+    ];
+    act(() => {
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          data: {
+            type: 'tabState',
+            tabState: { openTabs, activeTabId: 'tab-b' },
+          },
+        }),
+      );
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          data: {
+            type: 'activeConversation',
+            conversation: { id: 'conv-b', title: 'Chat B', messages: [] },
+          },
+        }),
+      );
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          data: {
+            type: 'tabState',
+            tabState: { openTabs, activeTabId: 'tab-a' },
+          },
+        }),
+      );
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Switch Chat B' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Switch Role C' }));
+
+    expect(prepareActivation.mock.calls.map(([activation]) => activation.source)).toEqual(
+      expect.arrayContaining([
+        'extension-active-conversation',
+        'extension-tab-state',
+        'ui-tab',
+        'character-role-tab',
+      ]),
+    );
+    prepareActivation.mockRestore();
+  });
+
   it('finalizes orphaned Markdown streaming state when a cached ordinary tab is activated from the UI', () => {
     vi.clearAllMocks();
     render(<ConversationController {...createProps()} />);
@@ -645,6 +705,45 @@ describe('ConversationController entry state', () => {
 
     expect(screen.getByTestId('workspace-messages').textContent).toBe('partial B');
     expect(screen.getByTestId('workspace-streaming-flags').textContent).toBe('false:false');
+  });
+
+  it('keeps Timeline and Markdown resources usable after StrictMode effect replay', () => {
+    vi.clearAllMocks();
+    render(
+      <StrictMode>
+        <ConversationController {...createProps()} />
+      </StrictMode>,
+    );
+
+    act(() => {
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          data: {
+            type: 'tabState',
+            tabState: {
+              openTabs: [{ id: 'tab-a', title: 'Chat A', conversationId: 'conv-a' }],
+              activeTabId: 'tab-a',
+            },
+          },
+        }),
+      );
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          data: timelineSnapshotMessage('conv-a', 'message-a', 'strict **markdown**'),
+        }),
+      );
+    });
+
+    expect(screen.getByTestId('workspace-messages').textContent).toBe('strict **markdown**');
+    expect(
+      getAgentMarkdownSessionRegistry().getSnapshot(
+        createAgentMarkdownSessionKey({
+          conversationId: 'conv-a',
+          messageId: 'message-a',
+          itemId: 'text-1',
+        }),
+      ),
+    ).toMatchObject({ source: 'strict **markdown**', isFinal: false });
   });
 
   it('rebuilds a disposed Markdown session before a cached Timeline tab is activated from the UI', () => {

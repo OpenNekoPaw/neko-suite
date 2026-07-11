@@ -26,6 +26,11 @@ import { shouldActivateForegroundConversation } from './foreground-activation';
 import { commitActiveTurnTimelineMarkdownSnapshot } from './conversation-tab-session-state';
 import { projectQueuedMessagesCleared } from '@/presenters/message-queue-presenter';
 import { getActiveTimelineForMessage } from './timeline-handlers';
+import {
+  commitConversationRenderActivation,
+  createConversationMarkdownTimelineResourceOwner,
+  createConversationVisibleStatePort,
+} from '@/render-lifecycle/legacy-conversation-render-adapter';
 
 /**
  * Handle 'error' message - Error occurred
@@ -235,23 +240,45 @@ const handleActiveConversation: MessageHandler<'activeConversation'> = (
         context.conversationStreamingRef.current.get(conversationId),
       )
     : undefined;
-  const markdownPublication = nextStreaming?.activeTurnTimeline
-    ? commitActiveTurnTimelineMarkdownSnapshot(context, nextStreaming.activeTurnTimeline)
-    : undefined;
-
-  context.setMessages(projection.messages);
-  context.setStreamingMessageId(projection.streaming.streamingMessageId);
-  context.streamingMessageIdRef.current = projection.streaming.streamingMessageId;
-  context.setIsThinking(projection.streaming.isThinking);
-  context.setQueuedMessageCount?.(projection.streaming.queuedMessageCount ?? 0);
-  context.setQueuedMessages?.(projection.streaming.queuedMessages ?? []);
-  context.setActiveConversationId(projection.activeConversationId);
-  context.activeConversationIdRef.current = projection.activeConversationId;
   if (conversationId && nextStreaming) {
-    context.conversationMessagesRef.current.set(conversationId, projection.messages);
-    context.conversationStreamingRef.current.set(conversationId, nextStreaming);
+    const coordinator = context.conversationRenderCoordinator;
+    if (!coordinator) {
+      throw new Error('Active conversation activation requires the canonical render coordinator.');
+    }
+    commitConversationRenderActivation({
+      coordinator,
+      source: 'extension-active-conversation',
+      projection: {
+        activeConversationId: conversationId,
+        messages: projection.messages,
+        streaming: nextStreaming,
+      },
+      visibleState: createConversationVisibleStatePort({
+        activeConversationIdRef: context.activeConversationIdRef,
+        streamingMessageIdRef: context.streamingMessageIdRef,
+        conversationMessagesRef: context.conversationMessagesRef,
+        conversationStreamingRef: context.conversationStreamingRef,
+        setMessages: context.setMessages,
+        setStreamingMessageId: context.setStreamingMessageId,
+        setIsThinking: context.setIsThinking,
+        setQueuedMessageCount: context.setQueuedMessageCount,
+        setQueuedMessages: context.setQueuedMessages,
+        setActiveConversationId: context.setActiveConversationId,
+      }),
+      markdown: createConversationMarkdownTimelineResourceOwner((timeline) =>
+        commitActiveTurnTimelineMarkdownSnapshot(context, timeline),
+      ),
+    });
+  } else {
+    context.setMessages(projection.messages);
+    context.setStreamingMessageId(projection.streaming.streamingMessageId);
+    context.streamingMessageIdRef.current = projection.streaming.streamingMessageId;
+    context.setIsThinking(projection.streaming.isThinking);
+    context.setQueuedMessageCount?.(projection.streaming.queuedMessageCount ?? 0);
+    context.setQueuedMessages?.(projection.streaming.queuedMessages ?? []);
+    context.setActiveConversationId(projection.activeConversationId);
+    context.activeConversationIdRef.current = projection.activeConversationId;
   }
-  markdownPublication?.publish();
   context.isTablessConversationViewRef.current = false;
   context.setOpenTabs(projection.openTabs);
   context.setActiveTabId(projection.activeTabId);

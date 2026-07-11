@@ -20,7 +20,7 @@ const handleEmbodyCharacterSessionStarted: MessageHandler<'embodyCharacterSessio
   persistCurrentVisibleConversation(context);
   context.conversationMessagesRef.current.delete(message.session.sessionId);
   context.conversationStreamingRef.current.delete(message.session.sessionId);
-  activateConversationTabView(context, message.session.sessionId);
+  activateConversationTabView(context, message.session.sessionId, 'extension-active-conversation');
   context.setOpenTabs((prev) => [
     ...prev.filter((tab) => tab.id !== message.tab.id),
     {

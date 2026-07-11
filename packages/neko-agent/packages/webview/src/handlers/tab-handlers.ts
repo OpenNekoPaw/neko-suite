@@ -53,7 +53,7 @@ const handleTabState: MessageHandler<'tabState'> = (message: TabStateMessage, co
       context.requestConfigSnapshot?.();
     }
     if (activeTab) {
-      activateConversationTabView(context, activeTab.conversationId);
+      activateConversationTabView(context, activeTab.conversationId, 'extension-tab-state');
       context.setActiveTab('chat');
     }
   }

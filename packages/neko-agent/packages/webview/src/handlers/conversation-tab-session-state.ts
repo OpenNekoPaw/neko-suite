@@ -2,6 +2,12 @@ import { projectConversationTabActivation } from '@/presenters/conversation-tab-
 import type { ActiveTurnTimelineState } from '@/presenters/active-turn-timeline-presenter';
 import type { AgentMarkdownSessionPublication } from '@/markdown/agent-markdown-session-registry';
 import type { MessageHandlerContext } from './types';
+import type { ConversationActivationSource } from '@/render-lifecycle/conversation-render-contract';
+import {
+  commitConversationRenderActivation,
+  createConversationMarkdownTimelineResourceOwner,
+  createConversationVisibleStatePort,
+} from '@/render-lifecycle/legacy-conversation-render-adapter';
 
 export function persistCurrentVisibleConversation(context: MessageHandlerContext): void {
   const conversationId = context.activeConversationIdRef.current;
@@ -20,33 +26,39 @@ export function persistCurrentVisibleConversation(context: MessageHandlerContext
 export function activateConversationTabView(
   context: MessageHandlerContext,
   conversationId: string,
+  source: ConversationActivationSource,
 ): void {
+  const coordinator = context.conversationRenderCoordinator;
+  if (!coordinator) {
+    throw new Error('Conversation activation requires the canonical render coordinator.');
+  }
   const projection = projectConversationTabActivation({
     conversationId,
     cachedMessages: context.conversationMessagesRef.current.get(conversationId),
     cachedStreaming: context.conversationStreamingRef.current.get(conversationId),
   });
 
-  const timeline = projection.streaming.activeTurnTimeline;
-  const markdownPublication = timeline
-    ? commitActiveTurnTimelineMarkdownSnapshot(context, timeline)
-    : undefined;
-
   context.isTablessConversationViewRef.current = false;
-  context.conversationMessagesRef.current.set(projection.activeConversationId, projection.messages);
-  context.conversationStreamingRef.current.set(
-    projection.activeConversationId,
-    projection.streaming,
-  );
-  context.setMessages(projection.messages);
-  context.setStreamingMessageId(projection.streaming.streamingMessageId);
-  context.streamingMessageIdRef.current = projection.streaming.streamingMessageId;
-  context.setIsThinking(projection.streaming.isThinking);
-  context.setQueuedMessageCount?.(projection.streaming.queuedMessageCount ?? 0);
-  context.setQueuedMessages?.(projection.streaming.queuedMessages ?? []);
-  context.activeConversationIdRef.current = projection.activeConversationId;
-  context.setActiveConversationId(projection.activeConversationId);
-  markdownPublication?.publish();
+  commitConversationRenderActivation({
+    coordinator,
+    source,
+    projection,
+    visibleState: createConversationVisibleStatePort({
+      activeConversationIdRef: context.activeConversationIdRef,
+      streamingMessageIdRef: context.streamingMessageIdRef,
+      conversationMessagesRef: context.conversationMessagesRef,
+      conversationStreamingRef: context.conversationStreamingRef,
+      setMessages: context.setMessages,
+      setStreamingMessageId: context.setStreamingMessageId,
+      setIsThinking: context.setIsThinking,
+      setQueuedMessageCount: context.setQueuedMessageCount,
+      setQueuedMessages: context.setQueuedMessages,
+      setActiveConversationId: context.setActiveConversationId,
+    }),
+    markdown: createConversationMarkdownTimelineResourceOwner((timeline) =>
+      commitActiveTurnTimelineMarkdownSnapshot(context, timeline),
+    ),
+  });
 }
 
 export function commitActiveTurnTimelineMarkdownSnapshot(

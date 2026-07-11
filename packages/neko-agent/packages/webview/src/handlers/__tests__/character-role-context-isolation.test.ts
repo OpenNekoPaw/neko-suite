@@ -18,6 +18,7 @@ import {
 } from '@/markdown/agent-markdown-session-registry';
 import type { PluginsAvailable } from '@/components/ChatView/SendToMenu';
 import type { ActiveTurnTimelineState } from '@/presenters/active-turn-timeline-presenter';
+import { ConversationRenderCoordinator } from '@/render-lifecycle/conversation-render-coordinator';
 import { conversationHandlers } from '../conversation-handlers';
 import { tabHandlers } from '../tab-handlers';
 import { timelineHandlers } from '../timeline-handlers';
@@ -1351,6 +1352,7 @@ function createContextHarness(options: ContextHarnessOptions): ContextHarness {
     activeConversationIdRef,
     conversationMessagesRef,
     conversationStreamingRef,
+    conversationRenderCoordinator: new ConversationRenderCoordinator(),
     openTabs,
     activeTabId,
     isTablessConversationViewRef,

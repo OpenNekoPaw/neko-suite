@@ -30,6 +30,7 @@ import type {
   PluginSlashCommandDef,
 } from '@/components/ChatView/InputArea/types';
 import type { ActiveSkillIndicator } from '@/components/ChatView/SkillIndicator';
+import type { ConversationRenderCoordinator } from '@/render-lifecycle/conversation-render-coordinator';
 
 /** Active skill indicator bound to a specific conversation */
 export interface BoundActiveSkillIndicator extends ActiveSkillIndicator {
@@ -154,6 +155,8 @@ export interface HelperContext {
   timelineRenderScheduler?: TimelineRenderCommitScheduler;
   /** Required canonical message/item-scoped normalized Markdown session owner. */
   markdownSessionRegistry?: AgentMarkdownSessionRegistry;
+  /** Canonical Webview-local owner for conversation render snapshots and activation. */
+  conversationRenderCoordinator?: ConversationRenderCoordinator;
   isCurrentConversation: (conversationId?: string) => boolean;
   updateNonCurrentConversation: (
     conversationId: string,

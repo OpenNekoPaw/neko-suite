@@ -58,6 +58,12 @@ import { ChatWorkspace } from './ChatWorkspace';
 import { isCharacterRoleConversationKind } from '@/presenters/character-role-session-presenter';
 import { projectConversationTabActivation } from '@/presenters/conversation-tab-activation-presenter';
 import {
+  commitConversationRenderActivation,
+  createConversationMarkdownTimelineResourceOwner,
+  createConversationVisibleStatePort,
+} from '@/render-lifecycle/legacy-conversation-render-adapter';
+import type { ConversationActivationSource } from '@/render-lifecycle/conversation-render-contract';
+import {
   applyUserMessageToConversationSummaries,
   applyUserMessageToOpenTabs,
   projectDisplayTabs,
@@ -170,6 +176,7 @@ export function ConversationController({
     activeConversationIdRef,
     conversationMessagesRef,
     conversationStreamingRef,
+    conversationRenderCoordinator,
     openTabs,
     setOpenTabs,
     activeTabId,
@@ -745,6 +752,7 @@ export function ConversationController({
       streamingMessageIdRef,
       conversationMessagesRef,
       conversationStreamingRef,
+      conversationRenderCoordinator,
       setMessages,
       setIsThinking,
       setStreamingMessageId,
@@ -783,33 +791,36 @@ export function ConversationController({
     });
 
   const commitConversationTabActivation = useCallback(
-    (conversationId: string) => {
+    (conversationId: string, source: ConversationActivationSource) => {
       const projection = projectConversationTabActivation({
         conversationId,
         cachedMessages: conversationMessagesRef.current.get(conversationId),
         cachedStreaming: conversationStreamingRef.current.get(conversationId),
       });
-
-      const markdownPublication = projection.streaming.activeTurnTimeline
-        ? commitTimelineMarkdownSnapshot(projection.streaming.activeTurnTimeline)
-        : undefined;
-
-      conversationMessagesRef.current.set(projection.activeConversationId, projection.messages);
-      conversationStreamingRef.current.set(projection.activeConversationId, projection.streaming);
-      setMessages(projection.messages);
-      setStreamingMessageId(projection.streaming.streamingMessageId);
-      streamingMessageIdRef.current = projection.streaming.streamingMessageId;
-      setIsThinking(projection.streaming.isThinking);
-      setQueuedMessageCount(projection.streaming.queuedMessageCount ?? 0);
-      setQueuedMessages(projection.streaming.queuedMessages ?? []);
-      activeConversationIdRef.current = projection.activeConversationId;
-      setActiveConversationId(projection.activeConversationId);
-      markdownPublication?.publish();
+      commitConversationRenderActivation({
+        coordinator: conversationRenderCoordinator,
+        source,
+        projection,
+        visibleState: createConversationVisibleStatePort({
+          activeConversationIdRef,
+          streamingMessageIdRef,
+          conversationMessagesRef,
+          conversationStreamingRef,
+          setMessages,
+          setStreamingMessageId,
+          setIsThinking,
+          setQueuedMessageCount,
+          setQueuedMessages,
+          setActiveConversationId,
+        }),
+        markdown: createConversationMarkdownTimelineResourceOwner(commitTimelineMarkdownSnapshot),
+      });
     },
     [
       activeConversationIdRef,
       commitTimelineMarkdownSnapshot,
       conversationMessagesRef,
+      conversationRenderCoordinator,
       conversationStreamingRef,
       setActiveConversationId,
       setIsThinking,
@@ -823,7 +834,7 @@ export function ConversationController({
 
   const activateCharacterRoleTab = useCallback(
     (tab: OpenTab) => {
-      commitConversationTabActivation(tab.conversationId);
+      commitConversationTabActivation(tab.conversationId, 'character-role-tab');
       setActiveTab('chat');
     },
     [commitConversationTabActivation],
@@ -1088,7 +1099,7 @@ export function ConversationController({
       };
       setIsForegroundConversationActivationPending(true);
       isTablessConversationViewRef.current = false;
-      commitConversationTabActivation(conversationId);
+      commitConversationTabActivation(conversationId, 'ui-tab');
     },
     [commitConversationTabActivation],
   );
