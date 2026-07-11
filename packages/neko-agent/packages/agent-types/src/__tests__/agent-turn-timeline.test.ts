@@ -181,6 +181,19 @@ describe('Agent Timeline V2 contract', () => {
     expect(result.diagnostics).toContainEqual(expect.objectContaining({ code }));
   });
 
+  it('accepts a coalesced first mutation with an item revision greater than one', () => {
+    const state = apply(
+      batch({
+        deliveryRevision: 1,
+        operations: [
+          { operation: 'append', item: textItem({ itemRevision: 2_000, content: 'coalesced' }) },
+        ],
+      }),
+    );
+
+    expect(state.items.get('text-1')?.itemRevision).toBe(2_000);
+  });
+
   it('distinguishes append from replacement generations', () => {
     let state = apply(
       batch({
@@ -219,34 +232,60 @@ describe('Agent Timeline V2 contract', () => {
     );
   });
 
-  it('rejects item revision gaps and mutation after completion', () => {
+  it('accepts coalesced item revision jumps and completion while rejecting duplicate or stale mutations', () => {
     let state = apply(
       batch({
         deliveryRevision: 1,
         operations: [{ operation: 'append', item: textItem({ itemRevision: 1, content: 'a' }) }],
       }),
     );
-    const gap = validateAgentTurnTimelineMessage(
-      batch({
-        deliveryRevision: 2,
-        operations: [{ operation: 'append', item: textItem({ itemRevision: 3, content: 'b' }) }],
-      }),
-      state,
-    );
-    expect(gap.diagnostics).toContainEqual(expect.objectContaining({ code: 'item-revision-gap' }));
-
     state = apply(
       batch({
         deliveryRevision: 2,
         operations: [
+          { operation: 'append', item: textItem({ itemRevision: 2_000, content: 'b' }) },
+        ],
+      }),
+      state,
+    );
+    state = apply(
+      batch({
+        deliveryRevision: 3,
+        operations: [
+          { operation: 'append', item: textItem({ itemRevision: 4_000, content: 'c' }) },
+        ],
+      }),
+      state,
+    );
+
+    for (const [itemRevision, code] of [
+      [4_000, 'duplicate-item-revision'],
+      [3_999, 'stale-item-revision'],
+    ] as const) {
+      const invalid = validateAgentTurnTimelineMessage(
+        batch({
+          deliveryRevision: 4,
+          operations: [
+            { operation: 'append', item: textItem({ itemRevision, content: 'invalid' }) },
+          ],
+        }),
+        state,
+      );
+      expect(invalid.diagnostics).toContainEqual(expect.objectContaining({ code }));
+    }
+
+    state = apply(
+      batch({
+        deliveryRevision: 4,
+        operations: [
           {
             operation: 'complete',
             itemId: 'text-1',
-            itemRevision: 2,
+            itemRevision: 4_001,
             kind: 'assistant_text',
             sourceGeneration: 1,
             status: 'complete',
-            updatedAt: 2,
+            updatedAt: 4_001,
           },
         ],
       }),
@@ -254,8 +293,10 @@ describe('Agent Timeline V2 contract', () => {
     );
     const late = validateAgentTurnTimelineMessage(
       batch({
-        deliveryRevision: 3,
-        operations: [{ operation: 'append', item: textItem({ itemRevision: 3, content: 'late' }) }],
+        deliveryRevision: 5,
+        operations: [
+          { operation: 'append', item: textItem({ itemRevision: 5_000, content: 'late' }) },
+        ],
       }),
       state,
     );

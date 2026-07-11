@@ -19,11 +19,6 @@ export const COMPOSITE_CONTENT_FENCE_LANGUAGES = [
   'json',
 ] as const;
 
-export interface CompositeContentExtraction {
-  readonly text: string;
-  readonly composites: readonly CompositeBlockData[];
-}
-
 export interface CompositeContentFenceCandidate {
   readonly language: string;
   readonly rawJson: string;
@@ -44,24 +39,6 @@ const ANIMATION_PLAN_DOMAIN_KIND = 'AnimationPlan';
 
 const COMPOSITE_CONTENT_FENCE_LANGUAGE_SET = new Set<string>(COMPOSITE_CONTENT_FENCE_LANGUAGES);
 const COMPOSITE_CONTENT_FENCE_PATTERN = /```([^\n`]*)\n([\s\S]*?)```/g;
-
-export function extractCompositeContentBlocks(markdown: string): CompositeContentExtraction {
-  const composites: CompositeBlockData[] = [];
-  const text = markdown
-    .replace(COMPOSITE_CONTENT_FENCE_PATTERN, (match, info: string, json: string) => {
-      if (!isCompositeContentFenceLanguage(info)) return match;
-      const parsed = parseCompositeContentJson(json);
-      if (parsed.length === 0) return match;
-      for (const composite of parsed) {
-        composites.push(composite);
-      }
-      return '';
-    })
-    .replace(/\n{3,}/g, '\n\n')
-    .trim();
-
-  return { text, composites };
-}
 
 export function isCompositeContentFenceLanguage(info: string | undefined): boolean {
   const language = normalizeFenceLanguage(info);

@@ -1,57 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import {
-  extractCompositeContentBlocks,
-  extractCompositeContentFenceCandidates,
-  parseCompositeContentJson,
-} from '../index';
+import { extractCompositeContentFenceCandidates, parseCompositeContentJson } from '../index';
 
 describe('composite content contract', () => {
-  it('extracts fenced storyboard composite blocks from markdown', () => {
-    const result = extractCompositeContentBlocks(`Here is the plan.
-
-\`\`\`neko-composite
-{
-  "template": "storyboard-table",
-  "title": "Opening",
-  "sections": [
-    {
-      "heading": "Shot 1",
-      "content": "Wide frame",
-      "layout": "table-row",
-      "mediaRefs": [
-        { "toolCallId": "read-1", "assetIndex": 0, "caption": "原图", "role": "original" }
-      ]
-    }
-  ]
-}
-\`\`\`
-
-Done.`);
-
-    expect(result.text).toBe('Here is the plan.\n\nDone.');
-    expect(result.composites).toEqual([
-      {
-        template: 'storyboard-table',
-        title: 'Opening',
-        sections: [
-          {
-            heading: 'Shot 1',
-            content: 'Wide frame',
-            layout: 'table-row',
-            mediaRefs: [
-              {
-                toolCallId: 'read-1',
-                assetIndex: 0,
-                caption: '原图',
-                role: 'original',
-              },
-            ],
-          },
-        ],
-      },
-    ]);
-  });
-
   it('parses envelopes and drops invalid composite payloads', () => {
     expect(
       parseCompositeContentJson(
@@ -275,7 +225,7 @@ Done.`);
   });
 
   it('extracts composite artifacts from json fences while preserving entity extensions and media refs', () => {
-    const result = extractCompositeContentBlocks(`Summary.
+    const markdown = `Summary.
 
 \`\`\`json
 {
@@ -353,10 +303,15 @@ Done.`);
 }
 \`\`\`
 
-Done.`);
+Done.`;
+    const candidates = extractCompositeContentFenceCandidates(markdown);
+    const composites = candidates.flatMap((candidate) =>
+      parseCompositeContentJson(candidate.rawJson),
+    );
 
-    expect(result.text).toBe('Summary.\n\nDone.');
-    expect(result.composites[0]).toMatchObject({
+    expect(markdown).toContain('Summary.');
+    expect(markdown).toContain('Done.');
+    expect(composites[0]).toMatchObject({
       template: 'storyboard-table',
       extensions: {
         'neko.entityMemoryContributionPayload': {
@@ -379,7 +334,7 @@ Done.`);
   });
 
   it('extracts uppercase neko fenced composite artifacts', () => {
-    const result = extractCompositeContentBlocks(`Summary.
+    const markdown = `Summary.
 
 \`\`\`NEKO
 {
@@ -419,10 +374,14 @@ Done.`);
 }
 \`\`\`
 
-Done.`);
+Done.`;
+    const candidates = extractCompositeContentFenceCandidates(markdown);
+    const composites = candidates.flatMap((candidate) =>
+      parseCompositeContentJson(candidate.rawJson),
+    );
 
-    expect(result.text).toBe('Summary.\n\nDone.');
-    expect(result.composites[0]).toMatchObject({
+    expect(candidates[0]?.language).toBe('neko');
+    expect(composites[0]).toMatchObject({
       template: 'storyboard-table',
       title: 'Storyboard Payload',
       storyboardTable: {

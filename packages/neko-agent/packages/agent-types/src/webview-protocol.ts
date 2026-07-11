@@ -702,7 +702,9 @@ export type AgentSessionDiagnosticCode =
   | 'unknown-conversation'
   | 'deleted-conversation'
   | 'missing-session-identity'
-  | 'active-tab-mismatch';
+  | 'active-tab-mismatch'
+  | 'terminal-webview-delivery-unavailable'
+  | 'conversation-durability-failed';
 
 export interface AgentSessionDiagnosticMessage {
   type: 'sessionDiagnostic';

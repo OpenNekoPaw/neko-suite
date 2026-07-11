@@ -64,6 +64,7 @@ export interface AgentTurnTimelineItemCore {
   readonly messageId: string;
   readonly itemId: string;
   readonly sequence: number;
+  /** Semantic mutation watermark; strictly increases but may skip after delivery coalescing. */
   readonly itemRevision: number;
   readonly status: AgentTurnTimelineItemStatus;
   readonly createdAt: number;
@@ -187,6 +188,7 @@ export interface AgentTurnTimelineUpsertOperation {
 export interface AgentTurnTimelineCompleteOperation {
   readonly operation: 'complete';
   readonly itemId: string;
+  /** Semantic mutation watermark; strictly increases but may skip after delivery coalescing. */
   readonly itemRevision: number;
   readonly kind: AgentTurnTimelineTextItem['kind'];
   readonly sourceGeneration: number;
@@ -239,7 +241,6 @@ export type AgentTurnTimelineDiagnosticCode =
   | 'invalid-item-revision'
   | 'duplicate-item-revision'
   | 'stale-item-revision'
-  | 'item-revision-gap'
   | 'invalid-operation'
   | 'invalid-operation-kind'
   | 'invalid-source-generation'
@@ -654,8 +655,10 @@ function validateItemRevision(
   item: { readonly itemId: string; readonly itemRevision: number },
   diagnostics: AgentTurnTimelineValidationDiagnostic[],
 ): void {
-  const expectedRevision = (previous?.itemRevision ?? 0) + 1;
-  if (item.itemRevision === previous?.itemRevision) {
+  if (!previous) return;
+
+  const expectedRevision = previous.itemRevision + 1;
+  if (item.itemRevision === previous.itemRevision) {
     diagnostics.push({
       code: 'duplicate-item-revision',
       message: 'Timeline item revision was already applied.',
@@ -663,18 +666,10 @@ function validateItemRevision(
       itemRevision: item.itemRevision,
       expectedRevision,
     });
-  } else if (previous && item.itemRevision < previous.itemRevision) {
+  } else if (item.itemRevision < previous.itemRevision) {
     diagnostics.push({
       code: 'stale-item-revision',
       message: 'Timeline item revision is stale.',
-      itemId: item.itemId,
-      itemRevision: item.itemRevision,
-      expectedRevision,
-    });
-  } else if (item.itemRevision !== expectedRevision) {
-    diagnostics.push({
-      code: 'item-revision-gap',
-      message: 'Timeline item revision has a gap.',
       itemId: item.itemId,
       itemRevision: item.itemRevision,
       expectedRevision,

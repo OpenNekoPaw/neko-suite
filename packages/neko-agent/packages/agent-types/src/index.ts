@@ -17,6 +17,7 @@ export type {
   CodeDiff,
   CanvasLifecycleBlockData,
   CompositeBlockData,
+  MarkdownDerivedCompositeSource,
   CompositeSection,
   CompositeTemplate,
   MediaRef,
@@ -24,11 +25,9 @@ export type {
 export {
   COMPOSITE_CONTENT_FENCE_LANGUAGES,
   extractCompositeContentFenceCandidates,
-  extractCompositeContentBlocks,
   isCompositeContentFenceLanguage,
   parseCompositeContentJsonCandidates,
   parseCompositeContentJson,
-  type CompositeContentExtraction,
   type CompositeContentFenceCandidate,
 } from './composite-content-contract';
 export type {

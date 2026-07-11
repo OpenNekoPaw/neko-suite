@@ -85,6 +85,20 @@ export interface CompositeBlockData {
   readonly extensions?: ArtifactExtensionMap;
 }
 
+/**
+ * Provenance for a semantic composite projected from a normalized Markdown code block.
+ * The Markdown text block remains the authoritative visual source; derived blocks are
+ * metadata carriers and must not be rendered as a second standalone artifact.
+ */
+export interface MarkdownDerivedCompositeSource {
+  readonly kind: 'normalized-markdown-code-block';
+  readonly sourceBlockId: string;
+  readonly startOffset: number;
+  readonly endOffset: number;
+  readonly language?: string;
+  readonly candidateIndex: number;
+}
+
 export interface CanvasLifecycleBlockData {
   readonly requestId: string;
   readonly success: boolean;
@@ -122,6 +136,8 @@ export interface ContentBlock {
   plan?: Plan;
   /** For composite blocks — structured multimodal presentation intent. */
   composite?: CompositeBlockData;
+  /** Present only when the composite is derived from authoritative Markdown source. */
+  compositeSource?: MarkdownDerivedCompositeSource;
   /** For Canvas lifecycle capability results and follow-up actions. */
   canvasLifecycle?: CanvasLifecycleBlockData;
 }
