@@ -326,8 +326,11 @@ flowchart TD
 
 Rollback is Webview-local: revert coordinator routing and restore the previous helpers while retaining Timeline DTOs. No user data rollback or migration is required.
 
+## Resolved Product Semantics
+
+- Closing an ordinary persisted or locally active UI Tab only removes the Tab projection; it retains the conversation and its background render snapshot. A conversation is permanently disposed only after an explicit lifecycle delete, or when the existing close flow has confirmed that a newly created conversation has neither persisted messages nor local activity. Closing a character-role Tab exits that role session through its existing lifecycle command. Hiding or closing the Webview editor does not archive, delete, or TTL-expire retained background conversations.
+
 ## Open Questions
 
-- Whether closing a UI Tab means permanent conversation disposal or only background retention must follow current product semantics; implementation tests should characterize the existing behavior before wiring `disposeConversation`.
 - The existing virtualized `MessageList` anchor API should be audited before finalizing `anchorOffset`; if stable item anchoring is already available, reuse it rather than introducing another measurement cache.
 - If status/time freshness can be fixed solely by subscribing to snapshot revision, no additional periodic state should enter the coordinator; elapsed display ticking should remain a UI-local concern.

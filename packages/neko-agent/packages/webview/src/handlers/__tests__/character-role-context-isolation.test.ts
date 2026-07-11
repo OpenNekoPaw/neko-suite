@@ -3,6 +3,8 @@ import { cleanup, render } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import type {
   AgentQueuedMessageItem,
+  AgentTurnTimelineAssistantTextItem,
+  AgentTurnTimelineMessage,
   ConversationSummary,
   ExtensionToWebviewMessage,
   OpenTab,
@@ -18,6 +20,7 @@ import type { PluginsAvailable } from '@/components/ChatView/SendToMenu';
 import type { ActiveTurnTimelineState } from '@/presenters/active-turn-timeline-presenter';
 import { conversationHandlers } from '../conversation-handlers';
 import { tabHandlers } from '../tab-handlers';
+import { timelineHandlers } from '../timeline-handlers';
 import type {
   HandlerRegistration,
   MessageHandlerContext,
@@ -803,6 +806,65 @@ describe('character role context isolation', () => {
     expect(harness.conversationStreaming().get('conv-a')?.activeTurnTimeline).toBe(activeTimeline);
   });
 
+  it('keeps background Timeline commits isolated and restores the latest snapshot on return', () => {
+    const registry = createAgentMarkdownSessionRegistry();
+    const visibleMessage = message('message-b', 'assistant', 'B remains foreground');
+    const harness = createContextHarness({
+      activeConversationId: 'conv-b',
+      activeTabId: 'tab-b',
+      currentMessages: [visibleMessage],
+      currentStreaming: { isThinking: false, streamingMessageId: null },
+      cachedMessages: new Map([
+        ['conv-a', []],
+        ['conv-b', [visibleMessage]],
+      ]),
+      cachedStreaming: new Map([
+        ['conv-a', { isThinking: false, streamingMessageId: null }],
+        ['conv-b', { isThinking: false, streamingMessageId: null }],
+      ]),
+      openTabs: [
+        { id: 'tab-a', title: 'Chat A', conversationId: 'conv-a' },
+        { id: 'tab-b', title: 'Chat B', conversationId: 'conv-b' },
+      ],
+    });
+    harness.context.markdownSessionRegistry = registry;
+    harness.context.timelineRenderScheduler = createImmediateTimelineRenderScheduler();
+
+    dispatch(timelineHandlers, timelineMessage('conv-a', 'latest **A** output'), harness.context);
+
+    expect(harness.activeConversationId()).toBe('conv-b');
+    expect(harness.messages()).toEqual([visibleMessage]);
+    expect(harness.conversationMessages().get('conv-a')?.[0]).toMatchObject({
+      id: 'message-conv-a',
+      content: 'latest **A** output',
+    });
+
+    dispatch(
+      tabHandlers,
+      {
+        type: 'tabState',
+        tabState: { openTabs: harness.openTabs(), activeTabId: 'tab-a' },
+      },
+      harness.context,
+    );
+
+    expect(harness.activeConversationId()).toBe('conv-a');
+    expect(harness.messages()[0]).toMatchObject({
+      id: 'message-conv-a',
+      content: 'latest **A** output',
+    });
+    expect(harness.conversationMessages().get('conv-b')).toEqual([visibleMessage]);
+    expect(
+      registry.getSnapshot(
+        createAgentMarkdownSessionKey({
+          conversationId: 'conv-a',
+          messageId: 'message-conv-a',
+          itemId: 'text-conv-a',
+        }),
+      ),
+    ).toMatchObject({ source: 'latest **A** output', isFinal: false });
+  });
+
   it('rebuilds missing Markdown sessions before activating a cached Timeline-owned tab', () => {
     const registry = createAgentMarkdownSessionRegistry();
     const canonicalMessage = message('assistant-stream', 'assistant', 'partial **markdown**');
@@ -1399,6 +1461,55 @@ function createContextHarness(options: ContextHarnessOptions): ContextHarness {
     globalError: () => globalError,
     pendingForegroundActivation: () => pendingForegroundConversationActivationRef.current,
     completedForegroundActivations: () => completedForegroundActivations,
+  };
+}
+
+function timelineMessage(conversationId: string, content: string): AgentTurnTimelineMessage {
+  const messageId = `message-${conversationId}`;
+  const item: AgentTurnTimelineAssistantTextItem = {
+    conversationId,
+    turnId: `turn-${conversationId}`,
+    messageId,
+    itemId: `text-${conversationId}`,
+    sequence: 1,
+    itemRevision: 1,
+    kind: 'assistant_text',
+    status: 'streaming',
+    payload: { content, format: 'markdown', sourceGeneration: 1 },
+    createdAt: 1,
+    updatedAt: 1,
+  };
+  return {
+    type: 'agentTurnTimeline',
+    schemaVersion: 2,
+    connectionEpoch: 'epoch-1',
+    conversationId,
+    turnId: item.turnId,
+    messageId,
+    batchKind: 'delta',
+    deliveryRevision: 1,
+    operations: [{ operation: 'append', item }],
+  };
+}
+
+function createImmediateTimelineRenderScheduler(): NonNullable<
+  MessageHandlerContext['timelineRenderScheduler']
+> {
+  return {
+    enqueue(message, commit): void {
+      commit([message]);
+    },
+    flushConversation(): void {},
+    flushAll(): void {},
+    dispose(): void {},
+    metrics: () => ({
+      scheduledDeliveries: 0,
+      immediateDeliveries: 1,
+      renderCommits: 1,
+      maxPendingDeliveries: 0,
+      pendingDeliveries: 0,
+      disposed: false,
+    }),
   };
 }
 

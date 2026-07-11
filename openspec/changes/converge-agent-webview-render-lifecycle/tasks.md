@@ -1,11 +1,11 @@
 ## 1. Characterize Current Lifecycle Boundaries
 
-- [ ] 1.1 Add a source-of-truth inventory test or focused architecture fixture covering visible React state, refs, per-conversation maps, Timeline scheduler ownership, Markdown registry ownership, viewport state, and Extension activation messages.
+- [x] 1.1 Add a source-of-truth inventory test or focused architecture fixture covering visible React state, refs, per-conversation maps, Timeline scheduler ownership, Markdown registry ownership, viewport state, and Extension activation messages.
 - [ ] 1.2 Add failing characterization tests for normal UI Tab, character-role Tab, Extension `tabState`, and Extension `activeConversation` activation proving their current commit/publication order.
-- [ ] 1.3 Add a failing background-stream scenario: conversation A streams, conversation B is foreground, A continues in the background, and returning to A must present its latest Timeline without foreground leakage.
+- [x] 1.3 Add a failing background-stream scenario: conversation A streams, conversation B is foreground, A continues in the background, and returning to A must present its latest Timeline without foreground leakage.
 - [ ] 1.4 Add StrictMode/unmount/remount characterization proving renderer-resource disposal cannot invalidate a retained canonical conversation snapshot.
 - [ ] 1.5 Add characterization tests for input/queue availability, status/time freshness, and scroll/focus isolation across conversation switching.
-- [ ] 1.6 Characterize whether closing a UI Tab permanently disposes the conversation or retains it in the background, and record the product-semantic decision in the design notes before implementing cleanup.
+- [x] 1.6 Characterize whether closing a UI Tab permanently disposes the conversation or retains it in the background, and record the product-semantic decision in the design notes before implementing cleanup.
 
 ## 2. Define Canonical Render Lifecycle Contracts
 
