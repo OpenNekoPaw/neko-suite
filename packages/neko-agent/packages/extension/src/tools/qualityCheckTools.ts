@@ -1,12 +1,12 @@
 import * as vscode from 'vscode';
 import {
-  createQualityCheckTools as createSkillsQualityCheckTools,
+  createLegacyQualityCheckTools as createSkillsQualityCheckTools,
   type IAudioAnalyzer,
   type IFrameExtractor,
   type MediaQualityChatModelRef,
-  type MediaQualityGenerator,
+  type LegacyMediaQualityGenerator,
   type MediaQualityLLMService,
-  type QualityCheckToolsDeps as SkillsQualityCheckToolsDeps,
+  type LegacyQualityCheckToolsDeps as SkillsQualityCheckToolsDeps,
 } from '@neko/skills';
 import type { Tool } from './types';
 import { getLogger } from '../base';
@@ -17,13 +17,13 @@ export type { IAudioAnalyzer, IFrameExtractor };
 
 export interface QualityCheckToolsDeps {
   createService: () => MediaQualityLLMService;
-  mediaGenerator: MediaQualityGenerator;
+  mediaGenerator: LegacyMediaQualityGenerator;
   chatModel?: MediaQualityChatModelRef;
   audioAnalyzer?: IAudioAnalyzer;
   frameExtractor?: IFrameExtractor;
 }
 
-export function createQualityCheckTools(deps: QualityCheckToolsDeps): Tool[] {
+export function createLegacyQualityCheckTools(deps: QualityCheckToolsDeps): Tool[] {
   const skillsDeps: SkillsQualityCheckToolsDeps = {
     createService: deps.createService,
     mediaGenerator: deps.mediaGenerator,

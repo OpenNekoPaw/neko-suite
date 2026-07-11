@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createConsistencyCheckTools, createQualityCheckTools } from '../quality-check-tools';
+import {
+  createLegacyConsistencyCheckTools as createConsistencyCheckTools,
+  createLegacyQualityCheckTools as createQualityCheckTools,
+} from '../quality-check-tools';
 
 function createService(responseJson: unknown) {
   return {
@@ -59,10 +62,14 @@ describe('quality check tool factories', () => {
     expect(qualityTool.localization?.zh?.parameters?.['scenes.[].mediaPath']).toContain(
       '生成媒体文件路径',
     );
-    expect(repairTool.localization?.zh?.description).toContain('评估 AI 生成媒体质量并显式尝试修复');
+    expect(repairTool.localization?.zh?.description).toContain(
+      '评估 AI 生成媒体质量并显式尝试修复',
+    );
     expect(repairTool.localization?.zh?.parameters?.maxRetries).toContain('修复重试次数');
     expect(consistencyTool.localization?.zh?.description).toContain('跨场景视觉一致性');
-    expect(consistencyTool.localization?.zh?.parameters?.characters).toContain('要跟踪外观一致性的角色');
+    expect(consistencyTool.localization?.zh?.parameters?.characters).toContain(
+      '要跟踪外观一致性的角色',
+    );
   });
 
   it('creates QualityRepairCheck as an explicit non-read-only repair tool', () => {
@@ -227,7 +234,9 @@ describe('quality check tool factories', () => {
 
     const messages = service.chat.mock.calls[1]![0] as Array<{ role: string; content: string }>;
     expect(messages[0]!.content).toContain('提示词工程师');
-    expect(messages[0]!.content).not.toContain('You are an AI image/video generation prompt engineer');
+    expect(messages[0]!.content).not.toContain(
+      'You are an AI image/video generation prompt engineer',
+    );
     expect(messages[1]!.content).toContain('原始提示词');
     expect(messages[1]!.content).toContain('发现的问题');
     expect(messages[1]!.content).not.toContain('Original prompt');

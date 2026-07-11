@@ -14,29 +14,35 @@ export type {
 } from './consistency-evaluator';
 
 export {
-  MediaQualityRuntime,
+  MediaQualityRuntime as LegacyMediaQualityRuntime,
   coerceQualityScore,
-  createMediaQualityRuntime,
+  createMediaQualityRuntime as createLegacyMediaQualityRuntime,
   detectQualityMediaType,
   extractTextFromContent,
 } from './media-quality-runtime';
 export type {
   IAudioAnalyzer,
   IFrameExtractor,
-  MediaGenerateOptions,
+  MediaGenerateOptions as LegacyMediaGenerateOptions,
   MediaQualityChatModelRef,
-  MediaQualityCheckInput,
-  MediaQualityCheckResult,
-  MediaQualityEvalOptions,
-  MediaQualityGenerator,
+  MediaQualityCheckInput as LegacyMediaQualityCheckInput,
+  MediaQualityCheckResult as LegacyMediaQualityCheckResult,
+  MediaQualityEvalOptions as LegacyMediaQualityEvalOptions,
+  MediaQualityGenerator as LegacyMediaQualityGenerator,
   MediaQualityLLMService,
   MediaQualityLogger,
-  MediaQualityRuntimeDeps,
-  MediaQualitySceneInput,
+  MediaQualityRuntimeDeps as LegacyMediaQualityRuntimeDeps,
+  MediaQualitySceneInput as LegacyMediaQualitySceneInput,
 } from './media-quality-runtime';
 
-export { createConsistencyCheckTools, createQualityCheckTools } from './quality-check-tools';
-export type { ConsistencyCheckToolsDeps, QualityCheckToolsDeps } from './quality-check-tools';
+export {
+  createLegacyConsistencyCheckTools,
+  createLegacyQualityCheckTools,
+} from './quality-check-tools';
+export type {
+  ConsistencyCheckToolsDeps as LegacyConsistencyCheckToolsDeps,
+  QualityCheckToolsDeps as LegacyQualityCheckToolsDeps,
+} from './quality-check-tools';
 
 export {
   createQualityReviewEvidence,
@@ -50,3 +56,5 @@ export type {
   QualityReviewEvaluationSummary,
   QualityReviewValidationPayload,
 } from './quality-review-validation';
+
+export * from './quality-gate-runtime';

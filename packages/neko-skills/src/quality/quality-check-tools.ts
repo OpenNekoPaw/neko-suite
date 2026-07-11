@@ -112,7 +112,8 @@ const QUALITY_TOOL_LOCALIZATION: Record<
   },
 };
 
-export function createQualityCheckTools(deps: QualityCheckToolsDeps): Tool[] {
+/** @deprecated Migration-only path-based tools. Canonical integrations use QualityGateRuntime. */
+export function createLegacyQualityCheckTools(deps: QualityCheckToolsDeps): Tool[] {
   const runtime = createMediaQualityRuntime(deps);
   const sharedParameters = createQualityCheckParameterSchema();
 
@@ -256,7 +257,8 @@ function createQualityCheckParameterSchema(): {
   };
 }
 
-export function createConsistencyCheckTools(deps: ConsistencyCheckToolsDeps): Tool[] {
+/** @deprecated Migration-only path-based consistency tool. Canonical review uses the cross-shot-consistency profile. */
+export function createLegacyConsistencyCheckTools(deps: ConsistencyCheckToolsDeps): Tool[] {
   return [
     createTool({
       name: 'QualityCheckConsistency',

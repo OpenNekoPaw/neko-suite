@@ -39,6 +39,7 @@ export interface MediaGenerateOptions {
   aspectRatio?: string;
 }
 
+/** @deprecated Migration-only path input. Canonical review uses QualityTarget. */
 export interface MediaQualitySceneInput {
   index: number;
   mediaPath: string;
@@ -647,11 +648,7 @@ class VisionEvaluator {
           { role: 'system', content: getPromptOptimizationSystemPrompt(this.deps.locale) },
           {
             role: 'user',
-            content: formatPromptOptimizationUserText(
-              originalPrompt,
-              issues,
-              this.deps.locale,
-            ),
+            content: formatPromptOptimizationUserText(originalPrompt, issues, this.deps.locale),
           },
         ],
         withMediaQualityChatModelRouting({ maxTokens: 500 }, this.deps.chatModel),
@@ -924,6 +921,7 @@ class VideoFrameEvaluator {
   }
 }
 
+/** @deprecated Migration-only runtime. Use QualityGateRuntime for default execution. */
 export class MediaQualityRuntime {
   private readonly evaluator: VisionEvaluator;
   private readonly audioEvaluator: AudioEvaluator | undefined;
@@ -1198,6 +1196,7 @@ export class MediaQualityRuntime {
   }
 }
 
+/** @deprecated Migration-only factory. Use createQualityGateRuntime. */
 export function createMediaQualityRuntime(deps: MediaQualityRuntimeDeps): MediaQualityRuntime {
   return new MediaQualityRuntime(deps);
 }
