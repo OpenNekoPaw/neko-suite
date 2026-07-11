@@ -32,6 +32,7 @@
 | `45894d13a` | 收敛 conversation render projections |
 | `a56ab303a` | 修复 realm teardown 期间 Markdown subscriber publication race |
 | `23ed8e3c5` | 将仅内部使用的 render projection converters 收回文件私有范围 |
+| `50e85c111` | 将 `turn-snapshot-unavailable` 的发布与 recovery cleanup 绑定到精确 Timeline owner |
 
 ## Teardown race 根因与修复
 
@@ -49,13 +50,26 @@ pagehide
 
 旧 realm 因而抛出 `Normalized Markdown streaming session is missing ...`。`a56ab303a` 将 realm-wide `disposeAll()` 改为直接清空 session/subscription，不向正在 teardown 的 React tree 发布；conversation/turn scoped disposal 仍执行正常 scoped invalidation。该修复没有引入 Markdown fallback。
 
+## 延迟 snapshot-unavailable 根因与修复
+
+旧 turn 请求 snapshot 后，其 owner/channel 可能已经被新 turn 替换。Extension 对旧请求返回 `turn-snapshot-unavailable` 是合法的；presenter 也会因 identity mismatch 保持新 Timeline state 不变。问题发生在 Webview timeline handler：它仍无条件发布全局错误，并且按 `conversationId` 重新读取 state 后执行 recovery cleanup，可能把旧 turn diagnostic 误用于同 conversation 的新 turn。
+
+`50e85c111` 将 diagnostic publication 与 cleanup 绑定到 `applyAgentTurnTimelineDiagnostic()` 实际接受并转为 `unavailable` 的精确 state：
+
+- delayed/stale diagnostic 若未命中当前 `connectionEpoch + conversationId + turnId + messageId` owner，不修改新 turn、不清理新 turn recovery，也不写全局错误；
+- 精确命中当前 owner 的 unavailable 仍清理该 owner recovery 并 fail-visible；
+- 其他 diagnostic code 保持原有错误发布语义。
+
+该修复没有 snapshot/Markdown fallback，也没有把当前 owner 的真实失败伪装为成功。
+
 ## 验证证据
 
 ### 聚焦与完整测试
 
 - `pnpm --filter @neko-agent/webview exec vitest run src/markdown/agent-markdown-session-registry.test.ts src/render-lifecycle/conversation-render-runtime-lifecycle.test.ts src/render-lifecycle/conversation-render-state-adapter.test.ts src/render-lifecycle/__tests__/current-render-lifecycle-ownership.test.ts src/components/ConversationController.test.tsx`：5 files / 42 tests passed。
 - teardown 修复聚焦回归：3 files / 36 tests passed。
-- `pnpm --filter @neko-agent/webview test`：88 files / 783 tests passed。
+- delayed snapshot diagnostic 聚焦路径：`work-item-handlers`、active-turn presenter 与 render runtime lifecycle，3 files / 72 tests passed。
+- `pnpm --filter @neko-agent/webview test`：88 files / 784 tests passed。
 - characterization、handler、MessageList、queue/input、status/time、viewport 与 poisoned-path 测试已随各实施批次运行并通过。
 
 ### 类型、构建与边界
@@ -77,8 +91,9 @@ pagehide
 - 使用 Extension Development Host + `vscode-extension-debugger` 执行：A streaming 并暂停 -> hide/reveal -> 新建并切到 B -> 在 B 保持可编辑输入 -> A 后台继续并完成 -> 切回 A。
 - hide/reveal 后 A 的 streaming Timeline、表格内容与 Tab 状态恢复；B 输入 `background-input-check-fixed` 保持焦点且 input/send 未被禁用；A 后台完成后切回可见 terminal content、完成状态、时间与 follow-tail 底部位置。
 - 最终 console 仅有 VS Code container 的既有 `Unrecognized feature: 'local-network-access'` warning。
-- 未出现：`Normalized Markdown streaming session is missing`、`turn-snapshot-unavailable`、`background-visible-state-write`、`activation-publication-order-invalid`、`activation-already-committed`。
-- 截图：`/tmp/neko-agent-render-lifecycle-fixed.png`。
+- 原 background/hide-reveal 生命周期场景未出现：`Normalized Markdown streaming session is missing`、`turn-snapshot-unavailable`、`background-visible-state-write`、`activation-publication-order-invalid`、`activation-already-committed`。
+- 额外向真实 Webview frame 注入无 owner 的 delayed `turn-snapshot-unavailable`，确认不显示全局 rejected/unavailable；再建立 matching owner 并注入同一 diagnostic，确认仍显示 fail-visible 全局错误。
+- 截图：`/tmp/neko-agent-render-lifecycle-fixed.png`；snapshot diagnostic 验证以 Webview frame DOM 断言为准。
 
 ## 性能观察
 

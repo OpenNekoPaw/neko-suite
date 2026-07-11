@@ -60,3 +60,4 @@
 - [x] 7.5 Capture runtime console/diagnostic evidence proving no missing normalized Markdown session, unavailable snapshot activation, cross-conversation foreground write, or repeated activation publication.
 - [x] 7.6 Update `packages/neko-agent/ARCHITECTURE.md` or package-private architecture documentation with render ownership, activation transaction ordering, background isolation, and cleanup scopes.
 - [x] 7.7 Record final validation commands, performance observations for background Markdown coalescing, remaining risks, and removed bypass paths in `implementation-notes.md` before archive.
+- [x] 7.8 Add a regression proving delayed `turn-snapshot-unavailable` diagnostics cannot reject or clean up a newer active turn, while matching-owner failures remain fail-visible.
