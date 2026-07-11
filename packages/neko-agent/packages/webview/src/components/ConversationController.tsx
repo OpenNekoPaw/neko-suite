@@ -64,14 +64,14 @@ import type { ActivationProgressTimeline } from '@/presenters/activation-progres
 import { shouldActivateForegroundConversation } from '@/handlers/foreground-activation';
 import { ChatWorkspace } from './ChatWorkspace';
 import { isCharacterRoleConversationKind } from '@/presenters/character-role-session-presenter';
-import { projectConversationTabActivation } from '@/presenters/conversation-tab-activation-presenter';
 import {
   commitConversationRenderActivation,
-  commitLegacyConversationCache,
+  commitConversationSnapshotProjection,
   createConversationMarkdownTimelineResourceOwner,
   createConversationVisibleStatePort,
-  ingestLegacyConversationRenderSnapshot,
-} from '@/render-lifecycle/legacy-conversation-render-adapter';
+  createRetainedConversationRenderActivation,
+  ingestConversationRenderSnapshot,
+} from '@/render-lifecycle/conversation-render-state-adapter';
 import {
   ConversationRenderLifecycleError,
   DEFAULT_CONVERSATION_VIEWPORT,
@@ -597,7 +597,7 @@ export function ConversationController({
           : optimisticQueuedItem
             ? [optimisticQueuedItem]
             : queuedMessages;
-      const snapshot = ingestLegacyConversationRenderSnapshot({
+      const snapshot = ingestConversationRenderSnapshot({
         coordinator: conversationRenderCoordinator,
         conversationId: event.conversationId,
         messages: nextMessages,
@@ -613,7 +613,7 @@ export function ConversationController({
           messageQueueVersion: currentStreaming?.messageQueueVersion,
         },
       });
-      commitLegacyConversationCache({
+      commitConversationSnapshotProjection({
         snapshot,
         conversationMessagesRef,
         conversationStreamingRef,
@@ -660,17 +660,27 @@ export function ConversationController({
   const persistCurrentVisibleConversation = useCallback(() => {
     const conversationId = visibleConversationId;
     if (!conversationId) return;
-    conversationMessagesRef.current.set(conversationId, messages);
     const currentStreaming = conversationStreamingRef.current.get(conversationId);
-    conversationStreamingRef.current.set(conversationId, {
-      ...(currentStreaming ?? {}),
-      streamingMessageId: streamingMessageIdRef.current,
-      isThinking,
-      queuedMessageCount,
-      queuedMessages,
+    const snapshot = ingestConversationRenderSnapshot({
+      coordinator: conversationRenderCoordinator,
+      conversationId,
+      messages,
+      streaming: {
+        ...(currentStreaming ?? {}),
+        streamingMessageId: streamingMessageIdRef.current,
+        isThinking,
+        queuedMessageCount,
+        queuedMessages,
+      },
+    });
+    commitConversationSnapshotProjection({
+      snapshot,
+      conversationMessagesRef,
+      conversationStreamingRef,
     });
   }, [
     conversationMessagesRef,
+    conversationRenderCoordinator,
     conversationStreamingRef,
     isThinking,
     queuedMessageCount,
@@ -822,15 +832,14 @@ export function ConversationController({
 
   const commitConversationTabActivation = useCallback(
     (conversationId: string, source: ConversationActivationSource) => {
-      const projection = projectConversationTabActivation({
-        conversationId,
-        cachedMessages: conversationMessagesRef.current.get(conversationId),
-        cachedStreaming: conversationStreamingRef.current.get(conversationId),
-      });
       commitConversationRenderActivation({
         coordinator: conversationRenderCoordinator,
         source,
-        projection,
+        conversation: createRetainedConversationRenderActivation({
+          conversationId,
+          cachedMessages: conversationMessagesRef.current.get(conversationId),
+          cachedStreaming: conversationStreamingRef.current.get(conversationId),
+        }),
         visibleState: createConversationVisibleStatePort({
           activeConversationIdRef,
           streamingMessageIdRef,

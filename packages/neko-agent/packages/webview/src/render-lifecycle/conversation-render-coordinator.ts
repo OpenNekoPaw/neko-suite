@@ -121,7 +121,23 @@ export class ConversationRenderCoordinator {
           });
         }
         committed = true;
-        const publication = markdown.prepare(snapshot);
+        const requiresMarkdownOwner = snapshot.streaming.activeTurnTimeline?.items.some(
+          (item) => item.kind === 'assistant_text' || item.kind === 'thinking',
+        );
+        if (requiresMarkdownOwner && !markdown) {
+          const timeline = snapshot.streaming.activeTurnTimeline;
+          throw lifecycleError({
+            code: 'markdown-resource-owner-missing',
+            message: `Conversation ${mutation.conversationId} requires a Markdown resource owner for foreground activation.`,
+            conversationId: mutation.conversationId,
+            activationSource: mutation.source,
+            currentRevision: current.revision,
+            targetRevision: snapshot.revision,
+            messageId: timeline?.messageId,
+            turnId: timeline?.turnId,
+          });
+        }
+        const publication = markdown?.prepare(snapshot);
         visibleState.commit(snapshot);
         if (visibleState.currentConversationId() !== mutation.conversationId) {
           throw lifecycleError({
@@ -135,7 +151,20 @@ export class ConversationRenderCoordinator {
         }
 
         this.commitForegroundSnapshot(snapshot);
-        publication.publish();
+        if (
+          visibleState.currentConversationId() !== mutation.conversationId ||
+          this.foregroundId !== mutation.conversationId
+        ) {
+          throw lifecycleError({
+            code: 'activation-publication-order-invalid',
+            message: `Conversation ${mutation.conversationId} cannot publish renderer state before foreground ownership commits.`,
+            conversationId: mutation.conversationId,
+            activationSource: mutation.source,
+            currentRevision: current.revision,
+            targetRevision: snapshot.revision,
+          });
+        }
+        publication?.publish();
       },
     };
   }

@@ -1,25 +1,43 @@
-import { projectConversationTabActivation } from '@/presenters/conversation-tab-activation-presenter';
 import type { ActiveTurnTimelineState } from '@/presenters/active-turn-timeline-presenter';
 import type { AgentMarkdownSessionPublication } from '@/markdown/agent-markdown-session-registry';
 import type { MessageHandlerContext } from './types';
-import type { ConversationActivationSource } from '@/render-lifecycle/conversation-render-contract';
+import {
+  ConversationRenderLifecycleError,
+  type ConversationActivationSource,
+} from '@/render-lifecycle/conversation-render-contract';
 import {
   commitConversationRenderActivation,
+  commitConversationSnapshotProjection,
   createConversationMarkdownTimelineResourceOwner,
   createConversationVisibleStatePort,
-} from '@/render-lifecycle/legacy-conversation-render-adapter';
+  createRetainedConversationRenderActivation,
+  ingestConversationRenderSnapshot,
+} from '@/render-lifecycle/conversation-render-state-adapter';
 
 export function persistCurrentVisibleConversation(context: MessageHandlerContext): void {
   const conversationId = context.activeConversationIdRef.current;
   if (!conversationId) return;
 
-  context.conversationMessagesRef.current.set(conversationId, context.messages);
-  context.conversationStreamingRef.current.set(conversationId, {
-    ...(context.conversationStreamingRef.current.get(conversationId) ?? {}),
-    streamingMessageId: context.streamingMessageIdRef.current,
-    isThinking: context.isThinking,
-    queuedMessageCount: context.queuedMessageCount ?? 0,
-    queuedMessages: context.queuedMessages ?? [],
+  const coordinator = context.conversationRenderCoordinator;
+  if (!coordinator) {
+    throw new Error('Conversation persistence requires the canonical render coordinator.');
+  }
+  const snapshot = ingestConversationRenderSnapshot({
+    coordinator,
+    conversationId,
+    messages: context.messages,
+    streaming: {
+      ...(context.conversationStreamingRef.current.get(conversationId) ?? {}),
+      streamingMessageId: context.streamingMessageIdRef.current,
+      isThinking: context.isThinking,
+      queuedMessageCount: context.queuedMessageCount ?? 0,
+      queuedMessages: context.queuedMessages ?? [],
+    },
+  });
+  commitConversationSnapshotProjection({
+    snapshot,
+    conversationMessagesRef: context.conversationMessagesRef,
+    conversationStreamingRef: context.conversationStreamingRef,
   });
 }
 
@@ -32,17 +50,15 @@ export function activateConversationTabView(
   if (!coordinator) {
     throw new Error('Conversation activation requires the canonical render coordinator.');
   }
-  const projection = projectConversationTabActivation({
-    conversationId,
-    cachedMessages: context.conversationMessagesRef.current.get(conversationId),
-    cachedStreaming: context.conversationStreamingRef.current.get(conversationId),
-  });
-
   context.isTablessConversationViewRef.current = false;
   commitConversationRenderActivation({
     coordinator,
     source,
-    projection,
+    conversation: createRetainedConversationRenderActivation({
+      conversationId,
+      cachedMessages: context.conversationMessagesRef.current.get(conversationId),
+      cachedStreaming: context.conversationStreamingRef.current.get(conversationId),
+    }),
     visibleState: createConversationVisibleStatePort({
       activeConversationIdRef: context.activeConversationIdRef,
       streamingMessageIdRef: context.streamingMessageIdRef,
@@ -71,9 +87,14 @@ export function commitActiveTurnTimelineMarkdownSnapshot(
       (item) => item.kind === 'assistant_text' || item.kind === 'thinking',
     );
     if (hasMarkdownItems) {
-      throw new Error(
-        `Markdown session registry is required to activate Timeline-owned conversation ${timeline.conversationId}.`,
-      );
+      throw new ConversationRenderLifecycleError({
+        code: 'markdown-resource-owner-missing',
+        message: `Markdown session registry is required to activate Timeline-owned conversation ${timeline.conversationId}.`,
+        conversationId: timeline.conversationId,
+        currentRevision: context.conversationRenderCoordinator?.revision(timeline.conversationId),
+        messageId: timeline.messageId,
+        turnId: timeline.turnId,
+      });
     }
     return undefined;
   }

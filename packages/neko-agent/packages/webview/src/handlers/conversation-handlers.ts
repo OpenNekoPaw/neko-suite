@@ -34,11 +34,11 @@ import { projectQueuedMessagesCleared } from '@/presenters/message-queue-present
 import { getActiveTimelineForMessage } from './timeline-handlers';
 import {
   commitConversationRenderActivation,
-  commitLegacyConversationCache,
+  commitConversationSnapshotProjection,
   createConversationMarkdownTimelineResourceOwner,
   createConversationVisibleStatePort,
-  ingestLegacyConversationRenderSnapshot,
-} from '@/render-lifecycle/legacy-conversation-render-adapter';
+  ingestConversationRenderSnapshot,
+} from '@/render-lifecycle/conversation-render-state-adapter';
 
 /**
  * Handle 'error' message - Error occurred
@@ -271,8 +271,8 @@ const handleActiveConversation: MessageHandler<'activeConversation'> = (
     commitConversationRenderActivation({
       coordinator,
       source: 'extension-active-conversation',
-      projection: {
-        activeConversationId: conversationId,
+      conversation: {
+        conversationId,
         messages: projection.messages,
         streaming: nextStreaming,
       },
@@ -328,13 +328,13 @@ function cacheConversationProjection(
   if (!coordinator) {
     throw new Error('Conversation caching requires the canonical render coordinator.');
   }
-  const snapshot = ingestLegacyConversationRenderSnapshot({
+  const snapshot = ingestConversationRenderSnapshot({
     coordinator,
     conversationId,
     messages,
     streaming,
   });
-  commitLegacyConversationCache({
+  commitConversationSnapshotProjection({
     snapshot,
     conversationMessagesRef: context.conversationMessagesRef,
     conversationStreamingRef: context.conversationStreamingRef,

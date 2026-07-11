@@ -97,7 +97,10 @@ export type ConversationRenderDiagnosticCode =
   | 'conversation-snapshot-unavailable'
   | 'conversation-disposed'
   | 'activation-already-committed'
-  | 'visible-state-commit-mismatch';
+  | 'visible-state-commit-mismatch'
+  | 'markdown-resource-owner-missing'
+  | 'background-visible-state-write'
+  | 'activation-publication-order-invalid';
 
 export interface ConversationRenderDiagnostic {
   readonly code: ConversationRenderDiagnosticCode;
@@ -122,7 +125,7 @@ export interface ConversationActivationTransaction {
   readonly source: ConversationActivationSource;
   commit(input: {
     readonly visibleState: ConversationVisibleStatePort;
-    readonly markdown: ConversationMarkdownTimelineResourceOwner;
+    readonly markdown?: ConversationMarkdownTimelineResourceOwner;
   }): void;
 }
 

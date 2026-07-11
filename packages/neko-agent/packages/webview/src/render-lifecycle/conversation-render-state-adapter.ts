@@ -10,8 +10,9 @@ import type {
   ConversationVisibleStatePort,
 } from './conversation-render-contract';
 import { ConversationRenderCoordinator } from './conversation-render-coordinator';
+import { ConversationRenderLifecycleError } from './conversation-render-contract';
 
-export interface LegacyConversationStreamingState {
+export interface ConversationRenderStreamingState {
   readonly streamingMessageId: string | null;
   readonly isThinking: boolean;
   readonly queuedMessageCount?: number;
@@ -20,10 +21,10 @@ export interface LegacyConversationStreamingState {
   readonly activeTurnTimeline?: ActiveTurnTimelineState | null;
 }
 
-export interface ConversationActivationProjectionInput {
-  readonly activeConversationId: string;
+export interface ConversationRenderActivationInput {
+  readonly conversationId: string;
   readonly messages: readonly Message[];
-  readonly streaming: LegacyConversationStreamingState;
+  readonly streaming: ConversationRenderStreamingState;
 }
 
 export interface ConversationVisibleStateAdapterInput {
@@ -31,7 +32,7 @@ export interface ConversationVisibleStateAdapterInput {
   readonly streamingMessageIdRef: MutableRefObject<string | null>;
   readonly conversationMessagesRef: MutableRefObject<Map<string, Message[]>>;
   readonly conversationStreamingRef: MutableRefObject<
-    Map<string, LegacyConversationStreamingState>
+    Map<string, ConversationRenderStreamingState>
   >;
   readonly setMessages: Dispatch<SetStateAction<Message[]>>;
   readonly setStreamingMessageId: Dispatch<SetStateAction<string | null>>;
@@ -41,11 +42,11 @@ export interface ConversationVisibleStateAdapterInput {
   readonly setActiveConversationId: Dispatch<SetStateAction<string | null>>;
 }
 
-export function ingestLegacyConversationRenderSnapshot(input: {
+export function ingestConversationRenderSnapshot(input: {
   readonly coordinator: ConversationRenderCoordinator;
   readonly conversationId: string;
   readonly messages: readonly Message[];
-  readonly streaming: LegacyConversationStreamingState;
+  readonly streaming: ConversationRenderStreamingState;
   readonly kind?: 'host-snapshot' | 'timeline-commit';
 }): ConversationRenderSnapshot {
   const baseRevision = input.coordinator.read(input.conversationId)?.revision ?? 0;
@@ -58,11 +59,11 @@ export function ingestLegacyConversationRenderSnapshot(input: {
   });
 }
 
-export function commitLegacyConversationCache(input: {
+export function commitConversationSnapshotProjection(input: {
   readonly snapshot: ConversationRenderSnapshot;
   readonly conversationMessagesRef: MutableRefObject<Map<string, Message[]>>;
   readonly conversationStreamingRef: MutableRefObject<
-    Map<string, LegacyConversationStreamingState>
+    Map<string, ConversationRenderStreamingState>
   >;
 }): void {
   input.conversationMessagesRef.current.set(input.snapshot.conversationId, [
@@ -70,33 +71,103 @@ export function commitLegacyConversationCache(input: {
   ]);
   input.conversationStreamingRef.current.set(
     input.snapshot.conversationId,
-    toLegacyConversationStreamingState(input.snapshot.streaming),
+    toConversationRenderStreamingState(input.snapshot.streaming),
   );
+}
+
+export function createRetainedConversationRenderActivation(input: {
+  readonly conversationId: string;
+  readonly cachedMessages?: readonly Message[];
+  readonly cachedStreaming?: ConversationRenderStreamingState;
+}): ConversationRenderActivationInput {
+  const streaming = input.cachedStreaming ?? {
+    streamingMessageId: null,
+    isThinking: false,
+    queuedMessageCount: 0,
+    queuedMessages: [],
+  };
+  return {
+    conversationId: input.conversationId,
+    messages: projectActivationMessages({
+      conversationId: input.conversationId,
+      messages: input.cachedMessages ?? [],
+      streaming,
+    }),
+    streaming: projectActivationStreaming(streaming),
+  };
 }
 
 export function commitConversationRenderActivation(input: {
   readonly coordinator: ConversationRenderCoordinator;
   readonly source: ConversationActivationSource;
-  readonly projection: ConversationActivationProjectionInput;
+  readonly conversation: ConversationRenderActivationInput;
   readonly visibleState: ConversationVisibleStatePort;
   readonly markdown: ConversationMarkdownTimelineResourceOwner;
 }): ConversationRenderSnapshot {
-  const currentRevision =
-    input.coordinator.read(input.projection.activeConversationId)?.revision ?? 0;
+  const currentRevision = input.coordinator.read(input.conversation.conversationId)?.revision ?? 0;
   input.coordinator.ingest({
     kind: 'host-snapshot',
-    conversationId: input.projection.activeConversationId,
+    conversationId: input.conversation.conversationId,
     baseRevision: currentRevision,
-    messages: input.projection.messages,
-    streaming: toConversationStreamingSnapshot(input.projection.streaming),
+    messages: input.conversation.messages,
+    streaming: toConversationStreamingSnapshot(input.conversation.streaming),
   });
   const transaction = input.coordinator.prepareActivation({
     kind: 'activation',
-    conversationId: input.projection.activeConversationId,
+    conversationId: input.conversation.conversationId,
     source: input.source,
   });
   transaction.commit({ visibleState: input.visibleState, markdown: input.markdown });
   return transaction.snapshot;
+}
+
+function projectActivationMessages(input: ConversationRenderActivationInput): Message[] {
+  const timeline = input.streaming.activeTurnTimeline;
+  const timelineMessageId =
+    timeline && timeline.synchronization !== 'unavailable' ? timeline.messageId : undefined;
+  return input.messages.map((message) => {
+    if (message.id === timelineMessageId) return message;
+    return finalizeOrphanedStreamingMessage(message);
+  });
+}
+
+function projectActivationStreaming(
+  streaming: ConversationRenderStreamingState,
+): ConversationRenderStreamingState {
+  const timeline = streaming.activeTurnTimeline;
+  const hasRecoverableTimelineOwnership =
+    timeline !== null && timeline !== undefined && timeline.synchronization !== 'unavailable';
+  return hasRecoverableTimelineOwnership
+    ? streaming
+    : {
+        ...streaming,
+        streamingMessageId: null,
+        isThinking: false,
+        ...(timeline?.synchronization === 'unavailable' ? { activeTurnTimeline: null } : {}),
+      };
+}
+
+function finalizeOrphanedStreamingMessage(message: Message): Message {
+  const contentBlocks = message.contentBlocks;
+  let blocksChanged = false;
+  const finalizedBlocks = contentBlocks?.map((block) => {
+    if (block.type === 'text' && block.isStreaming === true) {
+      blocksChanged = true;
+      return { ...block, isStreaming: false };
+    }
+    if (block.type === 'thinking' && block.isThinkingComplete === false) {
+      blocksChanged = true;
+      return { ...block, isThinkingComplete: true };
+    }
+    return block;
+  });
+
+  if (message.isStreaming !== true && !blocksChanged) return message;
+  return {
+    ...message,
+    isStreaming: false,
+    ...(finalizedBlocks ? { contentBlocks: finalizedBlocks } : {}),
+  };
 }
 
 export function createConversationVisibleStatePort(
@@ -104,9 +175,19 @@ export function createConversationVisibleStatePort(
 ): ConversationVisibleStatePort {
   return {
     commit(snapshot): void {
-      const streaming = toLegacyConversationStreamingState(snapshot.streaming);
+      if (snapshot.visibility !== 'foreground') {
+        throw new ConversationRenderLifecycleError({
+          code: 'background-visible-state-write',
+          message: `Background conversation ${snapshot.conversationId} cannot update foreground visible state.`,
+          conversationId: snapshot.conversationId,
+          targetRevision: snapshot.revision,
+          messageId: snapshot.streaming.activeTurnTimeline?.messageId,
+          turnId: snapshot.streaming.activeTurnTimeline?.turnId,
+        });
+      }
+      const streaming = toConversationRenderStreamingState(snapshot.streaming);
       const messages = [...snapshot.messages];
-      commitLegacyConversationCache({
+      commitConversationSnapshotProjection({
         snapshot,
         conversationMessagesRef: input.conversationMessagesRef,
         conversationStreamingRef: input.conversationStreamingRef,
@@ -136,14 +217,14 @@ export function createConversationMarkdownTimelineResourceOwner(
     },
     disposeConversation(): void {
       throw new Error(
-        'Legacy Markdown activation adapter does not own conversation disposal; use the registry lifecycle owner.',
+        'Conversation Markdown activation adapter does not own conversation disposal; use the registry lifecycle owner.',
       );
     },
   };
 }
 
 export function toConversationStreamingSnapshot(
-  streaming: LegacyConversationStreamingState,
+  streaming: ConversationRenderStreamingState,
 ): ConversationStreamingSnapshot {
   const activeTurnTimeline = streaming.activeTurnTimeline ?? null;
   const hasExplicitReleasedTimeline =
@@ -164,9 +245,9 @@ export function toConversationStreamingSnapshot(
   };
 }
 
-export function toLegacyConversationStreamingState(
+export function toConversationRenderStreamingState(
   streaming: ConversationStreamingSnapshot,
-): LegacyConversationStreamingState {
+): ConversationRenderStreamingState {
   return {
     streamingMessageId: streaming.streamingMessageId,
     isThinking: streaming.isThinking,

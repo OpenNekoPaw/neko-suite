@@ -1,3 +1,6 @@
+import { existsSync, readFileSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 interface RenderLifecycleOwnerInventoryItem {
@@ -17,50 +20,58 @@ interface RenderLifecycleOwnerInventoryItem {
 const currentRenderLifecycleOwners: readonly RenderLifecycleOwnerInventoryItem[] = [
   {
     concern: 'visible-react-state',
-    currentOwner: 'useConversationState React setters',
+    currentOwner: 'ConversationVisibleStatePort',
     lifecycleScope: 'component',
     writableFromBackground: false,
   },
   {
     concern: 'foreground-refs',
-    currentOwner: 'useConversationState active/streaming refs',
+    currentOwner: 'ConversationVisibleStatePort',
     lifecycleScope: 'component',
     writableFromBackground: false,
   },
   {
     concern: 'conversation-cache',
-    currentOwner: 'useConversationState per-conversation maps',
+    currentOwner: 'ConversationRenderCoordinator with state projection adapter',
     lifecycleScope: 'conversation',
     writableFromBackground: true,
   },
   {
     concern: 'timeline-scheduler',
-    currentOwner: 'useMessageHandler Timeline render commit scheduler',
+    currentOwner: 'ConversationRenderRuntimeLifecycle',
     lifecycleScope: 'webview-realm',
     writableFromBackground: true,
   },
   {
     concern: 'markdown-registry',
-    currentOwner: 'Agent Markdown session registry',
+    currentOwner: 'ConversationMarkdownTimelineResourceOwner',
     lifecycleScope: 'webview-realm',
     writableFromBackground: true,
   },
   {
     concern: 'viewport-focus',
-    currentOwner: 'MessageList and composer effects',
-    lifecycleScope: 'component',
+    currentOwner: 'ConversationRenderSnapshot viewport intent',
+    lifecycleScope: 'conversation',
     writableFromBackground: false,
   },
   {
     concern: 'extension-activation',
-    currentOwner: 'tabState and activeConversation handlers',
+    currentOwner: 'ConversationRenderCoordinator activation transaction',
     lifecycleScope: 'extension-message',
     writableFromBackground: false,
   },
 ];
 
+const srcRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
+const foregroundActivationFiles = [
+  'components/ConversationController.tsx',
+  'handlers/conversation-handlers.ts',
+  'handlers/conversation-tab-session-state.ts',
+  'handlers/tab-handlers.ts',
+] as const;
+
 describe('current conversation render lifecycle ownership', () => {
-  it('keeps every known render concern explicit during coordinator migration', () => {
+  it('keeps every known render concern explicit after coordinator convergence', () => {
     expect(currentRenderLifecycleOwners.map(({ concern }) => concern)).toEqual([
       'visible-react-state',
       'foreground-refs',
@@ -70,9 +81,6 @@ describe('current conversation render lifecycle ownership', () => {
       'viewport-focus',
       'extension-activation',
     ]);
-    expect(new Set(currentRenderLifecycleOwners.map(({ currentOwner }) => currentOwner)).size).toBe(
-      currentRenderLifecycleOwners.length,
-    );
   });
 
   it('allows background writes only to conversation-owned or derived renderer resources', () => {
@@ -81,5 +89,37 @@ describe('current conversation render lifecycle ownership', () => {
         .filter(({ writableFromBackground }) => writableFromBackground)
         .map(({ concern }) => concern),
     ).toEqual(['conversation-cache', 'timeline-scheduler', 'markdown-registry']);
+  });
+
+  it('keeps foreground activation free of direct writable cache access', () => {
+    for (const relativePath of foregroundActivationFiles) {
+      const source = readFileSync(join(srcRoot, relativePath), 'utf8');
+      expect(source, relativePath).not.toMatch(
+        /conversation(?:Messages|Streaming)Ref\.current\.(?:set|clear)\(/,
+      );
+    }
+  });
+
+  it('keeps prepareActivation private to the coordinator state adapter', () => {
+    const productionFiles = [
+      'components/ConversationController.tsx',
+      'handlers/conversation-handlers.ts',
+      'handlers/conversation-tab-session-state.ts',
+      'handlers/tab-handlers.ts',
+      'render-lifecycle/conversation-render-state-adapter.ts',
+    ] as const;
+    const prepareActivationCallers = productionFiles.filter((relativePath) =>
+      readFileSync(join(srcRoot, relativePath), 'utf8').includes('.prepareActivation('),
+    );
+
+    expect(prepareActivationCallers).toEqual([
+      'render-lifecycle/conversation-render-state-adapter.ts',
+    ]);
+    expect(existsSync(join(srcRoot, 'presenters/conversation-tab-activation-presenter.ts'))).toBe(
+      false,
+    );
+    expect(
+      existsSync(join(srcRoot, 'render-lifecycle/legacy-conversation-render-adapter.ts')),
+    ).toBe(false);
   });
 });

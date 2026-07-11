@@ -44,9 +44,9 @@ import type { HandlerRegistration, MessageHandlerContext, StreamingState } from 
 import { projectMarkdownResourceRendering } from '@/presenters/markdown-resource-rendering-presenter';
 import { ConversationRenderCoordinator } from '@/render-lifecycle/conversation-render-coordinator';
 import {
-  commitLegacyConversationCache,
-  ingestLegacyConversationRenderSnapshot,
-} from '@/render-lifecycle/legacy-conversation-render-adapter';
+  commitConversationSnapshotProjection,
+  ingestConversationRenderSnapshot,
+} from '@/render-lifecycle/conversation-render-state-adapter';
 
 describe('work item message handlers', () => {
   it('stores plugin availability for TaskCard send-to menus', () => {
@@ -2587,14 +2587,14 @@ function createContextHarness(options: ContextHarnessOptions): ContextHarness {
           'Background conversation updates require the canonical render coordinator.',
         );
       }
-      const snapshot = ingestLegacyConversationRenderSnapshot({
+      const snapshot = ingestConversationRenderSnapshot({
         coordinator,
         conversationId,
         messages: result.messages,
         streaming: result.streaming,
         kind: 'timeline-commit',
       });
-      commitLegacyConversationCache({
+      commitConversationSnapshotProjection({
         snapshot,
         conversationMessagesRef,
         conversationStreamingRef,

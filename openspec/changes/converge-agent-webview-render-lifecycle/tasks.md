@@ -20,8 +20,8 @@
 - [ ] 3.2 Move writes to `conversationMessagesRef` and `conversationStreamingRef` behind the coordinator while retaining transitional read adapters only where required.
 - [ ] 3.3 Integrate the existing Timeline frame scheduler so coalesced foreground and background commits advance only the owning conversation revision.
 - [x] 3.4 Integrate Markdown `commitTimelineSnapshot()` through the narrow resource owner and preserve commit-visible-state-before-publish ordering.
-- [ ] 3.5 Add diagnostics for stale revisions, wrong identities, unavailable ownership, missing Markdown owner, background foreground-write attempts, and illegal publication order.
-- [ ] 3.6 Add coordinator unit tests proving conversation isolation, deterministic reconciliation, no-op matching snapshots, scoped resource cleanup, and fail-visible invalid states.
+- [x] 3.5 Add diagnostics for stale revisions, wrong identities, unavailable ownership, missing Markdown owner, background foreground-write attempts, and illegal publication order.
+- [x] 3.6 Add coordinator unit tests proving conversation isolation, deterministic reconciliation, no-op matching snapshots, scoped resource cleanup, and fail-visible invalid states.
 
 ## 4. Migrate Foreground Activation Paths
 
@@ -30,7 +30,7 @@
 - [x] 4.3 Migrate character-role UI Tab activation to the same transaction and prove role metadata does not change conversation render ownership.
 - [x] 4.4 Migrate Extension `tabState` handling to the same transaction.
 - [x] 4.5 Migrate Extension `activeConversation` handling to the same transaction, including pending-frame flush and unavailable-Timeline release.
-- [ ] 4.6 Add poisoned-path tests proving all four activation sources hit the coordinator and no retired direct activation helper can return success.
+- [x] 4.6 Add poisoned-path tests proving all four activation sources hit the coordinator and no retired direct activation helper can return success.
 
 ## 5. Isolate Background Projection, Input, Status, and Viewport
 
@@ -48,7 +48,7 @@
 - [x] 6.2 Ensure disposing one conversation clears only its scheduled frames, Markdown sessions/subscriptions, render snapshot, and viewport intent.
 - [x] 6.3 Make React StrictMode cleanup/remount reconstruct derived resources from canonical snapshots without treating effect cleanup as permanent conversation deletion.
 - [ ] 6.4 Remove writable direct access to migrated per-conversation maps and delete redundant activation/projector helpers inside the scoped replacement boundary.
-- [ ] 6.5 Add static/source tests or poisoned adapters proving production code cannot perform a successful foreground activation or background visible-state write outside the coordinator.
+- [x] 6.5 Add static/source tests or poisoned adapters proving production code cannot perform a successful foreground activation or background visible-state write outside the coordinator.
 - [ ] 6.6 Run `pnpm check:legacy-debt` and `pnpm check:unused`, fixing only debt introduced or exposed inside this change and recording unrelated worktree blockers.
 
 ## 7. Validation and Documentation

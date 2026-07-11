@@ -38,9 +38,9 @@ import type { ActiveTurnTimelineState } from '@/presenters/active-turn-timeline-
 import type { MediaModelSelection } from '@/hooks/useUIState';
 import type { ConversationRenderCoordinator } from '@/render-lifecycle/conversation-render-coordinator';
 import {
-  commitLegacyConversationCache,
-  ingestLegacyConversationRenderSnapshot,
-} from '@/render-lifecycle/legacy-conversation-render-adapter';
+  commitConversationSnapshotProjection,
+  ingestConversationRenderSnapshot,
+} from '@/render-lifecycle/conversation-render-state-adapter';
 import type { ExtensionToWebviewMessage } from './messages';
 import { AgentHostMessages, getAgentHostRuntimeAdapter } from '@/messages';
 import { readAgentTurnTimelineRecoveryRequests } from './timeline-recovery-state';
@@ -275,14 +275,14 @@ export function useMessageHandler(props: UseMessageHandlerProps): UseMessageHand
         activeTurnTimeline: null,
       };
       const updated = updater(currentMessages, currentStreaming);
-      const snapshot = ingestLegacyConversationRenderSnapshot({
+      const snapshot = ingestConversationRenderSnapshot({
         coordinator: conversationRenderCoordinator,
         conversationId,
         messages: updated.messages,
         streaming: updated.streaming,
         kind: 'timeline-commit',
       });
-      commitLegacyConversationCache({
+      commitConversationSnapshotProjection({
         snapshot,
         conversationMessagesRef,
         conversationStreamingRef,

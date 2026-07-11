@@ -10,9 +10,9 @@ import type { MessageHandlerContext, StreamingState } from './types';
 import type { AgentQueuedMessageItem, Message } from '@neko-agent/types';
 import type { ActiveTurnTimelineState } from '@/presenters/active-turn-timeline-presenter';
 import {
-  commitLegacyConversationCache,
-  ingestLegacyConversationRenderSnapshot,
-} from '@/render-lifecycle/legacy-conversation-render-adapter';
+  commitConversationSnapshotProjection,
+  ingestConversationRenderSnapshot,
+} from '@/render-lifecycle/conversation-render-state-adapter';
 
 /**
  * Result of a conversation update that may change streaming state.
@@ -100,14 +100,14 @@ export function updateConversation(
     if (!coordinator) {
       throw new Error('Conversation updates require the canonical render coordinator.');
     }
-    const snapshot = ingestLegacyConversationRenderSnapshot({
+    const snapshot = ingestConversationRenderSnapshot({
       coordinator,
       conversationId,
       messages: result.messages,
       streaming: nextStreaming,
       kind: 'timeline-commit',
     });
-    commitLegacyConversationCache({
+    commitConversationSnapshotProjection({
       snapshot,
       conversationMessagesRef: context.conversationMessagesRef,
       conversationStreamingRef: context.conversationStreamingRef,

@@ -123,6 +123,41 @@ describe('ConversationRenderCoordinator', () => {
     expect(coordinator.read('conv-b')?.visibility).toBe('foreground');
   });
 
+  it('fails visibly when Markdown Timeline activation has no resource owner', () => {
+    const coordinator = new ConversationRenderCoordinator();
+    coordinator.ingest({
+      ...hostSnapshot('conv-a', 0, [message('message-a')]),
+      streaming: {
+        ...createIdleConversationStreamingSnapshot(),
+        streamingMessageId: 'message-a',
+        isThinking: true,
+        activeTurnTimeline: markdownTimeline('conv-a'),
+      },
+    });
+
+    const transaction = coordinator.prepareActivation({
+      kind: 'activation',
+      conversationId: 'conv-a',
+      source: 'extension-tab-state',
+    });
+
+    expect(() => transaction.commit({ visibleState: createVisibleStatePort([]) })).toThrowError(
+      expect.objectContaining({
+        diagnostic: expect.objectContaining({
+          code: 'markdown-resource-owner-missing',
+          conversationId: 'conv-a',
+          activationSource: 'extension-tab-state',
+          currentRevision: 1,
+          targetRevision: 2,
+          messageId: 'message-a',
+          turnId: 'turn-a',
+        }),
+      }),
+    );
+    expect(coordinator.foregroundConversationId()).toBeNull();
+    expect(coordinator.read('conv-a')?.visibility).toBe('background');
+  });
+
   it('releases unavailable Timeline ownership before activation', () => {
     const coordinator = new ConversationRenderCoordinator();
     coordinator.ingest({
@@ -285,6 +320,42 @@ function hostSnapshot(conversationId: string, baseRevision: number, messages: re
     baseRevision,
     messages,
     streaming: createIdleConversationStreamingSnapshot(),
+  };
+}
+
+function markdownTimeline(conversationId: string) {
+  return {
+    connectionEpoch: 'epoch-1',
+    conversationId,
+    turnId: 'turn-a',
+    messageId: 'message-a',
+    deliveryRevision: 1,
+    validationState: {
+      connectionEpoch: 'epoch-1',
+      conversationId,
+      turnId: 'turn-a',
+      messageId: 'message-a',
+      deliveryRevision: 1,
+      completed: false,
+      items: new Map(),
+    },
+    items: [
+      {
+        conversationId,
+        turnId: 'turn-a',
+        messageId: 'message-a',
+        itemId: 'text-a',
+        sequence: 1,
+        itemRevision: 1,
+        kind: 'assistant_text' as const,
+        status: 'streaming' as const,
+        payload: { content: 'stream', format: 'markdown' as const, sourceGeneration: 1 },
+        createdAt: 1,
+        updatedAt: 1,
+      },
+    ],
+    completed: false,
+    synchronization: 'synchronized' as const,
   };
 }
 
