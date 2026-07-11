@@ -99,7 +99,7 @@
 - [ ] 9.1 Extend generated draft/promoted asset records or associated evidence storage to bind QualityEvidence to stable asset identity, revision/digest, and generation lineage.
 - [ ] 9.2 Ensure background task backfill exposes stable generated asset and workflow stage refs required for later quality review.
 - [ ] 9.3 Implement evidence transfer/lineage behavior for draft promotion without treating cache file existence as durable ownership.
-- [ ] 9.4 Implement bounded, observable migration aliases for approved legacy Skill names and record replacement diagnostics/telemetry.
+- [x] 9.4 Implement bounded, observable migration aliases for approved legacy Skill names and record replacement diagnostics/telemetry.
 - [ ] 9.5 Update Agent prompts, capability catalogs, evaluation manifests, fixtures, locale metadata, and docs to use canonical Skill and operation identities.
 - [ ] 9.6 Remove expired stage-Skill exports, old command metadata, duplicate toolDefinitions, legacy Quality fixtures, dual-read/dual-write adapters, and default fallback branches.
 - [ ] 9.7 Add legacy debt and unused-code assertions proving removed names and path-only Quality entry points cannot return default success.

@@ -11,12 +11,16 @@
       "expectations": [
         "Agent creates or requests a cat-playing image generation task.",
         "Agent waits for the generated image or task result observation before final analysis.",
+        "Agent activates the canonical media-quality-review Skill rather than a legacy quality-assessment Skill.",
+        "When the chat model cannot inspect the image natively, Agent obtains semantic evidence through perception.perceive.",
         "Agent analyzes the generated image quality based on the actual result.",
         "If the image has visible quality issues, Agent requests a regenerated image before finalizing."
       ],
       "assertions": [
         { "kind": "runtime-errors-empty" },
         { "kind": "final-answer-non-empty" },
+        { "kind": "skill-active", "name": "media-quality-review" },
+        { "kind": "tool-call-succeeded", "name": "perception.perceive" },
         { "kind": "task-created", "type": "image_generation" },
         { "kind": "task-terminal", "type": "image_generation", "status": "completed" },
         { "kind": "no-user-internal-continuation" },

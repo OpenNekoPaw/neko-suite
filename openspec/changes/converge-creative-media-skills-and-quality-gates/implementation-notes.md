@@ -6,7 +6,7 @@
 >
 > Schema：`spec-driven`
 >
-> 当前进度：53/87（完成 1.1–6.11；7.x–10.x 尚未完成）
+> 当前进度：54/87（完成 1.1–6.11、9.4；其余 7.x–10.x 尚未完成）
 
 ## 1. 当前结论
 
@@ -140,3 +140,75 @@ QualityTarget -> QualityEvidence[] -> deterministic aggregation -> QualityGateRe
 6. 全仓 `pnpm check`、`pnpm test`、legacy debt、unused 检查和最终文档同步仍属于 10.x release-readiness 工作。
 
 下一实施批次应优先完成任务 7.1–7.8：由各 owning package 暴露 headless、revision-bound ProjectQuality evidence，再由中央 Quality orchestration 消费 facade 输出，而不是复制 `.nk*` parser。
+
+
+## 8. 真实 Agent 媒体质检故障与恢复（2026-07-11）
+
+### 8.1 生产路径证据
+
+用户请求“生成猫猫玩耍的图片，并分析图片质量”时，异步生成和自动续跑链路实际正常：
+
+- conversation：`izbh0142-01KX7YY74ACRJQXA5Q192654T2`
+- generation task：`task_1783752506832_8`
+- generated asset：`59dbc482-b779-4352-9dcd-049f9d67a96b`
+- stable ResourceRef：`res_3z6xxu`
+- output：1024×1024 PNG，1,347,289 bytes
+- Journal 中 task observation、evidence、follow-up request 和自动 continuation 均已出现；续跑后 `ReadImage` 成功返回结构化 `PerceptionCard`。
+
+失败发生在下一次 provider message projection。当前 chat model 为 `deepseek-chat/deepseek-v4-flash`，只声明文本 chat capability；`ReadImage` 卡片包含 Layer 0 结构信息和 provider-loadable image ref，但 Layer 1 semantic evidence 为 skipped。旧投影层把工具卡片等同于用户直接提交的原生图片 packet，抛出非重试错误：
+
+```text
+CHAT_MODEL_NATIVE_MULTIMODAL_UNSUPPORTED
+The selected chat model does not support native image input.
+```
+
+这证明故障不在图片生成、后台任务或 auto-resume，而在“工具媒体证据 → text-only chat model”的恢复边界。
+
+### 8.2 修复后的 canonical 路径
+
+本轮将输入分成两个不同信任/恢复边界：
+
+1. 用户或 host packet 中的原生 image/video 输入，在所选模型不支持对应 modality 时继续 fail-visible，避免伪装成已读取媒体。
+2. 工具返回的 `PerceptionCard` 在 text-only 模型下不再终止 turn：投影层保留 structural/semantic 文本摘要，不物化 native image，并附加 runtime perception 恢复诊断。
+3. 若卡片已有 Layer 1 semantic evidence，文本模型可直接消费该证据；若只有结构信息，诊断明确要求通过独立 perception pipeline 获取视觉证据后再判断画质，不允许根据 prompt、路径或缩略图标签臆测。
+4. `media-quality-review.allowedTools` 增加机器可读 `perception.perceive` 权限。Skill 正文仍不承载工具教程或运行时 schema，符合 Prompt/Capability/Skill 注入边界。
+
+独立感知路径继续采用 API-first purpose routing：chat model 与 image/audio/video understanding model 可以不同。外部感知模型只替换 perception evaluator；格式、尺寸、codec、decode、响度、项目引用和 export 完整性仍由本地/owning evaluator 负责。
+
+### 8.3 Legacy Skill 身份迁移
+
+- canonical builtin registry 只保留 `media-quality-review`。
+- 删除未注册但仍被导出、国际化和 Extension catalog 引用的 stale `quality-assessment` builtin 定义。
+- 运行时仅保留一个显式 alias：`quality-assessment -> media-quality-review`。
+- alias 激活结果、生命周期 record 和工具成功消息均返回 canonical 名称；同时返回 `legacy-skill-alias` diagnostic，包含 requested/canonical 名称。
+- alias 的移除条件：Agent prompts、eval manifests、用户可见 catalog、文档和保存的调用入口均不再产生旧名称，并且迁移 telemetry/diagnostic 在一个发布验证窗口内无命中。预发布阶段不保留第二条 builtin 成功路径。
+
+### 8.4 验证证据
+
+已通过：
+
+```bash
+pnpm --dir packages/neko-agent exec vitest --run \
+  packages/platform/src/service/__tests__/shared-service-adapter.test.ts
+# 21/21
+
+pnpm --filter @neko/skills exec vitest --run \
+  src/builtins/builtin-skills.test.ts
+# 16/16
+
+pnpm --dir packages/neko-agent exec vitest --run \
+  packages/agent/src/skill/__tests__/conversation-skill-runtime.test.ts \
+  packages/agent/src/tools/core/__tests__/meta-tools.test.ts \
+  packages/extension/src/services/__tests__/skillCatalogProvider.test.ts
+# 43/43
+```
+
+`cat-play-image-analysis` evaluation case 已增加 canonical path 断言：`media-quality-review` 必须 active，且 `perception.perceive` 必须成功；仅依赖最终回答文本不再足以证明图片质检路径。
+
+包级 `@neko/agent` 全量 `tsc --noEmit` 当前被仓库既有测试类型债务阻断，首批错误位于 `execution-runtime-summary-trace.test.ts`、`standalone.test.ts`、多个 command/session 测试等，与本批次文件无直接关系。该结果不能作为本变更通过证据，也不应通过 fallback 掩盖；后续 10.1 仍需在工作区基线收敛后重跑。
+
+### 8.5 尚未完成
+
+- canonical `QualityTarget`/`QualityGateRuntime` 尚未完成 Extension 生产工具注册与稳定 ResourceRef materializer 接线。
+- 尚未执行更新后源码构建的真实 provider-backed `cat-play-image-analysis` case；旧的预编译 `packages/neko-agent/neko` 不能证明本轮源码修复已生效。
+- `.nk*` owning validator、pre-export Gate、post-export deliverable verification、repair/re-export loop 和端到端 production workflow 仍属于 7.x–10.x 后续任务。
