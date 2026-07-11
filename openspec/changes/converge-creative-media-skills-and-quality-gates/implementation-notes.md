@@ -613,3 +613,66 @@ git diff --check -- packages/neko-audio \
 - 当前生产环境没有 final-mix review renderer 和 loudness/true-peak readiness adapter，因此 preview/readiness 正确报告 unavailable，而不是伪装通过；
 - 没有修改 Engine、Webview 或跨层 message，不需要 cargo test 或 VSCode Webview runtime smoke；
 - 下一项任务 7.4 为 `neko-puppet` owning package 的 `.nkp` ProjectQuality facade。
+
+## 14. 旧创作 Skill 运行时导出清理（2026-07-12）
+
+### 14.1 清理顺序与 owning boundary
+
+本批按“先切断旧成功路径，再迁移价值内容”的顺序处理，不再把“未出现在 `getBuiltinSkills()` 默认列表”视为已完成清理：
+
+1. 从 `@neko/skills` builtin public exports 删除 `ai-generate`、`comic-to-storyboard`、`media-to-video`、`comic-to-animation`、`image-to-shot`、`storyboard-to-animation-plan`、`animation-plan-to-cut`、`generated-shot-assembly` 和 `export-video-package` 的定义/getter；
+2. 删除上述旧 Skill 的实现文件、本地化 catalog metadata 和 Markdown prompt 文件；
+3. 删除 `ai-generate` 复制的 `SkillToolDefinition[]`，运行时参数 schema 只由 capability/tool registry 拥有；
+4. 在模块导出测试中 poison 所有旧 symbol，证明它们不能再被外部消费者重新注册为 builtin Skill；
+5. 仅保留已批准、可观测且有移除条件的 migration alias。当前 `quality-assessment -> media-quality-review` alias 位于 Agent migration boundary，不恢复第二份 builtin 定义。
+
+这次没有新增 Skill、命令、generic Skill factory 或平行 registry。canonical 用户入口仍是 `storyboard`、`image`、`video`、`media-production`、`video-editing` 和 `media-quality-review`。
+
+### 14.2 方法论与 fixture 迁移
+
+旧 `comic-to-storyboard` 中仍有价值、且不属于运行时工具协议的规则已压缩迁入 canonical `storyboard/from-comic` 内容及测试：
+
+- 像素级视觉证据/OCR/分格边界不足时只返回 diagnostic，不编造分镜表；
+- 阅读方向、分格 keep/skip/merge/split、OCR 文本分类和稳定 scoped resource identity；
+- `imagePrompt` 与 scene-level `videoPrompt` 的生成有效约束、长场景 beat/time segmentation 和常见 prompt failure checks；
+- 先完成唯一 review projection，再进行 Canvas durable authoring handoff；两者不能互相冒充。
+
+旧 `ai-generate` 的“只有 capability 确认后才能宣称生成成功”约束迁入 canonical `image`/`video`；pending/blocked/failed 状态不会被描述为已生成。
+
+没有把 220 行漫画专用 prompt 整体搬入 canonical Skill。运行时工具名、参数表、轮询协议、Canvas/Cut command 和 provider schema 均已丢弃，避免 Skill 再次膨胀。仍在代码中的 `comic-to-animation-plan`、`comic-shot-asset-prep`、`manga-to-video` artifact/profile fixture 属于下一批 contract identity 迁移；它们不再对应可激活 Skill，但继续存在会污染 capability catalog，因此任务 9.5/9.6 暂不标记完成。
+
+### 14.3 验证与提交
+
+代码提交：
+
+```text
+d5a754e4e refactor(skills): remove legacy creative skill exports
+```
+
+已运行：
+
+```bash
+pnpm --filter @neko/skills test
+# 34 files, 320 tests passed
+
+pnpm --filter @neko/skills exec tsc --noEmit -p tsconfig.json
+# passed
+
+pnpm exec eslint \
+  packages/neko-skills/src/builtins/builtin-definitions.ts \
+  packages/neko-skills/src/builtins/builtin-skill-locales.ts \
+  packages/neko-skills/src/builtins/builtin-skills.test.ts \
+  packages/neko-skills/src/builtins/creative-media.ts
+# passed
+
+git diff --check -- packages/neko-skills
+# passed
+```
+
+剩余清理按以下顺序继续：
+
+1. 将 capability/artifact fixtures 中的旧 profile identity 收敛到 canonical `media-production/from-comic` 和 typed internal stage identity；
+2. 更新 Agent prompts、capability catalogs、eval manifests 和跨包 fixtures；
+3. 删除旧 Quality/path-only fixture、dual-read/fallback；
+4. 增加 runtime activation poison test 和 repository legacy-debt/unused assertions；
+5. 最后删除到期 migration alias，而不是先隐藏 catalog 后保留旧实现。

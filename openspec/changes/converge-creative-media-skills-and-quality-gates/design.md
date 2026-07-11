@@ -237,11 +237,11 @@ Preview 是派生资源，使用稳定 target/revision 作为证据身份；rend
 3. 新增 canonical `storyboard`、`image`、`video`、`media-production`、`media-quality-review` Skill metadata/content；移除 Skill 正文中的 runtime tool schema 教程。
 4. 接通 Story/Content/comic adapters，统一输出 Storyboard；Canvas/Cut 通过 projection/handoff 消费，不 dual-write。
 5. 接通 Media/Sketch/Canvas/Cut 的 Image/Video operation registry，明确 supported/degraded/unsupported；未实现 operation fail-visible。
-6. 将现有阶段型媒体 Skill 降为 internal profile/stage，更新 Agent catalog、evaluation scenarios 和文档；短期 alias 必须记录 telemetry/diagnostic、replacement 和移除条件。
+6. 先删除旧阶段型媒体 Skill 的 builtin/runtime 导出、激活定义和复制 toolDefinitions，使旧名称无法继续形成成功路径；再把仍有价值的来源方法论、profile 约束和测试 fixture 迁入 canonical Skill 或 typed internal stage。更新 Agent catalog、evaluation scenarios 和文档时不得只隐藏旧 Skill；短期 alias 只能存在于独立 migration registry，并必须记录 telemetry/diagnostic、replacement 和移除条件。
 7. 迁移 Quality runtime 到 ResourceRef/revision contract，拆分 structural/technical/perception/policy evaluator；为旧 `mediaPath` 增加拒绝或显式迁移入口，默认禁用 fallback。
 8. 为 `.nks/.nkv/.nkp/.nkm/.nka` 分批实现 ProjectQuality facade，优先 `.nkv/.nks/.nka`，再 `.nkp/.nkm`；缺失实现时 Gate 返回 unavailable，不伪装通过。
 9. 接通 media-production 的 asset Gate、pre-export gate、export lineage 与 post-export verifier；验证修复导致 evidence stale 并重新执行完整链路。
-10. 删除到期 alias、旧 command 字段、重复 toolDefinitions、旧 Quality fixture 和旧阶段型成功路径，运行 legacy-debt/unused 检查并更新架构/领域文档。
+10. 删除到期 alias、旧 command 字段、旧 profile/fixture identity、旧 Quality fixture、dual-read/dual-write 和 fallback；运行 legacy-debt/unused 检查，证明旧导出、旧激活和旧 path-only Quality 入口不能返回成功，再更新架构/领域文档。
 
 Rollback 采用 fail-closed：若某 canonical operation 或 validator 未完成，返回 unavailable diagnostic，不恢复旧阶段型 Skill 或 active-Webview fallback。若需保护有价值本地数据，只回滚 catalog 可见性或启用明确 migration-only adapter，不回滚项目文件内容。
 
