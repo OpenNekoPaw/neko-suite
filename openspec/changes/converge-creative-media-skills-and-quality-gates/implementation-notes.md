@@ -141,7 +141,6 @@ QualityTarget -> QualityEvidence[] -> deterministic aggregation -> QualityGateRe
 
 下一实施批次应优先完成任务 7.1–7.8：由各 owning package 暴露 headless、revision-bound ProjectQuality evidence，再由中央 Quality orchestration 消费 facade 输出，而不是复制 `.nk*` parser。
 
-
 ## 8. 真实 Agent 媒体质检故障与恢复（2026-07-11）
 
 ### 8.1 生产路径证据
@@ -209,6 +208,75 @@ pnpm --dir packages/neko-agent exec vitest --run \
 
 ### 8.5 尚未完成
 
-- canonical `QualityTarget`/`QualityGateRuntime` 尚未完成 Extension 生产工具注册与稳定 ResourceRef materializer 接线。
 - 尚未执行更新后源码构建的真实 provider-backed `cat-play-image-analysis` case；旧的预编译 `packages/neko-agent/neko` 不能证明本轮源码修复已生效。
 - `.nk*` owning validator、pre-export Gate、post-export deliverable verification、repair/re-export loop 和端到端 production workflow 仍属于 7.x–10.x 后续任务。
+
+## 9. Canonical QualityCheck 生产 capability 接线（2026-07-11）
+
+提交 `a57f5a6ab` 将已存在的 Quality contract/runtime 接入 VSCode Extension 的 production capability discovery，不再依赖未注册的 legacy `qualityCheckTools` factory。
+
+### 9.1 API-first 工具与身份边界
+
+- `@neko/skills` 新增 canonical `QualityCheck` tool adapter，输入只接受 `QualityTarget`、可选 profile 和 policy。
+- `QualityTarget` 必须带稳定 `ResourceRef` 或 owning-project reference，并满足 revision/content digest 契约；未知 contract version、target kind、profile、policy 字段均 fail-visible。
+- 顶层 `mediaPath`、旧 `scenes[].mediaPath` 和缺少 durable revision/digest 的 target 在进入 review handler 前被 poison；不会从裸路径推导 durable identity，也不会触发内容访问。
+- Tool schema 和参数解析保留在 capability/tool contract 层；`media-quality-review` Skill 正文没有加入工具名教程、参数表或运行时协议。
+
+### 9.2 Extension provider 与授权物化
+
+- 新增 Agent-owned provider `neko-agent-media-quality`，并在 Extension activation 的 `CapabilityDiscoveryService` 注册 canonical `QualityCheck`。
+- 媒体内容通过 `AgentContentAccessRuntime.loadProviderAsset` 物化，caller 为 `quality-review`；外部感知只得到目标 `ResourceRef` 对应的 bytes、MIME type 和最小 metadata，不接收 arbitrary local path、cache root 或项目 archive。
+- 图片感知按 purpose `image.understand` 解析独立 provider/model，再适配到 `PerceptionEvaluator` port；chat model 与 image understanding model 不要求相同。
+- 没有配置图片理解模型时，不伪造感知成功，Gate 返回 `manual-review` 并报告 `missingEvaluatorClasses: ['perception']`。
+- 当前 production evaluator 接线仅覆盖 image perception。默认 image policy 也是 perception-scope；其 `pass` 只表示该显式 policy 的感知证据通过，不代表结构、格式、decode 或完整交付 Gate 已通过。外部感知模型仍不能替代 technical/structural/project/export evaluator。
+
+### 9.3 路径级验证
+
+已通过：
+
+```bash
+pnpm --filter @neko/skills exec tsc --noEmit
+
+pnpm exec eslint \
+  packages/neko-skills/src/quality/canonical-quality-tools.ts \
+  packages/neko-skills/src/quality/index.ts \
+  packages/neko-skills/src/quality/__tests__/canonical-quality-tools.test.ts \
+  packages/neko-agent/packages/extension/src/tools/qualityCapabilityProvider.ts \
+  packages/neko-agent/packages/extension/src/tools/__tests__/qualityCapabilityProvider.test.ts \
+  packages/neko-agent/packages/extension/src/tools/__tests__/capabilityProviders.test.ts \
+  packages/neko-agent/packages/agent/src/runtime/capability/agent-content-access-runtime.ts \
+  packages/neko-agent/packages/extension/src/index.ts
+
+pnpm --filter @neko/skills exec vitest --run \
+  src/quality/__tests__/canonical-quality-tools.test.ts \
+  src/quality/__tests__/quality-gate-runtime.test.ts \
+  src/builtins/builtin-skills.test.ts
+# 31/31
+
+pnpm --dir packages/neko-agent exec vitest --run \
+  packages/extension/src/tools/__tests__/qualityCapabilityProvider.test.ts \
+  packages/extension/src/tools/__tests__/capabilityProviders.test.ts \
+  packages/agent/src/runtime/__tests__/agent-content-access-runtime.test.ts
+# 11/11
+
+pnpm test:agent:eval
+# 33/33
+```
+
+路径级测试证明：
+
+- canonical provider 经真实 `CapabilityDiscoveryService` 注册后，`ToolRegistry` 中出现 `QualityCheck`；
+- image review 命中 `image.understand` purpose 和 `quality-review` content-access caller；
+- provider/model identity 进入 perception evaluator；
+- legacy path request 在 content materialization 前抛错；
+- 缺失感知模型返回可观测 `manual-review`，而不是 fallback 或默认成功。
+
+`pnpm --dir packages/neko-agent --filter @neko-agent/extension exec tsc --noEmit` 仍被当前工作区其他并行改动/既有类型基线阻断：`understandingModels` contract 尚未在 turn/message input 类型间同步，且 legacy consistency wrapper 仍引用已重命名导出。本批新增 Quality 文件未出现在错误列表中，因此不能宣称 Extension 全量 typecheck 通过。
+
+### 9.4 明确未完成范围
+
+- `QualityRepairCheck` 尚未接入 canonical production provider；不得用空壳或无 revision mutation 的成功结果代替 8.10 repair/re-preflight/re-export/re-verify 流程。
+- video/audio 的 purpose-routed evaluator、image technical/structural evaluator、`.nk*` ProjectQuality facade、pre-export Gate 和 post-export deliverable verifier 尚未生产接线。
+- project target 仍需要 owning package 提供 validator/evidence facade；中央 Quality 不解析 `.nk*`。
+- CLI/TUI 尚未注册等价 Quality provider；本批只证明 VSCode Extension production discovery 路径。
+- 尚未运行由当前源码构建并由真实 provider 支持的 `cat-play-image-analysis`；`pnpm test:agent:eval` 仅是 key-free harness 自测，不能替代真实 Agent 行为验收。
