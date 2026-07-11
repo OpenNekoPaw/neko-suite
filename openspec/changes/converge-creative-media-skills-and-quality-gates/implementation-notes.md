@@ -525,3 +525,91 @@ pnpm check:legacy-debt
 - ambiguous alias 尚缺可由通用 debug facts 证明的真实 Agent negative case；
 - deprecated `generationPrompt` 仍存在于旧 Storyboard/Canvas 迁移读取路径，需在存量 migration 完成后由 legacy-debt 任务删除；
 - Webview 全包 build/test 需等待并行 conversation/tab-state 变更完成后重跑。
+
+## 13. `.nka` ProjectQuality facade（2026-07-12）
+
+### 13.1 职责、依赖与复用审计
+
+任务 7.3 由 `neko-audio` owning package 实现，共享层只提供 `ProjectQualityFacade`、`QualityTarget`、`QualityProjectRef`、`ResourceRef`、稳定摘要和 project-file source policy。中央 Quality 不读取 `.nka` JSON，也不复制音频 routing、track mix、timeline 或 schema 规则。
+
+实现复用了以下 canonical 能力：
+
+- `.nka` 解析、版本兼容和基础 schema 验证：`loadNka()`；
+- source 枚举和 runtime/cache identity 拒绝：`nkaSourcePathPolicy`、`detectRuntimeOrCacheSourceHandle()`；
+- workspace-relative / `${VAR}` 解析：共享 workspace media path contract 与 VSCode project-file adapter；
+- facade 形状和结果语义：共享 `ProjectQualityFacade`；
+- target-bound live snapshot 模式：与 `.nkv` facade 一致，但具体 `.nka` 缓存读取仍由 `AudioProjectProvider` 所有。
+
+没有新增 Skill、命令、中央格式 parser、平行 DTO、通用 facade framework 或音频 DSP 实现。虽然 `.nkv/.nks/.nka` facade 存在相似编排骨架，但格式 codec、结构不变量、preview adapter 和 readiness evidence 的变化方向不同；本批不为减少少量重复引入 generic base class。若后续 `.nkp/.nkm` 证明 load/revision/result envelope 完全稳定，再单独评估提取共享 helper，而不是让功能包互相导入内部实现。
+
+### 13.2 Target-bound revision、结构与资源验证
+
+`NekoAudioAPI.projectQuality` 现在暴露 `.nka` facade。live state 只通过请求中的 `documentUri` 调用 `getProjectDataForDocument()`；不读取 focused editor，也不隐式打开其他项目。目标未打开时读取显式磁盘 URI，snapshot source 明确报告 unavailable 时 fail-closed。
+
+对 `loadNka()` 得到的 canonical `AudioProjectData` 计算：
+
+```text
+contentDigest = hashStableValue(canonical AudioProjectData)
+projectRevision = nka:<contentDigest>
+```
+
+在 final-mix renderer 或 readiness adapter 运行前核对 revision/content digest。旧 revision 返回 `stale-quality-evidence`，adapter 不会执行。future/read-only schema 不作为可权威验证的当前项目接受；创建 project ref 时遇到 invalid/future schema 同样直接抛错。
+
+package-owned 补充不变量包括：
+
+- track id 非空且唯一，element id 在全项目非空且唯一；
+- `.nka` track 和 element 必须使用 audio 类型；
+- start/duration/trim 必须有限且合法，trim 不得吃掉整个 clip；
+- `trackMix` key 必须对应真实 track；
+- review range 不得超过按 `startTime + duration - trimStart - trimEnd` 计算的项目时长；
+- blob、Engine/session、cache/proxy/thumbnail identity、不可解析 absolute path 和缺失 source 明确失败；
+- workspace-relative 和 `${VAR}` 使用共享路径解析器，不在 facade 内另造路径系统。
+
+### 13.3 Final-mix preview 与 loudness/peak readiness 边界
+
+本批定义 package-owned ports：`AudioProjectFinalMixRenderer`、`AudioProjectRuntimeProbe` 和 `AudioProjectExportReadinessProbe`。它们接收已经通过结构、资源和 revision 检查的 canonical document。
+
+- `renderPreview()` 只接受 target-bound final-mix review artifact，可携带指定 `mediaRange`；没有 renderer 时明确失败，不临时导出一个文件冒充 durable evidence。
+- Extension 注册 Engine mix runtime availability probe，但 runtime 可用不等于最终响度或 true peak 合格。
+- `checkExportReadiness()` 检查至少一个经 solo/mute/track gain routing 后可听的 audio element，以及非零 master volume。
+- loudness 和 true peak 必须由能够 materialize 当前 final mix 的 Engine-backed readiness adapter 产生证据。当前没有安全、target-bound 的 final-mix artifact lifecycle，因此生产接线不注册 readiness adapter；结果为 `ok: true` envelope、`ready: false`，并在 readiness data 中返回明确 error diagnostic。
+- 本任务不执行正式 export。正式 deliverable、export lineage 和 post-export probe/decode/loudness 验证仍属于 8.x。
+
+因此 `.nka` 结构质检无需先导出成品；需要听感、响度或峰值证据时，应渲染绑定当前 revision 的指定范围 final-mix review artifact。不能用 active playback stream、cache 文件或单个 source 的 `analyzeLoudness()` 代替整个项目 final mix。
+
+### 13.4 路径级测试与质量自审
+
+已运行：
+
+```bash
+pnpm --filter neko-audio test
+# 18 files, 184 tests passed
+
+pnpm --filter neko-audio compile:extension
+# esbuild passed
+
+pnpm --dir packages/neko-audio/packages/extension exec tsc \
+  -p tsconfig.quality-check.json --noEmit
+# production sources passed；临时 tsconfig 排除既有测试类型基线后已删除
+
+pnpm exec eslint \
+  packages/neko-audio/packages/extension/src/services/AudioProjectQualityFacade.ts \
+  packages/neko-audio/packages/extension/src/services/AudioProjectQualityFacade.test.ts \
+  packages/neko-audio/packages/extension/src/providers/AudioProjectProvider.ts \
+  packages/neko-audio/packages/extension/src/providers/AudioProjectProvider.headlessAuthoring.test.ts \
+  packages/neko-audio/packages/extension/src/extension.ts \
+  packages/neko-audio/packages/extension/src/types/api.ts
+# passed
+
+git diff --check -- packages/neko-audio \
+  openspec/changes/converge-creative-media-skills-and-quality-gates
+# passed
+```
+
+质量自审风险为 L3（项目格式、Extension public API、媒体 readiness boundary）。未发现阻断项。路径级测试证明：target-bound live snapshot 优先于磁盘、stale revision 会 poison renderer/readiness path、final-mix renderer 收到精确 project/revision/range、readiness probe 收到项目有效时长、future schema/runtime-cache/missing source/orphan mix/silent routing 均 fail-visible。
+
+剩余风险：
+
+- 当前生产环境没有 final-mix review renderer 和 loudness/true-peak readiness adapter，因此 preview/readiness 正确报告 unavailable，而不是伪装通过；
+- 没有修改 Engine、Webview 或跨层 message，不需要 cargo test 或 VSCode Webview runtime smoke；
+- 下一项任务 7.4 为 `neko-puppet` owning package 的 `.nkp` ProjectQuality facade。
