@@ -290,7 +290,7 @@ describe('agent markdown session registry', () => {
     expect(registry.metrics()).toMatchObject({ activeSessions: 1, activeSubscriptions: 1 });
   });
 
-  it('disposes all sessions and subscriptions without preventing a later remount', () => {
+  it('disposes realm sessions without notifying subscribers during teardown', () => {
     const registry = createAgentMarkdownSessionRegistry();
     const listener = vi.fn();
     const key = sessionKey();
@@ -302,13 +302,13 @@ describe('agent markdown session registry', () => {
     expect(registry.metrics()).toMatchObject({ activeSessions: 0, activeSubscriptions: 0 });
     registry.applyTimelineDeliveries([appendMessage(1, 1, 'after remount')]);
 
-    expect(listener).toHaveBeenCalledTimes(2);
+    expect(listener).toHaveBeenCalledTimes(1);
     expect(registry.getSnapshot(key)?.source).toBe('after remount');
     expect(registry.metrics()).toMatchObject({
       activeSessions: 1,
       createdSessions: 2,
       disposedSessions: 1,
-      notifications: 2,
+      notifications: 1,
       activeSubscriptions: 0,
     });
   });

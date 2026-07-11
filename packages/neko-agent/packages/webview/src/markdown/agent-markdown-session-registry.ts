@@ -41,6 +41,7 @@ export interface AgentMarkdownSessionRegistry {
   subscribe(sessionKey: string, listener: () => void): () => void;
   releaseTurn(conversationId: string, messageId: string): void;
   disposeConversation(conversationId: string): void;
+  /** Release the exiting Webview realm without publishing to subscribers being torn down. */
   disposeAll(): void;
   metrics(): AgentMarkdownSessionRegistryMetrics;
 }
@@ -239,9 +240,7 @@ export function createAgentMarkdownSessionRegistry(): AgentMarkdownSessionRegist
     },
     disposeAll(): void {
       disposedSessions += entries.size;
-      const affectedKeys = Array.from(entries.keys());
       entries.clear();
-      for (const sessionKey of affectedKeys) notify(sessionKey);
       listeners.clear();
     },
     metrics(): AgentMarkdownSessionRegistryMetrics {
