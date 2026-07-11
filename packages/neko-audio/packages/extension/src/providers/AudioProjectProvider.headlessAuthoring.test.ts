@@ -187,7 +187,11 @@ describe('AudioProjectProvider headless authoring gateway', () => {
     const activeUri = seedProject('/workspace/project/active.nka', createProject({ volume: 0.9 }));
     const targetUri = seedProject('/workspace/project/target.nka', createProject({ volume: 0.7 }));
     const provider = createProvider();
-    setActivePanel(provider, activeUri, vi.fn(async () => undefined));
+    setActivePanel(
+      provider,
+      activeUri,
+      vi.fn(async () => undefined),
+    );
     getProviderCache(provider).set(activeUri, createProject({ volume: 0.9 }));
 
     const session = await provider.resolveSession(targetUri);
@@ -200,6 +204,26 @@ describe('AudioProjectProvider headless authoring gateway', () => {
     expect(readSavedProject('/workspace/project/target.nka').trackMix?.['track-1']?.volume).toBe(
       0.1,
     );
+  });
+
+  it('reads live project state only for the explicitly requested document URI', () => {
+    const firstUri = 'file:///workspace/project/first.nka';
+    const secondUri = 'file:///workspace/project/second.nka';
+    const first = createProject({ volume: 0.2 });
+    const second = createProject({ volume: 0.8 });
+    const provider = createProvider();
+    getProviderCache(provider).set(firstUri, first);
+    getProviderCache(provider).set(secondUri, second);
+    setActivePanel(
+      provider,
+      firstUri,
+      vi.fn(async () => undefined),
+    );
+
+    expect(provider.getProjectDataForDocument(secondUri)).toBe(second);
+    expect(
+      provider.getProjectDataForDocument('file:///workspace/project/missing.nka'),
+    ).toBeUndefined();
   });
 
   it('links audio sources for unopened documentUri sessions through the durable source path policy', async () => {
@@ -219,19 +243,22 @@ describe('AudioProjectProvider headless authoring gateway', () => {
 });
 
 function createProvider(): AudioProjectProvider {
-  return new AudioProjectProvider(vscodeMockState.MockUri.file('/workspace/extensions/neko-audio'), {
-    register: vi.fn(() => ({ dispose: vi.fn() })),
-    markActive: vi.fn(),
-    markInactive: vi.fn(),
-    markVisible: vi.fn(),
-    markKeyboardFocused: vi.fn(),
-    markKeyboardEditable: vi.fn(),
-    hasKeyboardEditable: vi.fn(() => false),
-    syncFocus: vi.fn(),
-    unregister: vi.fn(),
-    resolve: vi.fn(() => undefined),
-    postKeyboardAction: vi.fn(async () => false),
-  } as never);
+  return new AudioProjectProvider(
+    vscodeMockState.MockUri.file('/workspace/extensions/neko-audio'),
+    {
+      register: vi.fn(() => ({ dispose: vi.fn() })),
+      markActive: vi.fn(),
+      markInactive: vi.fn(),
+      markVisible: vi.fn(),
+      markKeyboardFocused: vi.fn(),
+      markKeyboardEditable: vi.fn(),
+      hasKeyboardEditable: vi.fn(() => false),
+      syncFocus: vi.fn(),
+      unregister: vi.fn(),
+      resolve: vi.fn(() => undefined),
+      postKeyboardAction: vi.fn(async () => false),
+    } as never,
+  );
 }
 
 function setActivePanel(

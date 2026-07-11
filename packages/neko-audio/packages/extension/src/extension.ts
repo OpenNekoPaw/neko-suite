@@ -14,6 +14,7 @@ import * as vscode from 'vscode';
 import { AudioEditorProvider } from './providers/AudioEditorProvider';
 import { AudioProjectProvider } from './providers/AudioProjectProvider';
 import { AudioService } from './services/AudioService';
+import { AudioProjectQualityFacade } from './services/AudioProjectQualityFacade';
 import { AudioToolBridge } from './services/audioToolBridge';
 import {
   createAudioInteractiveEditorForwardedResult,
@@ -25,12 +26,14 @@ import { AudioStatusBar } from './views/audioStatusBar';
 import type { NekoAudioAPI } from './types/api';
 import {
   createVSCodeLogger,
+  createVSCodeProjectFileIoAdapter,
   createNewFile,
   VSCodeErrorHandler,
   resolveLogLevelSetting,
   watchLogLevel,
 } from '@neko/shared/vscode/extension';
 import { CURRENT_NKA_VERSION } from '@neko/shared/nka';
+import { classifyWorkspaceMediaPath, resolveWorkspaceMediaPath } from '@neko/shared';
 import { setRootLogger, getLogger } from './utils/logger';
 import { setErrorHandler, handleError } from './utils/errorHandler';
 
@@ -118,6 +121,37 @@ export async function activate(context: vscode.ExtensionContext): Promise<NekoAu
   );
   context.subscriptions.push(projectProvider);
 
+  const projectFileAdapter = createVSCodeProjectFileIoAdapter({ vscodeApi: vscode });
+  const projectQuality = new AudioProjectQualityFacade({
+    fileOps: projectFileAdapter.fileOps,
+    snapshotSource: {
+      async getSnapshot({ documentUri }) {
+        const document = projectProvider?.getProjectDataForDocument(documentUri);
+        return document ? { status: 'available', document } : { status: 'not-open' };
+      },
+    },
+    runtimeProbe: {
+      async probe() {
+        const available = sharedAudioService?.isAvailable === true;
+        return {
+          available,
+          ...(available ? { profileId: 'audio-engine-mix-runtime' } : {}),
+        };
+      },
+    },
+    resolveSourcePath(sourcePath, projectFilePath) {
+      const classification = classifyWorkspaceMediaPath(sourcePath);
+      if (classification.kind !== 'workspace-relative' && classification.kind !== 'variable') {
+        return undefined;
+      }
+      const pathContext = projectFileAdapter.createWorkspaceMediaPathContext({
+        documentUri: vscode.Uri.file(projectFilePath),
+      });
+      const resolved = resolveWorkspaceMediaPath({ source: sourcePath, context: pathContext });
+      return resolved.status === 'resolved-local' ? resolved.path : undefined;
+    },
+  });
+
   // Register outline view
   outlineProvider = new AudioOutlineProvider();
   const outlineView = vscode.window.createTreeView('nekoAudio.outline', {
@@ -173,11 +207,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<NekoAu
       runInteractiveCommand('denoise', 'audio.denoise', 'Denoise — open an audio file first'),
     ),
     vscode.commands.registerCommand('neko.audio.normalize', () =>
-      runInteractiveCommand(
-        'normalize',
-        'audio.normalize',
-        'Normalize — open an audio file first',
-      ),
+      runInteractiveCommand('normalize', 'audio.normalize', 'Normalize — open an audio file first'),
     ),
     vscode.commands.registerCommand('neko.audio.showSpectrum', () =>
       runInteractiveCommand(
@@ -237,6 +267,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<NekoAu
 
   // Build and return public API
   const api: NekoAudioAPI = {
+    projectQuality,
     get isAvailable() {
       return sharedAudioService?.isAvailable ?? false;
     },

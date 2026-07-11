@@ -220,6 +220,11 @@ export class AudioProjectProvider
     return null;
   }
 
+  /** Read only the live cache bound to the requested project URI. */
+  getProjectDataForDocument(documentUri: string): AudioProjectData | undefined {
+    return this._projectDataCache.get(this.toDocumentKey(documentUri));
+  }
+
   async resolveSession(documentUri?: string): Promise<ProjectSession | null> {
     const docKey = documentUri ? this.toDocumentKey(documentUri) : this.resolveFocusedProjectKey();
     if (!docKey) return null;
@@ -1440,7 +1445,10 @@ export class AudioProjectProvider
         this.createHostContentPathOptions(nkaUri, context, { fileExists: isExistingLocalFile }),
       );
     } catch (error) {
-      logger.warn(`Unable to resolve audio source path through shared content policy: ${src}`, error);
+      logger.warn(
+        `Unable to resolve audio source path through shared content policy: ${src}`,
+        error,
+      );
     }
 
     const resolved = resolveWorkspaceMediaPath({

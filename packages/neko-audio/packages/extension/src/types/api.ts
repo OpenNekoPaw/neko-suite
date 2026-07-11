@@ -25,6 +25,8 @@ export interface WaveformData {
 }
 
 export interface NekoAudioAPI {
+  /** Package-owned structural, final-mix preview, runtime, and export-readiness facade for .nka projects. */
+  readonly projectQuality: import('@neko/shared').ProjectQualityFacade;
   readonly isAvailable: boolean;
   readonly port: number | null;
   probeAudio(filePath: string): Promise<AudioInfo>;
