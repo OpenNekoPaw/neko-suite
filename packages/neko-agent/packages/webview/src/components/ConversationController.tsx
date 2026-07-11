@@ -72,7 +72,12 @@ import {
   createConversationVisibleStatePort,
   ingestLegacyConversationRenderSnapshot,
 } from '@/render-lifecycle/legacy-conversation-render-adapter';
-import type { ConversationActivationSource } from '@/render-lifecycle/conversation-render-contract';
+import {
+  ConversationRenderLifecycleError,
+  DEFAULT_CONVERSATION_VIEWPORT,
+  type ConversationActivationSource,
+  type ConversationViewportSnapshot,
+} from '@/render-lifecycle/conversation-render-contract';
 import {
   applyUserMessageToConversationSummaries,
   applyUserMessageToOpenTabs,
@@ -1308,6 +1313,32 @@ export function ConversationController({
     [conversationRenderCoordinator, tabConversationIds, tabRenderRevisionSignature],
   );
 
+  const visibleViewport = visibleConversationId
+    ? (tabRenderSnapshots.get(visibleConversationId)?.viewport ?? DEFAULT_CONVERSATION_VIEWPORT)
+    : DEFAULT_CONVERSATION_VIEWPORT;
+  const handleViewportChange = useCallback(
+    (viewport: ConversationViewportSnapshot): void => {
+      if (!visibleConversationId) return;
+      const snapshot = conversationRenderCoordinator.read(visibleConversationId);
+      if (!snapshot) {
+        const error = new ConversationRenderLifecycleError({
+          code: 'conversation-snapshot-unavailable',
+          message: `Conversation ${visibleConversationId} has no retained render snapshot for viewport update.`,
+          conversationId: visibleConversationId,
+        });
+        setGlobalError(error.message);
+        throw error;
+      }
+      conversationRenderCoordinator.ingest({
+        kind: 'viewport-update',
+        conversationId: visibleConversationId,
+        baseRevision: snapshot.revision,
+        viewport,
+      });
+    },
+    [conversationRenderCoordinator, visibleConversationId],
+  );
+
   const displayTabs = useMemo(
     () =>
       projectDisplayTabs({
@@ -1475,6 +1506,8 @@ export function ConversationController({
             activeSkill={activeSkill}
             setActiveSkill={setActiveSkill}
             activationProgress={activationProgress}
+            viewport={visibleViewport}
+            onViewportChange={handleViewportChange}
             // Context chips
             contextChips={contextChips}
             ambientNodes={ambientNodes}

@@ -20,6 +20,7 @@ import type { AgentContextPayload } from '@neko/shared';
 import type { AmbientCanvasNodeProjection } from '@/presenters/plugin-transfer-presenter';
 import type { ActivationProgressTimeline } from '@/presenters/activation-progress-presenter';
 import type { ActiveSkillIndicator } from '@/components/ChatView/SkillIndicator';
+import type { ConversationViewportSnapshot } from '@/render-lifecycle/conversation-render-contract';
 import { CharacterDialogueHeader } from '@/components/ChatView/CharacterDialogueHeader';
 import { EmbodyCharacterHeader } from '@/components/ChatView/EmbodyCharacterHeader';
 import { AgentRunStatus } from '@/components/ChatView/AgentRunStatus';
@@ -43,6 +44,8 @@ interface ChatViewProps {
   /** Active skill indicator */
   activeSkill?: ActiveSkillIndicator | null;
   activationProgress?: readonly ActivationProgressTimeline[];
+  viewport?: ConversationViewportSnapshot;
+  onViewportChange?: (viewport: ConversationViewportSnapshot) => void;
   onClearActiveSkill?: (recordId?: string) => void;
   // Unified work items
   workItems?: AgentWorkItem[];
@@ -104,6 +107,8 @@ export function ChatView({
   isConversationSwitching = false,
   activeSkill,
   activationProgress = [],
+  viewport,
+  onViewportChange,
   onClearActiveSkill,
   workItems,
   pluginsAvailable,
@@ -214,6 +219,8 @@ export function ChatView({
                 identities={messageIdentities}
                 activeSkillNotice={activeSkill}
                 activationProgress={activationProgress}
+                viewport={viewport}
+                onViewportChange={onViewportChange}
                 onClearActiveSkill={onClearActiveSkill}
               />
             </>

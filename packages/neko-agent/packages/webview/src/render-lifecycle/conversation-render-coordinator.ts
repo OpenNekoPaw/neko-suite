@@ -63,6 +63,7 @@ export class ConversationRenderCoordinator {
     }
 
     const next = createNextSnapshot(current, mutation);
+    if (next === current) return current;
     validateTimelineIdentity(next);
     this.snapshots.set(mutation.conversationId, next);
     this.publishRevisions([mutation.conversationId]);
@@ -245,7 +246,25 @@ function createNextSnapshot(
             : null,
         },
       };
+    case 'viewport-update':
+      if (isMatchingViewport(base.viewport, mutation.viewport)) return base;
+      return {
+        ...base,
+        revision: base.revision + 1,
+        viewport: { ...mutation.viewport },
+      };
   }
+}
+
+function isMatchingViewport(
+  current: ConversationRenderSnapshot['viewport'],
+  next: ConversationRenderSnapshot['viewport'],
+): boolean {
+  return (
+    current.followMode === next.followMode &&
+    current.anchorMessageId === next.anchorMessageId &&
+    current.anchorOffset === next.anchorOffset
+  );
 }
 
 function emptyStreamingForMutation(mutation: RevisionedMutation): ConversationStreamingSnapshot {

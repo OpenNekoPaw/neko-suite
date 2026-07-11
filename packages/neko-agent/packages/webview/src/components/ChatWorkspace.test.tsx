@@ -584,8 +584,7 @@ describe('ChatWorkspace pending send', () => {
 
 function runRegisteredShortcut(id: string): void {
   const options = keyboardMocks.useKeyboardShortcuts.mock.calls.at(-1)?.[0] as
-    | { shortcuts?: Array<{ id: string; handler: () => void }> }
-    | undefined;
+    { shortcuts?: Array<{ id: string; handler: () => void }> } | undefined;
   const shortcut = options?.shortcuts?.find((candidate) => candidate.id === id);
   expect(shortcut).toBeDefined();
   act(() => {
@@ -635,6 +634,8 @@ function createProps(overrides: Partial<ChatWorkspaceProps> = {}): ChatWorkspace
     skills: [],
     activeSkill: null,
     setActiveSkill: noop as React.Dispatch<React.SetStateAction<ChatWorkspaceProps['activeSkill']>>,
+    viewport: { followMode: 'follow-tail' },
+    onViewportChange: noop,
     contextChips: [],
     ambientNodes: [],
     onAddContextChip: noop,

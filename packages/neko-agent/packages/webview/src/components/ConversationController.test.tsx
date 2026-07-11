@@ -17,6 +17,7 @@ import {
   getAgentMarkdownSessionRegistry,
 } from '@/markdown/agent-markdown-session-registry';
 import { ConversationRenderCoordinator } from '@/render-lifecycle/conversation-render-coordinator';
+import type { ConversationViewportSnapshot } from '@/render-lifecycle/conversation-render-contract';
 import { ConversationController } from './ConversationController';
 
 const vscodeMocks = vi.hoisted(() => ({
@@ -123,6 +124,8 @@ vi.mock('@/components/ChatWorkspace', () => ({
     contextTokenCount?: number;
     workItems?: readonly AgentWorkItem[];
     onAddContextChip?: (payload: AgentContextPayload) => void;
+    viewport?: ConversationViewportSnapshot;
+    onViewportChange?: (viewport: ConversationViewportSnapshot) => void;
     handleMessage?: (event: MessageEvent) => void;
     pendingSendRequest?: { id: number; input: { messageText?: string } } | null;
     initialInputRequest?: { id: number; messageText: string } | null;
@@ -184,6 +187,21 @@ vi.mock('@/components/ChatWorkspace', () => ({
         <span data-testid="workspace-work-items">
           {props.workItems?.map((item) => item.title).join('|') ?? ''}
         </span>
+        <span data-testid="workspace-viewport">
+          {props.viewport?.followMode ?? 'none'}:{props.viewport?.anchorMessageId ?? 'none'}:
+          {props.viewport?.anchorOffset ?? 0}
+        </span>
+        <button
+          type="button"
+          data-testid="detach-viewport"
+          onClick={() =>
+            props.onViewportChange?.({
+              followMode: 'detached',
+              anchorMessageId: `anchor-${props.activeTabConversationId ?? props.activeConversationId ?? 'none'}`,
+              anchorOffset: 25,
+            })
+          }
+        />
         <button
           type="button"
           data-testid="add-context-chip"
@@ -678,6 +696,61 @@ describe('ConversationController entry state', () => {
       ]),
     );
     prepareActivation.mockRestore();
+  });
+
+  it('keeps viewport intent owned by its conversation across background revisions and tab switches', () => {
+    vi.clearAllMocks();
+    render(<ConversationController {...createProps()} />);
+    const openTabs = [
+      { id: 'tab-a', title: 'Chat A', conversationId: 'conv-a' },
+      { id: 'tab-b', title: 'Chat B', conversationId: 'conv-b' },
+    ];
+
+    act(() => {
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          data: {
+            type: 'activeConversation',
+            conversation: { id: 'conv-a', title: 'Chat A', messages: [message('a-1', 'A')] },
+          },
+        }),
+      );
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          data: {
+            type: 'activeConversation',
+            conversation: { id: 'conv-b', title: 'Chat B', messages: [message('b-1', 'B')] },
+          },
+        }),
+      );
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          data: { type: 'tabState', tabState: { openTabs, activeTabId: 'tab-a' } },
+        }),
+      );
+    });
+
+    expect(screen.getByTestId('workspace-tab-conversation').textContent).toBe('conv-a');
+    expect(screen.getByTestId('workspace-viewport').textContent).toBe('follow-tail:none:0');
+    fireEvent.click(screen.getByTestId('detach-viewport'));
+    expect(screen.getByTestId('workspace-viewport').textContent).toBe('detached:anchor-conv-a:25');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Switch Chat B' }));
+    expect(screen.getByTestId('workspace-tab-conversation').textContent).toBe('conv-b');
+    expect(screen.getByTestId('workspace-viewport').textContent).toBe('follow-tail:none:0');
+
+    act(() => {
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          data: timelineSnapshotMessage('conv-a', 'message-a', 'background A'),
+        }),
+      );
+    });
+    expect(screen.getByTestId('workspace-tab-conversation').textContent).toBe('conv-b');
+    expect(screen.getByTestId('workspace-viewport').textContent).toBe('follow-tail:none:0');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Switch Chat A' }));
+    expect(screen.getByTestId('workspace-viewport').textContent).toBe('detached:anchor-conv-a:25');
   });
 
   it('finalizes orphaned Markdown streaming state when a cached ordinary tab is activated from the UI', () => {

@@ -5,9 +5,10 @@
  * Enhanced: Flattened content blocks for chronological rendering
  */
 
-import { useRef, useEffect, useCallback, useMemo } from 'react';
+import { useRef, useEffect, useCallback, useMemo, type UIEvent } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { Message } from '@neko-agent/types';
+import type { ConversationViewportSnapshot } from '@/render-lifecycle/conversation-render-contract';
 import { MessageItem } from '@/components/ChatView/MessageItem';
 import { ContentBlockItem } from '@/components/ChatView/ContentBlockItem';
 import { ProcessRecordsGroup } from '@/components/ChatView/ProcessRecordsGroup';
@@ -33,6 +34,8 @@ interface MessageListProps {
   activeSkillNotice?: ActiveSkillIndicator | null;
   activationProgress?: readonly ActivationProgressTimeline[];
   onClearActiveSkill?: (recordId?: string) => void;
+  viewport?: ConversationViewportSnapshot;
+  onViewportChange?: (viewport: ConversationViewportSnapshot) => void;
 }
 
 export function MessageList({
@@ -44,12 +47,22 @@ export function MessageList({
   activeSkillNotice,
   activationProgress = [],
   onClearActiveSkill,
+  viewport = { followMode: 'follow-tail' },
+  onViewportChange,
 }: MessageListProps) {
   const { pluginsAvailable } = useMessageActions();
   const parentRef = useRef<HTMLDivElement>(null);
   const prevItemCountRef = useRef(0);
+  const prevIsThinkingRef = useRef(false);
+  const prevConversationIdRef = useRef<string | null>(null);
+  const prevStreamingContentRef = useRef<{
+    conversationId: string | null;
+    message: Message | undefined;
+  }>({ conversationId: null, message: undefined });
+  const lastReportedViewportRef = useRef<ConversationViewportSnapshot>(viewport);
   const autoScrollRafRef = useRef<number | null>(null);
   const autoScrollWindowRef = useRef<Window | null>(null);
+  const programmaticScrollTargetRef = useRef<number | null>(null);
 
   const projection = useMemo(
     () =>
@@ -83,6 +96,12 @@ export function MessageList({
     ),
     overscan: 5,
   });
+  const virtualizerRef = useRef(virtualizer);
+  const flattenedItemsRef = useRef(flattenedItems);
+  const viewportRef = useRef(viewport);
+  virtualizerRef.current = virtualizer;
+  flattenedItemsRef.current = flattenedItems;
+  viewportRef.current = viewport;
 
   const cancelScheduledAutoScroll = useCallback(() => {
     const scrollWindow = autoScrollWindowRef.current ?? getElementWindow(parentRef.current);
@@ -105,7 +124,10 @@ export function MessageList({
         autoScrollRafRef.current = null;
         autoScrollWindowRef.current = null;
         if (!isScrollableElementConnected(scrollElement)) return;
-        scrollElement.scrollTo({ top: Math.max(0, offset), behavior });
+        const maxScrollTop = Math.max(0, scrollElement.scrollHeight - scrollElement.clientHeight);
+        const target = Math.max(0, maxScrollTop > 0 ? Math.min(offset, maxScrollTop) : offset);
+        programmaticScrollTargetRef.current = target;
+        scrollElement.scrollTo({ top: target, behavior });
       });
     },
     [cancelScheduledAutoScroll],
@@ -113,28 +135,109 @@ export function MessageList({
 
   useEffect(() => cancelScheduledAutoScroll, [cancelScheduledAutoScroll]);
 
-  // Auto-scroll to bottom when new items arrive or streaming
+  // Viewport restoration belongs to conversation activation, not ordinary foreground rerenders.
   useEffect(() => {
-    const itemCountChanged = itemCount !== prevItemCountRef.current;
-    prevItemCountRef.current = itemCount;
+    const activeViewport = viewportRef.current;
+    lastReportedViewportRef.current = activeViewport;
+    programmaticScrollTargetRef.current = null;
+    cancelScheduledAutoScroll();
 
-    // Scroll to bottom on new item or when thinking starts
-    if (itemCountChanged || isThinking) {
-      scheduleScrollToOffset(virtualizer.getTotalSize());
+    if (activeViewport.followMode === 'follow-tail') {
+      scheduleScrollToOffset(virtualizerRef.current.getTotalSize(), 'auto');
+      return;
     }
-  }, [itemCount, isThinking, scheduleScrollToOffset, virtualizer]);
 
-  // Also scroll when streaming content updates
-  useEffect(() => {
-    if (streamingMessageId) {
-      if (projection.streamingItemIndex !== -1) {
-        const offsetInfo = virtualizer.getOffsetForIndex(projection.streamingItemIndex, 'end');
-        if (offsetInfo) {
-          scheduleScrollToOffset(offsetInfo[0]);
-        }
+    const anchorIndex = flattenedItemsRef.current.findIndex(
+      (item) => item.ownerMessageId === activeViewport.anchorMessageId,
+    );
+    if (anchorIndex === -1) return;
+    const offsetInfo = virtualizerRef.current.getOffsetForIndex(anchorIndex, 'start');
+    if (!offsetInfo) return;
+    scheduleScrollToOffset(offsetInfo[0] + (activeViewport.anchorOffset ?? 0), 'auto');
+  }, [activeConversationId, cancelScheduledAutoScroll, scheduleScrollToOffset]);
+
+  const handleScroll = useCallback(
+    (event: UIEvent<HTMLDivElement>) => {
+      const element = event.currentTarget;
+      if (autoScrollRafRef.current !== null) {
+        cancelScheduledAutoScroll();
       }
+      const programmaticTarget = programmaticScrollTargetRef.current;
+      if (programmaticTarget !== null && Math.abs(programmaticTarget - element.scrollTop) <= 1) {
+        programmaticScrollTargetRef.current = null;
+        return;
+      }
+      programmaticScrollTargetRef.current = null;
+      if (!onViewportChange) return;
+
+      const distanceFromTail = element.scrollHeight - element.clientHeight - element.scrollTop;
+      const currentVirtualizer = virtualizerRef.current;
+      const nextViewport =
+        distanceFromTail <= 24
+          ? ({ followMode: 'follow-tail' } satisfies ConversationViewportSnapshot)
+          : captureDetachedViewport(
+              element.scrollTop,
+              currentVirtualizer.getVirtualItems(),
+              flattenedItemsRef.current,
+              (index) => currentVirtualizer.getOffsetForIndex(index, 'start')?.[0],
+            );
+      if (!nextViewport || isMatchingViewport(lastReportedViewportRef.current, nextViewport))
+        return;
+      lastReportedViewportRef.current = nextViewport;
+      onViewportChange(nextViewport);
+    },
+    [cancelScheduledAutoScroll, onViewportChange],
+  );
+
+  // Auto-scroll only for foreground growth owned by the current follow-tail conversation.
+  useEffect(() => {
+    const conversationChanged = prevConversationIdRef.current !== activeConversationId;
+    const itemCountChanged = itemCount !== prevItemCountRef.current;
+    const thinkingStarted = isThinking && !prevIsThinkingRef.current;
+    prevConversationIdRef.current = activeConversationId;
+    prevItemCountRef.current = itemCount;
+    prevIsThinkingRef.current = isThinking;
+
+    if (
+      !conversationChanged &&
+      viewport.followMode === 'follow-tail' &&
+      (itemCountChanged || thinkingStarted)
+    ) {
+      scheduleScrollToOffset(virtualizerRef.current.getTotalSize());
     }
-  }, [streamingMessageId, projection.streamingItemIndex, scheduleScrollToOffset, virtualizer]);
+  }, [activeConversationId, itemCount, isThinking, scheduleScrollToOffset, viewport.followMode]);
+
+  const streamingMessage = streamingMessageId
+    ? messages.find((message) => message.id === streamingMessageId)
+    : undefined;
+  useEffect(() => {
+    const previous = prevStreamingContentRef.current;
+    prevStreamingContentRef.current = {
+      conversationId: activeConversationId,
+      message: streamingMessage,
+    };
+    if (
+      previous.conversationId !== activeConversationId ||
+      previous.message === streamingMessage ||
+      !streamingMessageId ||
+      viewport.followMode !== 'follow-tail'
+    ) {
+      return;
+    }
+    if (projection.streamingItemIndex === -1) return;
+    const offsetInfo = virtualizerRef.current.getOffsetForIndex(
+      projection.streamingItemIndex,
+      'end',
+    );
+    if (offsetInfo) scheduleScrollToOffset(offsetInfo[0]);
+  }, [
+    activeConversationId,
+    projection.streamingItemIndex,
+    scheduleScrollToOffset,
+    streamingMessage,
+    streamingMessageId,
+    viewport.followMode,
+  ]);
 
   const virtualItems = virtualizer.getVirtualItems();
 
@@ -143,6 +246,7 @@ export function MessageList({
       ref={parentRef}
       className="agent-message-list flex-1 overflow-y-auto scrollbar-auto-hide"
       style={{ contain: 'strict' }}
+      onScroll={handleScroll}
     >
       <div
         style={{
@@ -214,6 +318,45 @@ export function MessageList({
         })}
       </div>
     </div>
+  );
+}
+
+function captureDetachedViewport(
+  scrollTop: number,
+  virtualItems: readonly { readonly index: number; readonly start: number }[],
+  items: readonly { readonly ownerMessageId: string | null }[],
+  getItemStart: (index: number) => number | undefined,
+): ConversationViewportSnapshot | null {
+  const ownedItems = virtualItems.flatMap((virtualItem) => {
+    const ownerMessageId = items[virtualItem.index]?.ownerMessageId;
+    return ownerMessageId ? [{ ...virtualItem, ownerMessageId }] : [];
+  });
+  if (ownedItems.length === 0) return null;
+  const visibleAnchor =
+    [...ownedItems].reverse().find((item) => item.start <= scrollTop) ?? ownedItems[0];
+  if (!visibleAnchor) return null;
+
+  const messageFirstItemIndex = items.findIndex(
+    (item) => item.ownerMessageId === visibleAnchor.ownerMessageId,
+  );
+  if (messageFirstItemIndex === -1) return null;
+  const messageStart = getItemStart(messageFirstItemIndex);
+  if (messageStart === undefined) return null;
+  return {
+    followMode: 'detached',
+    anchorMessageId: visibleAnchor.ownerMessageId,
+    anchorOffset: Math.max(0, scrollTop - messageStart),
+  };
+}
+
+function isMatchingViewport(
+  current: ConversationViewportSnapshot,
+  next: ConversationViewportSnapshot,
+): boolean {
+  return (
+    current.followMode === next.followMode &&
+    current.anchorMessageId === next.anchorMessageId &&
+    current.anchorOffset === next.anchorOffset
   );
 }
 

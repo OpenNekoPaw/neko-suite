@@ -62,6 +62,7 @@ import {
   projectMediaModelSelectionForSessionModeChange,
 } from '@/presenters/config-message-presenter';
 import { isCharacterRoleConversationKind } from '@/presenters/character-role-session-presenter';
+import type { ConversationViewportSnapshot } from '@/render-lifecycle/conversation-render-contract';
 
 // =============================================================================
 // Props
@@ -120,6 +121,8 @@ export interface ChatWorkspaceProps {
   activeSkill: BoundActiveSkillIndicator | null;
   setActiveSkill: React.Dispatch<React.SetStateAction<BoundActiveSkillIndicator | null>>;
   activationProgress?: readonly ActivationProgressTimeline[];
+  viewport: ConversationViewportSnapshot;
+  onViewportChange: (viewport: ConversationViewportSnapshot) => void;
   // Context chips
   contextChips: AgentContextPayload[];
   ambientNodes: Array<{ nodeId: string; type: string; summary: string }>;
@@ -203,6 +206,8 @@ export function ChatWorkspace({
   activeSkill,
   setActiveSkill,
   activationProgress = [],
+  viewport,
+  onViewportChange,
   contextChips,
   ambientNodes,
   onAddContextChip,
@@ -751,6 +756,8 @@ export function ChatWorkspace({
             : null
         }
         activationProgress={!isCharacterRoleSession ? activationProgress : []}
+        viewport={viewport}
+        onViewportChange={onViewportChange}
         onClearActiveSkill={skillActions.handleClearActiveSkill}
         workItems={workItems}
         pluginsAvailable={pluginsAvailable}

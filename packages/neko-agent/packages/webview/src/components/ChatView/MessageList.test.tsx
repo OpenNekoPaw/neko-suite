@@ -12,13 +12,18 @@ import { I18nService } from '@neko/shared';
 const scrollToMock = vi.fn();
 const requestAnimationFrameMock = vi.fn<(callback: FrameRequestCallback) => number>();
 const cancelAnimationFrameMock = vi.fn<(handle: number) => void>();
+const getTotalSizeMock = vi.fn<() => number>();
+const getOffsetForIndexMock =
+  vi.fn<
+    (index: number, alignment: 'auto' | 'center' | 'end' | 'start') => readonly [number, string]
+  >();
 let virtualItems: Array<{ index: number; key: string; start: number }> = [];
 
 vi.mock('@tanstack/react-virtual', () => ({
   useVirtualizer: () => ({
     getVirtualItems: () => virtualItems,
-    getTotalSize: () => 120,
-    getOffsetForIndex: () => [120, 'end'] as const,
+    getTotalSize: getTotalSizeMock,
+    getOffsetForIndex: getOffsetForIndexMock,
     measureElement: vi.fn(),
   }),
 }));
@@ -28,6 +33,10 @@ describe('MessageList auto-scroll lifecycle', () => {
     scrollToMock.mockClear();
     requestAnimationFrameMock.mockClear();
     cancelAnimationFrameMock.mockClear();
+    getTotalSizeMock.mockReset();
+    getOffsetForIndexMock.mockReset();
+    getTotalSizeMock.mockReturnValue(120);
+    getOffsetForIndexMock.mockImplementation((index, alignment) => [index * 100, alignment]);
     virtualItems = [];
 
     requestAnimationFrameMock.mockReturnValue(1);
@@ -67,6 +76,225 @@ describe('MessageList auto-scroll lifecycle', () => {
 
     expect(cancelAnimationFrameMock).toHaveBeenCalledWith(1);
     expect(scrollToMock).not.toHaveBeenCalled();
+  });
+
+  it('restores follow-tail exactly once when a conversation becomes active', () => {
+    renderWithI18n(
+      <MessageActionsProvider>
+        <MessageList
+          messages={[createMessage('message-1')]}
+          isThinking={false}
+          streamingMessageId={null}
+          activeConversationId="conv-1"
+          viewport={{ followMode: 'follow-tail' }}
+        />
+      </MessageActionsProvider>,
+    );
+
+    expect(requestAnimationFrameMock).toHaveBeenCalledTimes(1);
+    flushLatestAnimationFrame();
+    expect(scrollToMock).toHaveBeenCalledWith({ top: 120, behavior: 'auto' });
+  });
+
+  it('restores a detached viewport from its stable message anchor on activation', () => {
+    renderWithI18n(
+      <MessageActionsProvider>
+        <MessageList
+          messages={[createMessage('message-1'), createMessage('message-2')]}
+          isThinking={false}
+          streamingMessageId={null}
+          activeConversationId="conv-1"
+          viewport={{
+            followMode: 'detached',
+            anchorMessageId: 'message-2',
+            anchorOffset: 17,
+          }}
+        />
+      </MessageActionsProvider>,
+    );
+
+    flushLatestAnimationFrame();
+    expect(getOffsetForIndexMock).toHaveBeenCalledWith(1, 'start');
+    expect(scrollToMock).toHaveBeenCalledWith({ top: 117, behavior: 'auto' });
+  });
+
+  it('does not reinterpret a clamped programmatic tail scroll as detached user intent', () => {
+    const onViewportChange = vi.fn();
+    getTotalSizeMock.mockReturnValue(500);
+    const { container } = renderWithI18n(
+      <MessageActionsProvider>
+        <MessageList
+          messages={[createMessage('message-1')]}
+          isThinking={false}
+          streamingMessageId={null}
+          activeConversationId="conv-1"
+          onViewportChange={onViewportChange}
+        />
+      </MessageActionsProvider>,
+    );
+    const list = requireMessageList(container);
+    defineViewportMetrics(list, { scrollTop: 0, scrollHeight: 500, clientHeight: 100 });
+
+    flushLatestAnimationFrame();
+    expect(scrollToMock).toHaveBeenCalledWith({ top: 400, behavior: 'auto' });
+    list.scrollTop = 400;
+    fireEvent.scroll(list);
+
+    expect(onViewportChange).not.toHaveBeenCalled();
+  });
+
+  it('captures detached intent relative to the first projected item of a message', () => {
+    const onViewportChange = vi.fn();
+    virtualItems = [{ index: 1, key: 'final-content', start: 80 }];
+    getOffsetForIndexMock.mockImplementation((index, alignment) => [
+      index === 0 ? 20 : 80,
+      alignment,
+    ]);
+    const { container } = renderWithI18n(
+      <MessageActionsProvider>
+        <MessageList
+          messages={[createMessageWithFinalContentAndProcessRecords()]}
+          isThinking={false}
+          streamingMessageId={null}
+          activeConversationId="conv-1"
+          onViewportChange={onViewportChange}
+        />
+      </MessageActionsProvider>,
+    );
+    const list = requireMessageList(container);
+    defineViewportMetrics(list, { scrollTop: 95, scrollHeight: 500, clientHeight: 100 });
+
+    fireEvent.scroll(list);
+
+    expect(onViewportChange).toHaveBeenCalledWith({
+      followMode: 'detached',
+      anchorMessageId: 'message-with-process',
+      anchorOffset: 75,
+    });
+    expect(getOffsetForIndexMock).toHaveBeenCalledWith(0, 'start');
+  });
+
+  it('reports follow-tail when the user returns to the tail threshold', () => {
+    const onViewportChange = vi.fn();
+    const { container } = renderWithI18n(
+      <MessageActionsProvider>
+        <MessageList
+          messages={[createMessage('message-1')]}
+          isThinking={false}
+          streamingMessageId={null}
+          activeConversationId="conv-1"
+          viewport={{
+            followMode: 'detached',
+            anchorMessageId: 'message-1',
+            anchorOffset: 40,
+          }}
+          onViewportChange={onViewportChange}
+        />
+      </MessageActionsProvider>,
+    );
+    const list = requireMessageList(container);
+    defineViewportMetrics(list, { scrollTop: 376, scrollHeight: 500, clientHeight: 100 });
+
+    fireEvent.scroll(list);
+
+    expect(onViewportChange).toHaveBeenCalledWith({ followMode: 'follow-tail' });
+  });
+
+  it('keeps detached foreground streaming stable while follow-tail owns streaming scroll', () => {
+    const initial = createStreamingTextMessage('first');
+    const detachedProps = {
+      isThinking: false,
+      streamingMessageId: initial.id,
+      activeConversationId: 'conv-1',
+      viewport: {
+        followMode: 'detached' as const,
+        anchorMessageId: initial.id,
+        anchorOffset: 10,
+      },
+    };
+    const { rerender, unmount } = renderWithI18n(
+      <MessageActionsProvider>
+        <MessageList messages={[initial]} {...detachedProps} />
+      </MessageActionsProvider>,
+    );
+    flushLatestAnimationFrame();
+    requestAnimationFrameMock.mockClear();
+    scrollToMock.mockClear();
+
+    rerender(
+      <MessageActionsProvider>
+        <MessageList messages={[createStreamingTextMessage('second')]} {...detachedProps} />
+      </MessageActionsProvider>,
+    );
+    expect(requestAnimationFrameMock).not.toHaveBeenCalled();
+    expect(scrollToMock).not.toHaveBeenCalled();
+    unmount();
+
+    requestAnimationFrameMock.mockClear();
+    scrollToMock.mockClear();
+    const followInitial = createStreamingTextMessage('first');
+    const followProps = {
+      isThinking: false,
+      streamingMessageId: followInitial.id,
+      activeConversationId: 'conv-2',
+      viewport: { followMode: 'follow-tail' as const },
+    };
+    const followRender = renderWithI18n(
+      <MessageActionsProvider>
+        <MessageList messages={[followInitial]} {...followProps} />
+      </MessageActionsProvider>,
+    );
+    flushLatestAnimationFrame();
+    requestAnimationFrameMock.mockClear();
+    scrollToMock.mockClear();
+
+    followRender.rerender(
+      <MessageActionsProvider>
+        <MessageList messages={[createStreamingTextMessage('second')]} {...followProps} />
+      </MessageActionsProvider>,
+    );
+    expect(requestAnimationFrameMock).toHaveBeenCalledTimes(1);
+    flushLatestAnimationFrame();
+    expect(scrollToMock).toHaveBeenCalledWith({ top: 0, behavior: 'smooth' });
+  });
+
+  it('does not scroll for an unrelated rerender and cancels the previous activation frame on switch', () => {
+    const messages = [createMessage('message-1')];
+    const { rerender } = renderWithI18n(
+      <MessageActionsProvider>
+        <MessageList
+          messages={messages}
+          isThinking={false}
+          streamingMessageId={null}
+          activeConversationId="conv-a"
+        />
+      </MessageActionsProvider>,
+    );
+
+    rerender(
+      <MessageActionsProvider>
+        <MessageList
+          messages={messages}
+          isThinking={false}
+          streamingMessageId={null}
+          activeConversationId="conv-a"
+        />
+      </MessageActionsProvider>,
+    );
+    expect(requestAnimationFrameMock).toHaveBeenCalledTimes(1);
+
+    rerender(
+      <MessageActionsProvider>
+        <MessageList
+          messages={messages}
+          isThinking={false}
+          streamingMessageId={null}
+          activeConversationId="conv-b"
+        />
+      </MessageActionsProvider>,
+    );
+    expect(cancelAnimationFrameMock).toHaveBeenCalledWith(1);
+    expect(requestAnimationFrameMock).toHaveBeenCalledTimes(2);
   });
 
   it('renders repeated tool blocks as a collapsed group in the virtualized list', () => {
@@ -288,11 +516,38 @@ describe('MessageList auto-scroll lifecycle', () => {
   });
 });
 
+function flushLatestAnimationFrame(): void {
+  const callback = requestAnimationFrameMock.mock.calls.at(-1)?.[0];
+  if (!callback) throw new Error('Expected a scheduled animation frame.');
+  callback(0);
+}
+
+function requireMessageList(container: HTMLElement): HTMLDivElement {
+  const element = container.querySelector<HTMLDivElement>('.agent-message-list');
+  if (!element) throw new Error('Expected MessageList scroll element.');
+  return element;
+}
+
+function defineViewportMetrics(
+  element: HTMLDivElement,
+  metrics: { scrollTop: number; scrollHeight: number; clientHeight: number },
+): void {
+  for (const [key, value] of Object.entries(metrics)) {
+    Object.defineProperty(element, key, { configurable: true, value, writable: true });
+  }
+}
+
 function renderWithI18n(node: React.ReactElement, locale: 'en' | 'zh-cn' = 'en') {
   const service = new I18nService(locale);
   service.registerBundle('chat', 'en', enChat);
   service.registerBundle('chat', 'zh-cn', zhCnChat);
-  return render(<I18nProvider service={service}>{node}</I18nProvider>);
+  const result = render(<I18nProvider service={service}>{node}</I18nProvider>);
+  return {
+    ...result,
+    rerender(next: React.ReactElement): void {
+      result.rerender(<I18nProvider service={service}>{next}</I18nProvider>);
+    },
+  };
 }
 
 function createMessage(id: string): Message {
@@ -434,6 +689,16 @@ function createStreamingMessageWithCompletedProcessRecords(): Message {
         isStreaming: false,
       },
     ],
+  };
+}
+
+function createStreamingTextMessage(content: string): Message {
+  return {
+    id: 'message-streaming',
+    role: 'assistant',
+    content,
+    timestamp: 1_717_200_000_000,
+    isStreaming: true,
   };
 }
 

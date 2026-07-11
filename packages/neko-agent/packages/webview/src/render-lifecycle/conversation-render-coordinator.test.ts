@@ -42,6 +42,55 @@ describe('ConversationRenderCoordinator', () => {
     expect(listenerA).toHaveBeenCalledTimes(1);
   });
 
+  it('stores viewport intent without publishing matching updates or touching other conversations', () => {
+    const coordinator = new ConversationRenderCoordinator();
+    const listenerA = vi.fn();
+    const listenerB = vi.fn();
+    coordinator.ingest(hostSnapshot('conv-a', 0, [message('a-1')]));
+    coordinator.ingest(hostSnapshot('conv-b', 0, [message('b-1')]));
+    coordinator.subscribeRevision('conv-a', listenerA);
+    coordinator.subscribeRevision('conv-b', listenerB);
+
+    const detached = coordinator.ingest({
+      kind: 'viewport-update',
+      conversationId: 'conv-a',
+      baseRevision: 1,
+      viewport: {
+        followMode: 'detached',
+        anchorMessageId: 'a-1',
+        anchorOffset: 18,
+      },
+    });
+
+    expect(detached.revision).toBe(2);
+    expect(detached.viewport).toEqual({
+      followMode: 'detached',
+      anchorMessageId: 'a-1',
+      anchorOffset: 18,
+    });
+    expect(coordinator.read('conv-b')).toMatchObject({
+      revision: 1,
+      viewport: { followMode: 'follow-tail' },
+    });
+    expect(listenerA).toHaveBeenCalledTimes(1);
+    expect(listenerB).not.toHaveBeenCalled();
+
+    const matching = coordinator.ingest({
+      kind: 'viewport-update',
+      conversationId: 'conv-a',
+      baseRevision: 2,
+      viewport: {
+        followMode: 'detached',
+        anchorMessageId: 'a-1',
+        anchorOffset: 18,
+      },
+    });
+
+    expect(matching).toBe(detached);
+    expect(coordinator.revision('conv-a')).toBe(2);
+    expect(listenerA).toHaveBeenCalledTimes(1);
+  });
+
   it('keeps one foreground conversation and publishes only after visible state commits', () => {
     const events: string[] = [];
     const coordinator = new ConversationRenderCoordinator();

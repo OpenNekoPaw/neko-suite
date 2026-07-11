@@ -59,6 +59,10 @@ export type ConversationRenderMutation =
       readonly kind: 'completion';
       readonly messages: readonly Message[];
     })
+  | (RevisionedConversationMutation & {
+      readonly kind: 'viewport-update';
+      readonly viewport: ConversationViewportSnapshot;
+    })
   | {
       readonly kind: 'activation';
       readonly conversationId: string;
