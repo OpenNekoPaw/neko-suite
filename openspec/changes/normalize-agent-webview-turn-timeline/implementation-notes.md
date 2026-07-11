@@ -99,3 +99,34 @@
 - Fail-closed behavior: active timeline-owned tool/task/media/error messages that arrive outside `agentTurnTimeline` are rejected via `setGlobalError` unless the same canonical item/result/error is already present and the message is only a duplicate notification. Active timeline-owned `toolResultBackfill` is always rejected unless it arrives as `agentTurnTimeline`; active timeline-owned `streamComplete.contentBlocks` finalizes the timeline snapshot but does not reorder display.
 - Durable completed-history rendering still uses persisted `Message.contentBlocks`; this is not an active-turn live path and remains the reload source.
 - Validation command: focused runtime, extension, webview handler, presenter, MessageList suites, dependency-cruiser, legacy-debt gate, legacy-debt ledger, and VS Code Webview runtime target smoke now pass under `pnpm@10.29.2`; `pnpm check` still fails on existing non-timeline `knip` unused/config gates recorded above.
+
+### Conversation Activation Markdown Session Reconciliation (2026-07-11)
+
+- Root cause: per-conversation cache retained the canonical `activeTurnTimeline`, while the module-level normalized Markdown registry could be disposed independently during Webview cleanup/remount. Returning to a cached Tab therefore rendered Timeline-owned Markdown without its parser session. Session keys already include `conversationId`, `messageId`, and `itemId`; this was a lifecycle/commit-order defect, not a cross-conversation key collision.
+- `AgentMarkdownSessionRegistry.commitTimelineSnapshot()` now reconciles `assistant_text` and `thinking` sessions from the authoritative Timeline snapshot. It creates missing sessions, replaces stale source generations/revisions, finalizes completed items, and removes sessions omitted from the same conversation/message snapshot.
+- All four foreground activation paths now cross the same reconciliation boundary: normal UI Tab activation, character-role UI Tab activation, Extension `tabState`, and Extension `activeConversation` restoration.
+- Activation commit order is explicit: reconcile the Markdown registry, commit conversation cache/refs/visible React state, then publish external-store notifications. `MarkdownRenderer` remains strict and does not fall back when a Timeline-owned session is missing.
+- Unavailable Timeline snapshots remain fail-closed and are released before reconciliation; the activation path does not recreate rejected ownership.
+
+#### Focused Validation
+
+- `pnpm --filter @neko-agent/webview exec tsc --noEmit --pretty false`
+  - Passed.
+- `pnpm --filter @neko-agent/webview exec vitest run src/markdown/agent-markdown-session-registry.test.ts src/handlers/__tests__/character-role-context-isolation.test.ts src/components/ConversationController.test.tsx`
+  - Passed: 3 files, 47 tests.
+- `pnpm --filter @neko-agent/webview test`
+  - Passed: 83 files, 741 tests.
+- `pnpm --filter @neko-agent/webview build`
+  - Passed; Vite reported only the existing Browserslist age and large-chunk warnings.
+- `pnpm --dir packages/neko-agent run compile:webview`
+  - Passed and copied the production Webview bundle into the extension package.
+- `pnpm smoke:webview:runtime`
+  - Passed: observed two VS Code page targets and two Webview targets, including `neko.neko-agent` in the Extension Development Host.
+- VS Code CDP inspection of the visible Neko Webview target found no current `Normalized Markdown streaming session is missing` text and no Neko console error during the observation window. This is runtime presence/console evidence, not a complete scripted long-turn interaction test.
+- `pnpm check:legacy-debt`
+  - Failed on 87 blocking occurrences in unrelated concurrent worktree changes (`migrate-now` and `needs-review` classes). The eight Webview files in this fix did not add `legacy`, `fallback`, or `deprecated` production paths.
+
+#### Remaining Runtime Risk
+
+- The registry remains a module singleton inside one Webview JavaScript realm, and `useMessageHandler` cleanup still disposes it on unmount. Foreground activation now deterministically reconstructs it from the canonical per-conversation Timeline, including StrictMode/remount loss, but a fully scripted `Tab A streaming -> Tab B foreground -> A background updates -> return to A` Extension Development Host scenario remains the strongest final acceptance evidence.
+- Background Timeline mutations update the owning conversation cache even when that conversation is hidden. Badge/status projection frequency is still separate from Markdown ownership and should be observed during the scripted switching scenario if UI freshness remains a concern.
