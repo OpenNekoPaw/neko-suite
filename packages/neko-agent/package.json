@@ -229,6 +229,18 @@
         "title": "%neko.agent.addToContext.title%",
         "category": "NekoAgent: AI",
         "icon": "$(comment-add)"
+      },
+      {
+        "command": "neko.agent.debug.startStreamLifecycleReplay",
+        "title": "%neko.agent.debug.startStreamLifecycleReplay.title%",
+        "category": "NekoAgent: Development",
+        "enablement": "neko.agent.streamLifecycleAcceptanceEnabled"
+      },
+      {
+        "command": "neko.agent.debug.continueStreamLifecycleReplay",
+        "title": "%neko.agent.debug.continueStreamLifecycleReplay.title%",
+        "category": "NekoAgent: Development",
+        "enablement": "neko.agent.streamLifecycleAcceptanceEnabled"
       }
     ],
     "menus": {

@@ -27,5 +27,7 @@
   "neko.script.generateVideo.title": "Generate Video from Script",
   "neko.agent.createFromFile.title": "Create Video from This File",
   "neko.agent.retryCreation.title": "Retry Last Creation",
-  "neko.agent.addToContext.title": "Add to Neko Agent"
+  "neko.agent.addToContext.title": "Add to Neko Agent",
+  "neko.agent.debug.startStreamLifecycleReplay.title": "Start Stream Lifecycle Replay",
+  "neko.agent.debug.continueStreamLifecycleReplay.title": "Continue Stream Lifecycle Replay"
 }
