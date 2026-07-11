@@ -329,6 +329,9 @@ describe('@neko/skills builtins', () => {
     expect(iterationPersonaSkill.name).toBe('iteration-persona');
 
     expect(builtinToolGroups.map((group) => group.name)).toContain('perception-evidence');
+    expect(builtinToolGroups.find((group) => group.name === 'media-qa')?.tools).toEqual([
+      'QualityCheck',
+    ]);
     expect(getBuiltinSkills().map((skill) => skill.name)).toEqual(
       builtinSkills.map((skill) => skill.name),
     );

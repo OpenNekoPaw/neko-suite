@@ -60,6 +60,18 @@ describe('CREATIVE_PRESETS', () => {
     expect(composerTools).toContain('SynthesizeSpeech');
   });
 
+  it('exposes only the canonical QualityCheck tool to the quality checker', () => {
+    const qualityTools = getAllowListTools(CREATIVE_PRESETS['quality-checker'].toolPolicy);
+
+    expect(qualityTools).toEqual(['QualityCheck']);
+    expect(CREATIVE_PRESETS['quality-checker'].systemPrompt).not.toContain(
+      'QualityCheckConsistency',
+    );
+    expect(getCreativePresets({ locale: 'zh-CN' })['quality-checker'].systemPrompt).not.toContain(
+      'QualityCheckConsistency',
+    );
+  });
+
   it('all presets except quality-checker should include GetContext tool', () => {
     for (const [type, preset] of Object.entries(CREATIVE_PRESETS)) {
       if (type === 'quality-checker') continue;

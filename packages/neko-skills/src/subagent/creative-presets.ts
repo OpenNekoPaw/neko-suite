@@ -230,9 +230,9 @@ Guidelines:
 - Flag style drift between adjacent scenes with specific descriptions
 - Track character appearances against reference images when available
 - Provide concrete, actionable recommendations for fixes
-- Use QualityCheck for individual scene evaluation
-- Use QualityCheckConsistency for cross-scene consistency analysis`,
-    toolPolicy: { kind: 'allow-list', tools: ['QualityCheck', 'QualityCheckConsistency'] },
+- Use canonical QualityCheck for individual assets and cross-shot consistency reviews
+- Select the review profile from the requested target semantics instead of invoking a separate consistency tool`,
+    toolPolicy: { kind: 'allow-list', tools: ['QualityCheck'] },
     defaultModelTier: 'balanced',
     defaultMaxIterations: 10,
   },
@@ -347,8 +347,8 @@ const ZH_CREATIVE_PRESET_TEXT: Record<
 - 用具体描述标记相邻场景之间的风格漂移
 - 有参考图时，对照跟踪角色外观
 - 提供具体、可执行的修复建议
-- 使用 QualityCheck 评估单个场景
-- 使用 QualityCheckConsistency 分析跨场景一致性`,
+- 使用 canonical QualityCheck 评估单个素材和跨镜一致性
+- 根据目标语义选择质量 profile，不调用独立的一致性工具`,
   },
 };
 
