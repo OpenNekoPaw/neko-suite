@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { AgentContextPayload } from '@neko/shared';
 import type {
   AgentQueuedMessageItem,
+  AgentState,
   AgentTurnTimelineMessage,
   AgentWorkItem,
   ConversationSummary,
@@ -113,6 +114,7 @@ vi.mock('@/components/ChatWorkspace', () => ({
     messages?: Message[];
     isThinking?: boolean;
     streamingMessageId?: string | null;
+    agentState?: AgentState | null;
     isForegroundConversationActivationPending?: boolean;
     queuedMessages?: readonly AgentQueuedMessageItem[];
     activationProgress?: readonly ActivationProgressTimeline[];
@@ -162,6 +164,11 @@ vi.mock('@/components/ChatWorkspace', () => ({
         </span>
         <span data-testid="workspace-composer-mode">
           {props.isThinking || props.streamingMessageId ? 'queue-enabled' : 'send-enabled'}
+        </span>
+        <span data-testid="workspace-agent-state">
+          {props.agentState
+            ? `${props.agentState.phase}:${props.agentState.startedAt}:${props.agentState.toolName ?? 'none'}`
+            : 'none'}
         </span>
         <span data-testid="workspace-activation-progress">
           {props.activationProgress?.map((timeline) => timeline.name).join(',') ?? 'none'}
@@ -766,6 +773,60 @@ describe('ConversationController entry state', () => {
 
     expect(screen.getByTestId('workspace-tab-conversation').textContent).toBe('conv-a');
     expect(screen.getByTestId('workspace-composer-mode').textContent).toBe('queue-enabled');
+  });
+
+  it('switches running status and elapsed baseline with the active conversation snapshot', () => {
+    render(<ConversationController {...createProps()} />);
+
+    act(() => {
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          data: {
+            type: 'tabState',
+            tabState: {
+              openTabs: [
+                { id: 'tab-a', title: 'Chat A', conversationId: 'conv-a' },
+                { id: 'tab-b', title: 'Chat B', conversationId: 'conv-b' },
+              ],
+              activeTabId: 'tab-b',
+            },
+          },
+        }),
+      );
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          data: {
+            type: 'agentPhase',
+            conversationId: 'conv-a',
+            phase: 'acting',
+            toolName: 'ReadFile',
+            timestamp: 1_000,
+          },
+        }),
+      );
+    });
+
+    expect(screen.getByTestId('workspace-tab-conversation').textContent).toBe('conv-b');
+    expect(screen.getByTestId('workspace-agent-state').textContent).toBe('none');
+
+    act(() => {
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          data: {
+            type: 'tabState',
+            tabState: {
+              openTabs: [
+                { id: 'tab-a', title: 'Chat A', conversationId: 'conv-a' },
+                { id: 'tab-b', title: 'Chat B', conversationId: 'conv-b' },
+              ],
+              activeTabId: 'tab-a',
+            },
+          },
+        }),
+      );
+    });
+
+    expect(screen.getByTestId('workspace-agent-state').textContent).toBe('acting:1000:ReadFile');
   });
 
   it('keeps Timeline and Markdown resources usable after StrictMode effect replay', () => {

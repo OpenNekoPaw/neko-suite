@@ -22,6 +22,7 @@ import type { ActivationProgressTimeline } from '@/presenters/activation-progres
 import type { ActiveSkillIndicator } from '@/components/ChatView/SkillIndicator';
 import { CharacterDialogueHeader } from '@/components/ChatView/CharacterDialogueHeader';
 import { EmbodyCharacterHeader } from '@/components/ChatView/EmbodyCharacterHeader';
+import { AgentRunStatus } from '@/components/ChatView/AgentRunStatus';
 import { projectMessageIdentities } from '@/components/ChatView/message-identity';
 import { TaskCard, BatchTaskCard } from '@/components/ChatView/TaskCard';
 import { SubAgentCard } from '@/components/ChatView/SubAgentCard';
@@ -130,7 +131,7 @@ export function ChatView({
   onAttachedFilesChange,
   selectedFileReferences,
   onSelectedFileReferencesChange,
-  agentState: _agentState,
+  agentState = null,
 }: ChatViewProps) {
   const isEmpty = messages.length === 0 && !isThinking && !activeSkill;
   const messageIdentities = useMemo(
@@ -218,6 +219,8 @@ export function ChatView({
             </>
           )}
         </MessageActionsProvider>
+
+        <AgentRunStatus agentState={agentState} />
 
         {/* Input Area */}
         <InputArea

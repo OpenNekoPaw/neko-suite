@@ -11,11 +11,15 @@ const translations: Record<string, string> = {
   'chat.emptyState.entry.startChat': 'Start Chat',
   'chat.emptyState.entry.generateAssets': 'Generate Assets',
   'chat.emptyState.entry.roleplay': 'Roleplay',
+  'chat.agentRun.phase.acting': 'Acting',
+  'chat.agentRun.actingWithTool': '{phase}: {tool}',
+  'chat.agentRun.elapsedLabel': 'Elapsed time for this run',
 };
 
 vi.mock('@/i18n/I18nContext', () => ({
   useTranslation: () => ({
-    t: (key: string) => translations[key] ?? key,
+    t: (key: string, params?: Record<string, string>) =>
+      (translations[key] ?? key).replace(/\{(\w+)\}/g, (_, name: string) => params?.[name] ?? ''),
   }),
 }));
 
@@ -64,13 +68,13 @@ describe('ChatView empty state', () => {
     expect(screen.queryByText('AI responses may be inaccurate.')).toBeNull();
   });
 
-  it('does not render a separate agent execution status row inside the chat body', () => {
+  it('renders the active conversation run status next to the composer', () => {
     renderChatView({
       isThinking: true,
       agentState: { phase: 'acting', toolName: 'ReadDocument', startedAt: Date.now() },
     });
 
-    expect(screen.queryByText('Acting')).toBeNull();
+    expect(screen.getByRole('status').textContent).toContain('Acting: ReadDocument');
   });
 
   it('passes active skill context into the conversation message list', () => {

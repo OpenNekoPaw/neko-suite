@@ -37,7 +37,7 @@
 - [x] 5.1 Route non-current conversation Timeline/message/queue/status mutations through coordinator ingestion without touching visible React state or foreground refs.
 - [x] 5.2 Make Tab badge/status projection subscribe to the owning conversation revision without forcing hidden conversation DOM rendering.
 - [x] 5.3 Make composer enablement and queued-message submission derive from the active conversation snapshot rather than a global running-task flag.
-- [ ] 5.4 Make thinking/running status and elapsed-time baseline switch immediately with the active snapshot; keep periodic elapsed display ticking UI-local.
+- [x] 5.4 Make thinking/running status and elapsed-time baseline switch immediately with the active snapshot; keep periodic elapsed display ticking UI-local.
 - [ ] 5.5 Add per-conversation `follow-tail`/`detached` viewport intent and stable message/item anchor capture using existing MessageList virtualization primitives where available.
 - [ ] 5.6 Prevent background mutations from invoking scroll or focus effects, and restore the selected conversation's viewport intent on activation.
 - [ ] 5.7 Add React tests covering editable input during allowed queued execution, frozen-status regression, foreground scroll stability, detached anchor restoration, and follow-tail ownership.
