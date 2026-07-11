@@ -33,6 +33,7 @@
 | `a56ab303a` | 修复 realm teardown 期间 Markdown subscriber publication race |
 | `23ed8e3c5` | 将仅内部使用的 render projection converters 收回文件私有范围 |
 | `50e85c111` | 将 `turn-snapshot-unavailable` 的发布与 recovery cleanup 绑定到精确 Timeline owner |
+| `cbb16299a` | 隔离多 Tab Timeline recovery diagnostics，禁止后台 conversation 污染前台 global error |
 
 ## Teardown race 根因与修复
 
@@ -62,6 +63,18 @@ pagehide
 
 该修复没有 snapshot/Markdown fallback，也没有把当前 owner 的真实失败伪装为成功。
 
+## 多 Tab revision-gap 冲突根因与修复
+
+Markdown renderer、Timeline scheduler 和 canonical snapshot 已按 Timeline identity 分区，但 Webview 的 `globalError` 仍是 `ConversationController` 中的单例展示状态。后台 conversation A 出现 delivery revision gap 时，A 会正确进入 `suspended` 并请求 authoritative snapshot；旧 handler 随后仍把 `delivery-revision-gap` 写入单例 `globalError`，导致当前前台 conversation B 显示 A 的错误。这是 diagnostic publication ownership 缺失，不是 Markdown session key 或内容状态串线。
+
+`cbb16299a` 收敛该边界：
+
+- `delivery-revision-gap` 在 current Timeline 已进入 `suspended` 且 snapshot recovery 正在进行时，不再作为全局错误发布；snapshot request、recovery persistence 和后续 authoritative snapshot 恢复保持不变；
+- Timeline diagnostic 只有属于当前 foreground conversation 时才能写入 `globalError`；后台 `turn-snapshot-unavailable` 仍更新其 owning conversation 为 `unavailable` 并执行 scoped cleanup，但不能污染另一个 Tab；
+- 当前 foreground owner 的不可恢复 diagnostic 仍 fail-visible；无 state 可承接的 revision gap 也不会被伪装为成功。
+
+Markdown 改造暴露了问题，是因为 canonical Timeline commit 与 snapshot recovery 让 owner/timing 更严格、后台交付更可观察；根因是遗留的全局错误通道没有跟随 per-conversation render ownership 一起收敛，而不是 normalized Markdown 渲染本身导致会话共享。
+
 ## 验证证据
 
 ### 聚焦与完整测试
@@ -69,7 +82,8 @@ pagehide
 - `pnpm --filter @neko-agent/webview exec vitest run src/markdown/agent-markdown-session-registry.test.ts src/render-lifecycle/conversation-render-runtime-lifecycle.test.ts src/render-lifecycle/conversation-render-state-adapter.test.ts src/render-lifecycle/__tests__/current-render-lifecycle-ownership.test.ts src/components/ConversationController.test.tsx`：5 files / 42 tests passed。
 - teardown 修复聚焦回归：3 files / 36 tests passed。
 - delayed snapshot diagnostic 聚焦路径：`work-item-handlers`、active-turn presenter 与 render runtime lifecycle，3 files / 72 tests passed。
-- `pnpm --filter @neko-agent/webview test`：88 files / 784 tests passed。
+- multi-Tab revision-gap 与 background diagnostic 聚焦路径：3 files / 74 tests passed。
+- `pnpm --filter @neko-agent/webview test`：88 files / 786 tests passed。
 - characterization、handler、MessageList、queue/input、status/time、viewport 与 poisoned-path 测试已随各实施批次运行并通过。
 
 ### 类型、构建与边界
@@ -93,6 +107,7 @@ pagehide
 - 最终 console 仅有 VS Code container 的既有 `Unrecognized feature: 'local-network-access'` warning。
 - 原 background/hide-reveal 生命周期场景未出现：`Normalized Markdown streaming session is missing`、`turn-snapshot-unavailable`、`background-visible-state-write`、`activation-publication-order-invalid`、`activation-already-committed`。
 - 额外向真实 Webview frame 注入无 owner 的 delayed `turn-snapshot-unavailable`，确认不显示全局 rejected/unavailable；再建立 matching owner 并注入同一 diagnostic，确认仍显示 fail-visible 全局错误。
+- 重启 Extension Development Host 后，向真实 Webview frame 注入后台 conversation revision 1 -> revision 3 gap；前台 entry/Tab 保持不变，DOM 中无 `delivery-revision-gap`、`Agent timeline event rejected` 或 `turn-snapshot-unavailable`，console 仅有 VS Code 的 benign `local-network-access` warning。
 - 截图：`/tmp/neko-agent-render-lifecycle-fixed.png`；snapshot diagnostic 验证以 Webview frame DOM 断言为准。
 
 ## 性能观察

@@ -61,3 +61,4 @@
 - [x] 7.6 Update `packages/neko-agent/ARCHITECTURE.md` or package-private architecture documentation with render ownership, activation transaction ordering, background isolation, and cleanup scopes.
 - [x] 7.7 Record final validation commands, performance observations for background Markdown coalescing, remaining risks, and removed bypass paths in `implementation-notes.md` before archive.
 - [x] 7.8 Add a regression proving delayed `turn-snapshot-unavailable` diagnostics cannot reject or clean up a newer active turn, while matching-owner failures remain fail-visible.
+- [x] 7.9 Add multi-Tab regressions proving recoverable revision gaps and background Timeline diagnostics remain conversation-scoped and cannot publish through the foreground global-error channel.
