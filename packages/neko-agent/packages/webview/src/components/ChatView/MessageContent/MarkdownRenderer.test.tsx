@@ -740,7 +740,7 @@ describe('MarkdownRenderer structured artifacts', () => {
       diagnostics: [
         {
           severity: 'warning',
-          code: 'unsupported-resource-reference-markdown-extension',
+          code: 'MD_RESOURCE_REFERENCE_UNSUPPORTED',
           token: 'cover.png',
           message:
             'Neko resource-reference embeds and links need host resource projection for this message.',
@@ -759,7 +759,7 @@ describe('MarkdownRenderer structured artifacts', () => {
       promptSpans: [
         {
           kind: 'scene',
-          range: { start: 0, end: 14 },
+          range: { startOffset: 0, endOffset: 14 },
           fieldId: 'scene.location',
           label: 'Alley',
           tone: 'scene',
@@ -817,7 +817,7 @@ describe('MarkdownRenderer structured artifacts', () => {
           status: 'bound',
           ref: { kind: 'character', id: 'character-aki' },
           candidates: [],
-          range: { start: 4, end: 8 },
+          range: { startOffset: 4, endOffset: 8 },
         },
       ],
     });
@@ -858,7 +858,7 @@ describe('MarkdownRenderer structured artifacts', () => {
           ref: { kind: 'asset', id: 'asset-cover' },
           candidates: [],
           placementHint: 'panel_1',
-          range: { start: 4, end: 26 },
+          range: { startOffset: 4, endOffset: 26 },
         },
       ],
       diagnostics: [],
@@ -882,7 +882,7 @@ describe('MarkdownRenderer structured artifacts', () => {
           ref: { kind: 'file', id: 'script.md' },
           candidates: [],
           placementHint: 'Scene 2',
-          range: { start: 5, end: 26 },
+          range: { startOffset: 5, endOffset: 26 },
         },
       ],
       diagnostics: [],

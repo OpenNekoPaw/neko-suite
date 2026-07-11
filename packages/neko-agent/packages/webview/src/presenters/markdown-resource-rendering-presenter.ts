@@ -353,7 +353,9 @@ function projectMarkdownStableRefForResource(
   return undefined;
 }
 
-function dedupeStableRefs(refs: readonly NekoMarkdownStableRef[]): readonly NekoMarkdownStableRef[] {
+function dedupeStableRefs(
+  refs: readonly NekoMarkdownStableRef[],
+): readonly NekoMarkdownStableRef[] {
   const byKey = new Map<string, NekoMarkdownStableRef>();
   for (const ref of refs) {
     byKey.set(`${ref.namespace ?? ''}:${ref.kind}:${ref.id}`, ref);
@@ -508,13 +510,42 @@ function projectMarkdownSemanticPromptSpan(
 function toMarkdownResourceDiagnostic(
   diagnostic: NekoMarkdownDiagnostic,
 ): MarkdownResourceDiagnostic {
+  const tokenValue = diagnostic.parameters['token'];
+  const token = typeof tokenValue === 'string' ? tokenValue : undefined;
   return {
-    severity: diagnostic.severity,
+    severity: diagnostic.severity === 'fatal' ? 'error' : diagnostic.severity,
     code: diagnostic.code,
-    message: diagnostic.message,
-    ...(diagnostic.token ? { token: diagnostic.token } : {}),
+    message: formatNekoMarkdownDiagnostic(diagnostic, token),
+    ...(token ? { token } : {}),
     ...(diagnostic.range ? { range: diagnostic.range } : {}),
   };
+}
+
+function formatNekoMarkdownDiagnostic(
+  diagnostic: NekoMarkdownDiagnostic,
+  token: string | undefined,
+): string {
+  const displayToken = token ?? 'Markdown content';
+  switch (diagnostic.code) {
+    case 'MD_RESOURCE_REFERENCE_UNSUPPORTED':
+      return 'Markdown resource references are unsupported in this context.';
+    case 'MD_RESOURCE_REFERENCE_AMBIGUOUS':
+      return `Markdown resource reference "${displayToken}" is ambiguous.`;
+    case 'MD_RESOURCE_REFERENCE_MISSING':
+      return `Markdown resource reference "${displayToken}" could not be resolved.`;
+    case 'MD_MENTION_AMBIGUOUS':
+      return `Markdown mention "${displayToken}" is ambiguous.`;
+    case 'MD_MENTION_MISSING':
+      return `Markdown mention "${displayToken}" could not be resolved.`;
+    case 'MD_RAW_HTML_PRESERVED':
+      return 'Raw HTML is preserved as inert Markdown content.';
+    case 'MD_TABLE_ROW_WIDTH_MISMATCH':
+      return 'Markdown table rows have different cell counts.';
+    case 'MD_UNSAFE_DESTINATION':
+      return 'Markdown contains a destination that this host will not activate.';
+    default:
+      return diagnostic.externalDetail?.detail ?? diagnostic.code;
+  }
 }
 
 function projectCanvasMarkdownResourceRef(

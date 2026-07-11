@@ -16,6 +16,12 @@ export interface MediaModelSelection {
   audio: string;
 }
 
+export interface MediaUnderstandingSelection {
+  image: string;
+  video: string;
+  audio: string;
+}
+
 /**
  * UI state shape
  */
@@ -24,6 +30,7 @@ export interface UIState {
   inputValue: string;
   selectedModel: string;
   mediaModelSelection: MediaModelSelection;
+  mediaUnderstandingSelection: MediaUnderstandingSelection;
   genCategory: GenCategory;
   genParams: GenerationParams;
 }
@@ -36,6 +43,7 @@ export interface UIStateActions {
   setInputValue: React.Dispatch<React.SetStateAction<string>>;
   setSelectedModel: React.Dispatch<React.SetStateAction<string>>;
   setMediaModelSelection: React.Dispatch<React.SetStateAction<MediaModelSelection>>;
+  setMediaUnderstandingSelection: React.Dispatch<React.SetStateAction<MediaUnderstandingSelection>>;
   clearInput: () => void;
   setGenCategory: React.Dispatch<React.SetStateAction<GenCategory>>;
   updateGenParams: (partial: Partial<GenerationParams>) => void;
@@ -54,6 +62,7 @@ const DEFAULT_UI_STATE: UIState = {
   inputValue: '',
   selectedModel: '',
   mediaModelSelection: { image: 'none', video: 'none', audio: 'none' },
+  mediaUnderstandingSelection: { image: 'auto', video: 'auto', audio: 'auto' },
   genCategory: 'image',
   genParams: DEFAULT_GENERATION_PARAMS,
 };
@@ -74,6 +83,10 @@ export function useUIState(initialState?: Partial<UIState>): UseUIStateReturn {
   const [mediaModelSelection, setMediaModelSelection] = useState<MediaModelSelection>(
     initialState?.mediaModelSelection ?? DEFAULT_UI_STATE.mediaModelSelection,
   );
+  const [mediaUnderstandingSelection, setMediaUnderstandingSelection] =
+    useState<MediaUnderstandingSelection>(
+      initialState?.mediaUnderstandingSelection ?? DEFAULT_UI_STATE.mediaUnderstandingSelection,
+    );
   const [genCategory, setGenCategory] = useState<GenCategory>(
     initialState?.genCategory ?? DEFAULT_UI_STATE.genCategory,
   );
@@ -95,6 +108,7 @@ export function useUIState(initialState?: Partial<UIState>): UseUIStateReturn {
     inputValue,
     selectedModel,
     mediaModelSelection,
+    mediaUnderstandingSelection,
     genCategory,
     genParams,
     // Actions
@@ -102,6 +116,7 @@ export function useUIState(initialState?: Partial<UIState>): UseUIStateReturn {
     setInputValue,
     setSelectedModel,
     setMediaModelSelection,
+    setMediaUnderstandingSelection,
     clearInput,
     setGenCategory,
     updateGenParams,

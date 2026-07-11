@@ -2,6 +2,7 @@ import type {
   AgentTurnTimelineItem,
   AgentTurnTimelineMessage,
   AgentTurnTimelineValidationDiagnostic,
+  AgentTurnTimelineValidationState,
   AgentWorkItem,
   ContentBlock,
   Message,
@@ -10,9 +11,12 @@ import type {
 import { extractCompositeContentBlocks, validateAgentTurnTimelineMessage } from '@neko-agent/types';
 
 export interface ActiveTurnTimelineState {
+  readonly connectionEpoch: string;
   readonly conversationId: string;
   readonly turnId: string;
   readonly messageId: string;
+  readonly deliveryRevision: number;
+  readonly validationState: AgentTurnTimelineValidationState;
   readonly items: readonly AgentTurnTimelineItem[];
   readonly completed: boolean;
   readonly finalContentBlocks?: readonly ContentBlock[];
@@ -36,32 +40,50 @@ export interface ActiveTurnTimelineProjection {
 export function applyAgentTurnTimelineMessage(
   input: ActiveTurnTimelineApplyInput,
 ): ActiveTurnTimelineApplyResult {
-  const currentState = isSameActiveTurnTimeline(input.state ?? null, input.message)
-    ? (input.state ?? null)
-    : null;
-  const diagnostics = [...validateAgentTurnTimelineMessage(input.message).diagnostics];
-  diagnostics.push(...validateTimelineStateTransition(currentState, input.message.events));
-  if (diagnostics.length > 0) {
+  const currentState = input.state ?? null;
+  const identityMatches = isSameActiveTurnTimeline(currentState, input.message);
+  if (currentState && !identityMatches) {
     return {
-      state: input.state ?? null,
-      diagnostics,
+      state: currentState,
+      diagnostics: [
+        {
+          code: 'identity-mismatch',
+          message: 'Timeline batch identity does not match the active turn.',
+          deliveryRevision: input.message.deliveryRevision,
+        },
+      ],
     };
   }
 
-  const nextItems = mergeTimelineItems(currentState?.items ?? [], input.message.events);
-  const completed =
-    currentState?.completed === true ||
-    (input.message.finalContentBlocks !== undefined && input.message.finalContentBlocks.length > 0);
+  const validationState =
+    currentState?.validationState ?? createInitialValidationState(input.message);
+  const validation = validateAgentTurnTimelineMessage(input.message, validationState);
+  if (!validation.ok || !validation.nextState) {
+    return { state: currentState, diagnostics: validation.diagnostics };
+  }
+
+  const nextItems = applyTimelineOperations(
+    input.message.batchKind === 'snapshot' ? [] : (currentState?.items ?? []),
+    input.message.operations,
+  );
+  const parentDiagnostics = validateTimelineParentAnchors(nextItems);
+  if (parentDiagnostics.length > 0) {
+    return { state: currentState, diagnostics: parentDiagnostics };
+  }
+
   return {
     diagnostics: [],
     state: {
+      connectionEpoch: input.message.connectionEpoch,
       conversationId: input.message.conversationId,
       turnId: input.message.turnId,
       messageId: input.message.messageId,
+      deliveryRevision: input.message.deliveryRevision,
+      validationState: validation.nextState,
       items: nextItems,
-      completed,
-      ...(input.message.finalContentBlocks !== undefined
-        ? { finalContentBlocks: input.message.finalContentBlocks }
+      completed: input.message.completion !== undefined,
+      ...(input.message.completion?.finalContentBlocks !== undefined
+        ? { finalContentBlocks: input.message.completion.finalContentBlocks }
         : currentState?.finalContentBlocks !== undefined
           ? { finalContentBlocks: currentState.finalContentBlocks }
           : {}),
@@ -73,9 +95,7 @@ export function completeActiveTurnTimeline(
   state: ActiveTurnTimelineState | null | undefined,
   input: { readonly finalContentBlocks?: readonly ContentBlock[] } = {},
 ): ActiveTurnTimelineState | null {
-  if (!state) {
-    return null;
-  }
+  if (!state) return null;
   return {
     ...state,
     items: completeOpenTimelineItems(state.items),
@@ -91,17 +111,12 @@ export function completeActiveTurnTimeline(
 function projectActiveTurnTimelineToMessage(
   state: ActiveTurnTimelineState | null | undefined,
 ): ActiveTurnTimelineProjection {
-  if (!state) {
-    return { message: null, workItemIds: [] };
-  }
-
-  const visibleItems = state.items;
-  const timelineContentBlocks = projectTimelineItemsToContentBlocks(visibleItems);
-  const finalContentBlocks = state.finalContentBlocks;
+  if (!state) return { message: null, workItemIds: [] };
+  const timelineContentBlocks = projectTimelineItemsToContentBlocks(state.items);
   const contentBlocks = state.completed
-    ? mergeFinalContentBlocksIntoTimelineOrder(timelineContentBlocks, finalContentBlocks)
+    ? mergeFinalContentBlocksIntoTimelineOrder(timelineContentBlocks, state.finalContentBlocks)
     : timelineContentBlocks;
-  const workItemIds = projectTimelineWorkItemIds(visibleItems);
+  const workItemIds = projectTimelineWorkItemIds(state.items);
   return {
     workItemIds,
     message: {
@@ -122,9 +137,7 @@ function projectActiveTurnTimelineToMessage(
 export function projectActiveTurnTimelineWorkItems(
   state: ActiveTurnTimelineState | null | undefined,
 ): AgentWorkItem[] {
-  if (!state) {
-    return [];
-  }
+  if (!state) return [];
   return state.items.flatMap((item) =>
     item.kind === 'task' || item.kind === 'media' ? [item.payload.workItem] : [],
   );
@@ -134,31 +147,77 @@ export function projectMessagesWithActiveTurnTimeline(
   messages: readonly Message[],
   state: ActiveTurnTimelineState | null | undefined,
 ): Message[] {
-  const projection = projectActiveTurnTimelineToMessage(state);
-  const projectedMessage = projection.message;
-  if (!projectedMessage) {
-    return [...messages];
-  }
-
+  const projectedMessage = projectActiveTurnTimelineToMessage(state).message;
+  if (!projectedMessage) return [...messages];
   const targetIndex = messages.findIndex((message) => message.id === projectedMessage.id);
-  if (targetIndex === -1) {
-    return [...messages, projectedMessage];
-  }
-
+  if (targetIndex === -1) return [...messages, projectedMessage];
   return messages.map((message, index) =>
     index === targetIndex ? mergeTimelineProjectionIntoMessage(message, projectedMessage) : message,
   );
 }
 
-function mergeTimelineItems(
+function createInitialValidationState(
+  message: AgentTurnTimelineMessage,
+): AgentTurnTimelineValidationState {
+  return {
+    connectionEpoch: message.connectionEpoch,
+    conversationId: message.conversationId,
+    turnId: message.turnId,
+    messageId: message.messageId,
+    deliveryRevision: message.batchKind === 'snapshot' ? message.deliveryRevision : 0,
+    completed: false,
+    items: new Map(),
+  };
+}
+
+function applyTimelineOperations(
   currentItems: readonly AgentTurnTimelineItem[],
-  events: readonly AgentTurnTimelineItem[],
+  operations: AgentTurnTimelineMessage['operations'],
 ): AgentTurnTimelineItem[] {
   const byItemId = new Map(currentItems.map((item) => [item.itemId, item]));
-  for (const event of events) {
-    byItemId.set(event.itemId, mergeTimelineItem(byItemId.get(event.itemId), event));
+  for (const operation of operations) {
+    switch (operation.operation) {
+      case 'append': {
+        const current = byItemId.get(operation.item.itemId);
+        if (
+          current &&
+          (current.kind === 'assistant_text' || current.kind === 'thinking') &&
+          current.kind === operation.item.kind
+        ) {
+          byItemId.set(operation.item.itemId, {
+            ...operation.item,
+            sequence: current.sequence,
+            createdAt: current.createdAt,
+            payload: {
+              ...operation.item.payload,
+              content: `${current.payload.content}${operation.item.payload.content}`,
+            },
+          });
+        } else {
+          byItemId.set(operation.item.itemId, operation.item);
+        }
+        break;
+      }
+      case 'replace':
+      case 'snapshot':
+      case 'upsert':
+        byItemId.set(operation.item.itemId, operation.item);
+        break;
+      case 'complete': {
+        const current = byItemId.get(operation.itemId);
+        if (current && (current.kind === 'assistant_text' || current.kind === 'thinking')) {
+          byItemId.set(operation.itemId, {
+            ...current,
+            itemRevision: operation.itemRevision,
+            status: operation.status,
+            updatedAt: operation.updatedAt,
+          });
+        }
+        break;
+      }
+    }
   }
-  return Array.from(byItemId.values()).sort((a, b) => a.sequence - b.sequence);
+  return Array.from(byItemId.values()).sort((left, right) => left.sequence - right.sequence);
 }
 
 function isSameActiveTurnTimeline(
@@ -167,37 +226,11 @@ function isSameActiveTurnTimeline(
 ): boolean {
   return Boolean(
     state &&
+    state.connectionEpoch === message.connectionEpoch &&
     state.conversationId === message.conversationId &&
     state.turnId === message.turnId &&
     state.messageId === message.messageId,
   );
-}
-
-function validateTimelineStateTransition(
-  state: ActiveTurnTimelineState | null,
-  events: readonly AgentTurnTimelineItem[],
-): AgentTurnTimelineValidationDiagnostic[] {
-  if (!state) {
-    return validateTimelineParentAnchors(events);
-  }
-
-  const diagnostics: AgentTurnTimelineValidationDiagnostic[] = [];
-  const currentByItemId = new Map(state.items.map((item) => [item.itemId, item]));
-  for (const event of events) {
-    const current = currentByItemId.get(event.itemId);
-    if (current && current.kind !== event.kind) {
-      diagnostics.push({
-        code: 'duplicate-item-id',
-        message: 'Timeline item id was reused for a different active timeline item kind.',
-        itemId: event.itemId,
-        sequence: event.sequence,
-      });
-    }
-    currentByItemId.set(event.itemId, event);
-  }
-
-  diagnostics.push(...validateTimelineParentAnchors(Array.from(currentByItemId.values())));
-  return diagnostics;
 }
 
 function validateTimelineParentAnchors(
@@ -208,14 +241,13 @@ function validateTimelineParentAnchors(
   const toolCallIds = new Set(
     items.flatMap((item) => (item.kind === 'tool_call' ? [item.payload.toolCall.id] : [])),
   );
-
   for (const item of items) {
     if (item.parentAnchor === 'item' && item.parentItemId && !itemIds.has(item.parentItemId)) {
       diagnostics.push({
         code: 'invalid-parent-anchor',
         message: 'Timeline item parent anchor references an unknown item.',
         itemId: item.itemId,
-        sequence: item.sequence,
+        itemRevision: item.itemRevision,
       });
     }
     if (
@@ -227,78 +259,11 @@ function validateTimelineParentAnchors(
         code: 'invalid-parent-anchor',
         message: 'Timeline tool parent anchor references an unknown tool call.',
         itemId: item.itemId,
-        sequence: item.sequence,
+        itemRevision: item.itemRevision,
       });
     }
   }
-
   return diagnostics;
-}
-
-function mergeTimelineItem(
-  current: AgentTurnTimelineItem | undefined,
-  event: AgentTurnTimelineItem,
-): AgentTurnTimelineItem {
-  if (!current) {
-    return event;
-  }
-  if (current.kind !== event.kind) {
-    return event;
-  }
-
-  const base = {
-    sequence: current.sequence,
-    createdAt: Math.min(current.createdAt, event.createdAt),
-    updatedAt: Math.max(current.updatedAt, event.updatedAt),
-  };
-
-  switch (event.kind) {
-    case 'assistant_text': {
-      if (current.kind !== 'assistant_text') return event;
-      const currentContent = current.payload.content;
-      const nextContent = event.payload.content;
-      const { replaceContent: _replaceContent, ...eventPayload } = event.payload;
-      void _replaceContent;
-      return {
-        ...event,
-        ...base,
-        payload: {
-          ...current.payload,
-          ...eventPayload,
-          content: event.payload.replaceContent
-            ? nextContent
-            : nextContent.startsWith(currentContent)
-              ? nextContent
-              : `${currentContent}${nextContent}`,
-        },
-      };
-    }
-    case 'thinking': {
-      if (current.kind !== 'thinking') return event;
-      const currentContent = current.payload.content;
-      const nextContent = event.payload.content;
-      return {
-        ...event,
-        ...base,
-        payload: {
-          ...current.payload,
-          ...event.payload,
-          content: nextContent.startsWith(currentContent)
-            ? nextContent
-            : `${currentContent}${nextContent}`,
-        },
-      };
-    }
-    case 'tool_call':
-    case 'task':
-    case 'media':
-    case 'composite':
-    case 'error':
-      return {
-        ...event,
-        ...base,
-      };
-  }
 }
 
 function completeOpenTimelineItems(

@@ -17,6 +17,7 @@ import {
   type MessageContextReference,
   type AgentLlmConfig,
   type AgentModelSlots,
+  type MediaUnderstandingModelSelections,
   type MessageModelProjection,
   type SessionMode,
   type TabType,
@@ -48,6 +49,7 @@ export interface PendingSendInput {
   contextPayloads?: AgentContextPayload[];
   fileReferences?: SelectedFileReference[];
   agentModels?: AgentModelSlots;
+  understandingModels?: MediaUnderstandingModelSelections;
   llmConfig?: AgentLlmConfig;
 }
 
@@ -62,6 +64,8 @@ export interface UseChatActionsProps {
   mediaModelId?: string;
   /** Per-category media models for agent mode (overrides mediaModelId when set) */
   agentMediaModels?: AgentMediaModels;
+  /** Per-category media understanding models for the current webview session. */
+  understandingModels?: MediaUnderstandingModelSelections;
   activeConversationId: string | null;
   activeConversationIdRef: MutableRefObject<string | null>;
   isConversationSwitching?: boolean;
@@ -96,6 +100,7 @@ export function useChatActions({
   mediaProviderId,
   mediaModelId,
   agentMediaModels,
+  understandingModels,
   activeConversationId,
   activeConversationIdRef,
   isConversationSwitching = false,
@@ -160,6 +165,7 @@ export function useChatActions({
 
       const conversationId = activeConversationId;
       if (!conversationId) {
+        const pendingSessionMode = inputSessionMode ?? sessionMode ?? 'agent';
         ensureConversationForSend?.({
           messageText,
           displayMessageText,
@@ -167,8 +173,15 @@ export function useChatActions({
           ...(attachments ? { attachments } : {}),
           ...(contextPayloads ? { contextPayloads } : {}),
           ...(input?.fileReferences ? { fileReferences: input.fileReferences } : {}),
-          ...(input?.agentModels ? { agentModels: input.agentModels } : {}),
-          ...(input?.llmConfig ? { llmConfig: input.llmConfig } : {}),
+          ...(pendingSessionMode === 'agent' && input?.agentModels
+            ? { agentModels: input.agentModels }
+            : {}),
+          ...(pendingSessionMode === 'agent' && input?.understandingModels
+            ? { understandingModels: input.understandingModels }
+            : {}),
+          ...(pendingSessionMode === 'agent' && input?.llmConfig
+            ? { llmConfig: input.llmConfig }
+            : {}),
         });
         return;
       }
@@ -178,7 +191,11 @@ export function useChatActions({
         clearInput();
         setAttachedFiles([]);
         setSelectedFileReferences?.([]);
-        AgentHostMessages.invokeSlashCommand(slashCommand.command, slashCommand.args, conversationId);
+        AgentHostMessages.invokeSlashCommand(
+          slashCommand.command,
+          slashCommand.args,
+          conversationId,
+        );
         return;
       }
 
@@ -187,7 +204,11 @@ export function useChatActions({
         clearInput();
         setAttachedFiles([]);
         setSelectedFileReferences?.([]);
-        AgentHostMessages.invokeSkill(skillInvocation.skillName, skillInvocation.args, conversationId);
+        AgentHostMessages.invokeSkill(
+          skillInvocation.skillName,
+          skillInvocation.args,
+          conversationId,
+        );
         return;
       }
 
@@ -249,6 +270,9 @@ export function useChatActions({
         ...(effectiveSessionMode === 'agent' && input?.agentModels
           ? { agentModels: input.agentModels }
           : {}),
+        ...(effectiveSessionMode === 'agent' && (input?.understandingModels ?? understandingModels)
+          ? { understandingModels: input?.understandingModels ?? understandingModels }
+          : {}),
         ...(effectiveSessionMode === 'agent' && input?.llmConfig
           ? { llmConfig: input.llmConfig }
           : {}),
@@ -268,6 +292,7 @@ export function useChatActions({
       mediaProviderId,
       mediaModelId,
       agentMediaModels,
+      understandingModels,
       activeConversationId,
       isConversationSwitching,
       availableModels,

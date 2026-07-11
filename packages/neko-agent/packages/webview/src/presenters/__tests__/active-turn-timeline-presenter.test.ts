@@ -18,6 +18,82 @@ import {
 import { projectMarkdownResourceRendering } from '../markdown-resource-rendering-presenter';
 
 describe('active turn timeline presenter', () => {
+  it('applies append literally without cumulative-prefix inference', () => {
+    const initial = applyAgentTurnTimelineMessage({
+      state: null,
+      message: timelineMessage([textItem('text-1', 1, 'a')]),
+    }).state;
+    const appended = applyAgentTurnTimelineMessage({
+      state: initial,
+      message: timelineMessage(
+        [
+          {
+            ...textItem('text-1', 1, 'abc'),
+            itemRevision: 2,
+          },
+        ],
+        { deliveryRevision: 2 },
+      ),
+    });
+
+    expect(appended.diagnostics).toEqual([]);
+    expect(appended.state?.items[0]?.payload).toMatchObject({ content: 'aabc' });
+  });
+
+  it('does not apply duplicate or gapped delivery revisions', () => {
+    const active = applyAgentTurnTimelineMessage({
+      state: null,
+      message: timelineMessage([textItem('text-1', 1, 'a')]),
+    }).state;
+    const duplicate = applyAgentTurnTimelineMessage({
+      state: active,
+      message: timelineMessage([{ ...textItem('text-1', 1, 'b'), itemRevision: 2 }], {
+        deliveryRevision: 1,
+      }),
+    });
+    const gap = applyAgentTurnTimelineMessage({
+      state: active,
+      message: timelineMessage([{ ...textItem('text-1', 1, 'c'), itemRevision: 2 }], {
+        deliveryRevision: 3,
+      }),
+    });
+
+    expect(duplicate.state).toBe(active);
+    expect(duplicate.diagnostics).toEqual(
+      expect.arrayContaining([expect.objectContaining({ code: 'duplicate-delivery-revision' })]),
+    );
+    expect(gap.state).toBe(active);
+    expect(gap.diagnostics).toEqual(
+      expect.arrayContaining([expect.objectContaining({ code: 'delivery-revision-gap' })]),
+    );
+  });
+
+  it('recovers from an authoritative snapshot and continues at the next revision', () => {
+    const snapshot = applyAgentTurnTimelineMessage({
+      state: null,
+      message: timelineMessage([{ ...textItem('text-1', 1, 'authoritative'), itemRevision: 5 }], {
+        deliveryRevision: 7,
+        operation: 'snapshot',
+        batchKind: 'snapshot',
+      }),
+    });
+    const appended = applyAgentTurnTimelineMessage({
+      state: snapshot.state,
+      message: timelineMessage(
+        [
+          {
+            ...textItem('text-1', 1, '!'),
+            itemRevision: 6,
+          },
+        ],
+        { deliveryRevision: 8 },
+      ),
+    });
+
+    expect(snapshot.diagnostics).toEqual([]);
+    expect(appended.diagnostics).toEqual([]);
+    expect(appended.state?.items[0]?.payload).toMatchObject({ content: 'authoritative!' });
+  });
   it('renders text, tool, and later text in sequence order', () => {
     const result = applyAgentTurnTimelineMessage({
       state: null,
@@ -137,20 +213,24 @@ describe('active turn timeline presenter', () => {
     }).state;
     const updated = applyAgentTurnTimelineMessage({
       state: active,
-      message: timelineMessage([
-        {
-          ...toolItem('tool-item-1', 9, 'tool-1'),
-          status: 'succeeded',
-          payload: {
-            toolCall: {
-              id: 'tool-1',
-              name: 'ReadDocument',
-              arguments: {},
-              result: { success: true, data: { title: 'Book' } },
+      message: timelineMessage(
+        [
+          {
+            ...toolItem('tool-item-1', 2, 'tool-1'),
+            itemRevision: 2,
+            status: 'succeeded',
+            payload: {
+              toolCall: {
+                id: 'tool-1',
+                name: 'ReadDocument',
+                arguments: {},
+                result: { success: true, data: { title: 'Book' } },
+              },
             },
           },
-        },
-      ]),
+        ],
+        { deliveryRevision: 2 },
+      ),
     });
     const messages = projectMessagesWithActiveTurnTimeline([], updated.state);
 
@@ -177,41 +257,49 @@ describe('active turn timeline presenter', () => {
     }).state;
     const withToolBResult = applyAgentTurnTimelineMessage({
       state: active,
-      message: timelineMessage([
-        {
-          ...toolItem('tool-item-b', 3, 'tool-b'),
-          status: 'succeeded',
-          createdAt: 3,
-          updatedAt: 10,
-          payload: {
-            toolCall: {
-              id: 'tool-b',
-              name: 'ReadDocument',
-              arguments: {},
-              result: { success: true, data: { title: 'B' } },
+      message: timelineMessage(
+        [
+          {
+            ...toolItem('tool-item-b', 3, 'tool-b'),
+            itemRevision: 2,
+            status: 'succeeded',
+            createdAt: 3,
+            updatedAt: 10,
+            payload: {
+              toolCall: {
+                id: 'tool-b',
+                name: 'ReadDocument',
+                arguments: {},
+                result: { success: true, data: { title: 'B' } },
+              },
             },
           },
-        },
-      ]),
+        ],
+        { deliveryRevision: 2 },
+      ),
     }).state;
     const withToolAResult = applyAgentTurnTimelineMessage({
       state: withToolBResult,
-      message: timelineMessage([
-        {
-          ...toolItem('tool-item-a', 2, 'tool-a'),
-          status: 'failed',
-          createdAt: 2,
-          updatedAt: 11,
-          payload: {
-            toolCall: {
-              id: 'tool-a',
-              name: 'ReadDocument',
-              arguments: {},
-              result: { success: false, data: null, error: 'A failed' },
+      message: timelineMessage(
+        [
+          {
+            ...toolItem('tool-item-a', 2, 'tool-a'),
+            itemRevision: 2,
+            status: 'failed',
+            createdAt: 2,
+            updatedAt: 11,
+            payload: {
+              toolCall: {
+                id: 'tool-a',
+                name: 'ReadDocument',
+                arguments: {},
+                result: { success: false, data: null, error: 'A failed' },
+              },
             },
           },
-        },
-      ]),
+        ],
+        { deliveryRevision: 3 },
+      ),
     });
     const messages = projectMessagesWithActiveTurnTimeline([], withToolAResult.state);
 
@@ -275,19 +363,23 @@ describe('active turn timeline presenter', () => {
     expect(active).not.toBeNull();
     const updated = applyAgentTurnTimelineMessage({
       state: active,
-      message: timelineMessage([
-        {
-          ...taskItem('tool-background-task-task-1', 10, 'tool-1', 'task-1'),
-          status: 'succeeded',
-          payload: {
-            workItem: workItem('task-1', 'tool-background-task', 'tool-1', {
-              status: 'completed',
-              progress: 100,
-            }),
+      message: timelineMessage(
+        [
+          {
+            ...taskItem('tool-background-task-task-1', 3, 'tool-1', 'task-1'),
+            itemRevision: 2,
+            status: 'succeeded',
+            payload: {
+              workItem: workItem('task-1', 'tool-background-task', 'tool-1', {
+                status: 'completed',
+                progress: 100,
+              }),
+            },
+            updatedAt: 10,
           },
-          updatedAt: 10,
-        },
-      ]),
+        ],
+        { deliveryRevision: 2 },
+      ),
     });
     const messages = projectMessagesWithActiveTurnTimeline([], updated.state);
 
@@ -326,24 +418,28 @@ describe('active turn timeline presenter', () => {
     expect(active).not.toBeNull();
     const updated = applyAgentTurnTimelineMessage({
       state: active,
-      message: timelineMessage([
-        {
-          ...toolItem('tool-item-1', 9, 'tool-1'),
-          status: 'failed',
-          payload: {
-            toolCall: {
-              id: 'tool-1',
-              name: 'ReadDocument',
-              arguments: {},
-              result: {
-                success: false,
-                data: null,
-                error: 'Read failed',
+      message: timelineMessage(
+        [
+          {
+            ...toolItem('tool-item-1', 2, 'tool-1'),
+            itemRevision: 2,
+            status: 'failed',
+            payload: {
+              toolCall: {
+                id: 'tool-1',
+                name: 'ReadDocument',
+                arguments: {},
+                result: {
+                  success: false,
+                  data: null,
+                  error: 'Read failed',
+                },
               },
             },
           },
-        },
-      ]),
+        ],
+        { deliveryRevision: 2 },
+      ),
     });
     const messages = projectMessagesWithActiveTurnTimeline([], updated.state);
 
@@ -515,16 +611,29 @@ describe('active turn timeline presenter', () => {
     }).state;
     const replaced = applyAgentTurnTimelineMessage({
       state: active,
-      message: timelineMessage([
-        {
-          ...textItem('text-1', 2, ''),
-          payload: { content: '', format: 'markdown', replaceContent: true },
-        },
-      ]),
+      message: timelineMessage(
+        [
+          {
+            ...textItem('text-1', 1, ''),
+            itemRevision: 2,
+            payload: { content: '', format: 'markdown', sourceGeneration: 2 },
+          },
+        ],
+        { deliveryRevision: 2, operation: 'replace' },
+      ),
     }).state;
     const repaired = applyAgentTurnTimelineMessage({
       state: replaced,
-      message: timelineMessage([textItem('text-1', 3, 'fixed table')]),
+      message: timelineMessage(
+        [
+          {
+            ...textItem('text-1', 1, 'fixed table'),
+            itemRevision: 3,
+            payload: { content: 'fixed table', format: 'markdown', sourceGeneration: 2 },
+          },
+        ],
+        { deliveryRevision: 3 },
+      ),
     }).state;
     const completed = completeActiveTurnTimeline(repaired, {
       finalContentBlocks: [
@@ -559,17 +668,30 @@ describe('active turn timeline presenter', () => {
     }).state;
     const replaced = applyAgentTurnTimelineMessage({
       state: active,
-      message: timelineMessage([
-        {
-          ...textItem('text-1', 3, ''),
-          payload: { content: '', format: 'markdown', replaceContent: true },
-        },
-      ]),
+      message: timelineMessage(
+        [
+          {
+            ...textItem('text-1', 2, ''),
+            itemRevision: 2,
+            payload: { content: '', format: 'markdown', sourceGeneration: 2 },
+          },
+        ],
+        { deliveryRevision: 2, operation: 'replace' },
+      ),
     }).state;
     const repairedMarkdown = '| scene | source |\n| --- | --- |\n| A | P1 |';
     const repaired = applyAgentTurnTimelineMessage({
       state: replaced,
-      message: timelineMessage([textItem('text-1', 4, repairedMarkdown)]),
+      message: timelineMessage(
+        [
+          {
+            ...textItem('text-1', 2, repairedMarkdown),
+            itemRevision: 3,
+            payload: { content: repairedMarkdown, format: 'markdown', sourceGeneration: 2 },
+          },
+        ],
+        { deliveryRevision: 3 },
+      ),
     }).state;
     const completed = completeActiveTurnTimeline(repaired, {
       finalContentBlocks: [
@@ -647,12 +769,17 @@ describe('active turn timeline presenter', () => {
       state: active,
       message: {
         type: 'agentTurnTimeline',
+        schemaVersion: 2,
+        connectionEpoch: 'epoch-1',
         conversationId: 'conv-1',
         turnId: 'turn-1',
         messageId: 'msg-1',
-        events: [
+        batchKind: 'delta',
+        deliveryRevision: 2,
+        operations: [
           {
-            ...parentlessTaskItem('task-1', 2, 'task-1'),
+            operation: 'upsert',
+            item: parentlessTaskItem('task-1', 2, 'task-1'),
           },
         ],
       },
@@ -662,7 +789,7 @@ describe('active turn timeline presenter', () => {
     expect(result.diagnostics).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          code: 'missing-parent-anchor',
+          code: 'invalid-parent-anchor',
           itemId: 'task-1',
         }),
       ]),
@@ -676,7 +803,9 @@ describe('active turn timeline presenter', () => {
     }).state;
     const result = applyAgentTurnTimelineMessage({
       state: active,
-      message: timelineMessage([toolItem('shared-item', 2, 'tool-1')]),
+      message: timelineMessage([{ ...toolItem('shared-item', 1, 'tool-1'), itemRevision: 2 }], {
+        deliveryRevision: 2,
+      }),
     });
 
     expect(result.state).toBe(active);
@@ -697,7 +826,9 @@ describe('active turn timeline presenter', () => {
     }).state;
     const result = applyAgentTurnTimelineMessage({
       state: active,
-      message: timelineMessage([taskItem('task-item-1', 2, 'missing-tool', 'task-1')]),
+      message: timelineMessage([taskItem('task-item-1', 2, 'missing-tool', 'task-1')], {
+        deliveryRevision: 2,
+      }),
     });
 
     expect(result.state).toBe(active);
@@ -722,9 +853,10 @@ describe('active turn timeline presenter', () => {
           messageId: 'msg-1',
           itemId: 'thinking-2',
           sequence: 2,
+          itemRevision: 1,
           kind: 'thinking',
           status: 'streaming',
-          payload: { content: 'Reasoning' },
+          payload: { content: 'Reasoning', sourceGeneration: 1 },
           createdAt: 2,
           updatedAt: 2,
         },
@@ -793,13 +925,29 @@ describe('active turn timeline presenter', () => {
   });
 });
 
-function timelineMessage(events: readonly AgentTurnTimelineItem[]): AgentTurnTimelineMessage {
+function timelineMessage(
+  items: readonly AgentTurnTimelineItem[],
+  options: {
+    readonly deliveryRevision?: number;
+    readonly operation?: 'append' | 'replace' | 'snapshot' | 'upsert';
+    readonly batchKind?: 'delta' | 'snapshot';
+  } = {},
+): AgentTurnTimelineMessage {
   return {
     type: 'agentTurnTimeline',
+    schemaVersion: 2,
+    connectionEpoch: 'epoch-1',
     conversationId: 'conv-1',
     turnId: 'turn-1',
     messageId: 'msg-1',
-    events,
+    batchKind: options.batchKind ?? 'delta',
+    deliveryRevision: options.deliveryRevision ?? 1,
+    operations: items.map((item) => ({
+      operation:
+        options.operation ??
+        (item.kind === 'assistant_text' || item.kind === 'thinking' ? 'append' : 'upsert'),
+      item,
+    })) as AgentTurnTimelineMessage['operations'],
   };
 }
 
@@ -814,9 +962,10 @@ function textItem(
     messageId: 'msg-1',
     itemId,
     sequence,
+    itemRevision: 1,
     kind: 'assistant_text',
     status: 'streaming',
-    payload: { content, format: 'markdown' },
+    payload: { content, format: 'markdown', sourceGeneration: 1 },
     createdAt: sequence,
     updatedAt: sequence,
   };
@@ -833,6 +982,7 @@ function toolItem(
     messageId: 'msg-1',
     itemId,
     sequence,
+    itemRevision: 1,
     kind: 'tool_call',
     status: 'pending',
     payload: {
@@ -859,6 +1009,7 @@ function taskItem(
     messageId: 'msg-1',
     itemId,
     sequence,
+    itemRevision: 1,
     kind: 'task',
     status: 'pending',
     ...(parentToolCallId
@@ -884,6 +1035,7 @@ function mediaItem(
     messageId: 'msg-1',
     itemId,
     sequence,
+    itemRevision: 1,
     kind: 'media',
     status: 'pending',
     parentAnchor: 'tool_call',
@@ -907,6 +1059,7 @@ function parentlessTaskItem(
     messageId: 'msg-1',
     itemId,
     sequence,
+    itemRevision: 1,
     kind: 'task',
     status: 'pending',
     payload: {
@@ -924,6 +1077,7 @@ function errorItem(itemId: string, sequence: number, message: string): AgentTurn
     messageId: 'msg-1',
     itemId,
     sequence,
+    itemRevision: 1,
     kind: 'error',
     status: 'failed',
     payload: { message },

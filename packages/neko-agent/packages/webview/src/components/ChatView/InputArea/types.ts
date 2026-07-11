@@ -26,12 +26,6 @@ export interface SlashCommand {
   extensionId?: string;
 }
 
-export interface SkillInvocation {
-  id: string;
-  skillName: string;
-  name: string;
-}
-
 /**
  * Plugin slash command registered by an external extension via
  * `vscode.commands.executeCommand('neko.agent.registerSlashCommands', ...)`.
@@ -97,13 +91,7 @@ export interface ProjectFile {
 
 // @mention item kinds
 export type MentionItemKind =
-  | 'file'
-  | 'canvas-node'
-  | 'character'
-  | 'scene'
-  | 'asset'
-  | 'media'
-  | 'entity';
+  'file' | 'canvas-node' | 'character' | 'scene' | 'asset' | 'media' | 'entity';
 
 /**
  * Unified item shown in the @mention popup.

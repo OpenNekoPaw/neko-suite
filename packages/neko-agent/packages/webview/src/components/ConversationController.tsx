@@ -1299,7 +1299,9 @@ export function ConversationController({
               mediaModelSelection={mediaModelSelection}
               availableMediaModels={entryModelState.availableMediaModels}
               mediaUnderstandingModels={activeSettings.mediaUnderstandingModels}
+              mediaUnderstandingSelection={{ image: 'auto', video: 'auto', audio: 'auto' }}
               onMediaModelSelect={handleEntryMediaModelSelect}
+              onMediaUnderstandingModelSelect={() => undefined}
               executionMode={activeSettings.executionMode}
               onExecutionModeChange={(mode) => updateActiveSettings({ executionMode: mode })}
               promptMode={activeSettings.promptMode}

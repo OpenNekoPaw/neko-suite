@@ -8,6 +8,7 @@ import { DEFAULT_GENERATION_PARAMS } from './types';
 import { InputArea } from './InputArea';
 
 const vscodeMocks = vi.hoisted(() => ({
+  invokeSkill: vi.fn(),
   startCharacterDialogueFromSlash: vi.fn(),
 }));
 
@@ -107,10 +108,17 @@ const translations: Record<string, string> = {
   'chat.generation.model.noneShort': '无',
   'chat.generation.model.select': '选择{category}模型',
   'chat.generation.model.unconfigured': '未配置{category}模型',
-  'chat.mediaUnderstanding.chip': '理解 {model}',
-  'chat.mediaUnderstanding.title': '{category}理解：{model}（{status}）',
+  'chat.mediaUnderstanding.chip': '感知 {model}',
+  'chat.mediaUnderstanding.title': '{category}感知：{model}（{status}）',
   'chat.mediaUnderstanding.unavailable': '未配置',
   'chat.mediaUnderstanding.unavailableShort': '无',
+  'chat.mediaUnderstanding.model.auto': '自动 · {model}',
+  'chat.mediaUnderstanding.menu.chip': '感知',
+  'chat.mediaUnderstanding.menu.title': '感知模型',
+  'chat.mediaUnderstanding.menu.titleWithSummary': '感知模型：{summary}',
+  'chat.mediaUnderstanding.menu.categoryRow': '{category}：{model}',
+  'chat.mediaUnderstanding.menu.categoryTitle': '{category}感知',
+  'chat.mediaUnderstanding.menu.back': '返回',
   'chat.mediaUnderstanding.status.configured': '指定',
   'chat.mediaUnderstanding.status.auto': '自动',
   'chat.mediaUnderstanding.status.missing': '缺失',
@@ -215,6 +223,42 @@ const chatModels: ChatModelOption[] = [
       creativity: true,
       maxOutputTokens: true,
     },
+  },
+  {
+    id: 'google:gemini-flash',
+    label: 'Google / Gemini Flash',
+    providerLabel: 'Google',
+    source: 'explicit-config',
+    connectionKind: 'direct',
+    supportLevel: 'verified',
+    providerId: 'google',
+    modelId: 'gemini-flash',
+    category: 'llm',
+    capabilities: ['chat', 'vision', 'vision_video'],
+  },
+  {
+    id: 'google:gemini-pro',
+    label: 'Google / Gemini Pro',
+    providerLabel: 'Google',
+    source: 'explicit-config',
+    connectionKind: 'direct',
+    supportLevel: 'verified',
+    providerId: 'google',
+    modelId: 'gemini-pro',
+    category: 'llm',
+    capabilities: ['chat', 'vision_video'],
+  },
+  {
+    id: 'google:gemini-audio',
+    label: 'Google / Gemini Audio',
+    providerLabel: 'Google',
+    source: 'explicit-config',
+    connectionKind: 'direct',
+    supportLevel: 'verified',
+    providerId: 'google',
+    modelId: 'gemini-audio',
+    category: 'llm',
+    capabilities: ['chat', 'audio'],
   },
 ];
 
@@ -577,7 +621,7 @@ describe('InputArea composer controls', () => {
     expect(modelTagList?.querySelectorAll('.agent-model-tag')).toHaveLength(2);
     expect(modelTagList?.textContent).toBe('视频文生视频');
     fireEvent.click(screen.getByRole('menuitem', { name: /Model Video/ }));
-    expect(within(paramsGroup).getByTitle('视频理解：Google / Gemini Flash（指定）')).toBeTruthy();
+    expect(within(paramsGroup).queryByRole('button', { name: /感知模型/ })).toBeNull();
     expect(within(paramsGroup).getByRole('button', { name: '画面比例' })).toBeTruthy();
     expect(within(paramsGroup).getByRole('button', { name: '分辨率' })).toBeTruthy();
     const durationTrigger = within(paramsGroup).getByRole('button', { name: '视频时长' });
@@ -640,6 +684,73 @@ describe('InputArea composer controls', () => {
     expect(screen.getByRole('button', { name: '分辨率' }).textContent).toBe('1080p');
   });
 
+  it('does not show media understanding model controls in direct generation modes', () => {
+    const onMediaUnderstandingModelSelect = vi.fn();
+    render(
+      <Harness
+        sessionMode="video"
+        availableMediaModels={allMediaModels}
+        mediaUnderstandingModels={mediaUnderstandingModels}
+        onMediaUnderstandingModelSelect={onMediaUnderstandingModelSelect}
+      >
+        <InputArea inputValue="" isThinking={false} onInputChange={vi.fn()} onSend={vi.fn()} />
+      </Harness>,
+    );
+
+    expect(screen.queryByRole('button', { name: /感知模型/ })).toBeNull();
+    expect(onMediaUnderstandingModelSelect).not.toHaveBeenCalled();
+  });
+
+  it('filters image understanding models by LLM vision capability', () => {
+    render(
+      <Harness
+        availableMediaModels={allMediaModels}
+        mediaUnderstandingModels={mediaUnderstandingModels}
+      >
+        <InputArea inputValue="" isThinking={false} onInputChange={vi.fn()} onSend={vi.fn()} />
+      </Harness>,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /感知模型/ }));
+    fireEvent.click(screen.getByRole('menuitem', { name: /图片：/ }));
+
+    expect(screen.getAllByRole('menuitem', { name: /Gemini Flash/ }).length).toBeGreaterThan(0);
+    expect(screen.queryByRole('menuitem', { name: /Gemini Pro/ })).toBeNull();
+    expect(screen.queryByRole('menuitem', { name: /Gemini Audio/ })).toBeNull();
+    expect(screen.queryByRole('menuitem', { name: /Model Image/ })).toBeNull();
+  });
+
+  it('filters audio understanding models by LLM audio capability', () => {
+    render(
+      <Harness
+        availableMediaModels={allMediaModels}
+        mediaUnderstandingModels={{
+          ...mediaUnderstandingModels,
+          audio: {
+            category: 'audio',
+            purpose: 'audio.understand',
+            status: 'auto',
+            providerId: 'google',
+            modelId: 'gemini-audio',
+            optionId: 'google:gemini-audio',
+            label: 'Google / Gemini Audio',
+            providerLabel: 'Google',
+            source: 'explicit-config',
+          },
+        }}
+      >
+        <InputArea inputValue="" isThinking={false} onInputChange={vi.fn()} onSend={vi.fn()} />
+      </Harness>,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /感知模型/ }));
+    fireEvent.click(screen.getByRole('menuitem', { name: /音频：/ }));
+
+    expect(screen.getAllByRole('menuitem', { name: /Gemini Audio/ }).length).toBeGreaterThan(0);
+    expect(screen.queryByRole('menuitem', { name: /Gemini Flash/ })).toBeNull();
+    expect(screen.queryByRole('menuitem', { name: /Model Audio/ })).toBeNull();
+  });
+
   it('removes the empty top control row for roleplay conversations', () => {
     render(
       <Harness conversationKind="character-dialogue">
@@ -692,8 +803,7 @@ describe('InputArea composer controls', () => {
     expect(menu.textContent).not.toMatch(/对白|旁白|分镜节奏|镜头语言|镜头片段/);
   });
 
-  it('keeps ordinary skills out of the slash menu and shows them in the dollar menu', () => {
-    const onSkillInvocation = vi.fn();
+  it('inserts an ordinary skill selected from the dollar menu without invoking it', () => {
     render(
       <Harness
         skills={[
@@ -707,7 +817,6 @@ describe('InputArea composer controls', () => {
             slashCommand: 'legacy-review',
           },
         ]}
-        onSkillInvocation={onSkillInvocation}
       >
         <InputAreaStatefulHarness initialInputValue="" onSend={vi.fn()} />
       </Harness>,
@@ -723,12 +832,10 @@ describe('InputArea composer controls', () => {
     expect(screen.getByRole('menuitem', { name: /\$quality-review/ })).toBeTruthy();
     expect(screen.getByText('Review changed files')).toBeTruthy();
 
-    fireEvent.keyDown(textarea, { key: 'Enter' });
-    expect(onSkillInvocation).toHaveBeenCalledWith({
-      id: 'quality-review',
-      skillName: 'quality-review',
-      name: '$quality-review',
-    });
+    fireEvent.click(screen.getByRole('menuitem', { name: /\$quality-review/ }));
+
+    expect(textarea.value).toBe('$quality-review ');
+    expect(vscodeMocks.invokeSkill).not.toHaveBeenCalled();
   });
 
   it('suppresses slash and skill command affordances in media generation mode', () => {
@@ -1579,10 +1686,10 @@ function Harness({
   mentionItems = [],
   onRequestFiles = vi.fn(),
   onMediaModelSelect = vi.fn(),
+  onMediaUnderstandingModelSelect = vi.fn(),
   onGenCategoryChange = vi.fn(),
   onGenParamsChange = vi.fn(),
   onSessionModeChange = vi.fn(),
-  onSkillInvocation = vi.fn(),
   selectedModel = 'openai:gpt-5.5',
   sessionMode = 'agent',
   skills = [],
@@ -1603,6 +1710,9 @@ function Harness({
   readonly onMediaModelSelect?: React.ComponentProps<
     typeof InputAreaProvider
   >['onMediaModelSelect'];
+  readonly onMediaUnderstandingModelSelect?: React.ComponentProps<
+    typeof InputAreaProvider
+  >['onMediaUnderstandingModelSelect'];
   readonly onGenCategoryChange?: React.ComponentProps<
     typeof InputAreaProvider
   >['onGenCategoryChange'];
@@ -1610,7 +1720,6 @@ function Harness({
   readonly onSessionModeChange?: React.ComponentProps<
     typeof InputAreaProvider
   >['onSessionModeChange'];
-  readonly onSkillInvocation?: React.ComponentProps<typeof InputAreaProvider>['onSkillInvocation'];
   readonly selectedModel?: string;
   readonly sessionMode?: SessionMode;
   readonly skills?: React.ComponentProps<typeof InputAreaProvider>['skills'];
@@ -1639,7 +1748,9 @@ function Harness({
       }}
       availableMediaModels={availableMediaModels}
       mediaUnderstandingModels={mediaUnderstandingModels}
+      mediaUnderstandingSelection={{ image: 'auto', video: 'auto', audio: 'auto' }}
       onMediaModelSelect={onMediaModelSelect}
+      onMediaUnderstandingModelSelect={onMediaUnderstandingModelSelect}
       sessionMode={sessionMode}
       conversationKind={conversationKind}
       onSessionModeChange={onSessionModeChange}
@@ -1652,7 +1763,6 @@ function Harness({
       isCompressing={false}
       mediaModelCallCount={0}
       skills={skills}
-      onSkillInvocation={onSkillInvocation}
       onRequestFiles={onRequestFiles}
       mentionItems={mentionItems}
       contextChips={contextChips}

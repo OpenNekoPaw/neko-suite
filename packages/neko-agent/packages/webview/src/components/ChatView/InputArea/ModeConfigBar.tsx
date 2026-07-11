@@ -10,6 +10,7 @@ import type {
 } from '@neko-agent/types';
 import type { ChatModelOption } from '@neko/shared';
 import { ModelSelector } from './ModelSelector';
+import { ChevronRightIcon } from '@neko/shared/icons';
 import { ChevronDownIcon } from './DropdownMenu';
 import { MediaCategoryIcon, SessionModeIcon } from './ComposerIcons';
 import { getCategoryColor } from './ModelIcon';
@@ -27,7 +28,11 @@ import {
 } from './model-option-presentation';
 import { ModelTagList } from './ModelTagList';
 import { useTranslation } from '@/i18n/I18nContext';
-import type { MediaCategory, MediaModelSelection } from '@/components/ChatView/InputAreaContext';
+import type {
+  MediaCategory,
+  MediaModelSelection,
+  MediaUnderstandingSelection,
+} from '@/components/ChatView/InputAreaContext';
 import type { ComposerModeConfigProjection } from '@/presenters/composer-mode-config-presenter';
 import type { GenCategory, GenerationDuration, GenerationParams } from './types';
 
@@ -41,7 +46,9 @@ interface ModeConfigBarProps {
   readonly mediaModelSelection: Readonly<MediaModelSelection>;
   readonly availableMediaModels: readonly ChatModelOption[];
   readonly mediaUnderstandingModels?: MediaUnderstandingModels;
+  readonly mediaUnderstandingSelection: Readonly<MediaUnderstandingSelection>;
   readonly onMediaModelSelect: (category: MediaCategory, modelId: string) => void;
+  readonly onMediaUnderstandingModelSelect: (category: MediaCategory, modelId: string) => void;
   readonly genCategory: GenCategory;
   readonly genParams: GenerationParams;
   readonly onGenCategoryChange: (category: GenCategory) => void;
@@ -57,6 +64,11 @@ const REASONING_OPTIONS: readonly AgentReasoningPreset[] = ['fast', 'balanced', 
 const VERBOSITY_OPTIONS: readonly AgentVerbosityPreset[] = ['brief', 'standard', 'detailed'];
 const CREATIVITY_OPTIONS: readonly AgentCreativityPreset[] = ['stable', 'creative', 'wild'];
 const MEDIA_CATEGORIES: readonly MediaCategory[] = ['image', 'video', 'audio'];
+const MEDIA_UNDERSTANDING_CAPABILITIES: Record<MediaCategory, readonly string[]> = {
+  image: ['vision', 'image.understand'],
+  audio: ['audio', 'audio.understand'],
+  video: ['vision_video', 'video.understand'],
+};
 type AgentConfigCategory = 'llm' | MediaCategory;
 type Translate = (key: string, params?: Record<string, string | number>) => string;
 
@@ -136,7 +148,9 @@ export function ModeConfigBar({
   mediaModelSelection,
   availableMediaModels,
   mediaUnderstandingModels,
+  mediaUnderstandingSelection,
   onMediaModelSelect,
+  onMediaUnderstandingModelSelect,
   genCategory,
   genParams,
   onGenCategoryChange,
@@ -222,7 +236,9 @@ export function ModeConfigBar({
             mediaModelSelection={mediaModelSelection}
             availableMediaModels={availableMediaModels}
             mediaUnderstandingModels={mediaUnderstandingModels}
+            mediaUnderstandingSelection={mediaUnderstandingSelection}
             onMediaModelSelect={onMediaModelSelect}
+            onMediaUnderstandingModelSelect={onMediaUnderstandingModelSelect}
             genParams={genParams}
             onGenParamsChange={onGenParamsChange}
             llmConfig={llmConfig}
@@ -234,7 +250,6 @@ export function ModeConfigBar({
             category={projection.mode}
             mediaModelSelection={mediaModelSelection}
             availableMediaModels={availableMediaModels}
-            mediaUnderstandingModels={mediaUnderstandingModels}
             onMediaModelSelect={onMediaModelSelect}
             genParams={genParams}
             onGenParamsChange={onGenParamsChange}
@@ -250,6 +265,9 @@ interface AgentLlmConfigBarProps {
   readonly availableModels: readonly ChatModelOption[];
   readonly selectedModel: string;
   readonly onModelSelect: (modelId: string) => void;
+  readonly mediaUnderstandingModels?: MediaUnderstandingModels;
+  readonly mediaUnderstandingSelection: Readonly<MediaUnderstandingSelection>;
+  readonly onMediaUnderstandingModelSelect: (category: MediaCategory, modelId: string) => void;
   readonly llmConfig: AgentLlmConfig;
   readonly onLlmConfigChange: (config: AgentLlmConfig) => void;
   readonly disabled?: boolean;
@@ -262,7 +280,10 @@ interface AgentModeConfigBarProps extends AgentLlmConfigBarProps {
   readonly mediaModelSelection: Readonly<MediaModelSelection>;
   readonly availableMediaModels: readonly ChatModelOption[];
   readonly mediaUnderstandingModels?: MediaUnderstandingModels;
+  readonly mediaUnderstandingSelection: Readonly<MediaUnderstandingSelection>;
   readonly onMediaModelSelect: (category: MediaCategory, modelId: string) => void;
+  readonly onMediaUnderstandingModelSelect: (category: MediaCategory, modelId: string) => void;
+  readonly showUnderstandingModel?: boolean;
   readonly genParams: GenerationParams;
   readonly onGenParamsChange: (params: Partial<GenerationParams>) => void;
 }
@@ -277,7 +298,9 @@ function AgentModeConfigBar({
   mediaModelSelection,
   availableMediaModels,
   mediaUnderstandingModels,
+  mediaUnderstandingSelection,
   onMediaModelSelect,
+  onMediaUnderstandingModelSelect,
   genParams,
   onGenParamsChange,
   llmConfig,
@@ -297,6 +320,9 @@ function AgentModeConfigBar({
           availableModels={availableModels}
           selectedModel={selectedModel}
           onModelSelect={onModelSelect}
+          mediaUnderstandingModels={mediaUnderstandingModels}
+          mediaUnderstandingSelection={mediaUnderstandingSelection}
+          onMediaUnderstandingModelSelect={onMediaUnderstandingModelSelect}
           llmConfig={llmConfig}
           onLlmConfigChange={onLlmConfigChange}
           disabled={disabled}
@@ -306,7 +332,6 @@ function AgentModeConfigBar({
           category={category}
           mediaModelSelection={mediaModelSelection}
           availableMediaModels={availableMediaModels}
-          mediaUnderstandingModels={mediaUnderstandingModels}
           onMediaModelSelect={onMediaModelSelect}
           genParams={genParams}
           onGenParamsChange={onGenParamsChange}
@@ -321,6 +346,9 @@ function AgentLlmConfigBar({
   availableModels,
   selectedModel,
   onModelSelect,
+  mediaUnderstandingModels,
+  mediaUnderstandingSelection,
+  onMediaUnderstandingModelSelect,
   llmConfig,
   onLlmConfigChange,
   disabled,
@@ -341,6 +369,14 @@ function AgentLlmConfigBar({
           selectedModel={selectedModel}
           models={[...availableModels]}
           onSelect={onModelSelect}
+          color={color}
+          disabled={disabled}
+        />
+        <AgentUnderstandingConfigChip
+          availableModels={availableModels}
+          mediaUnderstandingModels={mediaUnderstandingModels}
+          mediaUnderstandingSelection={mediaUnderstandingSelection}
+          onMediaUnderstandingModelSelect={onMediaUnderstandingModelSelect}
           color={color}
           disabled={disabled}
         />
@@ -385,6 +421,204 @@ function AgentLlmConfigBar({
               disabled={disabled}
             />
           ) : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+interface AgentUnderstandingConfigChipProps {
+  readonly availableModels: readonly ChatModelOption[];
+  readonly mediaUnderstandingModels?: MediaUnderstandingModels;
+  readonly mediaUnderstandingSelection: Readonly<MediaUnderstandingSelection>;
+  readonly onMediaUnderstandingModelSelect: (category: MediaCategory, modelId: string) => void;
+  readonly color: string;
+  readonly disabled?: boolean;
+}
+
+function AgentUnderstandingConfigChip({
+  availableModels,
+  mediaUnderstandingModels,
+  mediaUnderstandingSelection,
+  onMediaUnderstandingModelSelect,
+  color,
+  disabled = false,
+}: AgentUnderstandingConfigChipProps) {
+  const { t } = useTranslation();
+  const [isOpen, setIsOpen] = useState(false);
+  const [activeCategory, setActiveCategory] = useState<MediaCategory | null>(null);
+  const [placement, setPlacement] = useState<DropdownPlacement>({
+    direction: 'down',
+    alignment: 'start',
+  });
+  const menuRef = useRef<HTMLDivElement>(null);
+  const getPlacement = useDropdownPlacement(menuRef, {
+    preferredDirection: 'down',
+    estimatedWidth: 360,
+  });
+  useClickOutsideSingle(menuRef, () => {
+    setIsOpen(false);
+    setActiveCategory(null);
+  });
+
+  const handleOpen = () => {
+    if (disabled) return;
+    if (!isOpen) setPlacement(getPlacement());
+    setIsOpen((value) => !value);
+    if (isOpen) setActiveCategory(null);
+  };
+
+  const summary = MEDIA_CATEGORIES.map(
+    (category) =>
+      `${getConfigCategoryLabel(t, category)}:${getUnderstandingMenuStatusLabel(
+        mediaUnderstandingModels?.[category],
+        mediaUnderstandingSelection[category],
+        getUnderstandingModelsForCategory(availableModels, category),
+        t,
+      )}`,
+  ).join(' / ');
+  const title = t('chat.mediaUnderstanding.menu.titleWithSummary', { summary });
+  const activeModels = activeCategory
+    ? getUnderstandingModelsForCategory(availableModels, activeCategory)
+    : [];
+  const activeStatus = activeCategory ? mediaUnderstandingModels?.[activeCategory] : undefined;
+  const activeSelectedId = activeCategory ? mediaUnderstandingSelection[activeCategory] : 'auto';
+  const groupedModels = useMemo(
+    () => groupModelOptionsByProvider(activeModels, t),
+    [activeModels, t],
+  );
+
+  return (
+    <div className="relative" ref={menuRef}>
+      <button
+        type="button"
+        onClick={handleOpen}
+        aria-haspopup="menu"
+        aria-expanded={isOpen}
+        disabled={disabled}
+        className={`agent-control-chip agent-control-chip-model agent-control-chip-understand ${
+          disabled ? 'agent-control-chip-muted' : ''
+        }`}
+        style={{ color }}
+        title={title}
+        aria-label={title}
+      >
+        <span className="agent-control-chip-text">{t('chat.mediaUnderstanding.menu.chip')}</span>
+        <ChevronDownIcon className="w-2.5 h-2.5 opacity-60" />
+      </button>
+
+      {isOpen ? (
+        <div
+          className={`agent-dropdown-menu agent-dropdown-menu-model agent-dropdown-menu-understanding absolute ${dropdownPositionClass(placement)}`}
+          role="menu"
+        >
+          {activeCategory ? (
+            <>
+              <button
+                type="button"
+                onClick={() => setActiveCategory(null)}
+                className="agent-dropdown-item agent-dropdown-item-muted"
+                role="menuitem"
+              >
+                {t('chat.mediaUnderstanding.menu.back')}
+              </button>
+              <div className="agent-dropdown-header">
+                {t('chat.mediaUnderstanding.menu.categoryTitle', {
+                  category: getConfigCategoryLabel(t, activeCategory),
+                })}
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  onMediaUnderstandingModelSelect(activeCategory, 'auto');
+                  setIsOpen(false);
+                  setActiveCategory(null);
+                }}
+                className={`agent-dropdown-item ${
+                  activeSelectedId === 'auto'
+                    ? 'agent-dropdown-item-selected'
+                    : 'agent-dropdown-item-muted'
+                }`}
+                role="menuitem"
+              >
+                {t('chat.mediaUnderstanding.model.auto', {
+                  model: getMediaUnderstandingModelLabel(activeStatus, t),
+                })}
+              </button>
+              {groupedModels.map((group) => (
+                <div key={group.key} className="agent-model-provider-group">
+                  <div className="agent-model-provider-header">
+                    <span className="agent-model-provider-name">{group.label}</span>
+                    <ModelTagList tags={group.tags} className="agent-model-provider-tags" />
+                  </div>
+                  {group.models.map((model) => (
+                    <button
+                      key={model.id}
+                      type="button"
+                      onClick={() => {
+                        onMediaUnderstandingModelSelect(activeCategory, model.id);
+                        setIsOpen(false);
+                        setActiveCategory(null);
+                      }}
+                      className={`agent-dropdown-item agent-dropdown-item-inline-detail ${
+                        model.id === activeSelectedId ? 'agent-dropdown-item-selected' : ''
+                      } agent-model-option-row`}
+                      role="menuitem"
+                    >
+                      <span className="agent-model-option-name">{model.label}</span>
+                      <ModelTagList
+                        tags={buildModelTags(model, t)}
+                        className="agent-model-option-tags"
+                      />
+                    </button>
+                  ))}
+                </div>
+              ))}
+            </>
+          ) : (
+            <>
+              <div className="agent-dropdown-header">{t('chat.mediaUnderstanding.menu.title')}</div>
+              {MEDIA_CATEGORIES.map((category) => (
+                <button
+                  key={category}
+                  type="button"
+                  onClick={() => setActiveCategory(category)}
+                  className="agent-dropdown-item agent-dropdown-item-inline-detail agent-understanding-category-row"
+                  role="menuitem"
+                  aria-label={t('chat.mediaUnderstanding.menu.categoryRow', {
+                    category: getConfigCategoryLabel(t, category),
+                    model: getUnderstandingMenuStatusLabel(
+                      mediaUnderstandingModels?.[category],
+                      mediaUnderstandingSelection[category],
+                      getUnderstandingModelsForCategory(availableModels, category),
+                      t,
+                    ),
+                  })}
+                >
+                  <span
+                    className="agent-understanding-category-icon"
+                    style={{ color: getCategoryColor(category) }}
+                  >
+                    <MediaCategoryIcon category={category} size={14} />
+                  </span>
+                  <span className="agent-understanding-category-label">
+                    <span className="agent-understanding-category-name">
+                      {getConfigCategoryLabel(t, category)}
+                    </span>
+                    <span className="agent-understanding-category-model">
+                      {getUnderstandingMenuStatusLabel(
+                        mediaUnderstandingModels?.[category],
+                        mediaUnderstandingSelection[category],
+                        getUnderstandingModelsForCategory(availableModels, category),
+                        t,
+                      )}
+                    </span>
+                  </span>
+                  <ChevronRightIcon className="agent-understanding-category-chevron" />
+                </button>
+              ))}
+            </>
+          )}
         </div>
       ) : null}
     </div>
@@ -481,7 +715,6 @@ interface MediaModelParamsBarProps {
   readonly category: MediaCategory;
   readonly mediaModelSelection: Readonly<MediaModelSelection>;
   readonly availableMediaModels: readonly ChatModelOption[];
-  readonly mediaUnderstandingModels?: MediaUnderstandingModels;
   readonly onMediaModelSelect: (category: MediaCategory, modelId: string) => void;
   readonly genParams: GenerationParams;
   readonly onGenParamsChange: (params: Partial<GenerationParams>) => void;
@@ -492,7 +725,6 @@ function MediaModelParamsBar({
   category,
   mediaModelSelection,
   availableMediaModels,
-  mediaUnderstandingModels,
   onMediaModelSelect,
   genParams,
   onGenParamsChange,
@@ -508,11 +740,6 @@ function MediaModelParamsBar({
         selectedId={mediaModelSelection[category]}
         models={models}
         onSelect={(modelId) => onMediaModelSelect(category, modelId)}
-        disabled={disabled}
-      />
-      <MediaUnderstandingChip
-        category={category}
-        status={mediaUnderstandingModels?.[category]}
         disabled={disabled}
       />
       <MediaParamsPanel
@@ -654,49 +881,6 @@ function InlineMediaModelChip({
         </div>
       )}
     </div>
-  );
-}
-
-interface MediaUnderstandingChipProps {
-  readonly category: MediaCategory;
-  readonly status?: MediaUnderstandingModelStatus;
-  readonly disabled?: boolean;
-}
-
-function MediaUnderstandingChip({
-  category,
-  status,
-  disabled = false,
-}: MediaUnderstandingChipProps) {
-  const { t } = useTranslation();
-  if (!status) return null;
-
-  const color =
-    status.status === 'missing'
-      ? 'var(--vscode-descriptionForeground)'
-      : getCategoryColor(category);
-  const statusLabel = t(`chat.mediaUnderstanding.status.${status.status}`);
-  const modelLabel = getMediaUnderstandingModelLabel(status, t);
-  const visibleLabel = t('chat.mediaUnderstanding.chip', {
-    model: shortenMediaUnderstandingLabel(status, t),
-  });
-  const title = t('chat.mediaUnderstanding.title', {
-    category: getConfigCategoryLabel(t, category),
-    model: modelLabel,
-    status: statusLabel,
-  });
-
-  return (
-    <span
-      className={`agent-control-chip agent-control-chip-model agent-control-chip-understand agent-control-chip-static ${
-        status.status === 'missing' || disabled ? 'agent-control-chip-muted' : ''
-      }`}
-      style={{ color }}
-      title={title}
-      aria-label={title}
-    >
-      <span className="agent-control-chip-text">{visibleLabel}</span>
-    </span>
   );
 }
 
@@ -1051,9 +1235,12 @@ function getConfigCategoryColor(category: AgentConfigCategory): string {
 }
 
 function getMediaUnderstandingModelLabel(
-  status: MediaUnderstandingModelStatus,
+  status: MediaUnderstandingModelStatus | undefined,
   t: Translate,
 ): string {
+  if (!status) {
+    return t('chat.mediaUnderstanding.unavailable');
+  }
   if (status.status === 'missing') {
     return t('chat.mediaUnderstanding.unavailable');
   }
@@ -1062,20 +1249,28 @@ function getMediaUnderstandingModelLabel(
   );
 }
 
-function shortenMediaUnderstandingLabel(
-  status: MediaUnderstandingModelStatus,
+function getUnderstandingMenuStatusLabel(
+  status: MediaUnderstandingModelStatus | undefined,
+  selectedId: string,
+  models: readonly ChatModelOption[],
   t: Translate,
 ): string {
-  if (status.status === 'missing') {
-    return t('chat.mediaUnderstanding.unavailableShort');
+  if (selectedId !== 'auto') {
+    const selected = models.find((model) => model.id === selectedId);
+    return selected ? selected.label : selectedId;
   }
-  return shortenModelLabel(
-    {
-      label: status.label ?? status.optionId ?? status.modelId ?? '',
-      modelId: status.modelId ?? status.optionId ?? '',
-    },
-    10,
-    '...',
+  return getMediaUnderstandingModelLabel(status, t);
+}
+
+function getUnderstandingModelsForCategory(
+  models: readonly ChatModelOption[],
+  category: MediaCategory,
+): readonly ChatModelOption[] {
+  const supportedCapabilities = MEDIA_UNDERSTANDING_CAPABILITIES[category];
+  return models.filter(
+    (model) =>
+      model.category === 'llm' &&
+      (model.capabilities ?? []).some((capability) => supportedCapabilities.includes(capability)),
   );
 }
 

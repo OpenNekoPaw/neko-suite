@@ -5,19 +5,16 @@ import { useSlashCommands } from '../useSlashCommands';
 const vscodeMocks = vi.hoisted(() => ({
   invokeSlashCommand: vi.fn(),
   invokePluginSlashCommand: vi.fn(),
-  invokeSkill: vi.fn(),
 }));
 
 vi.mock('@/messages', () => ({
   AgentHostMessages: {
     invokeSlashCommand: vscodeMocks.invokeSlashCommand,
     invokePluginSlashCommand: vscodeMocks.invokePluginSlashCommand,
-    invokeSkill: vscodeMocks.invokeSkill,
   },
   VSCodeMessages: {
     invokeSlashCommand: vscodeMocks.invokeSlashCommand,
     invokePluginSlashCommand: vscodeMocks.invokePluginSlashCommand,
-    invokeSkill: vscodeMocks.invokeSkill,
   },
 }));
 
@@ -35,36 +32,6 @@ vi.mock('@/i18n/I18nContext', () => ({
 describe('useSlashCommands', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-  });
-
-  it('dispatches explicit skill invocation through invokeSkill', () => {
-    const clearInput = vi.fn();
-    const { result } = renderHook(() =>
-      useSlashCommands({
-        skills: [],
-        pluginCommands: [],
-        inputValue: '$quality-review changed files',
-        activeConversationId: 'conv-1',
-        setMessages: vi.fn(),
-        clearInput,
-      }),
-    );
-
-    act(() => {
-      result.current.handleSkillInvocation({
-        id: 'quality-review',
-        skillName: 'quality-review',
-        name: '$quality-review',
-      });
-    });
-
-    expect(clearInput).toHaveBeenCalledTimes(1);
-    expect(vscodeMocks.invokeSkill).toHaveBeenCalledWith(
-      'quality-review',
-      'changed files',
-      'conv-1',
-    );
-    expect(vscodeMocks.invokeSlashCommand).not.toHaveBeenCalled();
   });
 
   it('renders help with separate slash command and dollar skill sections', () => {

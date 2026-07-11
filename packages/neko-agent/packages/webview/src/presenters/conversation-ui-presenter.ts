@@ -121,11 +121,9 @@ function hasRecoverableLocalActivity(
   messages: readonly Message[],
   streaming?: ConversationStreamingState,
 ): boolean {
-  return (
-    messages.some((message) => message.isStreaming) ||
-    Boolean(streaming?.isThinking) ||
-    (streaming?.queuedMessageCount ?? 0) > 0 ||
-    (streaming?.queuedMessages?.length ?? 0) > 0
+  const streamingMessageId = streaming?.streamingMessageId;
+  return messages.some(
+    (message) => message.isStreaming === true || message.id === streamingMessageId,
   );
 }
 

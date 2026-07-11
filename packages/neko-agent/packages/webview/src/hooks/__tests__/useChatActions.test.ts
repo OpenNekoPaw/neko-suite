@@ -375,6 +375,89 @@ describe('useChatActions', () => {
     );
   });
 
+  it('does not send understanding model selections outside Agent mode', () => {
+    const setMessages = vi.fn();
+    const setIsThinking = vi.fn();
+    const setStreamingMessageId = vi.fn();
+
+    const { result } = renderHook(() => {
+      const activeConversationIdRef = useRef<string | null>('conv-video');
+      return useChatActions({
+        inputValue: '生成一个镜头',
+        isThinking: false,
+        selectedModel: 'model-a',
+        sessionMode: 'video',
+        understandingModels: {
+          video: { providerId: 'google', modelId: 'gemini-video', category: 'llm' },
+        },
+        activeConversationId: 'conv-video',
+        activeConversationIdRef,
+        streamingMessageIdRef: { current: null },
+        messages: [],
+        setMessages,
+        setIsThinking,
+        setStreamingMessageId,
+        setActiveTab: vi.fn(),
+        clearInput: vi.fn(),
+        setAttachedFiles: vi.fn(),
+      });
+    });
+
+    act(() => {
+      result.current.handleSend();
+    });
+
+    expect(vscodeMocks.sendMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        conversationId: 'conv-video',
+        message: '生成一个镜头',
+        sessionMode: 'video',
+      }),
+    );
+    expect(vscodeMocks.sendMessage.mock.calls[0]?.[0]).not.toHaveProperty('understandingModels');
+  });
+
+  it('does not cache understanding model selections for new non-Agent conversations', () => {
+    const ensureConversationForSend = vi.fn();
+
+    const { result } = renderHook(() => {
+      const activeConversationIdRef = useRef<string | null>(null);
+      return useChatActions({
+        inputValue: '生成视频',
+        isThinking: false,
+        selectedModel: 'model-a',
+        sessionMode: 'video',
+        activeConversationId: null,
+        activeConversationIdRef,
+        streamingMessageIdRef: { current: null },
+        messages: [],
+        setMessages: vi.fn(),
+        setIsThinking: vi.fn(),
+        setStreamingMessageId: vi.fn(),
+        setActiveTab: vi.fn(),
+        clearInput: vi.fn(),
+        setAttachedFiles: vi.fn(),
+        ensureConversationForSend,
+      });
+    });
+
+    act(() => {
+      result.current.handleSend({
+        sessionMode: 'video',
+        understandingModels: {
+          video: { providerId: 'google', modelId: 'gemini-video', category: 'llm' },
+        },
+      });
+    });
+
+    expect(ensureConversationForSend).toHaveBeenCalledWith({
+      messageText: '生成视频',
+      displayMessageText: '生成视频',
+      sessionMode: 'video',
+    });
+    expect(vscodeMocks.sendMessage).not.toHaveBeenCalled();
+  });
+
   it('uses Agent primary model as the only LLM routing field when legacy selectedModel is stale', () => {
     const setMessages = vi.fn();
     const setIsThinking = vi.fn();

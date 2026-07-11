@@ -21,7 +21,6 @@ import {
   MessageAttachment,
   ProjectFile,
   SlashCommand,
-  SkillInvocation,
   MentionItem,
   EntryPromptMenu,
   type GenCategory,
@@ -133,11 +132,12 @@ export function InputArea({
     mediaModelSelection,
     availableMediaModels,
     mediaUnderstandingModels,
+    mediaUnderstandingSelection,
     onMediaModelSelect,
+    onMediaUnderstandingModelSelect,
     skills,
     pluginCommands = [],
     onSlashCommand,
-    onSkillInvocation,
     onRequestFiles,
     mentionItems = [],
     onAddContextChip,
@@ -534,7 +534,6 @@ export function InputArea({
     setShowSkillMenu(false);
     setShowSlashMenu(false);
     onInputChange(skill.name + ' ');
-    onSkillInvocation?.(projectSkillInvocationSelection(skill));
     textareaRef.current?.focus();
   };
 
@@ -811,7 +810,9 @@ export function InputArea({
             mediaModelSelection={mediaModelSelection}
             availableMediaModels={availableMediaModels}
             mediaUnderstandingModels={mediaUnderstandingModels}
+            mediaUnderstandingSelection={mediaUnderstandingSelection}
             onMediaModelSelect={onMediaModelSelect}
+            onMediaUnderstandingModelSelect={onMediaUnderstandingModelSelect}
             genCategory={genCategory}
             genParams={genParams}
             onGenCategoryChange={onGenCategoryChange}
@@ -1033,14 +1034,6 @@ function projectSelectedFileReference(item: MentionItem): SelectedFileReference 
     ...(item.mediaType ? { mediaType: item.mediaType } : {}),
     ...(item.source ? { source: item.source } : {}),
     ...(item.thumbnailUri ? { thumbnailUri: item.thumbnailUri } : {}),
-  };
-}
-
-function projectSkillInvocationSelection(skill: SkillInvocationCatalogItem): SkillInvocation {
-  return {
-    id: skill.id,
-    skillName: skill.skillName,
-    name: skill.name,
   };
 }
 

@@ -22,11 +22,11 @@ import type {
   PluginSlashCommandDef,
   GenCategory,
   GenerationParams,
-  SkillInvocation,
 } from '@/components/ChatView/InputArea/types';
-import type { MediaModelSelection } from '@/hooks/useUIState';
+import type { MediaModelSelection, MediaUnderstandingSelection } from '@/hooks/useUIState';
 
 export type { MediaModelSelection };
+export type { MediaUnderstandingSelection };
 export type MediaCategory = 'image' | 'video' | 'audio';
 
 export interface InputAreaContextValue {
@@ -41,7 +41,9 @@ export interface InputAreaContextValue {
   availableMediaModels: ChatModelOption[];
   /** Read-only model routing for native media understanding. */
   mediaUnderstandingModels?: MediaUnderstandingModels;
+  mediaUnderstandingSelection: MediaUnderstandingSelection;
   onMediaModelSelect: (category: MediaCategory, modelId: string) => void;
+  onMediaUnderstandingModelSelect: (category: MediaCategory, modelId: string) => void;
   // Session mode (top-level workflow routing)
   sessionMode: SessionMode;
   conversationKind?: ConversationKind;
@@ -66,7 +68,6 @@ export interface InputAreaContextValue {
   /** Plugin slash commands from external extensions */
   pluginCommands?: PluginSlashCommandDef[];
   onSlashCommand?: (command: SlashCommand) => void;
-  onSkillInvocation?: (skill: SkillInvocation) => void;
   onRequestFiles?: (filter: string) => void;
   /** Unified @mention items (files + canvas nodes + characters) — updated after onRequestFiles */
   mentionItems?: MentionItem[];
@@ -99,7 +100,9 @@ export function InputAreaProvider({
       mediaModelSelection: value.mediaModelSelection,
       availableMediaModels: value.availableMediaModels,
       mediaUnderstandingModels: value.mediaUnderstandingModels,
+      mediaUnderstandingSelection: value.mediaUnderstandingSelection,
       onMediaModelSelect: value.onMediaModelSelect,
+      onMediaUnderstandingModelSelect: value.onMediaUnderstandingModelSelect,
       sessionMode: value.sessionMode,
       conversationKind: value.conversationKind,
       onSessionModeChange: value.onSessionModeChange,
@@ -117,7 +120,6 @@ export function InputAreaProvider({
       skills: value.skills,
       pluginCommands: value.pluginCommands,
       onSlashCommand: value.onSlashCommand,
-      onSkillInvocation: value.onSkillInvocation,
       onRequestFiles: value.onRequestFiles,
       mentionItems: value.mentionItems,
       onAddContextChip: value.onAddContextChip,
@@ -137,7 +139,9 @@ export function InputAreaProvider({
       value.mediaModelSelection,
       value.availableMediaModels,
       value.mediaUnderstandingModels,
+      value.mediaUnderstandingSelection,
       value.onMediaModelSelect,
+      value.onMediaUnderstandingModelSelect,
       value.sessionMode,
       value.conversationKind,
       value.onSessionModeChange,
@@ -155,7 +159,6 @@ export function InputAreaProvider({
       value.skills,
       value.pluginCommands,
       value.onSlashCommand,
-      value.onSkillInvocation,
       value.onRequestFiles,
       value.mentionItems,
       value.onAddContextChip,

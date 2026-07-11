@@ -292,38 +292,6 @@ export function extractSlashCommandArgs(
   return args.length > 0 ? args : undefined;
 }
 
-export function extractSkillInvocationArgs(
-  inputValue: string,
-  skill: Pick<SkillInvocationCatalogItem, 'name' | 'skillName' | 'id'>,
-): string | undefined {
-  const trimmed = inputValue.trim();
-  if (!trimmed.startsWith('$')) {
-    return undefined;
-  }
-
-  const withoutPrefix = trimmed.slice(1);
-  const separatorIndex = withoutPrefix.search(/\s/);
-  const typedSkill =
-    separatorIndex === -1 ? withoutPrefix : withoutPrefix.slice(0, Math.max(separatorIndex, 0));
-  const normalizedTypedSkill = normalizeSlashCommandName(typedSkill);
-  const acceptedSkills = new Set([
-    normalizeSlashCommandName(skill.name),
-    normalizeSlashCommandName(skill.skillName),
-    normalizeSlashCommandName(skill.id),
-  ]);
-
-  if (!acceptedSkills.has(normalizedTypedSkill)) {
-    return undefined;
-  }
-
-  if (separatorIndex === -1) {
-    return undefined;
-  }
-
-  const args = withoutPrefix.slice(separatorIndex + 1).trim();
-  return args.length > 0 ? args : undefined;
-}
-
 function projectSkillInvocation(skill: SkillSummary): SkillInvocationCatalogItem | null {
   if (!skill.enabled) {
     return null;

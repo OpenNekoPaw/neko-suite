@@ -519,7 +519,9 @@ function findMarkdownResourceReferenceProjection(
 ): NonNullable<MarkdownResourceRenderingProjection['resourceReferences']>[number] | undefined {
   const normalizedRaw = normalizeMarkdownResourceLookupToken(raw);
   const normalizedTarget = normalizeMarkdownResourceLookupToken(target);
-  const normalizedBaseTarget = normalizeMarkdownResourceLookupToken(stripResourcePlacementHint(target));
+  const normalizedBaseTarget = normalizeMarkdownResourceLookupToken(
+    stripResourcePlacementHint(target),
+  );
   return markdownResources.resourceReferences?.find(
     (reference) =>
       normalizeMarkdownResourceLookupToken(reference.raw) === normalizedRaw ||
@@ -1241,7 +1243,7 @@ function SemanticPromptSpanProjectionList({
     <div className="mt-2 flex max-w-full flex-wrap gap-1.5" data-markdown-prompt-spans="true">
       {spans.map((span, index) => (
         <SemanticPromptSpanChip
-          key={`${span.kind}:${span.range.start}:${span.range.end}:${span.fieldId ?? index}`}
+          key={`${span.kind}:${span.range.startOffset}:${span.range.endOffset}:${span.fieldId ?? index}`}
           content={content}
           span={span}
         />
@@ -1272,7 +1274,7 @@ function SemanticPromptSpanChip({
       data-markdown-prompt-span-ref-kind={span.ref?.kind}
       data-markdown-prompt-span-ref-id={span.ref?.id}
       data-markdown-prompt-span-ref-namespace={span.ref?.namespace}
-      data-markdown-prompt-span-range={`${span.range.start}:${span.range.end}`}
+      data-markdown-prompt-span-range={`${span.range.startOffset}:${span.range.endOffset}`}
       data-canvas-handoff-ref-kind={span.ref?.kind}
       data-canvas-handoff-ref-id={span.ref?.id}
       data-canvas-handoff-ref-namespace={span.ref?.namespace}
@@ -1327,13 +1329,13 @@ function readPromptSpanSourceText(
   span: NonNullable<MarkdownResourceRenderingProjection['promptSpans']>[number],
 ): string | undefined {
   if (
-    span.range.start < 0 ||
-    span.range.end <= span.range.start ||
-    span.range.end > content.length
+    span.range.startOffset < 0 ||
+    span.range.endOffset <= span.range.startOffset ||
+    span.range.endOffset > content.length
   ) {
     return undefined;
   }
-  const value = content.slice(span.range.start, span.range.end).trim();
+  const value = content.slice(span.range.startOffset, span.range.endOffset).trim();
   return value.length > 0 ? value : undefined;
 }
 
@@ -1419,9 +1421,7 @@ function MarkdownExtensionDiagnostics({
 }) {
   const diagnostics =
     markdownResources?.diagnostics
-      .filter(
-        (diagnostic) => diagnostic.code === 'unsupported-resource-reference-markdown-extension',
-      )
+      .filter((diagnostic) => diagnostic.code === 'MD_RESOURCE_REFERENCE_UNSUPPORTED')
       .slice(0, 3) ?? [];
   if (diagnostics.length === 0) return null;
 
@@ -1727,7 +1727,7 @@ function formatMarkdownResourceDiagnostic(
   if (diagnostic.code === 'ambiguous-resource-token') {
     return t('chat.markdown.diagnostic.ambiguousResourceToken', { token });
   }
-  if (diagnostic.code === 'unsupported-resource-reference-markdown-extension') {
+  if (diagnostic.code === 'MD_RESOURCE_REFERENCE_UNSUPPORTED') {
     return t('chat.markdown.diagnostic.unsupportedResourceReference');
   }
   return diagnostic.message;

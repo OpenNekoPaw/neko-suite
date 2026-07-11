@@ -8,14 +8,12 @@ import { useCallback } from 'react';
 import type { Message } from '@neko-agent/types';
 import type {
   SlashCommand,
-  SkillInvocation,
   SkillSummary,
   PluginSlashCommandDef,
 } from '@/components/ChatView/InputArea/types';
 import {
   createSkillInvocationCatalog,
   createSlashCommandCatalog,
-  extractSkillInvocationArgs,
   extractSlashCommandArgs,
   formatSkillInvocationHelpCatalog,
   formatSlashCommandHelpCatalog,
@@ -34,7 +32,6 @@ export interface UseSlashCommandsProps {
 
 export interface UseSlashCommandsReturn {
   handleSlashCommand: (command: SlashCommand) => void;
-  handleSkillInvocation: (skill: SkillInvocation) => void;
 }
 
 export function useSlashCommands({
@@ -112,17 +109,5 @@ export function useSlashCommands({
     [activeConversationId, clearInput, inputValue, pluginCommands, setMessages, skills, t],
   );
 
-  const handleSkillInvocation = useCallback(
-    (skill: SkillInvocation) => {
-      if (!activeConversationId) {
-        return;
-      }
-      const args = extractSkillInvocationArgs(inputValue, skill);
-      clearInput();
-      AgentHostMessages.invokeSkill(skill.skillName, args, activeConversationId);
-    },
-    [activeConversationId, clearInput, inputValue],
-  );
-
-  return { handleSlashCommand, handleSkillInvocation };
+  return { handleSlashCommand };
 }

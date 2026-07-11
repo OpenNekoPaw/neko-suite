@@ -13,7 +13,7 @@
  */
 
 import { type MutableRefObject, useEffect, useCallback, useRef, useState } from 'react';
-import type { AgentContextPayload } from '@neko/shared';
+import type { AgentContextPayload, ChatModelOption } from '@neko/shared';
 import {
   ShellExecutionMode,
   PromptMode,
@@ -26,7 +26,13 @@ import {
   type EmbodyCharacterSessionProjection,
   type AgentQueuedMessageItem,
 } from '@neko-agent/types';
-import type { MediaUnderstandingModels, SettingsState, Message, TabType } from '@neko-agent/types';
+import type {
+  MediaUnderstandingModelSelections,
+  MediaUnderstandingModels,
+  SettingsState,
+  Message,
+  TabType,
+} from '@neko-agent/types';
 import { AgentHostMessages } from '@/messages';
 import { ChatView } from '@/components/ChatView';
 import { InputAreaProvider } from '@/components/ChatView/InputAreaContext';
@@ -230,6 +236,8 @@ export function ChatWorkspace({
     setGenCategory,
     genParams,
     updateGenParams,
+    mediaUnderstandingSelection,
+    setMediaUnderstandingSelection,
   } = ui;
 
   const visibleSessionConversationId = activeTabConversationId ?? activeConversationId;
@@ -372,6 +380,10 @@ export function ChatWorkspace({
     mediaProviderId: activeMediaModel?.providerId,
     mediaModelId: activeMediaModel?.modelId,
     agentMediaModels,
+    understandingModels: buildRuntimeUnderstandingModelSelections(
+      mediaUnderstandingSelection,
+      settings.chatModelOptions,
+    ),
     activeConversationId: sessionMutationConversationId,
     activeConversationIdRef: sessionMutationConversationIdRef,
     isConversationSwitching,
@@ -582,7 +594,7 @@ export function ChatWorkspace({
   });
 
   // Slash command routing
-  const { handleSlashCommand, handleSkillInvocation } = useSlashCommands({
+  const { handleSlashCommand } = useSlashCommands({
     skills,
     pluginCommands,
     inputValue,
@@ -625,6 +637,13 @@ export function ChatWorkspace({
       setMediaModelSelection((prev) => ({ ...prev, [category]: modelId }));
     },
     [setMediaModelSelection],
+  );
+
+  const handleMediaUnderstandingModelSelect = useCallback(
+    (category: 'image' | 'video' | 'audio', modelId: string) => {
+      setMediaUnderstandingSelection((prev) => ({ ...prev, [category]: modelId }));
+    },
+    [setMediaUnderstandingSelection],
   );
 
   const handleSessionModeChange = useCallback(
@@ -680,7 +699,9 @@ export function ChatWorkspace({
       mediaModelSelection={mediaModelSelection}
       availableMediaModels={availableMediaModels}
       mediaUnderstandingModels={mediaUnderstandingModels}
+      mediaUnderstandingSelection={mediaUnderstandingSelection}
       onMediaModelSelect={handleMediaModelSelect}
+      onMediaUnderstandingModelSelect={handleMediaUnderstandingModelSelect}
       executionMode={settings.executionMode}
       onExecutionModeChange={handleExecutionModeChange}
       promptMode={settings.promptMode}
@@ -695,7 +716,6 @@ export function ChatWorkspace({
       skills={skills}
       pluginCommands={pluginCommands}
       onSlashCommand={handleSlashCommand}
-      onSkillInvocation={handleSkillInvocation}
       onRequestFiles={(filter) => {
         onMentionSearchFilterChange(filter);
         if (!isCharacterRoleSession && sessionMutationConversationId) {
@@ -775,4 +795,23 @@ export function ChatWorkspace({
 
 function isActiveWorkItem(item: AgentWorkItem): boolean {
   return item.status === 'queued' || item.status === 'processing';
+}
+
+function buildRuntimeUnderstandingModelSelections(
+  selection: import('@/hooks/useUIState').MediaUnderstandingSelection,
+  options: readonly ChatModelOption[],
+): MediaUnderstandingModelSelections | undefined {
+  const result: MediaUnderstandingModelSelections = {};
+  for (const category of ['image', 'video', 'audio'] as const) {
+    const selectedId = selection[category];
+    if (selectedId === 'auto') continue;
+    const option = options.find((model) => model.id === selectedId);
+    if (!option?.providerId || !option.modelId) continue;
+    result[category] = {
+      providerId: option.providerId,
+      modelId: option.modelId,
+      category: 'llm',
+    };
+  }
+  return Object.keys(result).length > 0 ? result : undefined;
 }

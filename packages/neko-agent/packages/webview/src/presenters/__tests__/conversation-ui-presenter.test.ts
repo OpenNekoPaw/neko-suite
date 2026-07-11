@@ -168,6 +168,43 @@ describe('conversation UI presenter', () => {
     expect(projected.restoredFromCache).toBe(false);
   });
 
+  it('does not treat isThinking alone as proof that a cache extension is an active turn', () => {
+    const persistedMessages: Message[] = [
+      {
+        id: 'assistant-persisted',
+        role: 'assistant',
+        content: '**visible** conversation message',
+        timestamp: 1,
+      },
+    ];
+    const leakedControlMessage: Message = {
+      id: 'released:task-observation-1',
+      role: 'user',
+      content: 'Continue from the completed async task result.',
+      timestamp: 2,
+    };
+
+    const projected = projectActiveConversation({
+      conversation: {
+        id: 'conv-1',
+        title: 'Foreground chat',
+        messages: persistedMessages,
+      },
+      cachedMessages: [...persistedMessages, leakedControlMessage],
+      cachedStreaming: { streamingMessageId: null, isThinking: true },
+      openTabs: [{ id: 'tab-1', title: 'Foreground chat', conversationId: 'conv-1' }],
+    });
+
+    expect(projected.messages).toEqual(persistedMessages);
+    expect(projected.streaming).toEqual({
+      streamingMessageId: null,
+      isThinking: false,
+      queuedMessageCount: 0,
+      queuedMessages: [],
+    });
+    expect(projected.restoredFromCache).toBe(false);
+  });
+
   it('keeps recoverable local activity when cached messages extend host messages', () => {
     const persistedMessage: Message = {
       id: 'user-1',
@@ -356,9 +393,20 @@ describe('conversation UI presenter', () => {
     const queuedA = queuedMessage('queue-a', 'conv-a');
     const queuedB = queuedMessage('queue-b', 'conv-b');
     const timelineB: ActiveTurnTimelineState = {
+      connectionEpoch: 'epoch-1',
       conversationId: 'conv-b',
       turnId: 'turn-b',
       messageId: 'message-b',
+      deliveryRevision: 0,
+      validationState: {
+        connectionEpoch: 'epoch-1',
+        conversationId: 'conv-b',
+        turnId: 'turn-b',
+        messageId: 'message-b',
+        deliveryRevision: 0,
+        completed: false,
+        items: new Map(),
+      },
       items: [],
       completed: false,
     };

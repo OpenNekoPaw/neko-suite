@@ -4,6 +4,7 @@ import type {
   AgentBackgroundTask,
   AgentTurnTimelineAssistantTextItem,
   AgentTurnTimelineMediaItem,
+  AgentTurnTimelineItem,
   AgentTurnTimelineMessage,
   AgentMediaTaskView,
   AgentQueuedMessageItem,
@@ -485,6 +486,7 @@ describe('work item message handlers', () => {
           messageId: 'msg-a',
           itemId: 'tool-tool-a',
           sequence: 1,
+          itemRevision: 1,
           kind: 'tool_call',
           status: 'pending',
           payload: {
@@ -525,6 +527,7 @@ describe('work item message handlers', () => {
           messageId: 'msg-a',
           itemId: 'tool-tool-a',
           sequence: 1,
+          itemRevision: 1,
           kind: 'tool_call',
           status: 'pending',
           payload: {
@@ -575,6 +578,7 @@ describe('work item message handlers', () => {
           messageId: 'msg-a',
           itemId: 'tool-tool-a',
           sequence: 1,
+          itemRevision: 1,
           kind: 'tool_call',
           status: 'pending',
           payload: {
@@ -621,6 +625,7 @@ describe('work item message handlers', () => {
           messageId: 'msg-a',
           itemId: 'tool-tool-a',
           sequence: 2,
+          itemRevision: 1,
           kind: 'tool_call',
           status: 'succeeded',
           payload: {
@@ -695,7 +700,7 @@ describe('work item message handlers', () => {
       timelineMessage([
         {
           ...textTimelineItem('text-storyboard', 3, ''),
-          payload: { content: '', format: 'markdown', replaceContent: true },
+          payload: { content: '', format: 'markdown', sourceGeneration: 2 },
         },
       ]),
       harness.context,
@@ -794,6 +799,7 @@ describe('work item message handlers', () => {
           messageId: 'msg-a',
           itemId: 'tool-tool-a',
           sequence: 1,
+          itemRevision: 1,
           kind: 'tool_call',
           status: 'succeeded',
           payload: {
@@ -973,19 +979,23 @@ describe('work item message handlers', () => {
 
     dispatch(
       timelineHandlers,
-      timelineMessage([
-        {
-          ...turnMediaTimelineItem('media-task-media-a', 3, 'media-a'),
-          status: 'succeeded',
-          payload: {
-            workItem: createMediaWorkItem('conv-a', 'media-a', {
-              parentMessageId: 'msg-a',
-              status: 'completed',
-              progress: 100,
-            }),
+      timelineMessage(
+        [
+          {
+            ...turnMediaTimelineItem('media-task-media-a', 2, 'media-a'),
+            itemRevision: 2,
+            status: 'succeeded',
+            payload: {
+              workItem: createMediaWorkItem('conv-a', 'media-a', {
+                parentMessageId: 'msg-a',
+                status: 'completed',
+                progress: 100,
+              }),
+            },
           },
-        },
-      ]),
+        ],
+        2,
+      ),
       harness.context,
     );
 
@@ -1760,13 +1770,23 @@ function createMediaWorkItem(
   });
 }
 
-function timelineMessage(events: AgentTurnTimelineMessage['events']): AgentTurnTimelineMessage {
+function timelineMessage(
+  items: readonly AgentTurnTimelineItem[],
+  deliveryRevision = 1,
+): AgentTurnTimelineMessage {
   return {
     type: 'agentTurnTimeline',
+    schemaVersion: 2,
+    connectionEpoch: 'epoch-1',
     conversationId: 'conv-a',
     turnId: 'turn-msg-a',
     messageId: 'msg-a',
-    events,
+    batchKind: 'delta',
+    deliveryRevision,
+    operations: items.map((item) => ({
+      operation: item.kind === 'assistant_text' || item.kind === 'thinking' ? 'append' : 'upsert',
+      item,
+    })) as AgentTurnTimelineMessage['operations'],
   };
 }
 
@@ -1781,9 +1801,10 @@ function textTimelineItem(
     messageId: 'msg-a',
     itemId,
     sequence,
+    itemRevision: 1,
     kind: 'assistant_text',
     status: 'streaming',
-    payload: { content, format: 'markdown' },
+    payload: { content, format: 'markdown', sourceGeneration: 1 },
     createdAt: sequence,
     updatedAt: sequence,
   };
@@ -1793,13 +1814,14 @@ function readImageTimelineItem(
   itemId: string,
   sequence: number,
   toolCallId: string,
-): AgentTurnTimelineMessage['events'][number] {
+): AgentTurnTimelineItem {
   return {
     conversationId: 'conv-a',
     turnId: 'turn-msg-a',
     messageId: 'msg-a',
     itemId,
     sequence,
+    itemRevision: 1,
     kind: 'tool_call',
     status: 'succeeded',
     payload: {
@@ -1884,13 +1906,14 @@ function mediaTimelineItem(
   sequence: number,
   parentToolCallId: string,
   workItemId: string,
-): AgentTurnTimelineMessage['events'][number] {
+): AgentTurnTimelineItem {
   return {
     conversationId: 'conv-a',
     turnId: 'turn-msg-a',
     messageId: 'msg-a',
     itemId,
     sequence,
+    itemRevision: 1,
     kind: 'media',
     status: 'pending',
     parentAnchor: 'tool_call',
@@ -1917,6 +1940,7 @@ function turnMediaTimelineItem(
     messageId: 'msg-a',
     itemId,
     sequence,
+    itemRevision: 1,
     kind: 'media',
     status: 'pending',
     parentAnchor: 'turn',
@@ -1934,13 +1958,14 @@ function errorTimelineItem(
   itemId: string,
   sequence: number,
   message: string,
-): AgentTurnTimelineMessage['events'][number] {
+): AgentTurnTimelineItem {
   return {
     conversationId: 'conv-a',
     turnId: 'turn-msg-a',
     messageId: 'msg-a',
     itemId,
     sequence,
+    itemRevision: 1,
     kind: 'error',
     status: 'failed',
     payload: { message },

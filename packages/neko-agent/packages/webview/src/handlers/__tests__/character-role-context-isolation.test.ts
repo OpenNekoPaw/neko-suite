@@ -168,9 +168,20 @@ describe('character role context isolation', () => {
 
   it('keeps foreground activeConversation active timeline in the session cache', () => {
     const activeTimeline: ActiveTurnTimelineState = {
+      connectionEpoch: 'epoch-1',
       conversationId: 'conv-a',
       turnId: 'turn-a',
       messageId: 'assistant-stream',
+      deliveryRevision: 0,
+      validationState: {
+        connectionEpoch: 'epoch-1',
+        conversationId: 'conv-a',
+        turnId: 'turn-a',
+        messageId: 'assistant-stream',
+        deliveryRevision: 0,
+        completed: false,
+        items: new Map(),
+      },
       items: [],
       completed: false,
     };
@@ -463,9 +474,20 @@ describe('character role context isolation', () => {
 
   it('clears visible streaming and queue state when switching to an uncached ordinary tab', () => {
     const activeTimeline: ActiveTurnTimelineState = {
+      connectionEpoch: 'epoch-1',
       conversationId: 'conv-a',
       turnId: 'turn-a',
       messageId: 'stream-a',
+      deliveryRevision: 0,
+      validationState: {
+        connectionEpoch: 'epoch-1',
+        conversationId: 'conv-a',
+        turnId: 'turn-a',
+        messageId: 'stream-a',
+        deliveryRevision: 0,
+        completed: false,
+        items: new Map(),
+      },
       items: [],
       completed: false,
     };
