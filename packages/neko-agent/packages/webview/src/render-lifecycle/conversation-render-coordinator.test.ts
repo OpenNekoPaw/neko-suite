@@ -3,8 +3,6 @@ import type { Message } from '@neko-agent/types';
 import {
   ConversationRenderLifecycleError,
   createIdleConversationStreamingSnapshot,
-  type ConversationMarkdownTimelineResourceOwner,
-  type ConversationRenderSnapshot,
   type ConversationVisibleStatePort,
 } from './conversation-render-contract';
 import { ConversationRenderCoordinator } from './conversation-render-coordinator';
@@ -42,22 +40,17 @@ describe('ConversationRenderCoordinator', () => {
     expect(listenerA).toHaveBeenCalledTimes(1);
   });
 
-  it('keeps one foreground conversation and publishes only after visible state commits', () => {
+  it('keeps one foreground conversation and commits only through visible state', () => {
     const events: string[] = [];
     const coordinator = new ConversationRenderCoordinator();
     coordinator.ingest(hostSnapshot('conv-a', 0, [message('a')]));
     coordinator.ingest(hostSnapshot('conv-b', 0, [message('b')]));
     const visibleState = createVisibleStatePort(events);
-    const markdown = createMarkdownOwner(events, (conversationId) => {
-      expect(visibleState.currentConversationId()).toBe(conversationId);
-      expect(coordinator.foregroundConversationId()).toBe(conversationId);
-    });
-
     coordinator
       .prepareActivation({ kind: 'activation', conversationId: 'conv-a', source: 'ui-tab' })
-      .commit({ visibleState, markdown });
+      .commit({ visibleState });
 
-    expect(events).toEqual(['markdown:prepare:conv-a', 'visible:commit:conv-a', 'publish:conv-a']);
+    expect(events).toEqual(['visible:commit:conv-a']);
     expect(coordinator.read('conv-a')?.visibility).toBe('foreground');
     expect(coordinator.read('conv-b')?.visibility).toBe('background');
 
@@ -67,94 +60,21 @@ describe('ConversationRenderCoordinator', () => {
         conversationId: 'conv-b',
         source: 'extension-tab-state',
       })
-      .commit({ visibleState, markdown });
+      .commit({ visibleState });
 
     expect(coordinator.foregroundConversationId()).toBe('conv-b');
     expect(coordinator.read('conv-a')?.visibility).toBe('background');
     expect(coordinator.read('conv-b')?.visibility).toBe('foreground');
   });
 
-  it('fails visibly when Markdown Timeline activation has no resource owner', () => {
-    const coordinator = new ConversationRenderCoordinator();
-    coordinator.ingest({
-      ...hostSnapshot('conv-a', 0, [message('message-a')]),
-      streaming: {
-        ...createIdleConversationStreamingSnapshot(),
-        streamingMessageId: 'message-a',
-        isThinking: true,
-        activeTurnTimeline: markdownTimeline('conv-a'),
-      },
-    });
-
-    const transaction = coordinator.prepareActivation({
-      kind: 'activation',
-      conversationId: 'conv-a',
-      source: 'extension-tab-state',
-    });
-
-    expect(() => transaction.commit({ visibleState: createVisibleStatePort([]) })).toThrowError(
-      expect.objectContaining({
-        diagnostic: expect.objectContaining({
-          code: 'markdown-resource-owner-missing',
-          conversationId: 'conv-a',
-          activationSource: 'extension-tab-state',
-          currentRevision: 1,
-          targetRevision: 2,
-          messageId: 'message-a',
-          turnId: 'turn-a',
-        }),
-      }),
-    );
-    expect(coordinator.foregroundConversationId()).toBeNull();
-    expect(coordinator.read('conv-a')?.visibility).toBe('background');
-  });
-
-  it('releases unavailable Timeline ownership before activation', () => {
-    const coordinator = new ConversationRenderCoordinator();
-    coordinator.ingest({
-      ...hostSnapshot('conv-a', 0, [message('stream')]),
-      streaming: {
-        ...createIdleConversationStreamingSnapshot(),
-        streamingMessageId: 'stream',
-        isThinking: true,
-        synchronization: 'unavailable',
-      },
-    });
-
-    const snapshot = coordinator.prepareActivation({
-      kind: 'activation',
-      conversationId: 'conv-a',
-      source: 'extension-active-conversation',
-    }).snapshot;
-
-    expect(snapshot.streaming).toMatchObject({
-      streamingMessageId: null,
-      isThinking: false,
-      synchronization: 'unavailable',
-      activeTurnTimeline: null,
-    });
-  });
-
   it('rejects identity mismatches and mutations after disposal', () => {
     const coordinator = new ConversationRenderCoordinator();
     const timeline = {
-      connectionEpoch: 'epoch-1',
       conversationId: 'conv-other',
       turnId: 'turn-a',
       messageId: 'message-a',
-      deliveryRevision: 1,
-      validationState: {
-        connectionEpoch: 'epoch-1',
-        conversationId: 'conv-other',
-        turnId: 'turn-a',
-        messageId: 'message-a',
-        deliveryRevision: 1,
-        completed: false,
-        items: new Map(),
-      },
       items: [],
       completed: false,
-      synchronization: 'synchronized' as const,
     };
 
     expect(() =>
@@ -231,10 +151,8 @@ describe('ConversationRenderCoordinator', () => {
       source: 'character-role-tab',
     });
     const visibleState = createVisibleStatePort([]);
-    const markdown = createMarkdownOwner([], () => undefined);
-
-    transaction.commit({ visibleState, markdown });
-    expect(() => transaction.commit({ visibleState, markdown })).toThrowError(
+    transaction.commit({ visibleState });
+    expect(() => transaction.commit({ visibleState })).toThrowError(
       expect.objectContaining({
         diagnostic: expect.objectContaining({ code: 'activation-already-committed' }),
       }),
@@ -252,7 +170,7 @@ describe('ConversationRenderCoordinator', () => {
           conversationId: 'conv-b',
           source: 'extension-active-conversation',
         })
-        .commit({ visibleState: mismatchedVisibleState, markdown }),
+        .commit({ visibleState: mismatchedVisibleState }),
     ).toThrowError(ConversationRenderLifecycleError);
   });
 });
@@ -264,42 +182,6 @@ function hostSnapshot(conversationId: string, baseRevision: number, messages: re
     baseRevision,
     messages,
     streaming: createIdleConversationStreamingSnapshot(),
-  };
-}
-
-function markdownTimeline(conversationId: string) {
-  return {
-    connectionEpoch: 'epoch-1',
-    conversationId,
-    turnId: 'turn-a',
-    messageId: 'message-a',
-    deliveryRevision: 1,
-    validationState: {
-      connectionEpoch: 'epoch-1',
-      conversationId,
-      turnId: 'turn-a',
-      messageId: 'message-a',
-      deliveryRevision: 1,
-      completed: false,
-      items: new Map(),
-    },
-    items: [
-      {
-        conversationId,
-        turnId: 'turn-a',
-        messageId: 'message-a',
-        itemId: 'text-a',
-        sequence: 1,
-        itemRevision: 1,
-        kind: 'assistant_text' as const,
-        status: 'streaming' as const,
-        payload: { content: 'stream', format: 'markdown' as const, sourceGeneration: 1 },
-        createdAt: 1,
-        updatedAt: 1,
-      },
-    ],
-    completed: false,
-    synchronization: 'synchronized' as const,
   };
 }
 
@@ -315,23 +197,5 @@ function createVisibleStatePort(events: string[]): ConversationVisibleStatePort 
       events.push(`visible:commit:${snapshot.conversationId}`);
     },
     currentConversationId: () => activeConversationId,
-  };
-}
-
-function createMarkdownOwner(
-  events: string[],
-  onPublish: (conversationId: string) => void,
-): ConversationMarkdownTimelineResourceOwner {
-  return {
-    prepare(snapshot: ConversationRenderSnapshot) {
-      events.push(`markdown:prepare:${snapshot.conversationId}`);
-      return {
-        publish(): void {
-          onPublish(snapshot.conversationId);
-          events.push(`publish:${snapshot.conversationId}`);
-        },
-      };
-    },
-    disposeConversation: vi.fn(),
   };
 }

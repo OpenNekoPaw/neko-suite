@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { registerDefaultRenderers } from '@/components/ChatView/RichContent';
 import { MarkdownRenderer } from './MarkdownRenderer';
 import type { MarkdownResourceRenderingProjection } from '@/presenters/markdown-resource-rendering-presenter';
-import type { AgentTurnTimelineMessage } from '@neko-agent/types';
+import type { ConversationProjectionPatch } from '@neko-agent/types';
 import {
   createAgentMarkdownSessionKey,
   getAgentMarkdownSessionRegistry,
@@ -978,15 +978,13 @@ function createTimelineMarkdownSession(content: string): string {
   const messageId = `message-render-${suffix}`;
   const itemId = `text-render-${suffix}`;
   const sessionKey = createAgentMarkdownSessionKey({ conversationId, messageId, itemId });
-  const delivery: AgentTurnTimelineMessage = {
-    type: 'agentTurnTimeline',
-    schemaVersion: 2,
-    connectionEpoch: 'epoch-render',
+  const patch: ConversationProjectionPatch = {
+    type: 'conversationProjectionPatch',
     conversationId,
     turnId: `turn-render-${suffix}`,
     messageId,
-    batchKind: 'delta',
-    deliveryRevision: 1,
+    projectionVersion: 1,
+    baseProjectionVersion: 0,
     operations: [
       {
         operation: 'append',
@@ -1006,7 +1004,7 @@ function createTimelineMarkdownSession(content: string): string {
       },
     ],
   };
-  getAgentMarkdownSessionRegistry().applyTimelineDeliveries([delivery]);
+  getAgentMarkdownSessionRegistry().commitProjectionPatch(patch).publish();
   return sessionKey;
 }
 

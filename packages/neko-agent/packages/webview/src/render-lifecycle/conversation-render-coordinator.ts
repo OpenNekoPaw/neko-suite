@@ -99,7 +99,7 @@ export class ConversationRenderCoordinator {
     const snapshot: ConversationRenderSnapshot = {
       ...current,
       revision: current.revision + 1,
-      streaming: releaseUnavailableTimeline(current.streaming),
+      streaming: current.streaming,
       visibility: 'foreground',
     };
     let committed = false;
@@ -107,7 +107,7 @@ export class ConversationRenderCoordinator {
     return {
       snapshot,
       source: mutation.source,
-      commit: ({ visibleState, markdown }): void => {
+      commit: ({ visibleState }): void => {
         if (committed) {
           throw lifecycleError({
             code: 'activation-already-committed',
@@ -118,23 +118,6 @@ export class ConversationRenderCoordinator {
           });
         }
         committed = true;
-        const requiresMarkdownOwner = snapshot.streaming.activeTurnTimeline?.items.some(
-          (item) => item.kind === 'assistant_text' || item.kind === 'thinking',
-        );
-        if (requiresMarkdownOwner && !markdown) {
-          const timeline = snapshot.streaming.activeTurnTimeline;
-          throw lifecycleError({
-            code: 'markdown-resource-owner-missing',
-            message: `Conversation ${mutation.conversationId} requires a Markdown resource owner for foreground activation.`,
-            conversationId: mutation.conversationId,
-            activationSource: mutation.source,
-            currentRevision: current.revision,
-            targetRevision: snapshot.revision,
-            messageId: timeline?.messageId,
-            turnId: timeline?.turnId,
-          });
-        }
-        const publication = markdown?.prepare(snapshot);
         visibleState.commit(snapshot);
         if (visibleState.currentConversationId() !== mutation.conversationId) {
           throw lifecycleError({
@@ -161,7 +144,6 @@ export class ConversationRenderCoordinator {
             targetRevision: snapshot.revision,
           });
         }
-        publication?.publish();
       },
     };
   }
@@ -298,7 +280,6 @@ function emptyStreamingForMutation(mutation: RevisionedMutation): ConversationSt
     queuedMessageCount: 0,
     queuedMessages: [],
     activeTurnTimeline: null,
-    synchronization: 'synchronized',
   };
 }
 
@@ -306,24 +287,6 @@ function copyStreaming(streaming: ConversationStreamingSnapshot): ConversationSt
   return {
     ...streaming,
     queuedMessages: [...streaming.queuedMessages],
-  };
-}
-
-function releaseUnavailableTimeline(
-  streaming: ConversationStreamingSnapshot,
-): ConversationStreamingSnapshot {
-  if (
-    streaming.synchronization !== 'unavailable' &&
-    streaming.activeTurnTimeline?.synchronization !== 'unavailable'
-  ) {
-    return streaming;
-  }
-  return {
-    ...streaming,
-    streamingMessageId: null,
-    isThinking: false,
-    activeTurnTimeline: null,
-    synchronization: 'unavailable',
   };
 }
 

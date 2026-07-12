@@ -5,7 +5,6 @@ import {
 } from '@neko/markdown';
 import type {
   AgentTurnTimelineItem,
-  AgentTurnTimelineMessage,
   AgentTurnTimelineOperation,
   ConversationProjectionPatch,
   ConversationProjectionSnapshot,
@@ -25,24 +24,17 @@ export interface AgentMarkdownSessionPublication {
   publish(): void;
 }
 
-export interface AgentMarkdownTimelineSnapshot {
+interface TimelineSnapshotInput {
   readonly conversationId: string;
   readonly messageId: string;
   readonly items: readonly AgentTurnTimelineItem[];
 }
 
 export interface AgentMarkdownSessionRegistry {
-  /** Commit parser/session state without notifying React subscribers. */
-  commitTimelineDeliveries(
-    deliveries: readonly AgentTurnTimelineMessage[],
-  ): AgentMarkdownSessionPublication;
-  applyTimelineDeliveries(deliveries: readonly AgentTurnTimelineMessage[]): void;
   commitProjectionPatch(patch: ConversationProjectionPatch): AgentMarkdownSessionPublication;
   commitProjectionSnapshot(
     snapshot: ConversationProjectionSnapshot,
   ): AgentMarkdownSessionPublication;
-  /** Reconcile sessions from the canonical in-memory Timeline before a cached view is shown. */
-  commitTimelineSnapshot(snapshot: AgentMarkdownTimelineSnapshot): AgentMarkdownSessionPublication;
   getSnapshot(sessionKey: string): MarkdownStreamingSnapshot | undefined;
   subscribe(sessionKey: string, listener: () => void): () => void;
   releaseTurn(conversationId: string, messageId: string): void;
@@ -157,19 +149,6 @@ export function createAgentMarkdownSessionRegistry(): AgentMarkdownSessionRegist
     };
   };
 
-  const commitTimelineDeliveries = (
-    deliveries: readonly AgentTurnTimelineMessage[],
-  ): AgentMarkdownSessionPublication => {
-    const mutations = collectSessionMutations(deliveries);
-    const affectedSessionKeys = new Set<string>();
-    for (const mutation of mutations.values()) {
-      if (mutation.mode === 'append') appendEntry(mutation);
-      else replaceEntry(mutation);
-      affectedSessionKeys.add(mutation.sessionKey);
-    }
-    return createPublication(affectedSessionKeys);
-  };
-
   const disposeMatching = (predicate: (sessionKey: string) => boolean): void => {
     const affectedKeys = new Set<string>();
     for (const sessionKey of entries.keys()) {
@@ -226,14 +205,6 @@ export function createAgentMarkdownSessionRegistry(): AgentMarkdownSessionRegist
     return createPublication(affectedSessionKeys);
   };
 
-  const commitTimelineSnapshot = (
-    snapshot: AgentMarkdownTimelineSnapshot,
-  ): AgentMarkdownSessionPublication =>
-    reconcileSnapshotMutations(
-      { conversationId: snapshot.conversationId, messageId: snapshot.messageId },
-      collectSnapshotMutations(snapshot),
-    );
-
   const commitProjectionSnapshot = (
     snapshot: ConversationProjectionSnapshot,
   ): AgentMarkdownSessionPublication => {
@@ -256,10 +227,6 @@ export function createAgentMarkdownSessionRegistry(): AgentMarkdownSessionRegist
   };
 
   return {
-    commitTimelineDeliveries,
-    applyTimelineDeliveries(deliveries): void {
-      commitTimelineDeliveries(deliveries).publish();
-    },
     commitProjectionPatch(patch): AgentMarkdownSessionPublication {
       const mutations = collectOperationMutations({
         conversationId: patch.conversationId,
@@ -275,7 +242,6 @@ export function createAgentMarkdownSessionRegistry(): AgentMarkdownSessionRegist
       return createPublication(affectedSessionKeys);
     },
     commitProjectionSnapshot,
-    commitTimelineSnapshot,
     getSnapshot(sessionKey): MarkdownStreamingSnapshot | undefined {
       return entries.get(sessionKey)?.snapshot;
     },
@@ -331,18 +297,6 @@ export function createAgentMarkdownSessionKey(input: {
   return [input.conversationId ?? '@detached', input.messageId, input.itemId].join('\u0000');
 }
 
-function collectSessionMutations(
-  deliveries: readonly AgentTurnTimelineMessage[],
-): Map<string, PendingSessionMutation> {
-  const pending = new Map<string, PendingSessionMutation>();
-  for (const delivery of deliveries) {
-    for (const operation of delivery.operations) {
-      collectOperationMutation(delivery, operation, pending);
-    }
-  }
-  return pending;
-}
-
 function collectOperationMutations(input: {
   readonly conversationId: string;
   readonly messageId: string;
@@ -356,7 +310,7 @@ function collectOperationMutations(input: {
 }
 
 function collectOperationMutation(
-  delivery: Pick<AgentTurnTimelineMessage, 'conversationId' | 'messageId'>,
+  delivery: { readonly conversationId: string; readonly messageId: string },
   operation: AgentTurnTimelineOperation,
   pending: Map<string, PendingSessionMutation>,
 ): void {
@@ -434,7 +388,7 @@ function collectOperationMutation(
 }
 
 function collectSnapshotMutations(
-  snapshot: AgentMarkdownTimelineSnapshot,
+  snapshot: TimelineSnapshotInput,
 ): Map<string, PendingSessionMutation> {
   const mutations = new Map<string, PendingSessionMutation>();
   for (const item of snapshot.items) {

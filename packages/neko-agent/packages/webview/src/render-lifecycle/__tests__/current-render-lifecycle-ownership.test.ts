@@ -8,12 +8,12 @@ interface RenderLifecycleOwnerInventoryItem {
     | 'visible-react-state'
     | 'foreground-refs'
     | 'conversation-cache'
-    | 'timeline-scheduler'
+    | 'projection-attachment'
     | 'markdown-registry'
     | 'viewport-focus'
     | 'extension-activation';
   readonly currentOwner: string;
-  readonly lifecycleScope: 'component' | 'conversation' | 'webview-realm' | 'extension-message';
+  readonly lifecycleScope: 'component' | 'conversation' | 'tab' | 'extension-message';
   readonly writableFromBackground: boolean;
 }
 
@@ -37,15 +37,15 @@ const currentRenderLifecycleOwners: readonly RenderLifecycleOwnerInventoryItem[]
     writableFromBackground: true,
   },
   {
-    concern: 'timeline-scheduler',
-    currentOwner: 'ConversationRenderRuntimeLifecycle',
-    lifecycleScope: 'webview-realm',
+    concern: 'projection-attachment',
+    currentOwner: 'per-Tab ProjectionAttachmentClient',
+    lifecycleScope: 'tab',
     writableFromBackground: true,
   },
   {
     concern: 'markdown-registry',
-    currentOwner: 'ConversationMarkdownTimelineResourceOwner',
-    lifecycleScope: 'webview-realm',
+    currentOwner: 'per-Tab AgentMarkdownSessionRegistry',
+    lifecycleScope: 'tab',
     writableFromBackground: true,
   },
   {
@@ -71,7 +71,7 @@ describe('current conversation render lifecycle ownership', () => {
       'visible-react-state',
       'foreground-refs',
       'conversation-cache',
-      'timeline-scheduler',
+      'projection-attachment',
       'markdown-registry',
       'viewport-focus',
       'extension-activation',
@@ -83,7 +83,7 @@ describe('current conversation render lifecycle ownership', () => {
       currentRenderLifecycleOwners
         .filter(({ writableFromBackground }) => writableFromBackground)
         .map(({ concern }) => concern),
-    ).toEqual(['conversation-cache', 'timeline-scheduler', 'markdown-registry']);
+    ).toEqual(['conversation-cache', 'projection-attachment', 'markdown-registry']);
   });
 
   it('keeps migrated conversation projections writable only through the state adapter', () => {

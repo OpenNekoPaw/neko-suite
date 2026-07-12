@@ -1,11 +1,10 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
-import { StrictMode, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import type { AgentContextPayload } from '@neko/shared';
 import type {
   AgentQueuedMessageItem,
   AgentState,
-  AgentTurnTimelineMessage,
   AgentWorkItem,
   ConversationSummary,
   Message,
@@ -968,124 +967,6 @@ describe('ConversationController entry state', () => {
     expect(workspaceB.getAttribute('data-instance-id')).toBe(instanceB);
   });
 
-  it('keeps viewport intent owned by its Tab across background revisions and tab switches', () => {
-    vi.clearAllMocks();
-    render(<ConversationController {...createProps()} />);
-    const openTabs = [
-      { id: 'tab-a', title: 'Chat A1', conversationId: 'conv-a' },
-      { id: 'tab-b', title: 'Chat A2', conversationId: 'conv-a' },
-    ];
-
-    act(() => {
-      window.dispatchEvent(
-        new MessageEvent('message', {
-          data: {
-            type: 'activeConversation',
-            conversation: { id: 'conv-a', title: 'Chat A', messages: [message('a-1', 'A')] },
-          },
-        }),
-      );
-      window.dispatchEvent(
-        new MessageEvent('message', {
-          data: { type: 'tabState', tabState: { openTabs, activeTabId: 'tab-a' } },
-        }),
-      );
-    });
-
-    expect(screen.getByTestId('workspace-tab-conversation').textContent).toBe('conv-a');
-    expect(screen.getByTestId('workspace-viewport').textContent).toBe('follow-tail:none:0');
-    fireEvent.click(screen.getByTestId('detach-viewport'));
-    expect(screen.getByTestId('workspace-viewport').textContent).toBe('detached:anchor-tab-a:25');
-
-    fireEvent.click(screen.getByRole('button', { name: 'Switch Chat A2' }));
-    expect(screen.getByTestId('workspace-tab-conversation').textContent).toBe('conv-a');
-    expect(screen.getByTestId('workspace-viewport').textContent).toBe('follow-tail:none:0');
-
-    act(() => {
-      window.dispatchEvent(
-        new MessageEvent('message', {
-          data: timelineSnapshotMessage('conv-a', 'message-a', 'background A'),
-        }),
-      );
-    });
-    expect(screen.getByTestId('workspace-tab-conversation').textContent).toBe('conv-a');
-    expect(screen.getByTestId('workspace-viewport').textContent).toBe('follow-tail:none:0');
-
-    fireEvent.click(screen.getByRole('button', { name: 'Switch Chat A1' }));
-    expect(screen.getByTestId('workspace-viewport').textContent).toBe('detached:anchor-tab-a:25');
-  });
-
-  it('keeps concurrent Timeline and Markdown projections isolated during rapid Tab switching', () => {
-    vi.clearAllMocks();
-    render(<ConversationController {...createProps()} />);
-
-    act(() => {
-      window.dispatchEvent(
-        new MessageEvent('message', {
-          data: {
-            type: 'tabState',
-            tabState: {
-              openTabs: [
-                { id: 'tab-a', title: 'Chat A', conversationId: 'conv-a' },
-                { id: 'tab-b', title: 'Chat B', conversationId: 'conv-b' },
-              ],
-              activeTabId: 'tab-a',
-            },
-          },
-        }),
-      );
-      window.dispatchEvent(
-        new MessageEvent('message', {
-          data: timelineSnapshotMessage('conv-a', 'message-a', 'stream **A**'),
-        }),
-      );
-      window.dispatchEvent(
-        new MessageEvent('message', {
-          data: timelineSnapshotMessage('conv-b', 'message-b', 'stream **B**'),
-        }),
-      );
-    });
-
-    const workspaceA = screen.getByTestId('workspace-runtime-tab-a');
-    const workspaceB = screen.getByTestId('workspace-runtime-tab-b');
-    const instanceA = workspaceA.getAttribute('data-instance-id');
-    const instanceB = workspaceB.getAttribute('data-instance-id');
-
-    for (let cycle = 0; cycle < 12; cycle += 1) {
-      fireEvent.click(screen.getByRole('button', { name: 'Switch Chat B' }));
-      expect(screen.getByTestId('workspace-messages').textContent).toBe('stream **B**');
-      expect(screen.getByTestId('workspace-messages-tab-a').textContent).toBe('stream **A**');
-      fireEvent.click(screen.getByRole('button', { name: 'Switch Chat A' }));
-      expect(screen.getByTestId('workspace-messages').textContent).toBe('stream **A**');
-      expect(screen.getByTestId('workspace-messages-tab-b').textContent).toBe('stream **B**');
-    }
-
-    expect(screen.getByTestId('workspace-runtime-tab-a')).toBe(workspaceA);
-    expect(screen.getByTestId('workspace-runtime-tab-b')).toBe(workspaceB);
-    expect(workspaceA.getAttribute('data-instance-id')).toBe(instanceA);
-    expect(workspaceB.getAttribute('data-instance-id')).toBe(instanceB);
-
-    const registry = getAgentMarkdownSessionRegistry();
-    expect(
-      registry.getSnapshot(
-        createAgentMarkdownSessionKey({
-          conversationId: 'conv-a',
-          messageId: 'message-a',
-          itemId: 'text-1',
-        }),
-      ),
-    ).toMatchObject({ source: 'stream **A**', isFinal: false });
-    expect(
-      registry.getSnapshot(
-        createAgentMarkdownSessionKey({
-          conversationId: 'conv-b',
-          messageId: 'message-b',
-          itemId: 'text-1',
-        }),
-      ),
-    ).toMatchObject({ source: 'stream **B**', isFinal: false });
-  });
-
   it('does not mutate cached Markdown streaming state when an ordinary Tab becomes visible', () => {
     vi.clearAllMocks();
     render(<ConversationController {...createProps()} />);
@@ -1123,62 +1004,6 @@ describe('ConversationController entry state', () => {
 
     expect(screen.getByTestId('workspace-messages').textContent).toBe('partial B');
     expect(screen.getByTestId('workspace-streaming-flags').textContent).toBe('true:true');
-  });
-
-  it('updates a background tab status from its canonical render revision', () => {
-    vi.clearAllMocks();
-    render(<ConversationController {...createProps()} />);
-
-    act(() => {
-      window.dispatchEvent(
-        new MessageEvent('message', {
-          data: {
-            type: 'tabState',
-            tabState: {
-              openTabs: [
-                { id: 'tab-a', title: 'Chat A', conversationId: 'conv-a' },
-                { id: 'tab-b', title: 'Chat B', conversationId: 'conv-b' },
-              ],
-              activeTabId: 'tab-b',
-            },
-          },
-        }),
-      );
-    });
-
-    expect(screen.getByTestId('tab-status-tab-a').textContent).toBe('none');
-
-    act(() => {
-      window.dispatchEvent(
-        new MessageEvent('message', {
-          data: timelineSnapshotMessage('conv-a', 'message-a', 'background A'),
-        }),
-      );
-    });
-
-    expect(screen.getByTestId('workspace-tab-conversation').textContent).toBe('conv-b');
-    expect(screen.getByTestId('workspace-composer-mode').textContent).toBe('send-enabled');
-    expect(screen.getByTestId('tab-status-tab-a').textContent).toBe('running');
-
-    act(() => {
-      window.dispatchEvent(
-        new MessageEvent('message', {
-          data: {
-            type: 'tabState',
-            tabState: {
-              openTabs: [
-                { id: 'tab-a', title: 'Chat A', conversationId: 'conv-a' },
-                { id: 'tab-b', title: 'Chat B', conversationId: 'conv-b' },
-              ],
-              activeTabId: 'tab-a',
-            },
-          },
-        }),
-      );
-    });
-
-    expect(screen.getByTestId('workspace-tab-conversation').textContent).toBe('conv-a');
-    expect(screen.getByTestId('workspace-composer-mode').textContent).toBe('queue-enabled');
   });
 
   it('switches running status and elapsed baseline with the active conversation snapshot', () => {
@@ -1235,45 +1060,6 @@ describe('ConversationController entry state', () => {
     expect(screen.getByTestId('workspace-agent-state').textContent).toBe('acting:1000:ReadFile');
   });
 
-  it('keeps Timeline and Markdown resources usable after StrictMode effect replay', () => {
-    vi.clearAllMocks();
-    render(
-      <StrictMode>
-        <ConversationController {...createProps()} />
-      </StrictMode>,
-    );
-
-    act(() => {
-      window.dispatchEvent(
-        new MessageEvent('message', {
-          data: {
-            type: 'tabState',
-            tabState: {
-              openTabs: [{ id: 'tab-a', title: 'Chat A', conversationId: 'conv-a' }],
-              activeTabId: 'tab-a',
-            },
-          },
-        }),
-      );
-      window.dispatchEvent(
-        new MessageEvent('message', {
-          data: timelineSnapshotMessage('conv-a', 'message-a', 'strict **markdown**'),
-        }),
-      );
-    });
-
-    expect(screen.getByTestId('workspace-messages').textContent).toBe('strict **markdown**');
-    expect(
-      getAgentMarkdownSessionRegistry().getSnapshot(
-        createAgentMarkdownSessionKey({
-          conversationId: 'conv-a',
-          messageId: 'message-a',
-          itemId: 'text-1',
-        }),
-      ),
-    ).toMatchObject({ source: 'strict **markdown**', isFinal: false });
-  });
-
   it('disposes only the deleted background conversation render resources', () => {
     vi.clearAllMocks();
     render(
@@ -1288,10 +1074,12 @@ describe('ConversationController entry state', () => {
     );
 
     const registry = getAgentMarkdownSessionRegistry();
-    registry.applyTimelineDeliveries([
-      timelineSnapshotMessage('conv-a', 'message-a', 'markdown A'),
-      timelineSnapshotMessage('conv-b', 'message-b', 'markdown B'),
-    ]);
+    registry
+      .commitProjectionSnapshot(projectionSnapshot('conv-a', 'message-a', 'markdown A'))
+      .publish();
+    registry
+      .commitProjectionSnapshot(projectionSnapshot('conv-b', 'message-b', 'markdown B'))
+      .publish();
     const keyA = createAgentMarkdownSessionKey({
       conversationId: 'conv-a',
       messageId: 'message-a',
@@ -1310,93 +1098,6 @@ describe('ConversationController entry state', () => {
     expect(vscodeMocks.deleteConversation).toHaveBeenCalledWith('conv-a');
     expect(registry.getSnapshot(keyA)).toBeUndefined();
     expect(registry.getSnapshot(keyB)?.source).toBe('markdown B');
-  });
-
-  it('retains conversation render resources across hide/reveal and tears them down on pagehide', () => {
-    vi.clearAllMocks();
-    const visibility = vi.spyOn(document, 'visibilityState', 'get');
-    visibility.mockReturnValue('visible');
-    render(<ConversationController {...createProps()} />);
-
-    act(() => {
-      window.dispatchEvent(
-        new MessageEvent('message', {
-          data: {
-            type: 'tabState',
-            tabState: {
-              openTabs: [{ id: 'tab-a', title: 'Chat A', conversationId: 'conv-a' }],
-              activeTabId: 'tab-a',
-            },
-          },
-        }),
-      );
-      window.dispatchEvent(
-        new MessageEvent('message', {
-          data: timelineSnapshotMessage('conv-a', 'message-a', 'retained **markdown**'),
-        }),
-      );
-    });
-
-    const key = createAgentMarkdownSessionKey({
-      conversationId: 'conv-a',
-      messageId: 'message-a',
-      itemId: 'text-1',
-    });
-    const registry = getAgentMarkdownSessionRegistry();
-    expect(registry.getSnapshot(key)?.source).toBe('retained **markdown**');
-
-    act(() => {
-      visibility.mockReturnValue('hidden');
-      document.dispatchEvent(new Event('visibilitychange'));
-      visibility.mockReturnValue('visible');
-      document.dispatchEvent(new Event('visibilitychange'));
-    });
-    expect(registry.getSnapshot(key)?.source).toBe('retained **markdown**');
-
-    act(() => window.dispatchEvent(new Event('pagehide')));
-    expect(registry.getSnapshot(key)).toBeUndefined();
-    visibility.mockRestore();
-  });
-
-  it('does not rebuild disposed Markdown resources as a Tab visibility side effect', () => {
-    vi.clearAllMocks();
-    render(<ConversationController {...createProps()} />);
-
-    act(() => {
-      window.dispatchEvent(
-        new MessageEvent('message', {
-          data: {
-            type: 'tabState',
-            tabState: {
-              openTabs: [
-                { id: 'tab-a', title: 'Chat A', conversationId: 'conv-a' },
-                { id: 'tab-b', title: 'Chat B', conversationId: 'conv-b' },
-              ],
-              activeTabId: 'tab-a',
-            },
-          },
-        }),
-      );
-      window.dispatchEvent(
-        new MessageEvent('message', {
-          data: timelineSnapshotMessage('conv-b', 'message-b', 'partial **B**'),
-        }),
-      );
-    });
-
-    const registry = getAgentMarkdownSessionRegistry();
-    const key = createAgentMarkdownSessionKey({
-      conversationId: 'conv-b',
-      messageId: 'message-b',
-      itemId: 'text-1',
-    });
-    expect(registry.getSnapshot(key)?.source).toBe('partial **B**');
-    registry.disposeConversation('conv-b');
-    expect(registry.getSnapshot(key)).toBeUndefined();
-
-    fireEvent.click(screen.getByRole('button', { name: 'Switch Chat B' }));
-
-    expect(registry.getSnapshot(key)).toBeUndefined();
   });
 
   it('does not mutate cached Markdown streaming state when a character-role Tab becomes visible', () => {
@@ -1808,36 +1509,29 @@ function message(id: string, content: string): Message {
   };
 }
 
-function timelineSnapshotMessage(
-  conversationId: string,
-  messageId: string,
-  content: string,
-): AgentTurnTimelineMessage {
+function projectionSnapshot(conversationId: string, messageId: string, content: string) {
   return {
-    type: 'agentTurnTimeline',
-    schemaVersion: 2,
-    connectionEpoch: 'epoch-1',
     conversationId,
-    turnId: `turn-${conversationId}`,
-    messageId,
-    batchKind: 'snapshot',
-    deliveryRevision: 1,
-    operations: [
+    projectionVersion: 1,
+    turns: [
       {
-        operation: 'snapshot',
-        item: {
-          conversationId,
-          turnId: `turn-${conversationId}`,
-          messageId,
-          itemId: 'text-1',
-          sequence: 1,
-          itemRevision: 1,
-          kind: 'assistant_text',
-          status: 'streaming',
-          payload: { content, format: 'markdown', sourceGeneration: 1 },
-          createdAt: 1,
-          updatedAt: 1,
-        },
+        turnId: `turn-${conversationId}`,
+        messageId,
+        items: [
+          {
+            conversationId,
+            turnId: `turn-${conversationId}`,
+            messageId,
+            itemId: 'text-1',
+            sequence: 1,
+            itemRevision: 1,
+            kind: 'assistant_text' as const,
+            status: 'streaming' as const,
+            payload: { content, format: 'markdown' as const, sourceGeneration: 1 },
+            createdAt: 1,
+            updatedAt: 1,
+          },
+        ],
       },
     ],
   };

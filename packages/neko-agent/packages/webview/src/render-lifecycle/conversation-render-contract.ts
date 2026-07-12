@@ -2,7 +2,6 @@ import type { AgentQueuedMessageItem, Message } from '@neko-agent/types';
 import type { ActiveTurnTimelineState } from '@/presenters/active-turn-timeline-presenter';
 
 export type ConversationVisibility = 'foreground' | 'background';
-export type TimelineSynchronization = 'synchronized' | 'suspended' | 'unavailable';
 export type ConversationRetention = 'retained' | 'disposed';
 
 export type ForegroundConversationAvailability =
@@ -17,7 +16,6 @@ export interface ConversationStreamingSnapshot {
   readonly queuedMessages: readonly AgentQueuedMessageItem[];
   readonly messageQueueVersion?: number;
   readonly activeTurnTimeline: ActiveTurnTimelineState | null;
-  readonly synchronization: TimelineSynchronization;
 }
 
 export interface ConversationRenderSnapshot {
@@ -79,11 +77,6 @@ export interface ConversationRenderPublication {
   publish(): void;
 }
 
-export interface ConversationMarkdownTimelineResourceOwner {
-  prepare(snapshot: ConversationRenderSnapshot): ConversationRenderPublication;
-  disposeConversation(conversationId: string): void;
-}
-
 export type ConversationRenderDiagnosticCode =
   | 'stale-revision'
   | 'conversation-identity-mismatch'
@@ -91,7 +84,6 @@ export type ConversationRenderDiagnosticCode =
   | 'conversation-disposed'
   | 'activation-already-committed'
   | 'visible-state-commit-mismatch'
-  | 'markdown-resource-owner-missing'
   | 'background-visible-state-write'
   | 'activation-publication-order-invalid';
 
@@ -116,10 +108,7 @@ export class ConversationRenderLifecycleError extends Error {
 export interface ConversationActivationTransaction {
   readonly snapshot: ConversationRenderSnapshot;
   readonly source: ConversationActivationSource;
-  commit(input: {
-    readonly visibleState: ConversationVisibleStatePort;
-    readonly markdown?: ConversationMarkdownTimelineResourceOwner;
-  }): void;
+  commit(input: { readonly visibleState: ConversationVisibleStatePort }): void;
 }
 
 export function createIdleConversationStreamingSnapshot(): ConversationStreamingSnapshot {
@@ -129,6 +118,5 @@ export function createIdleConversationStreamingSnapshot(): ConversationStreaming
     queuedMessageCount: 0,
     queuedMessages: [],
     activeTurnTimeline: null,
-    synchronization: 'synchronized',
   };
 }

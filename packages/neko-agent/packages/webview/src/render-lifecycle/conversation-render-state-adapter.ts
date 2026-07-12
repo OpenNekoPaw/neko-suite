@@ -1,10 +1,8 @@
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react';
 import type { AgentQueuedMessageItem, Message } from '@neko-agent/types';
 import type { ActiveTurnTimelineState } from '@/presenters/active-turn-timeline-presenter';
-import type { AgentMarkdownSessionPublication } from '@/markdown/agent-markdown-session-registry';
 import type {
   ConversationActivationSource,
-  ConversationMarkdownTimelineResourceOwner,
   ConversationRenderSnapshot,
   ConversationStreamingSnapshot,
   ConversationVisibleStatePort,
@@ -113,7 +111,6 @@ export function commitConversationRenderActivation(input: {
   readonly source: ConversationActivationSource;
   readonly conversation: ConversationRenderActivationInput;
   readonly visibleState: ConversationVisibleStatePort;
-  readonly markdown: ConversationMarkdownTimelineResourceOwner;
 }): ConversationRenderSnapshot {
   const currentRevision = input.coordinator.read(input.conversation.conversationId)?.revision ?? 0;
   input.coordinator.ingest({
@@ -128,14 +125,13 @@ export function commitConversationRenderActivation(input: {
     conversationId: input.conversation.conversationId,
     source: input.source,
   });
-  transaction.commit({ visibleState: input.visibleState, markdown: input.markdown });
+  transaction.commit({ visibleState: input.visibleState });
   return transaction.snapshot;
 }
 
 function projectActivationMessages(input: ConversationRenderActivationInput): Message[] {
   const timeline = input.streaming.activeTurnTimeline;
-  const timelineMessageId =
-    timeline && timeline.synchronization !== 'unavailable' ? timeline.messageId : undefined;
+  const timelineMessageId = timeline?.messageId;
   return input.messages.map((message) => {
     if (message.id === timelineMessageId) return message;
     return finalizeOrphanedStreamingMessage(message);
@@ -145,16 +141,12 @@ function projectActivationMessages(input: ConversationRenderActivationInput): Me
 function projectActivationStreaming(
   streaming: ConversationRenderStreamingState,
 ): ConversationRenderStreamingState {
-  const timeline = streaming.activeTurnTimeline;
-  const hasRecoverableTimelineOwnership =
-    timeline !== null && timeline !== undefined && timeline.synchronization !== 'unavailable';
-  return hasRecoverableTimelineOwnership
+  return streaming.activeTurnTimeline
     ? streaming
     : {
         ...streaming,
         streamingMessageId: null,
         isThinking: false,
-        ...(timeline?.synchronization === 'unavailable' ? { activeTurnTimeline: null } : {}),
       };
 }
 
@@ -192,8 +184,6 @@ export function createConversationVisibleStatePort(
           message: `Background conversation ${snapshot.conversationId} cannot update foreground visible state.`,
           conversationId: snapshot.conversationId,
           targetRevision: snapshot.revision,
-          messageId: snapshot.streaming.activeTurnTimeline?.messageId,
-          turnId: snapshot.streaming.activeTurnTimeline?.turnId,
         });
       }
       const streaming = toConversationRenderStreamingState(snapshot.streaming);
@@ -216,31 +206,10 @@ export function createConversationVisibleStatePort(
   };
 }
 
-export function createConversationMarkdownTimelineResourceOwner(
-  commitTimelineSnapshot: (
-    timeline: ActiveTurnTimelineState,
-  ) => AgentMarkdownSessionPublication | undefined,
-): ConversationMarkdownTimelineResourceOwner {
-  return {
-    prepare(snapshot) {
-      const timeline = snapshot.streaming.activeTurnTimeline;
-      return timeline ? (commitTimelineSnapshot(timeline) ?? NOOP_PUBLICATION) : NOOP_PUBLICATION;
-    },
-    disposeConversation(): void {
-      throw new Error(
-        'Conversation Markdown activation adapter does not own conversation disposal; use the registry lifecycle owner.',
-      );
-    },
-  };
-}
-
 function toConversationStreamingSnapshot(
   streaming: ConversationRenderStreamingState,
 ): ConversationStreamingSnapshot {
   const activeTurnTimeline = streaming.activeTurnTimeline ?? null;
-  const hasExplicitReleasedTimeline =
-    Object.prototype.hasOwnProperty.call(streaming, 'activeTurnTimeline') &&
-    streaming.activeTurnTimeline === null;
   return {
     streamingMessageId: streaming.streamingMessageId,
     isThinking: streaming.isThinking,
@@ -250,9 +219,6 @@ function toConversationStreamingSnapshot(
       ? { messageQueueVersion: streaming.messageQueueVersion }
       : {}),
     activeTurnTimeline,
-    synchronization:
-      activeTurnTimeline?.synchronization ??
-      (hasExplicitReleasedTimeline ? 'unavailable' : 'synchronized'),
   };
 }
 
@@ -267,12 +233,8 @@ function toConversationRenderStreamingState(
     ...(streaming.messageQueueVersion !== undefined
       ? { messageQueueVersion: streaming.messageQueueVersion }
       : {}),
-    ...(streaming.activeTurnTimeline !== null || streaming.synchronization === 'unavailable'
+    ...(streaming.activeTurnTimeline !== null
       ? { activeTurnTimeline: streaming.activeTurnTimeline }
       : {}),
   };
 }
-
-const NOOP_PUBLICATION: AgentMarkdownSessionPublication = {
-  publish(): void {},
-};

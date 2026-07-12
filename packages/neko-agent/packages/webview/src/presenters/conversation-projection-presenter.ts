@@ -7,7 +7,7 @@ import type {
 import {
   projectTimelineItemsToWorkItems,
   projectTimelineTurnToMessage,
-} from './active-turn-timeline-presenter';
+} from './timeline-projection-presenter';
 
 export interface ConversationProjectionRenderInput {
   readonly messages: readonly Message[];

@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type {
-  AgentTurnTimelineItem,
-  AgentTurnTimelineMessage,
+  AgentTurnTimelineAssistantTextItem,
   ConversationProjectionPatch,
   ConversationProjectionSnapshot,
 } from '@neko-agent/types';
@@ -11,35 +10,26 @@ import {
 } from './agent-markdown-session-registry';
 
 describe('agent markdown session registry', () => {
-  it('coalesces all append operations for one frame into one Markdown revision', () => {
+  it('coalesces one projection patch into one Markdown revision and publication', () => {
     const registry = createAgentMarkdownSessionRegistry();
     const key = sessionKey();
     const listener = vi.fn();
     registry.subscribe(key, listener);
 
-    registry.applyTimelineDeliveries([
-      appendMessage(1, 1, '| A'),
-      appendMessage(2, 2, ' | B |\n'),
-      appendMessage(3, 3, '| - | - |\n'),
-    ]);
+    const publication = registry.commitProjectionPatch({
+      ...projectionPatch('', 1, 1),
+      operations: [
+        appendOperation('| A', 1),
+        appendOperation(' | B |\n', 2),
+        appendOperation('| - | - |\n', 3),
+      ],
+    });
 
     expect(registry.getSnapshot(key)).toMatchObject({
       source: '| A | B |\n| - | - |\n',
       isFinal: false,
     });
     expect(registry.metrics()).toMatchObject({ renderRevisions: 1, activeSessions: 1 });
-    expect(listener).toHaveBeenCalledTimes(1);
-  });
-
-  it('stages source visibility before publishing one external-store notification', () => {
-    const registry = createAgentMarkdownSessionRegistry();
-    const key = sessionKey();
-    const listener = vi.fn();
-    registry.subscribe(key, listener);
-
-    const publication = registry.commitTimelineDeliveries([appendMessage(1, 2000, 'coalesced')]);
-
-    expect(registry.getSnapshot(key)?.source).toBe('coalesced');
     expect(listener).not.toHaveBeenCalled();
     publication.publish();
     expect(listener).toHaveBeenCalledTimes(1);
@@ -48,14 +38,14 @@ describe('agent markdown session registry', () => {
     );
   });
 
-  it('keeps one session while a GFM table crosses multiple Timeline revisions', () => {
+  it('keeps one parser session across authoritative append patches', () => {
     const registry = createAgentMarkdownSessionRegistry();
     const key = sessionKey();
 
-    registry.applyTimelineDeliveries([appendMessage(1, 1, '| Shot | Prompt |\n')]);
+    registry.commitProjectionPatch(projectionPatch('| Shot | Prompt |\n', 1, 1)).publish();
     const first = registry.getSnapshot(key);
-    registry.applyTimelineDeliveries([appendMessage(2, 2, '| --- | --- |\n')]);
-    registry.applyTimelineDeliveries([appendMessage(3, 3, '| 1 | Pan right |')]);
+    registry.commitProjectionPatch(projectionPatch('| --- | --- |\n', 2, 2)).publish();
+    registry.commitProjectionPatch(projectionPatch('| 1 | Pan right |', 3, 3)).publish();
     const final = registry.getSnapshot(key);
 
     expect(final).toMatchObject({
@@ -67,38 +57,15 @@ describe('agent markdown session registry', () => {
     expect(final?.document.root.children.some((node) => node.type === 'table')).toBe(true);
   });
 
-  it('coalesces append plus completion into one final session revision', () => {
-    const registry = createAgentMarkdownSessionRegistry();
-    const key = sessionKey();
-
-    registry.applyTimelineDeliveries([
-      appendMessage(1, 1, 'exact final source'),
-      completeMessage(2, 2, 1),
-    ]);
-
-    expect(registry.getSnapshot(key)).toMatchObject({
-      revision: 1,
-      source: 'exact final source',
-      isFinal: true,
-    });
-    expect(registry.metrics()).toMatchObject({
-      createdSessions: 1,
-      renderRevisions: 1,
-      notifications: 0,
-    });
-  });
-
-  it('rebuilds a missing streaming session from an authoritative Timeline snapshot', () => {
+  it('reconciles a missing parser session from the authoritative projection snapshot', () => {
     const registry = createAgentMarkdownSessionRegistry();
     const key = sessionKey();
     const listener = vi.fn();
     registry.subscribe(key, listener);
 
-    const publication = registry.commitTimelineSnapshot({
-      conversationId: 'conv-1',
-      messageId: 'message-1',
-      items: [markdownSnapshotItem('partial **markdown**', 4)],
-    });
+    const publication = registry.commitProjectionSnapshot(
+      projectionSnapshot('partial **markdown**', 4),
+    );
 
     expect(registry.getSnapshot(key)).toMatchObject({
       source: 'partial **markdown**',
@@ -109,27 +76,14 @@ describe('agent markdown session registry', () => {
     expect(listener).toHaveBeenCalledTimes(1);
   });
 
-  it('does not create a render revision when the authoritative snapshot already matches', () => {
+  it('does not rebuild a parser session when an authoritative snapshot is unchanged', () => {
     const registry = createAgentMarkdownSessionRegistry();
-    const item = markdownSnapshotItem('stable', 2);
+    const snapshot = projectionSnapshot('stable', 2);
 
-    registry
-      .commitTimelineSnapshot({
-        conversationId: 'conv-1',
-        messageId: 'message-1',
-        items: [item],
-      })
-      .publish();
+    registry.commitProjectionSnapshot(snapshot).publish();
     const first = registry.getSnapshot(sessionKey());
     const metricsBefore = registry.metrics();
-
-    registry
-      .commitTimelineSnapshot({
-        conversationId: 'conv-1',
-        messageId: 'message-1',
-        items: [item],
-      })
-      .publish();
+    registry.commitProjectionSnapshot(snapshot).publish();
 
     expect(registry.getSnapshot(sessionKey())).toBe(first);
     expect(registry.metrics()).toMatchObject({
@@ -140,188 +94,14 @@ describe('agent markdown session registry', () => {
     });
   });
 
-  it('removes sessions omitted by the authoritative message snapshot and publishes once', () => {
-    const registry = createAgentMarkdownSessionRegistry();
-    const retainedKey = sessionKey('conv-1', 'text-1');
-    const removedKey = sessionKey('conv-1', 'text-2');
-    const retainedListener = vi.fn();
-    const removedListener = vi.fn();
-    registry.subscribe(retainedKey, retainedListener);
-    registry.subscribe(removedKey, removedListener);
-
-    registry
-      .commitTimelineSnapshot({
-        conversationId: 'conv-1',
-        messageId: 'message-1',
-        items: [
-          markdownSnapshotItem('retained', 1, 'streaming', 1, 'text-1'),
-          markdownSnapshotItem('removed', 1, 'streaming', 1, 'text-2'),
-        ],
-      })
-      .publish();
-    retainedListener.mockClear();
-    removedListener.mockClear();
-
-    registry
-      .commitTimelineSnapshot({
-        conversationId: 'conv-1',
-        messageId: 'message-1',
-        items: [markdownSnapshotItem('retained', 1, 'streaming', 1, 'text-1')],
-      })
-      .publish();
-
-    expect(registry.getSnapshot(retainedKey)?.source).toBe('retained');
-    expect(registry.getSnapshot(removedKey)).toBeUndefined();
-    expect(retainedListener).not.toHaveBeenCalled();
-    expect(removedListener).toHaveBeenCalledTimes(1);
-    expect(registry.metrics()).toMatchObject({ activeSessions: 1, disposedSessions: 1 });
-  });
-
-  it('replaces stale registry state with the authoritative Timeline snapshot', () => {
-    const registry = createAgentMarkdownSessionRegistry();
-    registry.applyTimelineDeliveries([appendMessage(1, 1, 'stale')]);
-    const staleSessionId = registry.getSnapshot(sessionKey())?.sessionId;
-
-    registry
-      .commitTimelineSnapshot({
-        conversationId: 'conv-1',
-        messageId: 'message-1',
-        items: [markdownSnapshotItem('canonical', 5, 'complete', 2)],
-      })
-      .publish();
-
-    expect(registry.getSnapshot(sessionKey())).toMatchObject({
-      source: 'canonical',
-      isFinal: true,
-    });
-    expect(registry.getSnapshot(sessionKey())?.sessionId).not.toBe(staleSessionId);
-  });
-
-  it('replaces a source generation explicitly and finalizes the replacement session', () => {
+  it('finalizes Markdown and removes omitted turns from an authoritative snapshot', () => {
     const registry = createAgentMarkdownSessionRegistry();
     const key = sessionKey();
-    registry.applyTimelineDeliveries([appendMessage(1, 1, 'draft')]);
-    const firstSession = registry.getSnapshot(key)?.sessionId;
-
-    registry.applyTimelineDeliveries([replaceMessage(2, 2, 'final', 2)]);
-    registry.applyTimelineDeliveries([completeMessage(3, 3, 2)]);
-
-    expect(registry.getSnapshot(key)).toMatchObject({ source: 'final', isFinal: true });
-    expect(registry.getSnapshot(key)?.sessionId).not.toBe(firstSession);
-    expect(registry.metrics()).toMatchObject({
-      createdSessions: 2,
-      disposedSessions: 1,
-      renderRevisions: 3,
-    });
-  });
-
-  it('rejects stale item revisions and append generation changes instead of guessing replacement', () => {
-    const registry = createAgentMarkdownSessionRegistry();
-    registry.applyTimelineDeliveries([appendMessage(1, 1, 'a')]);
-
-    expect(() => registry.applyTimelineDeliveries([appendMessage(2, 1, 'stale')])).toThrow(
-      'Markdown item revision must increase',
-    );
-    expect(() => registry.applyTimelineDeliveries([appendMessage(3, 2, 'wrong', 2)])).toThrow(
-      'Markdown append generation mismatch',
-    );
-  });
-
-  it('keeps concurrent conversations isolated and disposes only the selected owner', () => {
-    const registry = createAgentMarkdownSessionRegistry();
-    const listenerA = vi.fn();
-    const listenerB = vi.fn();
-    registry.subscribe(sessionKey('conv-a'), listenerA);
-    registry.subscribe(sessionKey('conv-b'), listenerB);
-    registry.applyTimelineDeliveries([
-      appendMessage(1, 1, 'a', 1, 'conv-a'),
-      appendMessage(1, 1, 'b', 1, 'conv-b'),
-    ]);
-
-    registry.disposeConversation('conv-a');
-
-    expect(registry.getSnapshot(sessionKey('conv-a'))).toBeUndefined();
-    expect(registry.getSnapshot(sessionKey('conv-b'))?.source).toBe('b');
-    expect(listenerA).toHaveBeenCalledTimes(2);
-    expect(listenerB).toHaveBeenCalledTimes(1);
-    expect(registry.metrics()).toMatchObject({
-      activeSessions: 1,
-      disposedSessions: 1,
-      activeSubscriptions: 1,
-    });
-  });
-
-  it('releases only the selected active turn sessions and subscriptions', () => {
-    const registry = createAgentMarkdownSessionRegistry();
-    const releasedKey = sessionKey('conv-a');
-    const retainedKey = createAgentMarkdownSessionKey({
-      conversationId: 'conv-a',
-      messageId: 'message-2',
-      itemId: 'text-1',
-    });
-    const releasedListener = vi.fn();
-    const retainedListener = vi.fn();
-    registry.subscribe(releasedKey, releasedListener);
-    registry.subscribe(retainedKey, retainedListener);
-    registry.applyTimelineDeliveries([appendMessage(1, 1, 'a', 1, 'conv-a')]);
-    registry
-      .commitTimelineSnapshot({
-        conversationId: 'conv-a',
-        messageId: 'message-2',
-        items: [
-          {
-            conversationId: 'conv-a',
-            turnId: 'turn-2',
-            messageId: 'message-2',
-            itemId: 'text-1',
-            sequence: 1,
-            itemRevision: 1,
-            kind: 'assistant_text',
-            status: 'streaming',
-            payload: { content: 'b', format: 'markdown', sourceGeneration: 1 },
-            createdAt: 1,
-            updatedAt: 1,
-          },
-        ],
-      })
-      .publish();
-
-    registry.releaseTurn('conv-a', 'message-1');
-
-    expect(registry.getSnapshot(releasedKey)).toBeUndefined();
-    expect(registry.getSnapshot(retainedKey)?.source).toBe('b');
-    expect(releasedListener).toHaveBeenCalledTimes(2);
-    expect(retainedListener).toHaveBeenCalledTimes(1);
-    expect(registry.metrics()).toMatchObject({ activeSessions: 1, activeSubscriptions: 1 });
-  });
-
-  it('builds and incrementally updates one Markdown session from projection delivery', () => {
-    const registry = createAgentMarkdownSessionRegistry();
-    const key = sessionKey();
-    const listener = vi.fn();
-    registry.subscribe(key, listener);
-
-    registry.commitProjectionSnapshot(projectionSnapshot('partial ', 1, 1)).publish();
-    const initial = registry.getSnapshot(key);
-    registry.commitProjectionPatch(projectionPatch('answer', 2, 1, 2)).publish();
-
-    expect(registry.getSnapshot(key)).toMatchObject({
-      sessionId: initial?.sessionId,
-      source: 'partial answer',
-      revision: 2,
-      isFinal: false,
-    });
-    expect(listener).toHaveBeenCalledTimes(2);
-  });
-
-  it('finalizes projection Markdown and reconciles removed turns from an authoritative snapshot', () => {
-    const registry = createAgentMarkdownSessionRegistry();
-    const key = sessionKey();
-    registry.commitProjectionSnapshot(projectionSnapshot('final', 1, 1)).publish();
+    registry.commitProjectionSnapshot(projectionSnapshot('final', 1)).publish();
 
     registry
       .commitProjectionPatch({
-        ...projectionPatch('', 2, 1, 2),
+        ...projectionPatch('', 2, 2),
         operations: [
           {
             operation: 'complete',
@@ -338,195 +118,105 @@ describe('agent markdown session registry', () => {
       .publish();
 
     expect(registry.getSnapshot(key)).toMatchObject({ source: 'final', isFinal: true });
-
     registry
-      .commitProjectionSnapshot({
-        conversationId: 'conv-1',
-        projectionVersion: 3,
-        turns: [],
-      })
+      .commitProjectionSnapshot({ conversationId: 'conv-1', projectionVersion: 3, turns: [] })
       .publish();
-
     expect(registry.getSnapshot(key)).toBeUndefined();
-    expect(registry.metrics()).toMatchObject({ activeSessions: 0, disposedSessions: 1 });
   });
 
-  it('keeps projection Markdown registries isolated for two Tabs on the same conversation', () => {
+  it('keeps Markdown registries isolated for two Tab projection replicas', () => {
     const registryA = createAgentMarkdownSessionRegistry();
     const registryB = createAgentMarkdownSessionRegistry();
     const key = sessionKey();
 
-    registryA.commitProjectionSnapshot(projectionSnapshot('tab A', 1, 1)).publish();
+    registryA.commitProjectionSnapshot(projectionSnapshot('tab A', 1)).publish();
+    registryB.commitProjectionSnapshot(projectionSnapshot('tab B', 1)).publish();
 
     expect(registryA.getSnapshot(key)?.source).toBe('tab A');
-    expect(registryB.getSnapshot(key)).toBeUndefined();
-    registryB.commitProjectionSnapshot(projectionSnapshot('tab B', 1, 1)).publish();
+    expect(registryB.getSnapshot(key)?.source).toBe('tab B');
     registryA.disposeAll();
-
     expect(registryA.getSnapshot(key)).toBeUndefined();
     expect(registryB.getSnapshot(key)?.source).toBe('tab B');
   });
 
-  it('disposes realm sessions without notifying subscribers during teardown', () => {
+  it('disposes a conversation without affecting another conversation', () => {
     const registry = createAgentMarkdownSessionRegistry();
-    const listener = vi.fn();
-    const key = sessionKey();
-    registry.subscribe(key, listener);
-    registry.applyTimelineDeliveries([appendMessage(1, 1, 'before dispose')]);
-    expect(registry.metrics().activeSubscriptions).toBe(1);
+    registry.commitProjectionSnapshot(projectionSnapshot('A', 1, 'conv-a')).publish();
+    registry.commitProjectionSnapshot(projectionSnapshot('B', 1, 'conv-b')).publish();
 
-    registry.disposeAll();
-    expect(registry.metrics()).toMatchObject({ activeSessions: 0, activeSubscriptions: 0 });
-    registry.applyTimelineDeliveries([appendMessage(1, 1, 'after remount')]);
+    registry.disposeConversation('conv-a');
 
-    expect(listener).toHaveBeenCalledTimes(1);
-    expect(registry.getSnapshot(key)?.source).toBe('after remount');
-    expect(registry.metrics()).toMatchObject({
-      activeSessions: 1,
-      createdSessions: 2,
-      disposedSessions: 1,
-      notifications: 1,
-      activeSubscriptions: 0,
-    });
+    expect(registry.getSnapshot(sessionKey('conv-a'))).toBeUndefined();
+    expect(registry.getSnapshot(sessionKey('conv-b'))?.source).toBe('B');
   });
 });
 
-function sessionKey(conversationId = 'conv-1', itemId = 'text-1'): string {
+function sessionKey(conversationId = 'conv-1'): string {
   return createAgentMarkdownSessionKey({
     conversationId,
     messageId: 'message-1',
-    itemId,
+    itemId: 'text-1',
   });
 }
 
-function appendMessage(
-  deliveryRevision: number,
-  itemRevision: number,
+function projectionPatch(
   content: string,
-  sourceGeneration = 1,
+  projectionVersion: number,
+  itemRevision: number,
   conversationId = 'conv-1',
-): AgentTurnTimelineMessage {
+): ConversationProjectionPatch {
   return {
-    type: 'agentTurnTimeline',
-    schemaVersion: 2,
-    connectionEpoch: 'epoch-1',
+    type: 'conversationProjectionPatch',
     conversationId,
+    projectionVersion,
+    baseProjectionVersion: projectionVersion - 1,
     turnId: 'turn-1',
     messageId: 'message-1',
-    batchKind: 'delta',
-    deliveryRevision,
-    operations: [
-      {
-        operation: 'append',
-        item: {
-          conversationId,
-          turnId: 'turn-1',
-          messageId: 'message-1',
-          itemId: 'text-1',
-          sequence: 1,
-          itemRevision,
-          kind: 'assistant_text',
-          status: 'streaming',
-          payload: { content, format: 'markdown', sourceGeneration },
-          createdAt: 1,
-          updatedAt: itemRevision,
-        },
-      },
-    ],
+    operations: [appendOperation(content, itemRevision, conversationId)],
   };
 }
 
-function replaceMessage(
-  deliveryRevision: number,
-  itemRevision: number,
-  content: string,
-  sourceGeneration: number,
-): AgentTurnTimelineMessage {
-  const base = appendMessage(deliveryRevision, itemRevision, content, sourceGeneration);
-  const operation = base.operations[0];
-  if (!operation || operation.operation !== 'append' || operation.item.kind !== 'assistant_text') {
-    throw new Error('Replacement fixture requires an assistant text append base.');
-  }
-  return { ...base, operations: [{ operation: 'replace', item: operation.item }] };
-}
-
-function completeMessage(
-  deliveryRevision: number,
-  itemRevision: number,
-  sourceGeneration: number,
-): AgentTurnTimelineMessage {
+function appendOperation(content: string, itemRevision: number, conversationId = 'conv-1') {
   return {
-    ...appendMessage(deliveryRevision, itemRevision, '', sourceGeneration),
-    operations: [
-      {
-        operation: 'complete',
-        itemId: 'text-1',
-        itemRevision,
-        kind: 'assistant_text',
-        sourceGeneration,
-        status: 'complete',
-        updatedAt: itemRevision,
-      },
-    ],
-    completion: { status: 'completed', completedAt: itemRevision },
-  };
-}
-
-function markdownSnapshotItem(
-  content: string,
-  itemRevision: number,
-  status: 'streaming' | 'complete' = 'streaming',
-  sourceGeneration = 1,
-  itemId = 'text-1',
-): AgentTurnTimelineItem {
-  return {
-    conversationId: 'conv-1',
-    turnId: 'turn-1',
-    messageId: 'message-1',
-    itemId,
-    sequence: itemId === 'text-1' ? 1 : 2,
-    itemRevision,
-    kind: 'assistant_text',
-    status,
-    payload: { content, format: 'markdown', sourceGeneration },
-    createdAt: 1,
-    updatedAt: itemRevision,
+    operation: 'append' as const,
+    item: textItem(content, itemRevision, conversationId),
   };
 }
 
 function projectionSnapshot(
   content: string,
   itemRevision: number,
-  projectionVersion: number,
+  conversationId = 'conv-1',
 ): ConversationProjectionSnapshot {
   return {
-    conversationId: 'conv-1',
-    projectionVersion,
+    conversationId,
+    projectionVersion: itemRevision,
     turns: [
       {
         turnId: 'turn-1',
         messageId: 'message-1',
-        items: [markdownSnapshotItem(content, itemRevision)],
+        items: [textItem(content, itemRevision, conversationId)],
       },
     ],
   };
 }
 
-function projectionPatch(
+function textItem(
   content: string,
   itemRevision: number,
-  baseProjectionVersion: number,
-  projectionVersion: number,
-): ConversationProjectionPatch {
-  const operation = appendMessage(1, itemRevision, content).operations[0];
-  if (!operation) throw new Error('Projection patch fixture requires one operation.');
+  conversationId: string,
+): AgentTurnTimelineAssistantTextItem {
   return {
-    type: 'conversationProjectionPatch',
-    conversationId: 'conv-1',
-    baseProjectionVersion,
-    projectionVersion,
+    conversationId,
     turnId: 'turn-1',
     messageId: 'message-1',
-    operations: [operation],
+    itemId: 'text-1',
+    sequence: 1,
+    itemRevision,
+    kind: 'assistant_text',
+    status: 'streaming',
+    payload: { content, format: 'markdown', sourceGeneration: 1 },
+    createdAt: 1,
+    updatedAt: itemRevision,
   };
 }

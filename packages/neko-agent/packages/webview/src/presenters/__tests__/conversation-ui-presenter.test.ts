@@ -393,23 +393,11 @@ describe('conversation UI presenter', () => {
     const queuedA = queuedMessage('queue-a', 'conv-a');
     const queuedB = queuedMessage('queue-b', 'conv-b');
     const timelineB: ActiveTurnTimelineState = {
-      connectionEpoch: 'epoch-1',
       conversationId: 'conv-b',
       turnId: 'turn-b',
       messageId: 'message-b',
-      deliveryRevision: 0,
-      validationState: {
-        connectionEpoch: 'epoch-1',
-        conversationId: 'conv-b',
-        turnId: 'turn-b',
-        messageId: 'message-b',
-        deliveryRevision: 0,
-        completed: false,
-        items: new Map(),
-      },
       items: [],
       completed: false,
-      synchronization: 'synchronized',
     };
     const activeSkillA = { conversationId: 'conv-a', skillName: 'skill-a' };
     const activeSkillB = { conversationId: 'conv-b', skillName: 'skill-b' };
