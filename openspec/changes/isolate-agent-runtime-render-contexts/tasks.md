@@ -28,7 +28,7 @@
 ## 4. Independent Webview Tab Render Runtimes
 
 - [x] 4.1 Introduce `TabRenderRuntime`, its independent store, lifecycle, and registry keyed by `tabId` with immutable conversation binding.
-- [ ] 4.2 Move input, attachments, references, model/config selection, generation parameters, prompt state, composition, focus, scroll, menus, queued edits, and diagnostics into the Tab-owned store.
+- [x] 4.2 Move input, attachments, references, model/config selection, generation parameters, prompt state, composition, focus, scroll, menus, queued edits, and diagnostics into the Tab-owned store.
 - [ ] 4.3 Refactor `ConversationController` into a Tab host that renders keyed `ConversationTabRuntimeView` subtrees and changes visibility only.
 - [ ] 4.4 Add bounded retention for inactive clean historical component trees while retaining independent stores and projection replicas.
 - [ ] 4.5 Remove conversation save/restore effects, foreground shared component rebinding, and active-conversation UI fallbacks.
