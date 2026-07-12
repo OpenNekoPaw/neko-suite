@@ -2,7 +2,10 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   MEDIA_QUALITY_CONTRACT_VERSION,
   TOOL_NAMES_QUALITY,
+  PROJECT_QUALITY_CONTRACT_VERSION,
+  createResourceRef,
   type AgentCapabilityContext,
+  type ProjectQualityFacade,
   type ResourceRef,
 } from '@neko/shared';
 import type { AgentContentAccessRuntime } from '@neko/agent/runtime';
@@ -72,6 +75,7 @@ describe('QualityCapabilityProvider', () => {
     const provider = createQualityCapabilityProvider({
       createService: () => ({ chat }),
       getContentAccessRuntime: () => contentAccessRuntime(loadProviderAsset),
+      projectQualityFacadeResolver: { resolve: vi.fn().mockResolvedValue(undefined) },
       resolveModelForPurpose,
     });
     const tool = provider
@@ -106,6 +110,7 @@ describe('QualityCapabilityProvider', () => {
     const provider = createQualityCapabilityProvider({
       createService: vi.fn(),
       getContentAccessRuntime: vi.fn(),
+      projectQualityFacadeResolver: { resolve: vi.fn().mockResolvedValue(undefined) },
       resolveModelForPurpose: vi.fn().mockReturnValue(undefined),
     });
     const tool = provider
@@ -121,11 +126,91 @@ describe('QualityCapabilityProvider', () => {
     });
   });
 
+  it('routes project targets through the owning facade without content materialization', async () => {
+    const projectRef = {
+      domain: 'model' as const,
+      documentUri: 'file:///workspace/scene.nkm',
+      projectRevision: 'nkm:scene-v1',
+      contentDigest: 'scene-v1',
+    };
+    const projectTarget = {
+      version: MEDIA_QUALITY_CONTRACT_VERSION,
+      targetId: 'scene-project',
+      kind: 'project-artifact' as const,
+      projectRef,
+      revision: projectRef.projectRevision,
+      contentDigest: projectRef.contentDigest,
+    };
+    const snapshotRef = createResourceRef({
+      scope: 'project',
+      provider: 'neko-model',
+      kind: 'document',
+      source: { kind: 'document', uri: projectRef.documentUri, identity: { hash: 'scene-v1' } },
+      locator: { kind: 'file', uri: projectRef.documentUri },
+      fingerprint: { strategy: 'hash', value: 'scene-v1' },
+    });
+    const facade: ProjectQualityFacade = {
+      validateProject: vi.fn(async (request) => ({
+        version: PROJECT_QUALITY_CONTRACT_VERSION,
+        requestId: request.requestId,
+        operation: 'validate-project',
+        ok: true,
+        data: projectTarget,
+        diagnostics: [],
+      })),
+      getProjectSnapshot: vi.fn(async (request) => ({
+        version: PROJECT_QUALITY_CONTRACT_VERSION,
+        requestId: request.requestId,
+        operation: 'get-project-snapshot',
+        ok: true,
+        data: { project: projectRef, snapshotRef, createdAt: '2026-07-12T00:00:00.000Z' },
+        diagnostics: [],
+      })),
+      renderPreview: vi.fn(),
+      probeRuntime: vi.fn(async (request) => ({
+        version: PROJECT_QUALITY_CONTRACT_VERSION,
+        requestId: request.requestId,
+        operation: 'probe-runtime',
+        ok: true,
+        data: { project: projectRef, available: true, diagnostics: [] },
+        diagnostics: [],
+      })),
+      checkExportReadiness: vi.fn(async (request) => ({
+        version: PROJECT_QUALITY_CONTRACT_VERSION,
+        requestId: request.requestId,
+        operation: 'check-export-readiness',
+        ok: true,
+        data: { project: projectRef, ready: true, requiredEvidenceIds: [], diagnostics: [] },
+        diagnostics: [],
+      })),
+    };
+    const loadProviderAsset = vi.fn();
+    const resolve = vi.fn(async () => facade);
+    const provider = createQualityCapabilityProvider({
+      createService: vi.fn(),
+      getContentAccessRuntime: () => contentAccessRuntime(loadProviderAsset),
+      projectQualityFacadeResolver: { resolve },
+      resolveModelForPurpose: vi.fn(),
+    });
+    const tool = provider
+      .getTools(context)
+      .find((candidate) => candidate.name === TOOL_NAMES_QUALITY.QUALITY_CHECK);
+
+    await expect(tool?.execute({ target: projectTarget })).resolves.toMatchObject({
+      success: true,
+      data: { verdict: 'pass', missingEvaluatorClasses: [] },
+    });
+    expect(resolve).toHaveBeenCalledWith(projectRef);
+    expect(loadProviderAsset).not.toHaveBeenCalled();
+    expect(facade.validateProject).toHaveBeenCalledTimes(1);
+  });
+
   it('never invokes content access for a path-only legacy request', async () => {
     const loadProviderAsset = vi.fn();
     const provider = createQualityCapabilityProvider({
       createService: vi.fn(),
       getContentAccessRuntime: () => contentAccessRuntime(loadProviderAsset),
+      projectQualityFacadeResolver: { resolve: vi.fn().mockResolvedValue(undefined) },
       resolveModelForPurpose: vi.fn(),
     });
     const tool = provider

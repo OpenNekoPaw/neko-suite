@@ -17,10 +17,15 @@ import type {
   Tool,
 } from '@neko/shared';
 import type { AgentContentAccessRuntime } from '@neko/agent/runtime';
+import {
+  collectProjectQualityEvidence,
+  type ProjectQualityFacadeResolver,
+} from './projectQualityOrchestration';
 
 export interface QualityCapabilityProviderDeps {
   readonly createService: () => MediaQualityLLMService;
   readonly getContentAccessRuntime: () => AgentContentAccessRuntime | undefined;
+  readonly projectQualityFacadeResolver: ProjectQualityFacadeResolver;
   readonly resolveModelForPurpose: (
     purpose: QualityUnderstandingPurpose,
   ) => ModelRefConfig | undefined;
@@ -45,11 +50,18 @@ class QualityCapabilityProvider implements AgentCapabilityProvider {
   }
 
   private async review(request: QualityReviewRequest) {
+    const existingEvidence =
+      request.target.kind === 'project-artifact'
+        ? await collectProjectQualityEvidence(
+            request.target,
+            this.deps.projectQualityFacadeResolver,
+          )
+        : request.existingEvidence;
     const runtime = createQualityGateRuntime({
       materializer: createExtensionQualityMaterializer(this.deps.getContentAccessRuntime),
       evaluators: this.createEvaluators(request.target),
     });
-    return runtime.review(request);
+    return runtime.review({ ...request, ...(existingEvidence ? { existingEvidence } : {}) });
   }
 
   private createEvaluators(target: QualityTarget): readonly QualityEvaluator[] {

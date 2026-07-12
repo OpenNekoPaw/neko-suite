@@ -117,6 +117,7 @@ describe('extension tool capability providers', () => {
     const provider = createQualityCapabilityProvider({
       createService: vi.fn(),
       getContentAccessRuntime: vi.fn(),
+      projectQualityFacadeResolver: { resolve: vi.fn().mockResolvedValue(undefined) },
       resolveModelForPurpose: vi.fn().mockReturnValue(undefined),
     });
 

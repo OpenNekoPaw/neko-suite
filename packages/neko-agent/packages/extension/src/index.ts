@@ -20,7 +20,13 @@ import {
   inspectLogLevelSetting,
   watchLogLevel,
 } from '@neko/shared/vscode/extension';
-import { LogLevel, withTimeout, type ISkillProvider } from '@neko/shared';
+import {
+  LogLevel,
+  withTimeout,
+  type ISkillProvider,
+  type ProjectQualityFacade,
+  type QualityProjectRef,
+} from '@neko/shared';
 import { builtinSkillLocales, getBuiltinSkills, registerBuiltinToolGroups } from '@neko/skills';
 import { bootstrapCoreServices, logServicesStatus } from './bootstrap';
 import { ITaskManager } from './bootstrap';
@@ -88,6 +94,27 @@ const SHOW_LOGS_COMMAND = 'neko.agent.showLogs';
 /**
  * Activate the extension
  */
+
+const PROJECT_QUALITY_EXTENSION_BY_DOMAIN: Readonly<Record<QualityProjectRef['domain'], string>> = {
+  sketch: 'neko.neko-sketch',
+  cut: 'neko.neko-cut',
+  audio: 'neko.neko-audio',
+  model: 'neko.neko-model',
+  puppet: 'neko.neko-puppet',
+};
+
+async function resolveOwningProjectQualityFacade(
+  project: QualityProjectRef,
+): Promise<ProjectQualityFacade | undefined> {
+  const extensionId = PROJECT_QUALITY_EXTENSION_BY_DOMAIN[project.domain];
+  const extension = vscode.extensions.getExtension<{
+    readonly projectQuality?: ProjectQualityFacade;
+  }>(extensionId);
+  if (!extension) return undefined;
+  const api = extension.isActive ? extension.exports : await extension.activate();
+  return api?.projectQuality;
+}
+
 export async function activate(context: vscode.ExtensionContext): Promise<ISkillProvider> {
   // Initialize logger
   const logLevelSetting = inspectLogLevelSetting(context.extensionMode);
@@ -215,6 +242,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<ISkill
     createQualityCapabilityProvider({
       createService: () => bootstrapResult.platform.createService(),
       getContentAccessRuntime: () => agentContentAccess.runtime,
+      projectQualityFacadeResolver: { resolve: resolveOwningProjectQualityFacade },
       resolveModelForPurpose: (purpose) =>
         bootstrapResult.platform.config.resolveModelRefForPurpose(purpose),
     }),
