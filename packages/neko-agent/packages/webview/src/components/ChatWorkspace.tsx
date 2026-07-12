@@ -216,6 +216,8 @@ export function ChatWorkspace({
   const mediaUnderstandingSelection = tabState.mediaUnderstandingSelection;
   const sessionMode = tabState.sessionMode;
   const entryPromptMenu = tabState.menus.entryPrompt;
+  const composition = tabState.composition;
+  const focus = tabState.focus;
 
   const setInputValue = useCallback<React.Dispatch<React.SetStateAction<string>>>(
     (value) => {
@@ -243,6 +245,20 @@ export function ChatWorkspace({
     },
     [updateTabRenderState],
   );
+
+  const setComposition = useCallback(
+    (isComposing: boolean) => {
+      updateTabRenderState((state) =>
+        state.composition.isComposing === isComposing ? {} : { composition: { isComposing } },
+      );
+    },
+    [updateTabRenderState],
+  );
+  const requestInputFocus = useCallback(() => {
+    updateTabRenderState((state) => ({
+      focus: { target: 'input', requestRevision: state.focus.requestRevision + 1 },
+    }));
+  }, [updateTabRenderState]);
 
   const setSelectedModel = useCallback(
     (modelId: string) => {
@@ -629,10 +645,7 @@ export function ChatWorkspace({
   // Keyboard shortcuts
   useKeyboardShortcuts({
     shortcuts: [
-      COMMON_SHORTCUTS.focusInput(() => {
-        const textarea = document.querySelector('textarea');
-        textarea?.focus();
-      }),
+      COMMON_SHORTCUTS.focusInput(requestInputFocus),
       COMMON_SHORTCUTS.clearConversation(() => {
         if (!sessionMutationConversationId) return;
         if (isCharacterRoleSession) {
@@ -861,6 +874,12 @@ export function ChatWorkspace({
         onAttachedFilesChange={setAttachedFiles}
         selectedFileReferences={selectedFileReferences}
         onSelectedFileReferencesChange={setSelectedFileReferences}
+        isComposing={composition.isComposing}
+        onCompositionChange={setComposition}
+        focusRequestOwner={tabRenderSnapshot.tabId}
+        focusRequestEnabled={tabRenderSnapshot.visibility === 'visible'}
+        focusRequestTarget={focus.target}
+        focusRequestRevision={focus.requestRevision}
         agentState={agentState}
         onApprovePlanStep={planActions.handleApprovePlanStep}
         onRejectPlanStep={planActions.handleRejectPlanStep}

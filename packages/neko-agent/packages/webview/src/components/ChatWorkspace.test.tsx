@@ -116,6 +116,11 @@ vi.mock('@/components/ChatView', () => ({
     onRejectAllPlanSteps?: (planId: string) => void;
     entryPromptMenu?: 'generate-assets' | 'roleplay' | null;
     onEntryPromptMenuChange?: (menu: 'generate-assets' | 'roleplay' | null) => void;
+    isComposing?: boolean;
+    onCompositionChange?: (isComposing: boolean) => void;
+    focusRequestOwner?: string;
+    focusRequestTarget?: 'none' | 'input';
+    focusRequestRevision?: number;
   }) => (
     <div>
       <button
@@ -180,8 +185,23 @@ vi.mock('@/components/ChatView', () => ({
         data-testid="edit-queued"
         onClick={() => props.onEditQueuedMessage?.('queued-1')}
       />
+      <button
+        type="button"
+        data-testid="composition-start"
+        onClick={() => props.onCompositionChange?.(true)}
+      />
+      <button
+        type="button"
+        data-testid="composition-end"
+        onClick={() => props.onCompositionChange?.(false)}
+      />
       <span data-testid="entry-menu">{props.entryPromptMenu ?? 'none'}</span>
       <span data-testid="input-value">{props.inputValue}</span>
+      <span data-testid="composition-state">{String(props.isComposing ?? false)}</span>
+      <span data-testid="focus-request">
+        {props.focusRequestOwner ?? 'none'}:{props.focusRequestTarget ?? 'none'}:
+        {props.focusRequestRevision ?? 0}
+      </span>
       <span data-testid="attachment-count">{props.attachedFiles?.length ?? 0}</span>
       <span data-testid="reference-count">{props.selectedFileReferences?.length ?? 0}</span>
     </div>
@@ -746,6 +766,36 @@ describe('ChatWorkspace pending send', () => {
         activeTabConversationId: 'conv-b',
       }),
     );
+  });
+
+  it('keeps composition and focus requests isolated by Tab store', () => {
+    const runtimeA = createTabRenderRuntime({ tabId: 'tab-a', conversationId: 'conv-a' });
+    const runtimeB = createTabRenderRuntime({ tabId: 'tab-b', conversationId: 'conv-b' });
+    const { rerender } = render(
+      <ChatWorkspace {...createProps({ tabRenderStore: runtimeA.store })} />,
+    );
+
+    fireEvent.click(screen.getByTestId('composition-start'));
+    runRegisteredShortcut('focusInput');
+    expect(runtimeA.store.getSnapshot().state.composition).toEqual({ isComposing: true });
+    expect(runtimeA.store.getSnapshot().state.focus).toEqual({
+      target: 'input',
+      requestRevision: 1,
+    });
+
+    rerender(<ChatWorkspace {...createProps({ tabRenderStore: runtimeB.store })} />);
+    expect(screen.getByTestId('composition-state').textContent).toBe('false');
+    expect(screen.getByTestId('focus-request').textContent).toContain('tab-b:none:0');
+
+    fireEvent.click(screen.getByTestId('composition-start'));
+    runRegisteredShortcut('focusInput');
+    expect(runtimeB.store.getSnapshot().state.composition).toEqual({ isComposing: true });
+    expect(runtimeB.store.getSnapshot().state.focus).toEqual({
+      target: 'input',
+      requestRevision: 1,
+    });
+    expect(runtimeA.store.getSnapshot().state.composition).toEqual({ isComposing: true });
+    expect(runtimeA.store.getSnapshot().state.focus.requestRevision).toBe(1);
   });
 
   it('does not report active-tab-mismatch while activation is pending for the same conversation', () => {

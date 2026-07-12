@@ -90,6 +90,12 @@ interface InputAreaProps {
   /** Session-bound @file references selected from the mention menu. */
   selectedFileReferences?: SelectedFileReference[];
   onSelectedFileReferencesChange?: (references: SelectedFileReference[]) => void;
+  isComposing?: boolean;
+  onCompositionChange?: (isComposing: boolean) => void;
+  focusRequestOwner?: string;
+  focusRequestEnabled?: boolean;
+  focusRequestTarget?: 'none' | 'input';
+  focusRequestRevision?: number;
 }
 
 type InputAreaTranslator = (key: string, params?: Record<string, string | number>) => string;
@@ -115,6 +121,12 @@ export function InputArea({
   onAttachedFilesChange,
   selectedFileReferences: externalSelectedFileReferences,
   onSelectedFileReferencesChange,
+  isComposing = false,
+  onCompositionChange,
+  focusRequestOwner,
+  focusRequestEnabled = true,
+  focusRequestTarget = 'none',
+  focusRequestRevision = 0,
 }: InputAreaProps) {
   // Global configuration from context (model, modes, compression, skills)
   const {
@@ -156,6 +168,13 @@ export function InputArea({
   } = useInputAreaContext();
   const { t } = useTranslation();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    if (!focusRequestEnabled || focusRequestTarget !== 'input' || focusRequestRevision <= 0) {
+      return;
+    }
+    textareaRef.current?.focus();
+  }, [focusRequestEnabled, focusRequestOwner, focusRequestRevision, focusRequestTarget]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Input history for arrow key navigation
@@ -377,7 +396,7 @@ export function InputArea({
   // Handle keyboard navigation
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     // Ignore key events during IME composition (e.g., Chinese/Japanese input)
-    if (e.nativeEvent.isComposing || e.keyCode === 229) {
+    if (isComposing || e.nativeEvent.isComposing || e.keyCode === 229) {
       return;
     }
 
@@ -905,6 +924,8 @@ export function InputArea({
               value={inputValue}
               onChange={handleInputChange}
               onKeyDown={handleKeyDown}
+              onCompositionStart={() => onCompositionChange?.(true)}
+              onCompositionEnd={() => onCompositionChange?.(false)}
               onPaste={handlePaste}
               disabled={disabled}
               placeholder={t(inputAreaProjection.inputPlaceholderKey, {

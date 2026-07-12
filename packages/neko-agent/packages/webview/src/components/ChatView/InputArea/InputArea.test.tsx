@@ -348,6 +348,113 @@ describe('InputArea composer controls', () => {
     vi.clearAllMocks();
   });
 
+  it('reports IME composition and blocks send while the Tab is composing', () => {
+    const onCompositionChange = vi.fn();
+    const onSend = vi.fn();
+    const { rerender } = render(
+      <Harness>
+        <InputArea
+          inputValue="正在输入"
+          isThinking={false}
+          isComposing
+          onCompositionChange={onCompositionChange}
+          onInputChange={vi.fn()}
+          onSend={onSend}
+        />
+      </Harness>,
+    );
+    const input = screen.getByRole('textbox');
+
+    fireEvent.compositionStart(input);
+    fireEvent.keyDown(input, { key: 'Enter' });
+    fireEvent.compositionEnd(input);
+
+    expect(onCompositionChange).toHaveBeenNthCalledWith(1, true);
+    expect(onCompositionChange).toHaveBeenNthCalledWith(2, false);
+    expect(onSend).not.toHaveBeenCalled();
+
+    rerender(
+      <Harness>
+        <InputArea
+          inputValue="正在输入"
+          isThinking={false}
+          isComposing={false}
+          onCompositionChange={onCompositionChange}
+          onInputChange={vi.fn()}
+          onSend={onSend}
+        />
+      </Harness>,
+    );
+    fireEvent.keyDown(screen.getByRole('textbox'), { key: 'Enter' });
+    expect(onSend).toHaveBeenCalledTimes(1);
+  });
+
+  it('focuses only when the owning Tab focus request changes', () => {
+    const { rerender } = render(
+      <Harness>
+        <InputArea
+          inputValue=""
+          isThinking={false}
+          focusRequestOwner="tab-a"
+          focusRequestTarget="none"
+          focusRequestRevision={0}
+          onInputChange={vi.fn()}
+          onSend={vi.fn()}
+        />
+      </Harness>,
+    );
+    const input = screen.getByRole('textbox');
+    expect(document.activeElement).not.toBe(input);
+
+    rerender(
+      <Harness>
+        <InputArea
+          inputValue=""
+          isThinking={false}
+          focusRequestOwner="tab-a"
+          focusRequestEnabled={false}
+          focusRequestTarget="input"
+          focusRequestRevision={1}
+          onInputChange={vi.fn()}
+          onSend={vi.fn()}
+        />
+      </Harness>,
+    );
+    expect(document.activeElement).not.toBe(input);
+
+    rerender(
+      <Harness>
+        <InputArea
+          inputValue=""
+          isThinking={false}
+          focusRequestOwner="tab-a"
+          focusRequestEnabled
+          focusRequestTarget="input"
+          focusRequestRevision={1}
+          onInputChange={vi.fn()}
+          onSend={vi.fn()}
+        />
+      </Harness>,
+    );
+    expect(document.activeElement).toBe(input);
+
+    input.blur();
+    rerender(
+      <Harness>
+        <InputArea
+          inputValue=""
+          isThinking={false}
+          focusRequestOwner="tab-b"
+          focusRequestTarget="input"
+          focusRequestRevision={1}
+          onInputChange={vi.fn()}
+          onSend={vi.fn()}
+        />
+      </Harness>,
+    );
+    expect(document.activeElement).toBe(input);
+  });
+
   it('does not show creation staged creation controls just because the control callback exists', () => {
     const legacyControlProps: Record<string, unknown> = { onControlIdcWorkflow: vi.fn() };
     render(

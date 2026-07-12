@@ -29,7 +29,17 @@ vi.mock('@/components/ChatView/DropZone', () => ({
 }));
 
 vi.mock('@/components/ChatView/InputArea', () => ({
-  InputArea: () => <div data-testid="input-area" />,
+  InputArea: (props: {
+    isComposing?: boolean;
+    focusRequestOwner?: string;
+    focusRequestTarget?: 'none' | 'input';
+    focusRequestRevision?: number;
+  }) => (
+    <div data-testid="input-area">
+      {String(props.isComposing ?? false)}:{props.focusRequestOwner ?? 'none'}:
+      {props.focusRequestTarget ?? 'none'}:{props.focusRequestRevision ?? 0}
+    </div>
+  ),
 }));
 
 vi.mock('@/components/ChatView/MessageList', () => ({
@@ -95,6 +105,17 @@ describe('ChatView empty state', () => {
     expect(screen.queryByRole('heading', { name: 'Neko Suite Creative Assistant' })).toBeNull();
     expect(screen.queryByRole('button', { name: /Start Chat/ })).toBeNull();
     expect(screen.queryByText('AI responses may be inaccurate.')).toBeNull();
+  });
+
+  it('forwards Tab-owned composition and focus requests to the composer', () => {
+    renderChatView({
+      isComposing: true,
+      focusRequestOwner: 'tab-a',
+      focusRequestTarget: 'input',
+      focusRequestRevision: 2,
+    });
+
+    expect(screen.getByTestId('input-area').textContent).toContain('true:tab-a:input:2');
   });
 
   it('renders the active conversation run status next to the composer', () => {

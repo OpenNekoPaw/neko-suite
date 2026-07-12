@@ -93,6 +93,12 @@ interface ChatViewProps {
   /** Session-bound @file references selected from the mention menu. */
   selectedFileReferences?: SelectedFileReference[];
   onSelectedFileReferencesChange?: (references: SelectedFileReference[]) => void;
+  isComposing?: boolean;
+  onCompositionChange?: (isComposing: boolean) => void;
+  focusRequestOwner?: string;
+  focusRequestEnabled?: boolean;
+  focusRequestTarget?: 'none' | 'input';
+  focusRequestRevision?: number;
   /** Current agent execution state (null when idle) */
   agentState?: AgentState | null;
 }
@@ -142,6 +148,12 @@ export function ChatView({
   onAttachedFilesChange,
   selectedFileReferences,
   onSelectedFileReferencesChange,
+  isComposing,
+  onCompositionChange,
+  focusRequestOwner,
+  focusRequestEnabled,
+  focusRequestTarget,
+  focusRequestRevision,
   agentState = null,
 }: ChatViewProps) {
   const { t } = useTranslation();
@@ -267,6 +279,12 @@ export function ChatView({
           onAttachedFilesChange={onAttachedFilesChange}
           selectedFileReferences={selectedFileReferences}
           onSelectedFileReferencesChange={onSelectedFileReferencesChange}
+          isComposing={isComposing}
+          onCompositionChange={onCompositionChange}
+          focusRequestOwner={focusRequestOwner}
+          focusRequestEnabled={focusRequestEnabled}
+          focusRequestTarget={focusRequestTarget}
+          focusRequestRevision={focusRequestRevision}
         />
       </div>
     </DropZone>
