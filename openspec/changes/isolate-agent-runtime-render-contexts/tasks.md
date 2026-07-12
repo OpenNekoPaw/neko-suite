@@ -54,7 +54,7 @@
 
 ## 7. Legacy Removal, Documentation, and Validation
 
-- [ ] 7.1 Remove legacy Timeline delivery revision/snapshot-request recovery messages, handlers, scheduler state, foreground flush/discard hooks, and persisted connection-epoch recovery descriptors.
+- [x] 7.1 Remove legacy Timeline delivery revision/snapshot-request recovery messages, handlers, scheduler state, foreground flush/discard hooks, and persisted connection-epoch recovery descriptors.
 - [ ] 7.2 Remove obsolete global settings projections, shared input/session caches, bare child-run adapters, compatibility branches, tests, exports, and dependencies.
 - [ ] 7.3 Update Agent domain/runtime/Webview/TUI architecture documentation and mark prior session/stream isolation claims as superseded where necessary.
 - [ ] 7.4 Run focused contract, Agent runtime, SubAgent, Task, Extension, Webview, Markdown, and TUI tests after each implementation batch.
