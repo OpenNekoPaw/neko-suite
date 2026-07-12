@@ -33,10 +33,11 @@ import { AgentMessageQueueOperationError } from '@neko/agent/runtime';
 import type { ChatModelOption } from '@neko/shared';
 import { toQueueOperationDiagnostic } from '../core/message-queue-semantics';
 import { presentQueueCommand } from '../presentation/work-queue-presentation';
-import { useAgentStore } from '../stores/agent-store';
-import { useConfigStore } from '../stores/config-store';
-import { useConversationStore } from '../stores/conversation-store';
-import { useUIStore, type SelectionMenuItem } from '../stores/ui-store';
+import type { SelectionMenuItem } from '../stores/ui-store';
+import {
+  useTuiConversationStores,
+  type TuiConversationStores,
+} from '../runtime/tui-runtime-context';
 import type { AgentTerminalPresentationContext } from '../presentation/context';
 import type { AgentTerminalMessageKey } from '../presentation/terminal-messages';
 import { presentCommandShellDiagnostic } from '../presentation/command-shell-presentation';
@@ -118,9 +119,10 @@ type AgentSessionHandleParameterApplier = NonNullable<
 >;
 
 export function useSlashCommands(sessionActions: SlashCommandSessionActions): SlashCommandHandlers {
+  const stores = useTuiConversationStores();
   const handleCommand = useCallback(
     async (input: string) => {
-      if (!isAllowedRunningCommand(input) && isAgentRunning()) {
+      if (!isAllowedRunningCommand(input) && isAgentRunning(stores)) {
         const error = isSkillInvocation(input)
           ? new AgentMessageQueueOperationError(
               'not-queueable',
@@ -131,24 +133,27 @@ export function useSlashCommands(sessionActions: SlashCommandSessionActions): Sl
               'Commands cannot be queued while an Agent turn is running.',
             );
         const message = presentQueueFailure(error, sessionActions.presentation);
-        useAgentStore.getState().setMessageQueueDiagnostic(message);
-        useConversationStore.getState().addError(new Error(message));
+        stores.agent.getState().setMessageQueueDiagnostic(message);
+        stores.conversation.getState().addError(new Error(message));
         return;
       }
 
       if (isSkillInvocation(input)) {
-        await handleSkillInvocationCommand(input, sessionActions);
+        await handleSkillInvocationCommand(input, sessionActions, stores);
         return;
       }
 
       try {
-        const result = await handleTuiControlCommand(input, createInkRouterContext(sessionActions));
+        const result = await handleTuiControlCommand(
+          input,
+          createInkRouterContext(sessionActions, stores),
+        );
 
         if (!result.handled) {
           throw new Error('TUI command router returned an unhandled slash command.');
         }
 
-        await projectCommandResult(result, sessionActions);
+        await projectCommandResult(result, sessionActions, stores);
       } catch (error) {
         const detail = error instanceof Error ? error.message : String(error);
         const projection = presentCommandShellDiagnostic(
@@ -158,22 +163,22 @@ export function useSlashCommands(sessionActions: SlashCommandSessionActions): Sl
         if (projection.kind !== 'error') {
           throw new Error('Command failure must project to a terminal diagnostic.');
         }
-        useConversationStore.getState().addError(new Error(projection.error));
+        stores.conversation.getState().addError(new Error(projection.error));
       }
     },
-    [sessionActions],
+    [sessionActions, stores],
   );
 
   const onClear = useCallback(() => {
     sessionActions.clearHistory();
-    useConversationStore.getState().clearMessages();
-  }, [sessionActions]);
+    stores.conversation.getState().clearMessages();
+  }, [sessionActions, stores]);
 
   return { handleCommand, onClear };
 }
 
-function isAgentRunning(): boolean {
-  const status = useAgentStore.getState().status;
+function isAgentRunning(stores: TuiConversationStores): boolean {
+  const status = stores.agent.getState().status;
   return status === 'running' || status === 'waiting_confirmation';
 }
 
@@ -197,8 +202,9 @@ function isAllowedRunningCommand(input: string): boolean {
 async function handleSkillInvocationCommand(
   input: string,
   sessionActions: SlashCommandSessionActions,
+  stores: TuiConversationStores,
 ): Promise<void> {
-  const config = useConfigStore.getState().config;
+  const config = stores.config.getState().config;
   try {
     const result = await handleTUISkillInvocation(input, {
       presentation: sessionActions.presentation,
@@ -206,13 +212,13 @@ async function handleSkillInvocationCommand(
       skillService: sessionActions.getSkillService?.(),
       toolRegistry: sessionActions.getToolRegistry?.(),
       onConfigUpdate: (updates) => {
-        useConfigStore.getState().setConfig(updates);
+        stores.config.getState().setConfig(updates);
       },
-      onOutput: addSystemMessage,
+      onOutput: (message) => addSystemMessage(message, stores),
     });
 
     if (result.error) {
-      useConversationStore.getState().addError(new Error(result.error));
+      stores.conversation.getState().addError(new Error(result.error));
       return;
     }
 
@@ -237,14 +243,15 @@ async function handleSkillInvocationCommand(
     if (projection.kind !== 'error') {
       throw new Error('Skill invocation failure must project to a terminal diagnostic.');
     }
-    useConversationStore.getState().addError(new Error(projection.error));
+    stores.conversation.getState().addError(new Error(projection.error));
   }
 }
 
 function createInkRouterContext(
   sessionActions: SlashCommandSessionActions,
+  stores: TuiConversationStores,
 ): TuiCommandRouterContext {
-  const config = useConfigStore.getState().config;
+  const config = stores.config.getState().config;
   return {
     presentation: sessionActions.presentation,
     slash: {
@@ -257,14 +264,14 @@ function createInkRouterContext(
       onResumeConversation: sessionActions.resumeConversation,
       getHistory: sessionActions.getHistory,
       onConfigUpdate: (updates) => {
-        useConfigStore.getState().setConfig(updates);
+        stores.config.getState().setConfig(updates);
         sessionActions.syncRuntimeState?.();
       },
     },
     ports: {
       output: {
-        info: addSystemMessage,
-        error: (message) => useConversationStore.getState().addError(new Error(message)),
+        info: (message) => addSystemMessage(message, stores),
+        error: (message) => stores.conversation.getState().addError(new Error(message)),
       },
       lifecycle: {
         exit: () => process.exit(0),
@@ -272,13 +279,13 @@ function createInkRouterContext(
       history: {
         clear: () => {
           sessionActions.clearHistory();
-          useConversationStore.getState().clearMessages();
+          stores.conversation.getState().clearMessages();
         },
       },
       mode: {
-        getSessionMode: () => useAgentStore.getState().sessionMode,
+        getSessionMode: () => stores.agent.getState().sessionMode,
         setSessionMode: (mode) => {
-          useAgentStore.getState().setSessionMode(mode);
+          stores.agent.getState().setSessionMode(mode);
           sessionActions.syncRuntimeState?.();
         },
         setExecutionMode: (mode) => {
@@ -286,16 +293,16 @@ function createInkRouterContext(
         },
       },
       model: {
-        listChatModelOptions: () => listChatModelOptions(useConfigStore.getState().config.workDir),
+        listChatModelOptions: () => listChatModelOptions(stores.config.getState().config.workDir),
         listChatModels: () => {
-          const currentConfig = useConfigStore.getState().config;
+          const currentConfig = stores.config.getState().config;
           return getProviderModels(currentConfig.provider, currentConfig.workDir);
         },
         ...(sessionActions.updateModel
           ? {
               selectChatModel: (model: string | TuiModelIdentity): TuiModelIdentity => {
                 sessionActions.updateModel?.(model);
-                const currentConfig = useConfigStore.getState().config;
+                const currentConfig = stores.config.getState().config;
                 const selected = currentConfig.chatModel;
                 if (selected === undefined) {
                   throw new Error('Chat model mutation did not produce canonical config state.');
@@ -309,30 +316,30 @@ function createInkRouterContext(
               },
             }
           : {}),
-        selectMenuItem: (input) => showSelection(input.title, [...input.items]),
+        selectMenuItem: (input) => showSelection(input.title, [...input.items], stores),
       },
       media: {
         listMediaModelOptions: () =>
-          listChatModelOptions(useConfigStore.getState().config.workDir).filter(
+          listChatModelOptions(stores.config.getState().config.workDir).filter(
             (option) =>
               option.category === 'image' ||
               option.category === 'video' ||
               option.category === 'audio',
           ),
-        getCurrentMediaModels: () => useConfigStore.getState().config.defaultMediaModels ?? {},
+        getCurrentMediaModels: () => stores.config.getState().config.defaultMediaModels ?? {},
         setMediaModel: (category, model) => {
-          const config = useConfigStore.getState().config;
+          const config = stores.config.getState().config;
           const current = config.defaultMediaModels ?? {};
           const nextValue =
             model === 'none' ? 'none' : (model.optionId ?? `${model.providerId}:${model.modelId}`);
-          useConfigStore.getState().setConfig({
+          stores.config.getState().setConfig({
             defaultMediaModels: {
               ...current,
               [category]: nextValue,
             },
           });
           sessionActions.syncRuntimeState?.();
-          const updatedConfig = useConfigStore.getState().config;
+          const updatedConfig = stores.config.getState().config;
           const stored = updatedConfig.defaultMediaModels?.[category];
           if (stored === undefined) {
             throw new Error('Media model mutation did not produce canonical config state.');
@@ -347,19 +354,19 @@ function createInkRouterContext(
               );
         },
         resetMediaModels: () => {
-          useConfigStore.getState().setConfig({ defaultMediaModels: {} });
+          stores.config.getState().setConfig({ defaultMediaModels: {} });
           sessionActions.syncRuntimeState?.();
-          return { ...(useConfigStore.getState().config.defaultMediaModels ?? {}) };
+          return { ...(stores.config.getState().config.defaultMediaModels ?? {}) };
         },
       },
       perception: {
         listPerceptionModelOptions: () =>
-          listChatModelOptions(useConfigStore.getState().config.workDir).filter(
+          listChatModelOptions(stores.config.getState().config.workDir).filter(
             (option) => option.category === 'llm',
           ),
-        getCurrentPerceptionModels: () => useConfigStore.getState().config.perceptionModels ?? {},
+        getCurrentPerceptionModels: () => stores.config.getState().config.perceptionModels ?? {},
         setPerceptionModel: (category, model) => {
-          const config = useConfigStore.getState().config;
+          const config = stores.config.getState().config;
           const current = config.perceptionModels ?? {};
           const next = { ...current };
           if (model === 'auto') {
@@ -367,9 +374,9 @@ function createInkRouterContext(
           } else {
             next[category] = model.optionId ?? `${model.providerId}:${model.modelId}`;
           }
-          useConfigStore.getState().setConfig({ perceptionModels: next });
+          stores.config.getState().setConfig({ perceptionModels: next });
           sessionActions.syncRuntimeState?.();
-          const updatedConfig = useConfigStore.getState().config;
+          const updatedConfig = stores.config.getState().config;
           const stored = updatedConfig.perceptionModels?.[category];
           if (stored === undefined) return 'auto';
           return resolveConfiguredModelIdentity(
@@ -380,24 +387,24 @@ function createInkRouterContext(
           );
         },
         resetPerceptionModels: () => {
-          useConfigStore.getState().setConfig({ perceptionModels: {} });
+          stores.config.getState().setConfig({ perceptionModels: {} });
           sessionActions.syncRuntimeState?.();
-          return { ...(useConfigStore.getState().config.perceptionModels ?? {}) };
+          return { ...(stores.config.getState().config.perceptionModels ?? {}) };
         },
       },
       parameters: {
-        getConfig: () => useConfigStore.getState().config.llmConfig,
+        getConfig: () => stores.config.getState().config.llmConfig,
         validate: (llmConfig) =>
           sessionActions.validateLlmConfig?.(llmConfig) ?? { config: llmConfig },
         apply: (result) => sessionActions.applyLlmConfig?.(result),
       },
       skill: {
         listEnabled: () => listEnabledSkills(sessionActions.getSkillService?.()),
-        getActiveSkillName: () => useAgentStore.getState().activeSkill,
-        getActiveRecords: () => useAgentStore.getState().activeSkillLifecycleRecords,
+        getActiveSkillName: () => stores.agent.getState().activeSkill,
+        getActiveRecords: () => stores.agent.getState().activeSkillLifecycleRecords,
         activate: sessionActions.activateSkill,
         deactivate: sessionActions.deactivateSkill,
-        selectSkillFromMenu: (input) => showSelection(input.title, [...input.items]),
+        selectSkillFromMenu: (input) => showSelection(input.title, [...input.items], stores),
       },
       context: {
         compact: sessionActions.compactContext,
@@ -443,7 +450,7 @@ function createInkRouterContext(
           : undefined,
       status: {
         getSnapshot: () => {
-          const agentState = useAgentStore.getState();
+          const agentState = stores.agent.getState();
           return {
             config,
             execution: {
@@ -521,12 +528,13 @@ function resolveConfiguredModelIdentity(
 async function projectCommandResult(
   result: TuiCommandRouterResult,
   sessionActions: SlashCommandSessionActions,
+  stores: TuiConversationStores,
 ): Promise<void> {
   if (result.output) {
-    addSystemMessage(result.output);
+    addSystemMessage(result.output, stores);
   }
   if (result.error) {
-    useConversationStore.getState().addError(new Error(result.error));
+    stores.conversation.getState().addError(new Error(result.error));
     return;
   }
 
@@ -545,8 +553,8 @@ async function projectCommandResult(
 }
 
 /** Add a system-level informational message to the conversation */
-function addSystemMessage(text: string): void {
-  useConversationStore.getState().addSystemMessage(text);
+function addSystemMessage(text: string, stores: TuiConversationStores): void {
+  stores.conversation.getState().addSystemMessage(text);
 }
 
 function listEnabledSkills(skillService: SkillService | undefined): TuiSkillOption[] {
@@ -562,13 +570,17 @@ function listEnabledSkills(skillService: SkillService | undefined): TuiSkillOpti
 }
 
 /** Show a selection menu and return the selected ID (or null if cancelled) */
-function showSelection(title: string, items: readonly SelectionMenuItem[]): Promise<string | null> {
+function showSelection(
+  title: string,
+  items: readonly SelectionMenuItem[],
+  stores: TuiConversationStores,
+): Promise<string | null> {
   return new Promise((resolve) => {
-    useUIStore.getState().showSelection({
+    stores.ui.getState().showSelection({
       title,
       items: [...items],
       resolve: (selectedId) => {
-        useUIStore.getState().dismissSelection();
+        stores.ui.getState().dismissSelection();
         resolve(selectedId);
       },
     });

@@ -8,12 +8,17 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { isCanonicalConversationId } from '@neko/agent';
 import type { IService } from '@neko/shared';
 import { DEFAULT_CLI_CONFIG, type CLIConfig } from '../../core/types';
-import { useAgentStore } from '../../stores/agent-store';
-import { useConversationStore } from '../../stores/conversation-store';
 import { useAgentSession } from '../useAgentSession';
 import { createTestAgentTerminalPresentation } from '../../presentation/testing';
+import { createTuiConversationId } from '../../core/tui-conversation-id';
+import {
+  createTuiTestRuntime,
+  type TuiTestRuntime,
+} from '../../__tests__/render-with-presentation';
+import { TuiApplicationRuntimeProvider } from '../../runtime/tui-runtime-context';
 
 let tempRoot: string;
+let runtime: TuiTestRuntime;
 
 beforeEach(async () => {
   tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'neko-tui-session-id-'));
@@ -21,8 +26,8 @@ beforeEach(async () => {
 
 afterEach(async () => {
   cleanup();
-  useAgentStore.getState().reset();
-  useConversationStore.getState().clearMessages();
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  runtime?.application.dispose();
   await fs.rm(tempRoot, { recursive: true, force: true });
 });
 
@@ -30,17 +35,19 @@ describe('useAgentSession conversation identity', () => {
   it('starts new Ink TUI sessions with canonical workspace conversation ids', async () => {
     const conversationIds: string[] = [];
 
-    render(
+    const config = {
+      ...DEFAULT_CLI_CONFIG,
+      workDir: tempRoot,
+      providerRequiresApiKey: false,
+    };
+    renderSessionProbe(
       React.createElement(ConversationIdProbe, {
-        config: {
-          ...DEFAULT_CLI_CONFIG,
-          workDir: tempRoot,
-          providerRequiresApiKey: false,
-        },
+        config,
         onConversationId: (conversationId: string) => {
           conversationIds.push(conversationId);
         },
       }),
+      config,
     );
 
     await waitFor(() =>
@@ -53,26 +60,45 @@ describe('useAgentSession conversation identity', () => {
   });
 
   it('rejects old cli resume ids before loading persisted records', async () => {
-    render(
+    const config = {
+      ...DEFAULT_CLI_CONFIG,
+      workDir: tempRoot,
+      providerRequiresApiKey: false,
+    };
+    renderSessionProbe(
       React.createElement(ConversationIdProbe, {
-        config: {
-          ...DEFAULT_CLI_CONFIG,
-          workDir: tempRoot,
-          providerRequiresApiKey: false,
-        },
+        config,
         resumeConversationId: 'cli-kf12oi-4fzzzxjyl',
         onConversationId: () => undefined,
       }),
+      config,
+      'cli-kf12oi-4fzzzxjyl',
     );
 
     await waitFor(
       () =>
-        useAgentStore.getState().error?.message.includes('TUI 恢复对话 ID 必须是规范 ID') === true,
+        runtime.conversation.stores.agent
+          .getState()
+          .error?.message.includes('TUI 恢复对话 ID 必须是规范 ID') === true,
     );
 
-    expect(useAgentStore.getState().status).toBe('error');
+    expect(runtime.conversation.stores.agent.getState().status).toBe('error');
   });
 });
+
+function renderSessionProbe(
+  node: React.ReactElement,
+  config: CLIConfig,
+  conversationId = createTuiConversationId(config.workDir),
+): void {
+  runtime = createTuiTestRuntime(config, conversationId);
+  render(
+    React.createElement(TuiApplicationRuntimeProvider, {
+      runtime: runtime.application,
+      children: node,
+    }),
+  );
+}
 
 function ConversationIdProbe(props: {
   readonly config: CLIConfig;

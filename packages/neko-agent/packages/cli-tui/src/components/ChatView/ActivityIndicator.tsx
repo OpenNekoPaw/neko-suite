@@ -12,8 +12,10 @@
 
 import React from 'react';
 import { Box, Text } from 'ink';
-import { useAgentStore } from '../../stores/agent-store';
-import { useConversationStore } from '../../stores/conversation-store';
+import {
+  useTuiAgentStore as useAgentStore,
+  useTuiConversationStore as useConversationStore,
+} from '../../runtime/tui-runtime-context';
 import { useTimer } from '../../hooks/useTimer';
 import { tokens } from '../../theme/tokens';
 import { useAgentTerminalPresentation } from '../../presentation/react-context';

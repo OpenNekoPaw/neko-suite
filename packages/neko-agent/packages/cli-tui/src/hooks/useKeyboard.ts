@@ -6,8 +6,11 @@
  */
 
 import { useInput } from 'ink';
-import { useAgentStore } from '../stores/agent-store';
-import { useUIStore } from '../stores/ui-store';
+import {
+  useTuiAgentStore as useAgentStore,
+  useTuiConversationStores,
+  useTuiUIStore as useUIStore,
+} from '../runtime/tui-runtime-context';
 import type { ExecutionMode } from '../types/state';
 
 const MODE_CYCLE: ExecutionMode[] = ['auto', 'plan', 'ask'];
@@ -28,6 +31,7 @@ export interface KeyboardActions {
  * - Ctrl+C: Quit (handled by Ink)
  */
 export function useKeyboard(actions: KeyboardActions): void {
+  const stores = useTuiConversationStores();
   const status = useAgentStore((s) => s.status);
   const pendingApproval = useUIStore((s) => s.pendingApproval);
   const pendingSelection = useUIStore((s) => s.pendingSelection);
@@ -41,11 +45,11 @@ export function useKeyboard(actions: KeyboardActions): void {
 
     const pageRows = Math.max(3, terminalRows - 6);
     if (key.pageUp) {
-      useUIStore.getState().scrollUp(pageRows);
+      stores.ui.getState().scrollUp(pageRows);
       return;
     }
     if (key.pageDown) {
-      useUIStore.getState().scrollDown(pageRows);
+      stores.ui.getState().scrollDown(pageRows);
       return;
     }
 
@@ -63,10 +67,10 @@ export function useKeyboard(actions: KeyboardActions): void {
 
     // Shift+Tab → cycle execution mode
     if (key.shift && key.tab) {
-      const current = useAgentStore.getState().executionMode;
+      const current = stores.agent.getState().executionMode;
       const idx = MODE_CYCLE.indexOf(current);
       const next = MODE_CYCLE[(idx + 1) % MODE_CYCLE.length]!;
-      useAgentStore.getState().setExecutionMode(next);
+      stores.agent.getState().setExecutionMode(next);
       actions.onModeChange?.(next);
       return;
     }

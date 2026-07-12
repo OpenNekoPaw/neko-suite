@@ -25,9 +25,13 @@ import { useAgentSession } from '../hooks/useAgentSession';
 import { useKeyboard } from '../hooks/useKeyboard';
 import { useSlashCommands } from '../hooks/useSlashCommands';
 import { useTerminalSize } from '../hooks/useTerminalSize';
-import { useConversationStore } from '../stores/conversation-store';
-import { useConfigStore } from '../stores/config-store';
-import { useUIStore } from '../stores/ui-store';
+import {
+  useTuiConversationStores,
+  useTuiUIStore,
+  TuiApplicationRuntimeProvider,
+} from '../runtime/tui-runtime-context';
+import { createAgentTuiApplicationRuntime } from '../runtime/tui-application-runtime';
+import { createTuiConversationId } from '../core/tui-conversation-id';
 import { createTuiSkillInvocationCatalog } from '../core/slash-command-catalog';
 import type { AgentTerminalInvocationContext } from '../core/node-locale-bootstrap';
 import { AgentTerminalPresentationProvider } from '../presentation/react-context';
@@ -56,10 +60,28 @@ interface AppProps {
 }
 
 export function App(props: AppProps): React.JSX.Element {
+  const [runtimeOwnership] = useState(() => {
+    const application = createAgentTuiApplicationRuntime();
+    application.createConversation({
+      config: props.config,
+      conversationId: props.resumeConversationId ?? createTuiConversationId(props.config.workDir),
+    });
+    return { application };
+  });
+
+  useEffect(
+    () => () => {
+      queueMicrotask(() => runtimeOwnership.application.dispose());
+    },
+    [runtimeOwnership],
+  );
+
   return (
-    <AgentTerminalPresentationProvider value={props.terminal.presentation}>
-      <AppContent {...props} />
-    </AgentTerminalPresentationProvider>
+    <TuiApplicationRuntimeProvider runtime={runtimeOwnership.application}>
+      <AgentTerminalPresentationProvider value={props.terminal.presentation}>
+        <AppContent {...props} />
+      </AgentTerminalPresentationProvider>
+    </TuiApplicationRuntimeProvider>
   );
 }
 
@@ -72,9 +94,10 @@ function AppContent({
   terminal,
   automation,
 }: AppProps): React.JSX.Element {
-  const pendingApproval = useUIStore((s) => s.pendingApproval);
-  const pendingSelection = useUIStore((s) => s.pendingSelection);
-  const pendingPlanReview = useUIStore((s) => s.pendingPlanReview);
+  const stores = useTuiConversationStores();
+  const pendingApproval = useTuiUIStore((s) => s.pendingApproval);
+  const pendingSelection = useTuiUIStore((s) => s.pendingSelection);
+  const pendingPlanReview = useTuiUIStore((s) => s.pendingPlanReview);
   const [referenceSuggestions, setReferenceSuggestions] = useState<
     readonly InputSuggestionOption[]
   >([]);
@@ -89,8 +112,8 @@ function AppContent({
 
   // Initialize config store
   useEffect(() => {
-    useConfigStore.getState().replaceConfig(config);
-  }, [config]);
+    stores.config.getState().replaceConfig(config);
+  }, [config, stores]);
 
   // Initialize agent session
   const agentSession = useAgentSession({
@@ -147,6 +170,7 @@ function AppContent({
       return;
     }
     const port = createTuiAutomationAppPort({
+      stores,
       readHandle: () => agentSessionRef.current,
       readMarkdownFacts: () => automation.readMarkdownFacts(),
     });
@@ -154,7 +178,7 @@ function AppContent({
     return () => {
       automation.unbind(port);
     };
-  }, [automation]);
+  }, [automation, stores]);
 
   const refreshReferenceSuggestions = useCallback(
     (query = '') => {
@@ -174,7 +198,7 @@ function AppContent({
         },
         (error) => {
           if (!cancelled && referenceRequestIdRef.current === requestId) {
-            useConversationStore
+            stores.conversation
               .getState()
               .addError(new Error(presentReferenceSuggestionError(error, terminal.presentation)));
           }
@@ -231,7 +255,7 @@ function AppContent({
     onCancel: cancel,
     onClear: () => {
       onClear();
-      useConversationStore.getState().clearMessages();
+      stores.conversation.getState().clearMessages();
     },
     onQuit: () => {
       process.exit(0);
@@ -273,14 +297,14 @@ function AppContent({
 
   // Plan review: execute → switch to auto and re-submit the plan
   const handlePlanReviewExecute = useCallback(async () => {
-    useUIStore.getState().dismissPlanReview();
+    stores.ui.getState().dismissPlanReview();
     updateMode('auto');
     await submit('Execute the plan above.');
-  }, [updateMode, submit]);
+  }, [stores, updateMode, submit]);
 
   const handlePlanReviewDismiss = useCallback(() => {
-    useUIStore.getState().dismissPlanReview();
-  }, []);
+    stores.ui.getState().dismissPlanReview();
+  }, [stores]);
 
   // Build plan review selection menu items (shown when pendingPlanReview is true)
   const planReviewSelection = pendingPlanReview

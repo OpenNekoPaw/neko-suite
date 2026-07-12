@@ -9,9 +9,9 @@
  */
 
 import type { AgentEvent } from '@neko/agent';
-import type { useConversationStore } from '../stores/conversation-store';
-import type { useAgentStore } from '../stores/agent-store';
-import type { useUIStore, PendingApproval } from '../stores/ui-store';
+import type { ConversationSlice } from '../stores/conversation-store';
+import type { AgentSlice } from '../stores/agent-store';
+import type { UISlice, PendingApproval } from '../stores/ui-store';
 import type { AgentTerminalPresentationContext } from '../presentation/context';
 import type { AgentTerminalMessageKey } from '../presentation/terminal-messages';
 import { presentQueuedContinuation } from '../presentation/runtime-presentation';
@@ -20,9 +20,9 @@ import {
   type TerminalTimelineMessage,
 } from '../core/timeline-projector';
 
-type ConversationStore = ReturnType<typeof useConversationStore.getState>;
-type AgentStore = ReturnType<typeof useAgentStore.getState>;
-type UIStore = ReturnType<typeof useUIStore.getState>;
+type ConversationStore = ConversationSlice;
+type AgentStore = AgentSlice;
+type UIStore = UISlice;
 type StoreAccessor<TStore> = TStore | (() => TStore);
 
 /**

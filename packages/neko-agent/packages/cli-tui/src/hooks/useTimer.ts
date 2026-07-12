@@ -6,7 +6,7 @@
  */
 
 import { useState, useEffect, useRef } from 'react';
-import { useAgentStore } from '../stores/agent-store';
+import { useTuiAgentStore as useAgentStore } from '../runtime/tui-runtime-context';
 
 /**
  * Returns elapsed seconds since agent started running.

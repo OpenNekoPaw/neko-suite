@@ -15,8 +15,15 @@ import { createStrictTranslator } from '@neko/shared/i18n';
 import { createAgentTerminalPresentationContext } from '../../presentation/context';
 import { createAgentTerminalFormatters } from '../../presentation/formatters';
 import { CLI_TERMINAL_MESSAGE_SOURCE } from '../../presentation/terminal-messages';
+import { createTuiConversationId } from '../../core/tui-conversation-id';
+import {
+  createTuiTestRuntime,
+  type TuiTestRuntime,
+} from '../../__tests__/render-with-presentation';
+import { TuiApplicationRuntimeProvider } from '../../runtime/tui-runtime-context';
 
 let tempRoot: string;
+let runtime: TuiTestRuntime;
 
 beforeEach(async () => {
   tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'neko-tui-session-refs-'));
@@ -24,6 +31,8 @@ beforeEach(async () => {
 
 afterEach(async () => {
   cleanup();
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  runtime?.application.dispose();
   await fs.rm(tempRoot, { recursive: true, force: true });
 });
 
@@ -37,20 +46,24 @@ const TEST_PRESENTATION = createAgentTerminalPresentationContext({
 
 describe('useAgentSession reference contributors', () => {
   it('refreshes @ reference suggestions after capability providers load', async () => {
-    const snapshots: readonly string[][] = [];
+    const snapshots: string[][] = [];
     const conversationIds: string[] = [];
 
+    const config = { ...DEFAULT_CLI_CONFIG, workDir: tempRoot, providerRequiresApiKey: false };
+    runtime = createTuiTestRuntime(config, createTuiConversationId(config.workDir));
     render(
-      <ReferenceContributorProbe
-        config={{ ...DEFAULT_CLI_CONFIG, workDir: tempRoot, providerRequiresApiKey: false }}
-        capabilityProviders={[createProbeAssetCapabilityProvider()]}
-        onSnapshot={(names) => {
-          snapshots.push(names);
-        }}
-        onConversationId={(conversationId) => {
-          conversationIds.push(conversationId);
-        }}
-      />,
+      <TuiApplicationRuntimeProvider runtime={runtime.application}>
+        <ReferenceContributorProbe
+          config={config}
+          capabilityProviders={[createProbeAssetCapabilityProvider()]}
+          onSnapshot={(names) => {
+            snapshots.push(names);
+          }}
+          onConversationId={(conversationId) => {
+            conversationIds.push(conversationId);
+          }}
+        />
+      </TuiApplicationRuntimeProvider>,
     );
 
     await waitFor(() => snapshots.some((names) => names.includes('浪客参考')));

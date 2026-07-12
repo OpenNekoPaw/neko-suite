@@ -9,9 +9,11 @@
 
 import React, { useLayoutEffect, useRef } from 'react';
 import { Box, measureElement, type DOMElement } from 'ink';
-import { useAgentStore } from '../../stores/agent-store';
-import { useConversationStore } from '../../stores/conversation-store';
-import { useUIStore } from '../../stores/ui-store';
+import {
+  useTuiAgentStore as useAgentStore,
+  useTuiConversationStore as useConversationStore,
+  useTuiUIStore as useUIStore,
+} from '../../runtime/tui-runtime-context';
 import { MessageItem } from './MessageItem';
 import { ActivityIndicator } from './ActivityIndicator';
 

@@ -122,10 +122,12 @@ import {
 import { createTuiSessionSkillRuntime } from '../core/tui-session-skills';
 import { mergeTuiMediaModelMetadata } from '../core/media-model-metadata';
 import { listChatModelOptions } from '../core/config';
-import { useConfigStore } from '../stores/config-store';
-import { useAgentStore } from '../stores/agent-store';
-import { useConversationStore } from '../stores/conversation-store';
-import { useUIStore } from '../stores/ui-store';
+import {
+  useTuiApplicationRuntime,
+  useTuiConversationRuntime,
+  useTuiConversationStores,
+  type TuiConversationStores,
+} from '../runtime/tui-runtime-context';
 import { createEventAdapter, type IEventAdapter } from '../adapters/event-adapter';
 import {
   createTuiSlashCommandCatalog,
@@ -141,7 +143,6 @@ import {
 } from '../core/skill-lifecycle-session';
 import {
   assertCanonicalTuiConversationId,
-  createTuiConversationId,
   TuiConversationIdError,
 } from '../core/tui-conversation-id';
 import {
@@ -330,6 +331,13 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
     presentation,
     promptLocale,
   } = options;
+  const applicationRuntime = useTuiApplicationRuntime();
+  const conversationRuntime = useTuiConversationRuntime();
+  const stores = useTuiConversationStores();
+  const initialConversationId = conversationRuntime.conversationId;
+  if (!initialConversationId) {
+    throw new Error('TUI conversation runtime must be bound before session initialization.');
+  }
   const uiLocale = presentation.uiLocale;
   const promptDomainLocale = promptLocale === 'zh-cn' ? 'zh' : 'en';
   const sessionRef = useRef<IAgentSession | null>(null);
@@ -354,7 +362,7 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
   const conversationStorageRef = useRef<FileConversationStorage | null>(null);
   const workspaceRuntimeStateRef = useRef<AgentWorkspaceRuntimeStateRuntime | null>(null);
   const runtimeConfigRef = useRef<ReturnType<typeof createCliAgentRuntime> | null>(null);
-  const conversationIdRef = useRef(createTuiConversationId(config.workDir));
+  const conversationIdRef = useRef(initialConversationId);
   const conversationCreatedAtRef = useRef(Date.now());
   const conversationTitleRef = useRef('');
   const runtimeSessionRef = useRef<AgentRuntimeSessionHandle | null>(null);
@@ -379,7 +387,7 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
       return;
     }
     workspaceRuntimeStateErrorRef.current = message;
-    useConversationStore
+    stores.conversation
       .getState()
       .addError(new Error(presentWorkspaceRuntimeStateFailure(message, presentation)));
   }, []);
@@ -387,23 +395,23 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
   const refreshTaskSummary = useCallback(async (): Promise<void> => {
     const taskManager = taskManagerRef.current;
     if (!taskManager) {
-      useAgentStore.getState().setRunningTasks([]);
+      stores.agent.getState().setRunningTasks([]);
       return;
     }
 
     try {
       const tasks = await taskManager.list();
       taskSummaryErrorRef.current = null;
-      useAgentStore.getState().setRunningTasks(selectRunningTasks(tasks));
+      stores.agent.getState().setRunningTasks(selectRunningTasks(tasks));
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       if (taskSummaryErrorRef.current !== message) {
         taskSummaryErrorRef.current = message;
-        useConversationStore
+        stores.conversation
           .getState()
           .addError(new Error(presentTaskStatusRefreshFailure(message, presentation)));
       }
-      useAgentStore.getState().setRunningTasks([]);
+      stores.agent.getState().setRunningTasks([]);
     }
   }, []);
 
@@ -421,15 +429,15 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
         input.contextTokenCount !== undefined
           ? input.contextTokenCount
           : (sessionRef.current?.getTokenCount() ?? null);
-      useAgentStore.getState().setContextTokenCount(contextTokenCount);
+      stores.agent.getState().setContextTokenCount(contextTokenCount);
 
       const runtime = workspaceRuntimeStateRef.current;
       if (!runtime) {
         return;
       }
 
-      const agentState = useAgentStore.getState();
-      const currentConfig = useConfigStore.getState().config;
+      const agentState = stores.agent.getState();
+      const currentConfig = stores.config.getState().config;
       const queueSnapshot = agentState.messageQueue.snapshot;
       const capabilitySnapshot = capabilityLoadResultRef.current;
       const mediaModels = currentConfig.defaultMediaModels ?? {};
@@ -487,7 +495,7 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
       return;
     }
 
-    const currentConfig = useConfigStore.getState().config;
+    const currentConfig = stores.config.getState().config;
     const title = conversationTitleRef.current || deriveConversationTitle(messages) || 'New Chat';
     conversationTitleRef.current = title;
     const mediaModelSelection = currentConfig.defaultMediaModels;
@@ -511,46 +519,49 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
 
   const resumeConversation = useCallback(
     async (record: ConversationRecord): Promise<void> => {
-      const session = sessionRef.current;
-      if (!session) {
-        throw new Error('Session not initialized');
-      }
-      const runtimeConfig = runtimeConfigRef.current;
-      const journalWriter = runtimeConfig?.artifactStore?.createJournalWriter?.(record.id);
-      if (!journalWriter) {
-        throw new Error('Runtime journal writer is not available for resumed conversation');
-      }
-
-      const nextConfig: Partial<AgentSessionConfig> = {
-        conversationId: record.id,
-        journalWriter,
-      };
-      session.configure(nextConfig);
-      session.loadHistory(record.messages, record.messageEventIds);
-      conversationIdRef.current = record.id;
-      conversationCreatedAtRef.current = record.createdAt;
-      conversationTitleRef.current = record.title;
-      const runtimeSession = runtimeSessionRef.current;
-      if (!runtimeSession) {
-        throw new Error('Agent runtime session is not initialized');
-      }
-      const queue = runtimeSession.messageQueue.bindConversation(record.id);
-      useAgentStore.getState().setMessageQueuePausedAfterCancel(false);
-      useAgentStore.getState().setMessageQueueSnapshot(queue.snapshot());
-      useConversationStore
-        .getState()
-        .replaceMessages(projectAgentHistoryToTuiMessages(record.messages));
-      void refreshTaskSummary();
-      syncWorkspaceRuntimeState({
-        status: 'idle',
-        contextTokenCount: session.getTokenCount(),
-      });
+      const targetRuntime =
+        applicationRuntime.findConversation(record.id) ??
+        applicationRuntime.createConversation({
+          conversationId: record.id,
+          config: stores.config.getState().config,
+          activate: false,
+        });
+      applicationRuntime.activateRuntime(targetRuntime.runtimeId);
     },
-    [refreshTaskSummary, syncWorkspaceRuntimeState],
+    [applicationRuntime, stores],
   );
 
   // Initialize session on mount
   useEffect(() => {
+    let disposed = false;
+    let streamDisposed = false;
+    const disposeResources = (projectState: boolean): void => {
+      taskTerminalUnsubscribeRef.current?.();
+      taskTerminalUnsubscribeRef.current = null;
+      stageGuardianUnsubscribeRef.current?.();
+      stageGuardianUnsubscribeRef.current = null;
+      taskResultObservationRuntimeRef.current?.dispose();
+      taskResultObservationRuntimeRef.current = null;
+      mediaDeliveryHostRef.current?.dispose();
+      mediaDeliveryHostRef.current = null;
+      if (!streamDisposed) {
+        streamRuntimeRef.current.dispose();
+        streamDisposed = true;
+      }
+      taskManagerRef.current = null;
+      if (projectState) {
+        stores.agent.getState().setRunningTasks([]);
+      }
+      runtimeSessionRef.current?.messageQueue.clear();
+      runtimeSessionRef.current = null;
+      sessionRef.current?.dispose();
+      sessionRef.current = null;
+      platformRef.current?.dispose();
+      platformRef.current = null;
+      const mcpManager = mcpManagerRef.current;
+      mcpManagerRef.current = null;
+      void mcpManager?.disconnectAll().catch(() => undefined);
+    };
     const init = async () => {
       try {
         isReadyRef.current = false;
@@ -586,7 +597,7 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
           if (result.error) {
             const message =
               result.error instanceof Error ? result.error.message : String(result.error);
-            useConversationStore
+            stores.conversation
               .getState()
               .addError(new Error(presentResourceCacheGcFailure(message, presentation)));
           }
@@ -598,7 +609,8 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
         });
         conversationCreatedAtRef.current = Date.now();
         conversationTitleRef.current = '';
-        const requestedResumeId = resumeConversationId?.trim();
+        const explicitResumeId = resumeConversationId?.trim();
+        const requestedResumeId = explicitResumeId ?? initialConversationId;
         let resumeRecord: ConversationRecord | undefined;
         if (requestedResumeId) {
           const canonicalResumeId = assertCanonicalTuiConversationId(requestedResumeId);
@@ -607,8 +619,8 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
             conversationIdRef.current = resumeRecord.id;
             conversationCreatedAtRef.current = resumeRecord.createdAt;
             conversationTitleRef.current = resumeRecord.title;
-          } else {
-            useConversationStore
+          } else if (explicitResumeId) {
+            stores.conversation
               .getState()
               .addSystemMessage(presentResumeFallback(requestedResumeId, presentation));
           }
@@ -690,7 +702,7 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
         }
 
         // 5. System Prompt
-        const executionMode = useAgentStore.getState().executionMode;
+        const executionMode = stores.agent.getState().executionMode;
         const basePromptBuilder = createSystemPromptBuilder({
           locale: promptDomainLocale,
           mode: executionMode === 'plan' ? 'plan' : 'default',
@@ -745,7 +757,7 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
           onConfirmTool: async (request) => {
             // Show approval UI and wait for user decision
             return new Promise<boolean>((resolve) => {
-              useUIStore.getState().showToolApproval({
+              stores.ui.getState().showToolApproval({
                 toolCallId: request.toolCall.id,
                 toolName: request.toolCall.name,
                 arguments: request.toolCall.arguments,
@@ -764,19 +776,19 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
         sessionRef.current = session;
         stageGuardianUnsubscribeRef.current?.();
         stageGuardianUnsubscribeRef.current = session.onStageGuardianIssue((issue) => {
-          useConversationStore
+          stores.conversation
             .getState()
             .addSystemMessage(presentStageGuardianIssue(issue, presentation));
         });
         if (resumeRecord) {
           session.loadHistory(resumeRecord.messages, resumeRecord.messageEventIds);
-          useConversationStore
+          stores.conversation
             .getState()
             .replaceMessages(projectAgentHistoryToTuiMessages(resumeRecord.messages));
         }
         const messageQueue = runtimeSession.messageQueue.require();
-        useAgentStore.getState().setMessageQueuePausedAfterCancel(false);
-        useAgentStore.getState().setMessageQueueSnapshot(messageQueue.snapshot());
+        stores.agent.getState().setMessageQueuePausedAfterCancel(false);
+        stores.agent.getState().setMessageQueueSnapshot(messageQueue.snapshot());
         mediaDeliveryHostRef.current?.dispose();
         const mediaDeliveryHost = new NodeMediaTaskDeliveryHost({
           ...(platformRef.current ? { platform: platformRef.current } : {}),
@@ -809,7 +821,7 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
                         source: input.source,
                       });
                       const snapshot = queue.snapshot();
-                      useAgentStore.getState().setMessageQueueSnapshot(snapshot);
+                      stores.agent.getState().setMessageQueueSnapshot(snapshot);
                       syncWorkspaceRuntimeState({ status: 'running' });
                       adapterRef.current?.handleEvent({
                         type: 'messageQueued',
@@ -827,11 +839,11 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
                 : undefined,
             isRunning: (conversationId) =>
               conversationId === conversationIdRef.current &&
-              (session.isRunning() || useAgentStore.getState().status === 'running'),
+              (session.isRunning() || stores.agent.getState().status === 'running'),
           },
           continuation: {
             requestUserContinuation: (request) => {
-              useConversationStore
+              stores.conversation
                 .getState()
                 .addSystemMessage(presentTaskResultContinuation(request.prompt, presentation));
             },
@@ -855,7 +867,7 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
             },
           },
           onDiagnostic: (diagnostic) => {
-            useConversationStore
+            stores.conversation
               .getState()
               .addError(
                 new Error(presentTaskResultObservationDiagnostic(diagnostic, presentation)),
@@ -885,7 +897,7 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
               return created;
             },
             onProjection: (projection) => {
-              useAgentStore.getState().setActiveSkillLifecycleRecords(projection.visibleIndicators);
+              stores.agent.getState().setActiveSkillLifecycleRecords(projection.visibleIndicators);
               syncWorkspaceRuntimeState();
             },
           });
@@ -902,15 +914,21 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
 
         // 8. Event Adapter
         adapterRef.current = createEventAdapter({
-          conversationStore: () => useConversationStore.getState(),
-          agentStore: () => useAgentStore.getState(),
-          uiStore: () => useUIStore.getState(),
+          conversationStore: () => stores.conversation.getState(),
+          agentStore: () => stores.agent.getState(),
+          uiStore: () => stores.ui.getState(),
           presentation,
         });
 
+        if (disposed) {
+          return;
+        }
         isReadyRef.current = true;
         setIsReady(true);
       } catch (error) {
+        if (disposed) {
+          return;
+        }
         const err =
           error instanceof NodeWorkspaceContentError
             ? new Error(presentWorkspaceContentDiagnostic(error.diagnostic, presentation))
@@ -919,32 +937,21 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
               : error instanceof Error
                 ? error
                 : new Error(String(error));
-        useAgentStore.getState().setError(err);
-        useConversationStore.getState().addError(err);
+        stores.agent.getState().setError(err);
+        stores.conversation.getState().addError(err);
+      } finally {
+        if (disposed) {
+          disposeResources(false);
+        }
       }
     };
 
     initPromiseRef.current = init();
 
     return () => {
+      disposed = true;
       isReadyRef.current = false;
-      setIsReady(false);
-      taskTerminalUnsubscribeRef.current?.();
-      taskTerminalUnsubscribeRef.current = null;
-      stageGuardianUnsubscribeRef.current?.();
-      stageGuardianUnsubscribeRef.current = null;
-      taskResultObservationRuntimeRef.current?.dispose();
-      taskResultObservationRuntimeRef.current = null;
-      mediaDeliveryHostRef.current?.dispose();
-      mediaDeliveryHostRef.current = null;
-      streamRuntimeRef.current.dispose();
-      taskManagerRef.current = null;
-      useAgentStore.getState().setRunningTasks([]);
-      runtimeSessionRef.current?.messageQueue.clear();
-      runtimeSessionRef.current = null;
-      sessionRef.current?.dispose();
-      platformRef.current?.dispose();
-      mcpManagerRef.current?.disconnectAll().catch(() => {});
+      disposeResources(true);
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -975,9 +982,9 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
 
       adapter.reset();
       if (!options.source || options.source === 'user') {
-        useConversationStore.getState().addUserMessage(prompt);
+        stores.conversation.getState().addUserMessage(prompt);
       } else {
-        useConversationStore.getState().addSystemMessage({
+        stores.conversation.getState().addSystemMessage({
           content: presentContinuationReady(
             options.source,
             options.continuationMetadata,
@@ -988,7 +995,7 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
           metadata: options.continuationMetadata,
         });
       }
-      useAgentStore.getState().setRunning();
+      stores.agent.getState().setRunning();
       if (!conversationTitleRef.current) {
         conversationTitleRef.current = deriveConversationTitle([{ role: 'user', content: prompt }]);
       }
@@ -1010,12 +1017,12 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
       let finalUsage: AgentUsageSnapshot | undefined;
       const events = observeTuiSessionEvents(
         session.execute(finalPrompt, {
-          workspaceRoot: readConfigWorkDir(),
+          workspaceRoot: stores.config.getState().config.workDir,
           ...(metadata ? { metadata } : {}),
         }),
         {
           onEvent: (event) => {
-            handleTuiRuntimeSideEffectEvent(event, presentation);
+            handleTuiRuntimeSideEffectEvent(event, presentation, stores);
             syncWorkspaceRuntimeState(projectRuntimeStateFromEvent(event, session));
             if (event.type === 'done') {
               finalUsage = event.usage;
@@ -1045,7 +1052,7 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
                     },
                   })
                   .catch((error: unknown) => {
-                    useConversationStore
+                    stores.conversation
                       .getState()
                       .addError(
                         new Error(presentMediaResultPersistenceFailure(error, presentation)),
@@ -1056,7 +1063,7 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
                 void refreshTaskSummary();
               },
               onDiagnostic: (diagnostic) => {
-                useConversationStore
+                stores.conversation
                   .getState()
                   .addError(new Error(presentMediaBackgroundDiagnostic(diagnostic, presentation)));
               },
@@ -1079,14 +1086,14 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
         },
         ...(backgroundTasks ? { backgroundTasks } : {}),
       });
-      useAgentStore.getState().setIdle();
+      stores.agent.getState().setIdle();
       if (finalUsage) {
-        useAgentStore.getState().updateUsage(finalUsage);
+        stores.agent.getState().updateUsage(finalUsage);
       }
       await persistCurrentConversation();
       void refreshTaskSummary();
       syncWorkspaceRuntimeState({
-        status: useAgentStore.getState().status,
+        status: stores.agent.getState().status,
         phase: 'idle',
         contextTokenCount: session.getTokenCount(),
       });
@@ -1103,10 +1110,8 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
   }, []);
 
   const projectRuntimeMessageQueue = useCallback((queue: AgentConversationMessageQueue): void => {
-    useAgentStore
-      .getState()
-      .setMessageQueuePausedAfterCancel(queue.isPausedAfterActiveTurnCancel());
-    useAgentStore.getState().setMessageQueueSnapshot(queue.snapshot());
+    stores.agent.getState().setMessageQueuePausedAfterCancel(queue.isPausedAfterActiveTurnCancel());
+    stores.agent.getState().setMessageQueueSnapshot(queue.snapshot());
   }, []);
 
   const releaseRuntimeQueuedPrompts = useCallback(async (): Promise<void> => {
@@ -1152,11 +1157,11 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
       const adapter = adapterRef.current;
 
       if (!session || !adapter) {
-        useAgentStore.getState().setError(new Error('Session not initialized'));
+        stores.agent.getState().setError(new Error('Session not initialized'));
         return;
       }
 
-      if (session.isRunning() || useAgentStore.getState().status === 'running') {
+      if (session.isRunning() || stores.agent.getState().status === 'running') {
         try {
           const queue = requireRuntimeMessageQueue();
           if (executionOverrides?.metadata && Object.keys(executionOverrides.metadata).length > 0) {
@@ -1185,8 +1190,8 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
           });
         } catch (error) {
           const message = presentQueueFailure(error, presentation);
-          useAgentStore.getState().setMessageQueueDiagnostic(message);
-          useConversationStore.getState().addError(new Error(message));
+          stores.agent.getState().setMessageQueueDiagnostic(message);
+          stores.conversation.getState().addError(new Error(message));
         }
         return;
       }
@@ -1195,13 +1200,13 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
         await executePrompt(prompt, { metadata: executionOverrides?.metadata, source: 'user' });
         await releaseRuntimeQueuedPrompts();
 
-        if (useAgentStore.getState().executionMode === 'plan') {
-          useUIStore.getState().showPlanReview();
+        if (stores.agent.getState().executionMode === 'plan') {
+          stores.ui.getState().showPlanReview();
         }
       } catch (error) {
         const err = error instanceof Error ? error : new Error(String(error));
-        useAgentStore.getState().setError(err);
-        useConversationStore.getState().addError(err);
+        stores.agent.getState().setError(err);
+        stores.conversation.getState().addError(err);
         void refreshTaskSummary();
         syncWorkspaceRuntimeState({ status: 'error', phase: 'idle', errorMessage: err.message });
       }
@@ -1234,7 +1239,7 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
         status: input.metadata?.status ?? 'queued',
       };
 
-      if (session.isRunning() || useAgentStore.getState().status === 'running') {
+      if (session.isRunning() || stores.agent.getState().status === 'running') {
         const queue = requireRuntimeMessageQueue();
         const item = queue.enqueue({
           content: input.prompt,
@@ -1265,8 +1270,8 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
         await releaseRuntimeQueuedPrompts();
       } catch (error) {
         const err = error instanceof Error ? error : new Error(String(error));
-        useAgentStore.getState().setError(err);
-        useConversationStore.getState().addError(err);
+        stores.agent.getState().setError(err);
+        stores.conversation.getState().addError(err);
         void refreshTaskSummary();
         syncWorkspaceRuntimeState({ status: 'error', phase: 'idle', errorMessage: err.message });
       }
@@ -1285,13 +1290,13 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
     const session = sessionRef.current;
     const queue = runtimeSessionRef.current?.messageQueue.current();
     const wasRunning =
-      Boolean(session?.isRunning()) || useAgentStore.getState().status === 'running';
+      Boolean(session?.isRunning()) || stores.agent.getState().status === 'running';
     session?.cancel();
     if (wasRunning && queue && queue.snapshot().pendingCount > 0) {
       queue.pauseAfterActiveTurnCancel();
       projectRuntimeMessageQueue(queue);
     }
-    useAgentStore.getState().setIdle();
+    stores.agent.getState().setIdle();
     void refreshTaskSummary();
     syncWorkspaceRuntimeState({ status: 'idle', phase: 'idle' });
   }, [projectRuntimeMessageQueue, refreshTaskSummary, syncWorkspaceRuntimeState]);
@@ -1327,8 +1332,8 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
       await releaseRuntimeQueuedPrompts();
     } catch (error) {
       const err = error instanceof Error ? error : new Error(String(error));
-      useAgentStore.getState().setError(err);
-      useConversationStore.getState().addError(err);
+      stores.agent.getState().setError(err);
+      stores.conversation.getState().addError(err);
       void refreshTaskSummary();
       syncWorkspaceRuntimeState({ status: 'error', phase: 'idle', errorMessage: err.message });
     }
@@ -1379,7 +1384,7 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
       const queue = requireRuntimeMessageQueue();
       const item = queue.discardContinuation(queueItemId);
       projectRuntimeMessageQueue(queue);
-      useConversationStore.getState().addSystemMessage({
+      stores.conversation.getState().addSystemMessage({
         content: presentContinuationDiscarded(item.id, presentation),
         source: normalizeTurnSource(item.source),
         displayKind: item.displayKind ?? displayKindForTurnSource(normalizeTurnSource(item.source)),
@@ -1409,8 +1414,8 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
 
   const clearHistory = useCallback(() => {
     sessionRef.current?.clearHistory();
-    useConversationStore.getState().clearMessages();
-    useAgentStore.getState().setContextTokenCount(sessionRef.current?.getTokenCount() ?? null);
+    stores.conversation.getState().clearMessages();
+    stores.agent.getState().setContextTokenCount(sessionRef.current?.getTokenCount() ?? null);
     void workspaceRuntimeStateRef.current
       ?.clearConversation(conversationIdRef.current)
       .catch(reportWorkspaceRuntimeStateError);
@@ -1419,9 +1424,9 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
   const confirmTool = useCallback(
     (toolCallId: string, approved: boolean) => {
       sessionRef.current?.confirmTool(toolCallId, approved);
-      useUIStore.getState().dismissToolApproval();
+      stores.ui.getState().dismissToolApproval();
       if (approved) {
-        useAgentStore.getState().setRunning();
+        stores.agent.getState().setRunning();
         syncWorkspaceRuntimeState({ status: 'running' });
       } else {
         syncWorkspaceRuntimeState({ status: 'idle', phase: 'idle' });
@@ -1434,9 +1439,9 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
     (model: string | TuiModelIdentity) => {
       const identity =
         typeof model === 'string'
-          ? { providerId: useConfigStore.getState().config.provider, modelId: model }
+          ? { providerId: stores.config.getState().config.provider, modelId: model }
           : model;
-      useConfigStore.getState().setConfig({
+      stores.config.getState().setConfig({
         provider: identity.providerId,
         model: identity.modelId,
         chatModel: {
@@ -1465,14 +1470,14 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
 
   const validateLlmConfig = useCallback(
     (llmConfig: AgentLlmConfig): TuiParameterValidationResult =>
-      projectCliLlmParameters(useConfigStore.getState().config, llmConfig),
+      projectCliLlmParameters(stores.config.getState().config, llmConfig),
     [],
   );
 
   const applyLlmConfig = useCallback(
     (result: TuiParameterValidationResult): void => {
-      const config = useConfigStore.getState().config;
-      useConfigStore.getState().setConfig({
+      const config = stores.config.getState().config;
+      stores.config.getState().setConfig({
         llmConfig: result.config,
         temperature: result.chatOptions?.temperature ?? config.temperature,
         maxTokens: result.chatOptions?.maxTokens ?? config.maxTokens,
@@ -1512,7 +1517,7 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
           lifecycleRuntime.project(conversationIdRef.current),
       });
       if (!result.ok) {
-        useConversationStore
+        stores.conversation
           .getState()
           .addSystemMessage(presentSkillActivationRejected(name, presentation));
         return false;
@@ -1546,7 +1551,7 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
           lifecycleRuntime.project(conversationIdRef.current),
       });
       if (!result.ok) {
-        useConversationStore
+        stores.conversation
           .getState()
           .addSystemMessage(presentSkillDeactivationRejected(presentation));
         return false;
@@ -1561,7 +1566,7 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
     (mode: ExecutionMode) => {
       const session = sessionRef.current;
       if (!session) return;
-      const config = useConfigStore.getState().config;
+      const config = stores.config.getState().config;
       const builder = createSystemPromptBuilder({
         locale: promptDomainLocale,
         mode: mode === 'plan' ? 'plan' : 'default',
@@ -1580,7 +1585,7 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
         agentsOverride: builder.buildAgentsOverlay() ?? undefined,
       });
       session.setExecutionMode(mode);
-      useAgentStore.getState().setExecutionMode(mode);
+      stores.agent.getState().setExecutionMode(mode);
       syncWorkspaceRuntimeState();
     },
     [promptDomainLocale, syncWorkspaceRuntimeState],
@@ -1722,11 +1727,6 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
   };
 }
 
-/** Helper to get workDir from config store */
-function readConfigWorkDir(): string {
-  return useConfigStore.getState().config.workDir;
-}
-
 /** Build system prompt with runtime context appended */
 function buildSystemPromptWithContext(builder: SystemPromptBuilder, config: CLIConfig): string {
   const base = builder.buildBaseOnly();
@@ -1808,12 +1808,13 @@ async function* observeTuiSessionEvents(
 function handleTuiRuntimeSideEffectEvent(
   event: AgentEvent,
   presentation: AgentTerminalPresentationContext<AgentTerminalMessageKey>,
+  stores: TuiConversationStores,
 ): void {
   switch (event.type) {
     case 'tool_confirmation': {
       if (!event.toolConfirmation) return;
-      useAgentStore.getState().setWaitingConfirmation();
-      useUIStore.getState().showToolApproval({
+      stores.agent.getState().setWaitingConfirmation();
+      stores.ui.getState().showToolApproval({
         toolCallId: event.toolConfirmation.toolCall.id,
         toolName: event.toolConfirmation.toolCall.name,
         arguments: event.toolConfirmation.toolCall.arguments,
@@ -1823,7 +1824,7 @@ function handleTuiRuntimeSideEffectEvent(
     }
     case 'iteration': {
       if (event.iteration) {
-        useAgentStore.getState().setIteration(event.iteration.current, event.iteration.max);
+        stores.agent.getState().setIteration(event.iteration.current, event.iteration.max);
       }
       return;
     }
@@ -1833,8 +1834,8 @@ function handleTuiRuntimeSideEffectEvent(
         event.error instanceof Error && externalMessage
           ? event.error
           : new Error(externalMessage ?? presentation.t('agent.terminal.timeline.fallback.error'));
-      useAgentStore.getState().setError(error);
-      useConversationStore.getState().addError(error);
+      stores.agent.getState().setError(error);
+      stores.conversation.getState().addError(error);
       return;
     }
     default:

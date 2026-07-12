@@ -5,7 +5,7 @@ import { presentTuiMessageQueue } from '../../core/message-queue-presenter';
 import { useAgentTerminalPresentation } from '../../presentation/react-context';
 import type { AgentTerminalPresentationContext } from '../../presentation/context';
 import type { AgentTerminalMessageKey } from '../../presentation/terminal-messages';
-import { useAgentStore } from '../../stores/agent-store';
+import { useTuiAgentStore as useAgentStore } from '../../runtime/tui-runtime-context';
 import { tokens } from '../../theme/tokens';
 
 export interface MessageQueuePanelProps {

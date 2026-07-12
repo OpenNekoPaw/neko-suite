@@ -13,7 +13,7 @@ import {
 import { encodeTerminalSegments } from '../../markdown/safe-encoding';
 import { createTerminalMarkdownThemeResolver } from '../../markdown/theme';
 import type { TerminalLine } from '../../markdown/terminal-blocks';
-import { useUIStore } from '../../stores/ui-store';
+import { useTuiUIStore as useUIStore } from '../../runtime/tui-runtime-context';
 import { tokens } from '../../theme/tokens';
 import { detectCapabilities, type TerminalCapabilities } from '../../utils/terminal';
 

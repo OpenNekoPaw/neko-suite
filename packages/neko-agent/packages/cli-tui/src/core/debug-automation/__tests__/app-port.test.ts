@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   createTuiAutomationAppPort,
   readContinuationFacts,
@@ -6,13 +6,19 @@ import {
   readMessageToolCallSummaries,
 } from '../app-port';
 import type { Message } from '../../../types/state';
-import { useAgentStore } from '../../../stores/agent-store';
-import { useConversationStore } from '../../../stores/conversation-store';
-import { useUIStore } from '../../../stores/ui-store';
+import {
+  createTuiTestRuntime,
+  type TuiTestRuntime,
+} from '../../../__tests__/render-with-presentation';
+
+let runtime: TuiTestRuntime;
+
+beforeEach(() => {
+  runtime = createTuiTestRuntime();
+});
 
 afterEach(() => {
-  useConversationStore.getState().clearMessages();
-  useAgentStore.getState().setIdle();
+  runtime.application.dispose();
 });
 
 describe('readMessageSummaryContent', () => {
@@ -130,7 +136,7 @@ describe('readMessageToolCallSummaries', () => {
 
 describe('readContinuationFacts', () => {
   it('reports executed and queued continuations without user-message parsing', () => {
-    useConversationStore.getState().addSystemMessage({
+    runtime.conversation.stores.conversation.getState().addSystemMessage({
       content: 'Task result ready task-1. Continuing from the completed async result.',
       source: 'task-result-continuation',
       displayKind: 'task-continuation',
@@ -138,22 +144,25 @@ describe('readContinuationFacts', () => {
     });
 
     expect(
-      readContinuationFacts({
-        conversationId: 'conv-1',
-        pendingCount: 1,
-        version: 1,
-        items: [
-          {
-            id: 'queue-1',
-            conversationId: 'conv-1',
-            content: 'Continue from subagent result',
-            createdAt: 10,
-            source: 'subagent-result-continuation',
-            displayKind: 'subagent-continuation',
-            metadata: { subagentId: 'subagent-1', status: 'queued' },
-          },
-        ],
-      }),
+      readContinuationFacts(
+        {
+          conversationId: 'conv-1',
+          pendingCount: 1,
+          version: 1,
+          items: [
+            {
+              id: 'queue-1',
+              conversationId: 'conv-1',
+              content: 'Continue from subagent result',
+              createdAt: 10,
+              source: 'subagent-result-continuation',
+              displayKind: 'subagent-continuation',
+              metadata: { subagentId: 'subagent-1', status: 'queued' },
+            },
+          ],
+        },
+        runtime.conversation.stores,
+      ),
     ).toEqual([
       expect.objectContaining({
         source: 'task-result-continuation',
@@ -180,6 +189,7 @@ describe('createTuiAutomationAppPort', () => {
     });
     let cancelled = false;
     const port = createTuiAutomationAppPort({
+      stores: runtime.conversation.stores,
       readHandle: () => ({
         isReady: true,
         submit: () => submitPromise,
@@ -194,7 +204,7 @@ describe('createTuiAutomationAppPort', () => {
       readMarkdownFacts: () => ({ pathEvents: [], droppedPathEventCount: 0 }),
     });
 
-    useAgentStore.getState().setRunning();
+    runtime.conversation.stores.agent.getState().setRunning();
     const accepted = port.submitMessage({ prompt: 'long response' });
     expect(port.cancelActiveMessage()).toBe(true);
     expect(cancelled).toBe(true);
@@ -204,6 +214,7 @@ describe('createTuiAutomationAppPort', () => {
 
   it('fails the machine fact read visibly without injecting human transcript prose', async () => {
     const port = createTuiAutomationAppPort({
+      stores: runtime.conversation.stores,
       readHandle: () => ({
         isReady: true,
         submit: async () => undefined,
@@ -221,7 +232,7 @@ describe('createTuiAutomationAppPort', () => {
     await expect(
       port.readFacts({ sessionId: 'debug-session-1', includeHistory: false }),
     ).rejects.toThrow('TASK_PROVIDER_DETAIL');
-    expect(useConversationStore.getState().messages).toEqual([]);
+    expect(runtime.conversation.stores.conversation.getState().messages).toEqual([]);
   });
 
   it('exposes bounded Markdown facts and applies generic terminal resize through the UI store', async () => {
@@ -230,6 +241,7 @@ describe('createTuiAutomationAppPort', () => {
       droppedPathEventCount: 2,
     };
     const port = createTuiAutomationAppPort({
+      stores: runtime.conversation.stores,
       readHandle: () => ({
         isReady: true,
         submit: async () => undefined,
@@ -245,7 +257,10 @@ describe('createTuiAutomationAppPort', () => {
     port.resizeTerminal({ columns: 42, rows: 18 });
     const facts = await port.readFacts({ sessionId: 'debug-session-1', includeHistory: false });
 
-    expect(useUIStore.getState().terminalSize).toEqual({ columns: 42, rows: 18 });
+    expect(runtime.conversation.stores.ui.getState().terminalSize).toEqual({
+      columns: 42,
+      rows: 18,
+    });
     expect(facts.markdown).toEqual(markdown);
   });
 });

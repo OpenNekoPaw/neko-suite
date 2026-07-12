@@ -21,33 +21,34 @@ import { InputEditor } from '../components/Input/InputEditor';
 import { ChatView } from '../components/ChatView/ChatView';
 import { ToolApprovalPanel } from '../components/ToolApproval/ToolApprovalPanel';
 
-// Stores — set state before render
-import { useAgentStore } from '../stores/agent-store';
-import { useConversationStore } from '../stores/conversation-store';
-import { useConfigStore } from '../stores/config-store';
-
 import type { Message, TodoItem } from '../types/state';
 import { DEFAULT_CLI_CONFIG } from '../core/types';
 import { AgentTerminalPresentationProvider } from '../presentation/react-context';
 import { createTestAgentTerminalPresentation } from '../presentation/testing';
+import { createTuiTestRuntime, type TuiTestRuntime } from './render-with-presentation';
+import { TuiApplicationRuntimeProvider } from '../runtime/tui-runtime-context';
 
 // ─── Helpers ────────────────────────────────────────────────────────
 
 const TEST_PRESENTATION = createTestAgentTerminalPresentation('en');
+let runtime: TuiTestRuntime;
 
 function render(node: React.ReactElement): ReturnType<typeof renderInk> {
   return renderInk(
-    <AgentTerminalPresentationProvider value={TEST_PRESENTATION}>
-      {node}
-    </AgentTerminalPresentationProvider>,
+    <TuiApplicationRuntimeProvider runtime={runtime.application}>
+      <AgentTerminalPresentationProvider value={TEST_PRESENTATION}>
+        {node}
+      </AgentTerminalPresentationProvider>
+    </TuiApplicationRuntimeProvider>,
   );
 }
 
 /** Reset all stores to initial state */
 function resetStores(): void {
-  useAgentStore.getState().reset();
-  useConversationStore.getState().clearMessages();
-  useConfigStore.getState().replaceConfig({
+  runtime = createTuiTestRuntime();
+  runtime.conversation.stores.agent.getState().reset();
+  runtime.conversation.stores.conversation.getState().clearMessages();
+  runtime.conversation.stores.config.getState().replaceConfig({
     ...DEFAULT_CLI_CONFIG,
     model: 'gpt-5.3-codex',
     provider: 'openai',
@@ -335,9 +336,9 @@ describe('Component Snapshots (ink-testing-library)', () => {
     });
 
     it('renders running state with spinner', () => {
-      useAgentStore.getState().setRunning();
-      useAgentStore.getState().setIteration(3, 10);
-      useAgentStore.getState().updateUsage({
+      runtime.conversation.stores.agent.getState().setRunning();
+      runtime.conversation.stores.agent.getState().setIteration(3, 10);
+      runtime.conversation.stores.agent.getState().updateUsage({
         inputTokens: 1200,
         outputTokens: 350,
         totalTokens: 1550,
@@ -353,7 +354,7 @@ describe('Component Snapshots (ink-testing-library)', () => {
     });
 
     it('renders error state', () => {
-      useAgentStore.getState().setError(new Error('API timeout'));
+      runtime.conversation.stores.agent.getState().setError(new Error('API timeout'));
 
       const { lastFrame } = render(<StatusBar />);
       const frame = lastFrame();
@@ -363,7 +364,7 @@ describe('Component Snapshots (ink-testing-library)', () => {
     });
 
     it('renders plan mode', () => {
-      useAgentStore.getState().setExecutionMode('plan');
+      runtime.conversation.stores.agent.getState().setExecutionMode('plan');
 
       const { lastFrame } = render(<StatusBar />);
       const frame = lastFrame();
@@ -432,7 +433,7 @@ describe('Component Snapshots (ink-testing-library)', () => {
     });
 
     it('renders multi-turn conversation', () => {
-      const store = useConversationStore.getState();
+      const store = runtime.conversation.stores.conversation.getState();
       store.addUserMessage('What files are in src/?');
       store.startAssistantMessage();
       store.addToolCall({
@@ -462,7 +463,7 @@ describe('Component Snapshots (ink-testing-library)', () => {
     });
 
     it('renders conversation with active streaming', () => {
-      const store = useConversationStore.getState();
+      const store = runtime.conversation.stores.conversation.getState();
       store.addUserMessage('Explain this code');
       store.startAssistantMessage();
       store.setThinking('Let me analyze...');
@@ -487,9 +488,11 @@ describe('Component Snapshots (ink-testing-library)', () => {
      * This captures the visual layout structure accurately.
      */
     it('renders idle state full layout', () => {
-      useConversationStore.getState().addUserMessage('Hello neko!');
-      useConversationStore.getState().startAssistantMessage();
-      useConversationStore.getState().completeMessage('Hello! How can I help you today?');
+      runtime.conversation.stores.conversation.getState().addUserMessage('Hello neko!');
+      runtime.conversation.stores.conversation.getState().startAssistantMessage();
+      runtime.conversation.stores.conversation
+        .getState()
+        .completeMessage('Hello! How can I help you today?');
 
       const { lastFrame } = render(
         <Box flexDirection="column" height={24}>
@@ -509,17 +512,17 @@ describe('Component Snapshots (ink-testing-library)', () => {
 
     it('renders running state with tool approval', () => {
       // Set up conversation
-      useConversationStore.getState().addUserMessage('Delete all temp files');
-      useConversationStore.getState().startAssistantMessage();
-      useConversationStore.getState().addToolCall({
+      runtime.conversation.stores.conversation.getState().addUserMessage('Delete all temp files');
+      runtime.conversation.stores.conversation.getState().startAssistantMessage();
+      runtime.conversation.stores.conversation.getState().addToolCall({
         id: 'tc-1',
         name: 'Bash',
         arguments: { command: 'rm -rf /tmp/neko-*' },
       });
 
       // Set agent as running
-      useAgentStore.getState().setRunning();
-      useAgentStore.getState().setIteration(1, 5);
+      runtime.conversation.stores.agent.getState().setRunning();
+      runtime.conversation.stores.agent.getState().setIteration(1, 5);
 
       const approval = {
         toolCallId: 'tc-1',
@@ -547,7 +550,7 @@ describe('Component Snapshots (ink-testing-library)', () => {
     });
 
     it('renders multi-message conversation with todos', () => {
-      const store = useConversationStore.getState();
+      const store = runtime.conversation.stores.conversation.getState();
 
       // Turn 1
       store.addUserMessage('Refactor the auth module');
@@ -571,8 +574,8 @@ describe('Component Snapshots (ink-testing-library)', () => {
       store.startAssistantMessage();
       store.appendDelta("Starting the refactor. First, I'll extract the ");
 
-      useAgentStore.getState().setRunning();
-      useAgentStore.getState().updateUsage({
+      runtime.conversation.stores.agent.getState().setRunning();
+      runtime.conversation.stores.agent.getState().updateUsage({
         inputTokens: 5000,
         outputTokens: 1200,
         totalTokens: 6200,

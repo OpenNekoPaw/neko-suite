@@ -10,8 +10,10 @@
 import React from 'react';
 import { Box, Text } from 'ink';
 import { resolveAgentTokenBudget } from '@neko/shared';
-import { useAgentStore } from '../../stores/agent-store';
-import { useConfigStore } from '../../stores/config-store';
+import {
+  useTuiAgentStore as useAgentStore,
+  useTuiConfigStore as useConfigStore,
+} from '../../runtime/tui-runtime-context';
 import { tokens } from '../../theme/tokens';
 import type { AgentTerminalPresentationContext } from '../../presentation/context';
 import { useAgentTerminalPresentation } from '../../presentation/react-context';

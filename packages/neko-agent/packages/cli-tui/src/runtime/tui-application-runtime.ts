@@ -42,6 +42,7 @@ export interface AgentTuiApplicationRuntime {
   getSnapshot(): TuiApplicationRuntimeSnapshot;
   subscribe(listener: () => void): () => void;
   createConversation(options: CreateTuiConversationRuntimeOptions): TuiConversationRuntime;
+  findConversation(conversationId: string): TuiConversationRuntime | undefined;
   requireRuntime(runtimeId: string): TuiConversationRuntime;
   requireConversation(conversationId: string): TuiConversationRuntime;
   requireActiveConversation(): TuiConversationRuntime;
@@ -148,6 +149,12 @@ class DefaultAgentTuiApplicationRuntime implements AgentTuiApplicationRuntime {
       throw new TuiRuntimeError('conversation-not-found', { conversationId });
     }
     return this.requireRuntime(runtimeId);
+  }
+
+  public findConversation(conversationId: string): TuiConversationRuntime | undefined {
+    this.assertReady();
+    const runtimeId = this.runtimeIdsByConversation.get(conversationId);
+    return runtimeId ? this.runtimes.get(runtimeId) : undefined;
   }
 
   public requireActiveConversation(): TuiConversationRuntime {

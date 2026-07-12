@@ -1,9 +1,6 @@
 import type { AgentMessageQueueSnapshot } from '@neko-agent/types';
 import type { Task } from '@neko/shared';
-import { useAgentStore } from '../../stores/agent-store';
-import { useConfigStore } from '../../stores/config-store';
-import { useConversationStore } from '../../stores/conversation-store';
-import { useUIStore } from '../../stores/ui-store';
+import type { TuiConversationStores } from '../../runtime/tui-application-runtime';
 import type { Message } from '../../types/state';
 import type {
   TuiDebugAutomationAppPort,
@@ -28,6 +25,7 @@ export interface TuiAutomationSessionHandle {
 }
 
 export interface TuiAutomationAppPortOptions {
+  readonly stores: TuiConversationStores;
   readonly readHandle: () => TuiAutomationSessionHandle;
   readonly readMarkdownFacts: () => TuiDebugAutomationMarkdownFacts;
 }
@@ -35,6 +33,7 @@ export interface TuiAutomationAppPortOptions {
 export function createTuiAutomationAppPort(
   options: TuiAutomationAppPortOptions,
 ): TuiDebugAutomationAppPort {
+  const { stores } = options;
   const inFlightSubmissions = new Set<Promise<void>>();
   let latestSubmission: Promise<void> | null = null;
   return {
@@ -56,25 +55,25 @@ export function createTuiAutomationAppPort(
           'TUI session is not ready for message submission.',
         );
       }
-      const messageCountBeforeSubmit = useConversationStore.getState().messages.length;
+      const messageCountBeforeSubmit = stores.conversation.getState().messages.length;
       const execution = handle.submit(input.prompt);
       latestSubmission = execution;
       inFlightSubmissions.add(execution);
       void execution.finally(() => {
         inFlightSubmissions.delete(execution);
       });
-      await waitForSubmissionAcceptance(execution, messageCountBeforeSubmit);
+      await waitForSubmissionAcceptance(execution, messageCountBeforeSubmit, stores);
     },
 
     cancelActiveMessage(): boolean {
       const handle = options.readHandle();
-      const wasRunning = useAgentStore.getState().status === 'running';
+      const wasRunning = stores.agent.getState().status === 'running';
       handle.cancel();
       return wasRunning;
     },
 
     resizeTerminal(input): void {
-      useUIStore.getState().setTerminalSize({ columns: input.columns, rows: input.rows });
+      stores.ui.getState().setTerminalSize({ columns: input.columns, rows: input.rows });
     },
 
     async waitForIdle(input): Promise<TuiDebugAutomationIdleState> {
@@ -82,7 +81,7 @@ export function createTuiAutomationAppPort(
       await Promise.all([...inFlightSubmissions]);
       await new Promise<void>((resolve) => setTimeout(resolve, 50));
       return waitForTuiAutomationIdle({
-        readIdle: async () => readTuiAutomationIdleState(options.readHandle()),
+        readIdle: async () => readTuiAutomationIdleState(options.readHandle(), stores),
         timeoutMs: input.timeoutMs,
         pollIntervalMs: input.pollIntervalMs,
       });
@@ -90,16 +89,16 @@ export function createTuiAutomationAppPort(
 
     async readFacts(input): Promise<TuiDebugAutomationSessionFacts> {
       const handle = options.readHandle();
-      const idle = await readTuiAutomationIdleState(handle);
+      const idle = await readTuiAutomationIdleState(handle, stores);
       return {
         sessionId: input.sessionId,
         conversationId: handle.getCurrentConversationId(),
         ready: handle.isReady,
-        model: readModelIdentity(),
+        model: readModelIdentity(stores),
         idle,
-        turns: readTurnSummaries(),
+        turns: readTurnSummaries(stores),
         ...(input.includeHistory ? { history: [...handle.getHistory()] } : {}),
-        skillActivations: [...useAgentStore.getState().activeSkillLifecycleRecords],
+        skillActivations: [...stores.agent.getState().activeSkillLifecycleRecords],
         tasks: (await readTasks(handle)).map((task) => ({
           id: task.id,
           type: task.type,
@@ -108,9 +107,9 @@ export function createTuiAutomationAppPort(
           ...(task.error ? { error: task.error } : {}),
         })),
         messageQueue: handle.getMessageQueueSnapshot(),
-        continuations: readContinuationFacts(handle.getMessageQueueSnapshot()),
-        runtimeErrors: readRuntimeErrors(),
-        canvas: readCanvasFacts(),
+        continuations: readContinuationFacts(handle.getMessageQueueSnapshot(), stores),
+        runtimeErrors: readRuntimeErrors(stores),
+        canvas: readCanvasFacts(stores),
         markdown: options.readMarkdownFacts(),
       };
     },
@@ -120,6 +119,7 @@ export function createTuiAutomationAppPort(
 async function waitForSubmissionAcceptance(
   execution: Promise<void>,
   messageCountBeforeSubmit: number,
+  stores: TuiConversationStores,
 ): Promise<void> {
   let settled = false;
   void execution.finally(() => {
@@ -127,8 +127,8 @@ async function waitForSubmissionAcceptance(
   });
   const startedAt = Date.now();
   for (;;) {
-    if (useAgentStore.getState().status === 'running') return;
-    if (settled && hasProjectedAssistantAfter(messageCountBeforeSubmit)) return;
+    if (stores.agent.getState().status === 'running') return;
+    if (settled && hasProjectedAssistantAfter(messageCountBeforeSubmit, stores)) return;
     if (Date.now() - startedAt >= 5_000) {
       throw new TuiDebugAutomationProtocolError(
         'session-timeout',
@@ -139,8 +139,11 @@ async function waitForSubmissionAcceptance(
   }
 }
 
-function hasProjectedAssistantAfter(messageCountBeforeSubmit: number): boolean {
-  return useConversationStore
+function hasProjectedAssistantAfter(
+  messageCountBeforeSubmit: number,
+  stores: TuiConversationStores,
+): boolean {
+  return stores.conversation
     .getState()
     .messages.slice(messageCountBeforeSubmit)
     .some((message) => message.role === 'assistant');
@@ -170,8 +173,9 @@ async function waitForTuiAutomationIdle(input: {
 
 async function readTuiAutomationIdleState(
   handle: TuiAutomationSessionHandle,
+  stores: TuiConversationStores,
 ): Promise<TuiDebugAutomationIdleState> {
-  const agentState = useAgentStore.getState();
+  const agentState = stores.agent.getState();
   const tasks = await readTasks(handle);
   const runningTasks = tasks.filter((task) => !isTerminalTaskStatus(String(task.status)));
   const taskDiagnostic =
@@ -235,8 +239,8 @@ function isTerminalTaskStatus(status: string): boolean {
   return status === 'completed' || status === 'failed' || status === 'cancelled';
 }
 
-function readModelIdentity(): TuiDebugAutomationSessionFacts['model'] {
-  const config = useConfigStore.getState().config;
+function readModelIdentity(stores: TuiConversationStores): TuiDebugAutomationSessionFacts['model'] {
+  const config = stores.config.getState().config;
   return {
     providerId: config.chatModel?.providerId ?? config.provider,
     modelId: config.chatModel?.modelId ?? config.model,
@@ -246,8 +250,10 @@ function readModelIdentity(): TuiDebugAutomationSessionFacts['model'] {
   };
 }
 
-function readTurnSummaries(): readonly TuiDebugAutomationTurnSummary[] {
-  return useConversationStore.getState().messages.map((message) => ({
+function readTurnSummaries(
+  stores: TuiConversationStores,
+): readonly TuiDebugAutomationTurnSummary[] {
+  return stores.conversation.getState().messages.map((message) => ({
     id: message.id,
     role: message.role,
     ...(message.source ? { source: message.source } : {}),
@@ -271,9 +277,10 @@ function readTurnSummaries(): readonly TuiDebugAutomationTurnSummary[] {
 
 export function readContinuationFacts(
   queueSnapshot: import('@neko-agent/types').AgentMessageQueueSnapshot | null,
+  stores: TuiConversationStores,
 ): import('./types').TuiDebugAutomationContinuationFact[] {
   const facts: import('./types').TuiDebugAutomationContinuationFact[] = [];
-  for (const message of useConversationStore.getState().messages) {
+  for (const message of stores.conversation.getState().messages) {
     if (!message.source || !isContinuationSource(message.source)) continue;
     facts.push({
       id: message.id,
@@ -378,17 +385,17 @@ export function readMessageToolCallSummaries(
   return [...summaries.values()];
 }
 
-function readRuntimeErrors(): readonly string[] {
-  const agentError = useAgentStore.getState().error;
-  const messageErrors = useConversationStore
+function readRuntimeErrors(stores: TuiConversationStores): readonly string[] {
+  const agentError = stores.agent.getState().error;
+  const messageErrors = stores.conversation
     .getState()
     .messages.filter((message) => message.isError)
     .map((message) => message.content);
   return [...(agentError ? [agentError.message] : []), ...messageErrors];
 }
 
-function readCanvasFacts(): TuiDebugAutomationCanvasFacts {
-  const messages = useConversationStore.getState().messages;
+function readCanvasFacts(stores: TuiConversationStores): TuiDebugAutomationCanvasFacts {
+  const messages = stores.conversation.getState().messages;
   const canvasMessages = messages.filter((message) => messageContainsCanvasSignal(message));
   return {
     messageSummaries: canvasMessages.map((message) => message.content).filter(Boolean),

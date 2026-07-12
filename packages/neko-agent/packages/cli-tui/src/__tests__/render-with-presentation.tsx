@@ -3,13 +3,40 @@ import type { SupportedLocale } from '@neko/shared/i18n';
 import { render as renderInk } from 'ink-testing-library';
 import { AgentTerminalPresentationProvider } from '../presentation/react-context';
 import { createTestAgentTerminalPresentation } from '../presentation/testing';
+import { DEFAULT_CLI_CONFIG, type CLIConfig } from '../core/types';
+import {
+  createAgentTuiApplicationRuntime,
+  type AgentTuiApplicationRuntime,
+  type TuiConversationRuntime,
+} from '../runtime/tui-application-runtime';
+import { TuiApplicationRuntimeProvider } from '../runtime/tui-runtime-context';
 
-export function renderWithPresentation(node: ReactElement, locale: SupportedLocale = 'en') {
+export interface TuiTestRuntime {
+  readonly application: AgentTuiApplicationRuntime;
+  readonly conversation: TuiConversationRuntime;
+}
+
+export function createTuiTestRuntime(
+  config: CLIConfig = DEFAULT_CLI_CONFIG,
+  conversationId = 'test-conversation',
+): TuiTestRuntime {
+  const application = createAgentTuiApplicationRuntime();
+  const conversation = application.createConversation({ config, conversationId });
+  return { application, conversation };
+}
+
+export function renderWithPresentation(
+  node: ReactElement,
+  locale: SupportedLocale = 'en',
+  runtime: TuiTestRuntime = createTuiTestRuntime(),
+) {
   const presentation = createTestAgentTerminalPresentation(locale);
   const wrap = (child: ReactElement): ReactElement => (
-    <AgentTerminalPresentationProvider value={presentation}>
-      {child}
-    </AgentTerminalPresentationProvider>
+    <TuiApplicationRuntimeProvider runtime={runtime.application}>
+      <AgentTerminalPresentationProvider value={presentation}>
+        {child}
+      </AgentTerminalPresentationProvider>
+    </TuiApplicationRuntimeProvider>
   );
   const rendered = renderInk(wrap(node));
   const rerender = rendered.rerender;
