@@ -10,7 +10,7 @@ import type {
 import type { AgentLlmRuntimeOptions } from '@neko/agent/runtime';
 import type { MessageAttachment } from '@neko/shared';
 import type { ProviderManager } from './providerManager';
-import type { SettingsManager } from './settingsManager';
+import type { AssistantRuntimeSettingsSnapshot } from '@neko/platform';
 
 export type AgentLlmConfigDiagnosticCode =
   | 'conflicting-media-understanding-purposes'
@@ -41,7 +41,7 @@ export interface ResolveAgentLlmConfigInput {
   readonly llmConfig?: AgentLlmConfig;
   readonly attachments?: readonly MessageAttachment[];
   readonly understandingModels?: MediaUnderstandingModelSelections;
-  readonly settings: SettingsManager;
+  readonly settings: AssistantRuntimeSettingsSnapshot;
   readonly providers: ProviderManager;
   readonly platform?: Platform;
 }

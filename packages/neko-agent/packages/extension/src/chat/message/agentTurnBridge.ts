@@ -7,7 +7,7 @@
  */
 
 import * as vscode from 'vscode';
-import type { Platform } from '@neko/platform';
+import type { AssistantRuntimeSettingsSnapshot, Platform } from '@neko/platform';
 import { buildAgentSessionDiagnosticMessage } from '@neko-agent/types';
 import type {
   AgentLlmConfig,
@@ -46,7 +46,6 @@ import type {
   ConversationTerminalPersistenceResult,
 } from '../conversationBridge';
 import type { ProviderManager } from '../providerManager';
-import type { SettingsManager } from '../settingsManager';
 import type {
   AgentStreamLifecycleResult,
   AgentStreamProcessor,
@@ -56,7 +55,6 @@ import type { AccountAiCatalogCache } from '../../services/accountAiCatalogCache
 import { loadWorkspaceFileIgnoreRules } from '../../services/workspaceIgnoreFilter';
 
 export interface AgentTurnBridgeDeps {
-  settings: SettingsManager;
   providers: ProviderManager;
   conversations: ConversationBridge;
   agentManager?: IAgentManager;
@@ -139,6 +137,7 @@ export interface ExecuteAgentTurnForWebviewInput {
   understandingModels?: MediaUnderstandingModelSelections;
   executionOverrides?: AgentMessageExecutionOverrides;
   locale?: string;
+  settings: AssistantRuntimeSettingsSnapshot;
 }
 
 export class AgentTurnBridge {
@@ -149,6 +148,7 @@ export class AgentTurnBridge {
   }
 
   async execute(input: ExecuteAgentTurnForWebviewInput): Promise<AgentTurnBridgeExecutionResult> {
+    const turnSettings = input.settings;
     await this.refreshAccountCatalogForTurn(input.chatModel?.providerId);
     const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
     const workspaceIgnoreRules = workspaceRoot
@@ -195,12 +195,12 @@ export class AgentTurnBridge {
         imageAttachments: input.imageAttachments,
         executionOverrides: input.executionOverrides,
         settings: {
-          customSystemPrompt: this.deps.settings.customSystemPrompt,
-          executionMode: this.deps.settings.executionMode,
-          autoExecuteTools: this.deps.settings.autoExecuteTools,
-          temperature: this.deps.settings.temperature,
-          maxTokens: this.deps.settings.maxTokens,
-          thinkingBudget: this.deps.settings.thinkingBudget,
+          customSystemPrompt: turnSettings.customSystemPrompt,
+          executionMode: turnSettings.executionMode,
+          autoExecuteTools: turnSettings.autoExecuteTools,
+          temperature: turnSettings.temperature,
+          maxTokens: turnSettings.maxTokens,
+          thinkingBudget: turnSettings.thinkingBudget,
         },
         providers: {
           getProvider: (providerId) => this.deps.providers.getProvider(providerId),

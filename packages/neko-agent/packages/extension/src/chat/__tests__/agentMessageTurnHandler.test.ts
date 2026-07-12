@@ -200,17 +200,34 @@ function createChatModelRequest(
 
 /** Minimal SettingsManager-shaped object */
 function createMockSettings() {
-  return {
+  const settings = {
     selectedProviderId: null as string | null,
     selectedModelId: null as string | null,
     customSystemPrompt: '',
     autoExecuteTools: true,
+    streamResponses: true,
+    showToolCalls: true,
     temperature: 0.7,
     maxTokens: 8192,
+    thinkingBudget: 2048,
     executionMode: 'ask' as const,
-    get: vi.fn((key: string) => undefined),
-    update: vi.fn(),
+    snapshotForConversation: vi.fn(),
   };
+  settings.snapshotForConversation.mockImplementation(() =>
+    Object.freeze({
+      selectedProviderId: settings.selectedProviderId,
+      selectedModelId: settings.selectedModelId,
+      customSystemPrompt: settings.customSystemPrompt,
+      autoExecuteTools: settings.autoExecuteTools,
+      streamResponses: settings.streamResponses,
+      showToolCalls: settings.showToolCalls,
+      temperature: settings.temperature,
+      maxTokens: settings.maxTokens,
+      thinkingBudget: settings.thinkingBudget,
+      executionMode: settings.executionMode,
+    }),
+  );
+  return settings;
 }
 
 /** Minimal ProviderManager-shaped object — no configured provider by default */
@@ -699,6 +716,50 @@ describe('AgentMessageTurnHandler', () => {
   });
 
   describe('Agent LLM composer configuration', () => {
+    it('captures conversation settings once and keeps the active turn snapshot immutable', async () => {
+      const settings = createMockSettings();
+      const captured = Object.freeze({
+        selectedProviderId: 'anthropic',
+        selectedModelId: 'claude-3',
+        customSystemPrompt: 'captured prompt',
+        autoExecuteTools: true,
+        streamResponses: true,
+        showToolCalls: true,
+        temperature: 0.25,
+        maxTokens: 4096,
+        thinkingBudget: 1024,
+        executionMode: 'ask' as const,
+      });
+      settings.snapshotForConversation.mockReturnValueOnce(captured).mockReturnValue(
+        Object.freeze({
+          ...captured,
+          selectedProviderId: 'future-provider',
+          selectedModelId: 'future-model',
+          temperature: 0.9,
+        }),
+      );
+      const agentManager = createMockAgentManager();
+      const agentRunner = agentManager.getOrCreate();
+      const handler = buildHandler({ settings, agentManager });
+
+      await handler.handleUserMessage(
+        createMockWebview() as any,
+        createMessageRequest('use the captured conversation configuration'),
+      );
+
+      expect(settings.snapshotForConversation).toHaveBeenCalledTimes(1);
+      expect(settings.snapshotForConversation).toHaveBeenCalledWith('conv-1');
+      expect(agentRunner.configure).toHaveBeenCalledWith(
+        expect.objectContaining({
+          providerId: 'anthropic',
+          modelId: 'claude-3',
+          temperature: 0.25,
+          maxTokens: 4096,
+          thinkingBudget: 1024,
+        }),
+      );
+    });
+
     it('uses the DeepSeek direct default after config reload clears stale gateway selection', async () => {
       const settings = createMockSettings();
       settings.selectedProviderId = 'deepseek-chat';
@@ -828,6 +889,7 @@ describe('AgentMessageTurnHandler', () => {
         autoExecuteTools: true,
         temperature: 0.7,
         maxTokens: 8192,
+        thinkingBudget: 2048,
         providerId: 'anthropic',
         modelId: 'claude-3',
         modelCapabilities: ['chat', 'thinking', 'sampling'],

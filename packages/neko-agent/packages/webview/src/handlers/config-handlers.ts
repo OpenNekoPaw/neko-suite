@@ -60,10 +60,13 @@ const handleSettingsData: MessageHandler<'settingsData'> = (
       selectedProviderId: defaultChatModel.providerId,
       selectedModelId: defaultChatModel.modelId,
     });
-    AgentHostMessages.updateSettings({
-      providerId: defaultChatModel.providerId,
-      modelId: defaultChatModel.modelId,
-    });
+    AgentHostMessages.updateSettings(
+      {
+        providerId: defaultChatModel.providerId,
+        modelId: defaultChatModel.modelId,
+      },
+      message.conversationId,
+    );
   }
 
   if (Object.keys(projection.defaultMediaModels).length > 0) {

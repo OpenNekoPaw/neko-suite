@@ -1,17 +1,23 @@
 import { describe, it, expect, vi, beforeEach, beforeAll } from 'vitest';
 
-// Mock VSCode API - must be before any imports that use it
-const mockPostMessage = vi.fn();
-const mockVSCodeApi = {
-  postMessage: mockPostMessage,
-  getState: vi.fn(),
-  setState: vi.fn(),
-};
-
-// Setup global mock before module loads
-beforeAll(() => {
-  (globalThis as Record<string, unknown>).acquireVsCodeApi = () => mockVSCodeApi;
+const { mockPostMessage, mockGetState, mockSetState, mockVSCodeApi } = vi.hoisted(() => {
+  const postMessage = vi.fn();
+  const getState = vi.fn();
+  const setState = vi.fn();
+  return {
+    mockPostMessage: postMessage,
+    mockGetState: getState,
+    mockSetState: setState,
+    mockVSCodeApi: { postMessage, getState, setState },
+  };
 });
+
+vi.mock('@neko/shared/vscode', () => ({
+  getVSCodeAPI: () => mockVSCodeApi,
+  postMessage: mockPostMessage,
+  getState: mockGetState,
+  setState: mockSetState,
+}));
 
 // Dynamic import to ensure mock is set up first
 let postMessage: typeof import('../../../messages').postMessage;
@@ -23,8 +29,6 @@ let setAgentHostRuntimeAdapter: typeof import('../../../messages').setAgentHostR
 let createVSCodeAgentHostRuntimeAdapter: typeof import('../../../messages').createVSCodeAgentHostRuntimeAdapter;
 
 beforeAll(async () => {
-  // Clear module cache to ensure fresh import with mock
-  vi.resetModules();
   const module = await import('../../../messages');
   postMessage = module.postMessage;
   AgentHostMessages = module.AgentHostMessages;
@@ -75,12 +79,15 @@ describe('messages', () => {
         runtimeId: 'agent-vscode-test',
       });
 
-      adapter.send({ type: 'getSettings' });
+      adapter.send({ type: 'getSettings', conversationId: 'conversation-1' });
       adapter.setState({ openTabs: [] });
 
       expect(adapter.hostKind).toBe('vscode');
       expect(adapter.runtimeId).toBe('agent-vscode-test');
-      expect(mockPostMessage).toHaveBeenCalledWith({ type: 'getSettings' });
+      expect(mockPostMessage).toHaveBeenCalledWith({
+        type: 'getSettings',
+        conversationId: 'conversation-1',
+      });
       expect(mockVSCodeApi.setState).toHaveBeenCalledWith({ openTabs: [] });
     });
 
@@ -101,9 +108,9 @@ describe('messages', () => {
         setState: vi.fn(),
       });
 
-      AgentHostMessages.getSettings();
+      AgentHostMessages.getSettings('conversation-1');
 
-      expect(sent).toEqual([{ type: 'getSettings' }]);
+      expect(sent).toEqual([{ type: 'getSettings', conversationId: 'conversation-1' }]);
       expect(mockPostMessage).not.toHaveBeenCalled();
       expect(getAgentHostRuntimeAdapter().getState()).toEqual({ source: 'fake-host' });
       subscription.dispose();
@@ -232,8 +239,11 @@ describe('messages', () => {
 
     describe('settings', () => {
       it('should post getSettings', () => {
-        VSCodeMessages.getSettings();
-        expect(mockPostMessage).toHaveBeenCalledWith({ type: 'getSettings' });
+        VSCodeMessages.getSettings('conversation-1');
+        expect(mockPostMessage).toHaveBeenCalledWith({
+          type: 'getSettings',
+          conversationId: 'conversation-1',
+        });
       });
 
       it('should post lifecycle config snapshot refresh', () => {
@@ -242,10 +252,11 @@ describe('messages', () => {
       });
 
       it('should post updateSettings with data', () => {
-        VSCodeMessages.updateSettings({ executionMode: 'auto' });
+        VSCodeMessages.updateSettings({ executionMode: 'auto' }, 'conversation-1');
         expect(mockPostMessage).toHaveBeenCalledWith({
           type: 'updateSettings',
           settings: { executionMode: 'auto' },
+          conversationId: 'conversation-1',
         });
       });
 

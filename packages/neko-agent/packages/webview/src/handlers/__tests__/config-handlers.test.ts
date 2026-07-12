@@ -37,6 +37,7 @@ describe('configHandlers', () => {
     dispatch(
       {
         type: 'settingsData',
+        conversationId: 'conversation-1',
         providers: [],
         selectedProviderId: null,
         selectedModelId: null,
@@ -63,6 +64,7 @@ describe('configHandlers', () => {
     dispatch(
       {
         type: 'settingsData',
+        conversationId: 'conversation-1',
         providers: [],
         selectedProviderId: null,
         selectedModelId: null,
@@ -84,6 +86,7 @@ describe('configHandlers', () => {
     dispatch(
       {
         type: 'settingsData',
+        conversationId: 'conversation-1',
         providers: [],
         selectedProviderId: 'openai',
         selectedModelId: 'gpt-4.1',
@@ -101,6 +104,7 @@ describe('configHandlers', () => {
     dispatch(
       {
         type: 'settingsData',
+        conversationId: 'conversation-1',
         providers: [],
         selectedProviderId: 'deepseek-chat',
         selectedModelId: 'deepseek-v4-pro',
@@ -133,6 +137,7 @@ describe('configHandlers', () => {
     dispatch(
       {
         type: 'settingsData',
+        conversationId: 'conversation-1',
         providers: [],
         selectedProviderId: null,
         selectedModelId: null,
@@ -154,10 +159,13 @@ describe('configHandlers', () => {
       selectedProviderId: 'neko-account-gateway',
       selectedModelId: 'auto',
     });
-    expect(messageMocks.updateSettingsMessage).toHaveBeenCalledWith({
-      providerId: 'neko-account-gateway',
-      modelId: 'auto',
-    });
+    expect(messageMocks.updateSettingsMessage).toHaveBeenCalledWith(
+      {
+        providerId: 'neko-account-gateway',
+        modelId: 'auto',
+      },
+      'conversation-1',
+    );
   });
 
   it('prefers explicit config LLM models over account gateway models for automatic hydration', () => {
@@ -166,6 +174,7 @@ describe('configHandlers', () => {
     dispatch(
       {
         type: 'settingsData',
+        conversationId: 'conversation-1',
         providers: [],
         selectedProviderId: null,
         selectedModelId: null,
@@ -196,10 +205,13 @@ describe('configHandlers', () => {
       selectedProviderId: 'deepseek-direct',
       selectedModelId: 'deepseek-chat',
     });
-    expect(messageMocks.updateSettingsMessage).toHaveBeenCalledWith({
-      providerId: 'deepseek-direct',
-      modelId: 'deepseek-chat',
-    });
+    expect(messageMocks.updateSettingsMessage).toHaveBeenCalledWith(
+      {
+        providerId: 'deepseek-direct',
+        modelId: 'deepseek-chat',
+      },
+      'conversation-1',
+    );
   });
 
   it('keeps missing config diagnostics in state without a global error', () => {

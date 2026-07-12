@@ -20,6 +20,7 @@ describe('config message presenter', () => {
     expect(
       projectSettingsDataMessage({
         type: 'settingsData',
+        conversationId: 'conversation-1',
         providers: [
           {
             id: 'openai',
@@ -150,6 +151,7 @@ describe('config message presenter', () => {
     expect(
       projectSettingsDataMessage({
         type: 'settingsData',
+        conversationId: 'conversation-1',
         mediaUnderstandingModels: {
           image: {
             category: 'image',

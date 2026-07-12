@@ -8,6 +8,7 @@
  */
 
 import * as vscode from 'vscode';
+import { normalizeLocale } from '@neko/shared/i18n';
 import {
   buildConversationHistoryClearedMessage,
   buildExtensionSlashStatusPayload,
@@ -123,7 +124,7 @@ export class SlashCommandHandler {
 
       const result = await runExtensionSlashCommandRuntime(
         { command, conversationId, ...(args !== undefined ? { args } : {}) },
-        this._createRuntimeDeps(webview),
+        this._createRuntimeDeps(webview, conversationId),
         this._createRuntimeEffects(webview),
       );
       logger.debug('neko.agent.command.slash.result', {
@@ -151,15 +152,21 @@ export class SlashCommandHandler {
     webview.postMessage(
       buildExtensionSlashStatusPayload({
         conversationId,
-        deps: this._createRuntimeDeps(webview),
+        deps: this._createRuntimeDeps(webview, conversationId),
       }),
     );
   }
 
-  private _createRuntimeDeps(webview: vscode.Webview): ExtensionSlashCommandRuntimeDeps {
+  private _createRuntimeDeps(
+    webview: vscode.Webview,
+    conversationId: string,
+  ): ExtensionSlashCommandRuntimeDeps {
     const skillService = this.deps.skillHandler.getSkillService();
 
+    const settings = this.deps.settings.snapshotForConversation(conversationId);
+
     return {
+      locale: normalizeLocale(vscode.env.language),
       conversations: {
         list: () => this.deps.conversations.list(),
         getMessageCount: (conversationId) =>
@@ -188,9 +195,9 @@ export class SlashCommandHandler {
           ),
       },
       settings: {
-        provider: this.deps.settings.selectedProviderId,
-        model: this.deps.settings.selectedModelId,
-        executionMode: this.deps.settings.executionMode,
+        provider: settings.selectedProviderId,
+        model: settings.selectedModelId,
+        executionMode: settings.executionMode,
       },
       planMode: {
         isEnabled: (conversationId) => this.deps.systemPrompt.isPlanMode(conversationId),

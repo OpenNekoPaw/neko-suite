@@ -129,6 +129,33 @@ describe('webview protocol parser', () => {
     ).toBeNull();
   });
 
+  it('requires explicit conversation scope for settings reads and writes', () => {
+    expect(
+      parseWebviewToExtensionMessage({
+        type: 'getSettings',
+        conversationId: 'conv-1',
+      }),
+    ).toEqual({ type: 'getSettings', conversationId: 'conv-1' });
+    expect(parseWebviewToExtensionMessage({ type: 'getSettings' })).toBeNull();
+    expect(
+      parseWebviewToExtensionMessage({
+        type: 'updateSettings',
+        conversationId: 'conv-1',
+        settings: { executionMode: 'auto' },
+      }),
+    ).toEqual({
+      type: 'updateSettings',
+      conversationId: 'conv-1',
+      settings: { executionMode: 'auto' },
+    });
+    expect(
+      parseWebviewToExtensionMessage({
+        type: 'updateSettings',
+        settings: { executionMode: 'auto' },
+      }),
+    ).toBeNull();
+  });
+
   it('accepts starting Character Dialogue from slash args without conversation scope', () => {
     expect(
       parseWebviewToExtensionMessage({

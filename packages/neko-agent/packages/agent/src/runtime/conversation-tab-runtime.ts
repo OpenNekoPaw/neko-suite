@@ -75,7 +75,7 @@ export interface UpdateTabStateRuntimeResult {
 export type ChatRestorePlanAction =
   | { type: 'syncCanvasAmbientScope' }
   | { type: 'sendConversationList' }
-  | { type: 'sendSettings' }
+  | { type: 'sendSettings'; conversationId: string }
   | { type: 'postTabState'; message: TabStateMessage }
   | { type: 'sendActiveConversationTasks' }
   | { type: 'sendAgentStateSnapshot' }
@@ -198,13 +198,16 @@ export function buildChatRestorePlan(input: BuildChatRestorePlanInput): ChatRest
     return { actions };
   }
 
-  actions.push(
-    { type: 'sendSettings' },
-    {
-      type: 'postTabState',
-      message: buildTabStateMessage(input.tabState, input.tabStateRevision),
-    },
-  );
+  const activeTab = input.tabState.activeTabId
+    ? input.tabState.openTabs.find((tab) => tab.id === input.tabState.activeTabId)
+    : undefined;
+  if (activeTab) {
+    actions.push({ type: 'sendSettings', conversationId: activeTab.conversationId });
+  }
+  actions.push({
+    type: 'postTabState',
+    message: buildTabStateMessage(input.tabState, input.tabStateRevision),
+  });
 
   actions.push({ type: 'sendActiveConversationTasks' }, { type: 'sendAgentStateSnapshot' });
 

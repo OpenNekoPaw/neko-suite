@@ -8,7 +8,7 @@
 
 import * as vscode from 'vscode';
 import * as path from 'node:path';
-import type { Platform } from '@neko/platform';
+import type { AssistantRuntimeSettingsSnapshot, Platform } from '@neko/platform';
 import type {
   AgentTaskResultFollowUpRequest,
   Task,
@@ -173,7 +173,6 @@ export class AgentMessageTurnHandler {
       entityMemoryContributionAutomation: createVSCodeEntityMemoryContributionAutomation(),
     });
     this._agentTurnBridge = new AgentTurnBridge({
-      settings: this._settings,
       providers: this._providers,
       conversations: this._conversations,
       agentManager: this._agentManager,
@@ -243,7 +242,8 @@ export class AgentMessageTurnHandler {
       ...request,
       locale: request.locale ?? vscode.env.language,
     };
-    const resolvedRequest = this._resolveAgentTurnRequest(webview, localizedRequest);
+    const turnSettings = this._settings.snapshotForConversation(localizedRequest.conversationId);
+    const resolvedRequest = this._resolveAgentTurnRequest(webview, localizedRequest, turnSettings);
     if (!resolvedRequest) {
       return;
     }
@@ -329,6 +329,7 @@ export class AgentMessageTurnHandler {
                 understandingModels,
                 executionOverrides,
                 locale,
+                settings: turnSettings,
               })
           : undefined,
       onMissingConversationId: () => {
@@ -354,7 +355,8 @@ export class AgentMessageTurnHandler {
       sessionMode: 'agent',
       locale: vscode.env.language,
     };
-    const resolvedRequest = this._resolveAgentTurnRequest(webview, localizedRequest);
+    const turnSettings = this._settings.snapshotForConversation(localizedRequest.conversationId);
+    const resolvedRequest = this._resolveAgentTurnRequest(webview, localizedRequest, turnSettings);
     if (!resolvedRequest) {
       return;
     }
@@ -373,12 +375,14 @@ export class AgentMessageTurnHandler {
       mediaModels: resolvedRequest.mediaModels,
       executionOverrides: resolvedRequest.executionOverrides,
       locale: resolvedRequest.locale,
+      settings: turnSettings,
     });
   }
 
   private _resolveAgentTurnRequest(
     webview: vscode.Webview,
     request: AgentMessageRuntimeRequest,
+    settings: AssistantRuntimeSettingsSnapshot,
   ): AgentMessageRuntimeRequest | null {
     const resolved = resolveAgentLlmConfigForTurn({
       sessionMode: request.sessionMode,
@@ -387,7 +391,7 @@ export class AgentMessageTurnHandler {
       llmConfig: request.llmConfig,
       attachments: request.attachments,
       understandingModels: request.understandingModels,
-      settings: this._settings,
+      settings,
       providers: this._providers,
       platform: this._platform,
     });

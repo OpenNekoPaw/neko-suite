@@ -594,12 +594,18 @@ export function ConversationController({
         selectedProviderId,
         selectedModelId,
       });
-      AgentHostMessages.updateSettings({
-        providerId: selectedProviderId,
-        modelId: selectedModelId,
-      });
+      if (!visibleConversationId) {
+        throw new Error('Cannot update Agent model without a visible conversation runtime.');
+      }
+      AgentHostMessages.updateSettings(
+        {
+          providerId: selectedProviderId,
+          modelId: selectedModelId,
+        },
+        visibleConversationId,
+      );
     },
-    [activeSettings.chatModelOptions, updateSettings],
+    [activeSettings.chatModelOptions, updateSettings, visibleConversationId],
   );
   const conversationKind = activeOpenTab?.kind ?? 'chat';
   const embodyCharacterSession = activeOpenTab?.embodyCharacterSession;

@@ -184,8 +184,8 @@ export const AgentHostMessages = {
   },
 
   /** Request current settings */
-  getSettings: () => {
-    postWebviewMessage({ type: 'getSettings' });
+  getSettings: (conversationId: string) => {
+    postConversationMessage({ type: 'getSettings', conversationId });
   },
 
   /** Request a lifecycle-scoped config/settings snapshot */
@@ -223,15 +223,11 @@ export const AgentHostMessages = {
    * Update settings
    * @param settings - Settings object to update
    */
-  updateSettings: (settings: Record<string, unknown>, conversationId?: string) => {
-    const scopedConversationId =
-      conversationId === undefined
-        ? undefined
-        : requireConversationId('updateSettings', conversationId);
-    postWebviewMessage({
+  updateSettings: (settings: Record<string, unknown>, conversationId: string) => {
+    postConversationMessage({
       type: 'updateSettings',
       settings,
-      ...(scopedConversationId ? { conversationId: scopedConversationId } : {}),
+      conversationId: requireConversationId('updateSettings', conversationId),
     });
   },
 

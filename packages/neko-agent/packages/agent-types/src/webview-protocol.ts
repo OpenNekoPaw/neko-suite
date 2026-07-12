@@ -227,7 +227,6 @@ export interface EmptyWebviewMessage {
     | 'getConversations'
     | 'getActiveConversation'
     | 'getAgentStates'
-    | 'getSettings'
     | 'getConfig'
     | 'refreshConfigSnapshot'
     | 'getSkills'
@@ -252,10 +251,15 @@ export interface PlanStepActionWebviewMessage {
   newDescription?: string;
 }
 
+export interface GetSettingsWebviewMessage {
+  type: 'getSettings';
+  conversationId: string;
+}
+
 export interface UpdateSettingsWebviewMessage {
   type: 'updateSettings';
   settings: Record<string, unknown>;
-  conversationId?: string;
+  conversationId: string;
 }
 
 export interface ActivateConversationWebviewMessage {
@@ -489,6 +493,7 @@ export type WebviewToExtensionMessage =
   | DeleteConversationWebviewMessage
   | ConversationLifecycleWebviewMessage
   | EmptyWebviewMessage
+  | GetSettingsWebviewMessage
   | PlanActionWebviewMessage
   | PlanStepActionWebviewMessage
   | UpdateSettingsWebviewMessage
@@ -764,6 +769,7 @@ export interface ActiveConversationMessage {
 
 export interface SettingsDataMessage {
   type: 'settingsData';
+  conversationId: string;
   providers?: SettingsState['providers'];
   configuredProviders?: ConfiguredProvider[];
   selectedProviderId?: string | null;
@@ -1213,7 +1219,6 @@ const EMPTY_MESSAGE_TYPES: readonly EmptyWebviewMessage['type'][] = [
   'getConversations',
   'getActiveConversation',
   'getAgentStates',
-  'getSettings',
   'getConfig',
   'refreshConfigSnapshot',
   'getSkills',
@@ -1849,6 +1854,10 @@ export function parseWebviewToExtensionMessage(raw: unknown): WebviewToExtension
   if (type === 'activateConversation') {
     return parseActivateConversationMessage(raw);
   }
+  if (type === 'getSettings') {
+    const conversationId = requiredString(raw.conversationId);
+    return conversationId ? { type, conversationId } : null;
+  }
   if (isEmptyMessageType(type)) {
     return { type };
   }
@@ -2250,11 +2259,12 @@ function parsePlanStepActionMessage(
 function parseUpdateSettingsMessage(
   raw: Record<string, unknown>,
 ): UpdateSettingsWebviewMessage | null {
-  if (!isRecord(raw.settings)) return null;
+  const conversationId = requiredString(raw.conversationId);
+  if (!isRecord(raw.settings) || !conversationId) return null;
   return {
     type: 'updateSettings',
     settings: raw.settings,
-    ...(typeof raw.conversationId === 'string' ? { conversationId: raw.conversationId } : {}),
+    conversationId,
   };
 }
 

@@ -203,7 +203,7 @@ describe('conversation-tab-runtime', () => {
     ).toEqual({
       actions: [
         { type: 'sendConversationList' },
-        { type: 'sendSettings' },
+        { type: 'sendSettings', conversationId: 'conv-1' },
         {
           type: 'postTabState',
           message: {

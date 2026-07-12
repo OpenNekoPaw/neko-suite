@@ -346,6 +346,9 @@ export function mapWebviewSettingsToUnifiedScalars(
   if (typeof settings.maxTokens === 'number' && Number.isFinite(settings.maxTokens)) {
     mapped.maxTokens = settings.maxTokens;
   }
+  if (typeof settings.thinkingBudget === 'number' && Number.isFinite(settings.thinkingBudget)) {
+    mapped.thinkingBudget = settings.thinkingBudget;
+  }
   const executionMode = parseExecutionMode(settings.executionMode);
   if (executionMode) {
     mapped.executionMode = executionMode;

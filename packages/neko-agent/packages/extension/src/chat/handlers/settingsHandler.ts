@@ -24,16 +24,7 @@ import {
 } from '@neko/shared';
 import { buildAgentCapabilityActivationProgressMessage } from '@neko-agent/types';
 import { getLogger } from '../../base';
-import { AGENT_SESSION_CONFIG_LOCKED_MESSAGE } from '@neko/agent/runtime';
-import type { Task } from '@neko/shared';
-
-interface AgentRunStateReader {
-  hasRunningAgents(): boolean;
-}
-
-interface AgentTaskStateReader {
-  list(): Promise<readonly Task[]>;
-}
+import type { SettingsManager } from '../settingsManager';
 
 /**
  * Dependencies for SettingsHandler
@@ -41,8 +32,7 @@ interface AgentTaskStateReader {
 export interface SettingsHandlerDeps {
   platform?: Platform;
   accountAiCatalog?: AccountAiCatalogCache;
-  agentRunState?: AgentRunStateReader;
-  taskState?: AgentTaskStateReader;
+  conversationSettings?: SettingsManager;
 }
 
 const logger = getLogger('SettingsHandler');
@@ -62,7 +52,7 @@ export class SettingsHandler {
    */
   async sendSettings(
     webview: vscode.Webview,
-    options: { readonly reloadConfig?: boolean } = {},
+    options: { readonly conversationId: string; readonly reloadConfig?: boolean },
   ): Promise<void> {
     if (!this.deps.platform) return;
     try {
@@ -70,6 +60,7 @@ export class SettingsHandler {
         this.deps.platform.config.reloadConfig();
       }
 
+      const conversationSettings = this.requireConversationSettings();
       const accountCatalog = await this.getAccountCatalogForSettingsProjection();
       const message = buildAssistantSettingsRuntimeDataMessage({
         getSettingsData: () =>
@@ -78,7 +69,13 @@ export class SettingsHandler {
           }),
       });
       if (message) {
-        void webview.postMessage(message);
+        const snapshot = conversationSettings.snapshotForConversation(options.conversationId);
+        void webview.postMessage({
+          ...message,
+          ...snapshot,
+          conversationId: options.conversationId,
+          systemPrompt: snapshot.customSystemPrompt,
+        });
       }
     } catch (error) {
       logger.warn('Failed to send Agent settings data:', error);
@@ -97,39 +94,37 @@ export class SettingsHandler {
   async handleUpdateSettings(
     webview: vscode.Webview,
     settings: Record<string, unknown>,
-    options: { readonly conversationId?: string } = {},
+    options: { readonly conversationId: string },
   ): Promise<void> {
-    if (!this.deps.platform) {
+    const conversationSettings = this.deps.conversationSettings;
+    if (!conversationSettings) {
       webview.postMessage(
         buildAssistantSettingsUpdatedMessage({
           success: false,
-          error: 'Platform is not initialized',
+          error: 'Conversation settings runtime is not initialized',
         }),
       );
       return;
     }
-
-    const platform = this.deps.platform;
     const executionMode = readExecutionMode(settings['executionMode']);
-    const activationIntent =
-      executionMode && options.conversationId
-        ? createAgentCapabilityActivationIntent({
-            conversationId: options.conversationId,
-            source: 'user-explicit',
-            target: 'execution-mode',
-            action: 'set',
-            name: executionMode,
-            requestedBy: 'user',
-            reason: `Execution mode selector set ${executionMode}`,
-            createdAt: Date.now(),
-          })
-        : null;
+    const activationIntent = executionMode
+      ? createAgentCapabilityActivationIntent({
+          conversationId: options.conversationId,
+          source: 'user-explicit',
+          target: 'execution-mode',
+          action: 'set',
+          name: executionMode,
+          requestedBy: 'user',
+          reason: `Execution mode selector set ${executionMode}`,
+          createdAt: Date.now(),
+        })
+      : null;
     const emit = (
       step: Parameters<typeof createAgentCapabilityActivationProgressEvent>[0]['step'],
       status: Parameters<typeof createAgentCapabilityActivationProgressEvent>[0]['status'],
       extra: Partial<Parameters<typeof createAgentCapabilityActivationProgressEvent>[0]> = {},
     ) => {
-      if (!activationIntent || !options.conversationId) return;
+      if (!activationIntent) return;
       const event = createAgentCapabilityActivationProgressEvent({
         intent: activationIntent,
         step,
@@ -151,10 +146,7 @@ export class SettingsHandler {
     }
     const message = await runAssistantSettingsUpdateRuntime(settings, {
       updateSettingsFromWebview: async (updates) => {
-        if (this.isModelConfigurationUpdate(updates)) {
-          await this.assertModelConfigurationUnlocked();
-        }
-        await platform.config.applyRuntimeAssistantSettingsFromWebview(updates);
+        await conversationSettings.updateConversation(options.conversationId, updates);
       },
     });
     if (activationIntent) {
@@ -176,22 +168,12 @@ export class SettingsHandler {
     webview.postMessage(message);
   }
 
-  private async assertModelConfigurationUnlocked(): Promise<void> {
-    if (this.deps.agentRunState?.hasRunningAgents()) {
-      throw new Error(AGENT_SESSION_CONFIG_LOCKED_MESSAGE);
+  private requireConversationSettings(): SettingsManager {
+    const settings = this.deps.conversationSettings;
+    if (!settings) {
+      throw new Error('Conversation settings runtime is not initialized');
     }
-    if (await this.hasActiveTasks()) {
-      throw new Error(AGENT_SESSION_CONFIG_LOCKED_MESSAGE);
-    }
-  }
-
-  private async hasActiveTasks(): Promise<boolean> {
-    const tasks = await this.deps.taskState?.list();
-    return tasks?.some((task) => task.status === 'pending' || task.status === 'running') ?? false;
-  }
-
-  private isModelConfigurationUpdate(settings: Record<string, unknown>): boolean {
-    return MODEL_CONFIGURATION_UPDATE_KEYS.some((key) => key in settings);
+    return settings;
   }
 
   private async getAccountCatalogForSettingsProjection() {
@@ -208,28 +190,6 @@ export class SettingsHandler {
     }
   }
 }
-
-const MODEL_CONFIGURATION_UPDATE_KEYS = [
-  'providerId',
-  'modelId',
-  'selectedProviderId',
-  'selectedModelId',
-  'defaultProvider',
-  'defaultModel',
-  'defaultModels',
-  'defaultMediaModels',
-  'temperature',
-  'topP',
-  'maxTokens',
-  'maxOutputTokens',
-  'reasoningEffort',
-  'thinkingBudget',
-  'verbosity',
-  'serviceTier',
-  'llmConfig',
-  'agentModels',
-  'mediaModelSelection',
-] as const;
 
 function readExecutionMode(value: unknown): 'plan' | 'ask' | 'auto' | null {
   return value === 'plan' || value === 'ask' || value === 'auto' ? value : null;

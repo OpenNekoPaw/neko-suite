@@ -1,9 +1,4 @@
-/**
- * SettingsHandler unit tests
- */
-
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { AGENT_SESSION_CONFIG_LOCKED_MESSAGE } from '@neko/agent/runtime';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { SettingsHandler } from '../settingsHandler';
 
 function createMockWebview() {
@@ -15,352 +10,180 @@ function createMockPlatform() {
     config: {
       reloadConfig: vi.fn(),
       getAssistantSettingsData: vi.fn().mockReturnValue({
-        providers: [
-          { id: 'anthropic', name: 'Anthropic', type: 'anthropic', models: [], enabled: true },
-        ],
-        configuredProviders: [
-          { id: 'anthropic', name: 'Anthropic', type: 'anthropic', models: [], enabled: true },
-        ],
-        selectedProviderId: 'anthropic',
-        selectedModelId: 'claude-3',
-        customSystemPrompt: 'You are a helpful assistant',
+        providers: [],
+        configuredProviders: [],
+        selectedProviderId: 'global-provider',
+        selectedModelId: 'global-model',
+        customSystemPrompt: '',
         autoExecuteTools: true,
         streamResponses: true,
         showToolCalls: true,
         temperature: 0.7,
-        maxTokens: 4096,
-        executionMode: 'auto',
+        maxTokens: 8192,
+        executionMode: 'ask',
         chatModelOptions: [],
+        modelGroups: [],
         defaultMediaModels: {},
       }),
-      applyRuntimeAssistantSettingsFromWebview: vi.fn().mockResolvedValue(undefined),
+      applyRuntimeAssistantSettingsFromWebview: vi.fn(() => {
+        throw new Error('legacy global settings path used');
+      }),
     },
   };
 }
 
+function createConversationSettings() {
+  return {
+    snapshotForConversation: vi.fn((conversationId: string) => ({
+      selectedProviderId: `${conversationId}-provider`,
+      selectedModelId: `${conversationId}-model`,
+      customSystemPrompt: `${conversationId}-prompt`,
+      autoExecuteTools: true,
+      streamResponses: true,
+      showToolCalls: true,
+      temperature: 0.2,
+      maxTokens: 4096,
+      thinkingBudget: 1024,
+      executionMode: 'ask',
+    })),
+    updateConversation: vi.fn(),
+  };
+}
+
 describe('SettingsHandler', () => {
-  let handler: SettingsHandler;
   let webview: ReturnType<typeof createMockWebview>;
   let platform: ReturnType<typeof createMockPlatform>;
+  let conversationSettings: ReturnType<typeof createConversationSettings>;
 
   beforeEach(() => {
-    vi.clearAllMocks();
     webview = createMockWebview();
     platform = createMockPlatform();
+    conversationSettings = createConversationSettings();
   });
 
-  describe('sendSettings', () => {
-    it('should do nothing when platform is unavailable', async () => {
-      handler = new SettingsHandler({});
-      await handler.sendSettings(webview as any);
-
-      expect(webview.postMessage).not.toHaveBeenCalled();
+  it('projects settings for the explicitly requested conversation', async () => {
+    const handler = new SettingsHandler({
+      platform: platform as never,
+      conversationSettings: conversationSettings as never,
     });
 
-    it('should send settings data to webview', async () => {
-      handler = new SettingsHandler({
-        platform: platform as any,
-      });
-      await handler.sendSettings(webview as any);
+    await handler.sendSettings(webview as never, { conversationId: 'conversation-b' });
 
-      expect(platform.config.reloadConfig).not.toHaveBeenCalled();
-      expect(webview.postMessage).toHaveBeenCalledWith(
-        expect.objectContaining({
-          type: 'settingsData',
-          selectedProviderId: 'anthropic',
-          selectedModelId: 'claude-3',
-          systemPrompt: 'You are a helpful assistant',
-          temperature: 0.7,
-          maxTokens: 4096,
-          executionMode: 'auto',
-        }),
-      );
+    expect(conversationSettings.snapshotForConversation).toHaveBeenCalledWith('conversation-b');
+    expect(webview.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'settingsData',
+        conversationId: 'conversation-b',
+        selectedProviderId: 'conversation-b-provider',
+        selectedModelId: 'conversation-b-model',
+        systemPrompt: 'conversation-b-prompt',
+      }),
+    );
+  });
+
+  it('passes account catalog snapshots into the shared provider projection', async () => {
+    const accountCatalog = {
+      getSnapshot: vi.fn().mockResolvedValue({
+        snapshot: {
+          source: 'account-gateway',
+          status: 'available',
+          provider: { id: 'neko-account-gateway' },
+          models: [],
+          entitlement: { allowedModelIds: [] },
+          expiresAt: 10_000,
+        },
+        refreshed: false,
+      }),
+      invalidateForAuthFailure: vi.fn(),
+    };
+    const handler = new SettingsHandler({
+      platform: platform as never,
+      accountAiCatalog: accountCatalog as never,
+      conversationSettings: conversationSettings as never,
     });
 
-    it('should reload config only for explicit snapshot refresh calls', async () => {
-      handler = new SettingsHandler({
-        platform: platform as any,
-      });
+    await handler.sendSettings(webview as never, { conversationId: 'conversation-a' });
 
-      await handler.sendSettings(webview as any, { reloadConfig: true });
-
-      expect(platform.config.reloadConfig).toHaveBeenCalledTimes(1);
-      expect(webview.postMessage).toHaveBeenCalledWith(
-        expect.objectContaining({ type: 'settingsData' }),
-      );
-    });
-
-    it('should expose platform-projected provider and media data', async () => {
-      platform.config.getAssistantSettingsData.mockReturnValue({
-        ...platform.config.getAssistantSettingsData(),
-        defaultMediaModels: { image: 'openai:openai-dall-e-3' },
-      });
-      handler = new SettingsHandler({
-        platform: platform as any,
-      });
-      await handler.sendSettings(webview as any);
-
-      expect(platform.config.reloadConfig).not.toHaveBeenCalled();
-      expect(webview.postMessage).toHaveBeenCalledWith(
-        expect.objectContaining({
-          providers: expect.any(Array),
-          configuredProviders: expect.any(Array),
-          defaultMediaModels: { image: 'openai:openai-dall-e-3' },
-        }),
-      );
-    });
-
-    it('passes account catalog snapshots into settings model projection', async () => {
-      const accountCatalog = {
-        getSnapshot: vi.fn().mockResolvedValue({
-          snapshot: {
-            source: 'account-gateway',
-            status: 'available',
-            provider: { id: 'neko-account-gateway' },
-            models: [],
-            entitlement: { allowedModelIds: [] },
-            expiresAt: 10_000,
-          },
-          refreshed: false,
-        }),
-        invalidateForAuthFailure: vi.fn(),
-      };
-      handler = new SettingsHandler({
-        platform: platform as any,
-        accountAiCatalog: accountCatalog as any,
-      });
-
-      await handler.sendSettings(webview as any);
-
-      expect(accountCatalog.getSnapshot).toHaveBeenCalledTimes(1);
-      expect(platform.config.getAssistantSettingsData).toHaveBeenCalledWith({
-        accountCatalog: expect.objectContaining({ source: 'account-gateway' }),
-      });
+    expect(platform.config.getAssistantSettingsData).toHaveBeenCalledWith({
+      accountCatalog: expect.objectContaining({ source: 'account-gateway' }),
     });
   });
 
-  describe('handleUpdateSettings', () => {
-    it('should update provider and model', async () => {
-      handler = new SettingsHandler({
-        platform: platform as any,
-      });
-      const update = {
-        providerId: 'openai',
-        modelId: 'gpt-4',
-      };
-      await handler.handleUpdateSettings(webview as any, update);
+  it('updates only the target conversation while other Agents and Tasks may be running', async () => {
+    const handler = new SettingsHandler({
+      platform: platform as never,
+      conversationSettings: conversationSettings as never,
+    });
+    const update = { providerId: 'provider-b', modelId: 'model-b', temperature: 0.3 };
 
-      expect(platform.config.applyRuntimeAssistantSettingsFromWebview).toHaveBeenCalledWith(update);
-      expect(webview.postMessage).toHaveBeenCalledWith({
-        type: 'settingsUpdated',
-        success: true,
-      });
+    await handler.handleUpdateSettings(webview as never, update, {
+      conversationId: 'conversation-b',
     });
 
-    it('rejects model selection updates while any Agent turn is running', async () => {
-      const agentRunState = {
-        hasRunningAgents: vi.fn().mockReturnValue(true),
-      };
-      handler = new SettingsHandler({
-        platform: platform as any,
-        agentRunState,
-      });
+    expect(conversationSettings.updateConversation).toHaveBeenCalledWith('conversation-b', update);
+    expect(platform.config.applyRuntimeAssistantSettingsFromWebview).not.toHaveBeenCalled();
+    expect(webview.postMessage).toHaveBeenCalledWith({ type: 'settingsUpdated', success: true });
+  });
 
-      await handler.handleUpdateSettings(webview as any, {
-        providerId: 'openai',
-        modelId: 'gpt-4',
-      });
-
-      expect(agentRunState.hasRunningAgents).toHaveBeenCalledTimes(1);
-      expect(platform.config.applyRuntimeAssistantSettingsFromWebview).not.toHaveBeenCalled();
-      expect(webview.postMessage).toHaveBeenCalledWith({
-        type: 'settingsUpdated',
-        success: false,
-        error: AGENT_SESSION_CONFIG_LOCKED_MESSAGE,
-      });
+  it('emits execution-mode activation progress with the same conversation owner', async () => {
+    const handler = new SettingsHandler({
+      conversationSettings: conversationSettings as never,
     });
 
-    it('rejects model parameter updates while any Agent turn is running', async () => {
-      const agentRunState = {
-        hasRunningAgents: vi.fn().mockReturnValue(true),
-      };
-      handler = new SettingsHandler({
-        platform: platform as any,
-        agentRunState,
-      });
+    await handler.handleUpdateSettings(
+      webview as never,
+      { executionMode: 'plan' },
+      { conversationId: 'conversation-a' },
+    );
 
-      await handler.handleUpdateSettings(webview as any, {
-        temperature: 0.2,
-        thinkingBudget: 4096,
-      });
+    const progressMessages = webview.postMessage.mock.calls
+      .map(([message]) => message)
+      .filter((message) => message.type === 'agentCapabilityActivationProgress');
+    expect(progressMessages.map((message) => message.events[0].step)).toEqual([
+      'requested',
+      'validated',
+      'projected',
+      'active',
+    ]);
+    expect(progressMessages).toEqual(
+      expect.arrayContaining([expect.objectContaining({ conversationId: 'conversation-a' })]),
+    );
+  });
 
-      expect(agentRunState.hasRunningAgents).toHaveBeenCalledTimes(1);
-      expect(platform.config.applyRuntimeAssistantSettingsFromWebview).not.toHaveBeenCalled();
-      expect(webview.postMessage).toHaveBeenCalledWith({
-        type: 'settingsUpdated',
-        success: false,
-        error: AGENT_SESSION_CONFIG_LOCKED_MESSAGE,
-      });
+  it('fails visibly when the conversation settings runtime is unavailable', async () => {
+    const handler = new SettingsHandler({ platform: platform as never });
+
+    await handler.handleUpdateSettings(
+      webview as never,
+      { temperature: 0.3 },
+      { conversationId: 'conversation-a' },
+    );
+
+    expect(webview.postMessage).toHaveBeenCalledWith({
+      type: 'settingsUpdated',
+      success: false,
+      error: 'Conversation settings runtime is not initialized',
+    });
+  });
+
+  it('surfaces conversation-specific validation failures', async () => {
+    conversationSettings.updateConversation.mockImplementation(() => {
+      throw new Error('Invalid model for conversation-b');
+    });
+    const handler = new SettingsHandler({
+      conversationSettings: conversationSettings as never,
     });
 
-    it('rejects model selection updates while background tasks are active', async () => {
-      const agentRunState = {
-        hasRunningAgents: vi.fn().mockReturnValue(false),
-      };
-      const taskState = {
-        list: vi.fn().mockResolvedValue([{ id: 'task-1', status: 'running' }]),
-      };
-      handler = new SettingsHandler({
-        platform: platform as any,
-        agentRunState,
-        taskState: taskState as any,
-      });
+    await handler.handleUpdateSettings(
+      webview as never,
+      { modelId: 'invalid' },
+      { conversationId: 'conversation-b' },
+    );
 
-      await handler.handleUpdateSettings(webview as any, {
-        providerId: 'openai',
-        modelId: 'gpt-4',
-      });
-
-      expect(agentRunState.hasRunningAgents).toHaveBeenCalledTimes(1);
-      expect(taskState.list).toHaveBeenCalledTimes(1);
-      expect(platform.config.applyRuntimeAssistantSettingsFromWebview).not.toHaveBeenCalled();
-      expect(webview.postMessage).toHaveBeenCalledWith({
-        type: 'settingsUpdated',
-        success: false,
-        error: AGENT_SESSION_CONFIG_LOCKED_MESSAGE,
-      });
-    });
-
-    it('allows non-model runtime settings while an Agent turn is running', async () => {
-      const agentRunState = {
-        hasRunningAgents: vi.fn().mockReturnValue(true),
-      };
-      handler = new SettingsHandler({
-        platform: platform as any,
-        agentRunState,
-      });
-      const update = {
-        executionMode: 'plan',
-      };
-
-      await handler.handleUpdateSettings(webview as any, update);
-
-      expect(agentRunState.hasRunningAgents).not.toHaveBeenCalled();
-      expect(platform.config.applyRuntimeAssistantSettingsFromWebview).toHaveBeenCalledWith(update);
-      expect(webview.postMessage).toHaveBeenCalledWith({
-        type: 'settingsUpdated',
-        success: true,
-      });
-    });
-
-    it('should update boolean settings', async () => {
-      handler = new SettingsHandler({
-        platform: platform as any,
-      });
-      const update = {
-        autoExecuteTools: true,
-        streamResponses: false,
-        showToolCalls: true,
-      };
-      await handler.handleUpdateSettings(webview as any, update);
-
-      expect(platform.config.applyRuntimeAssistantSettingsFromWebview).toHaveBeenCalledWith(update);
-    });
-
-    it('should update numeric settings', async () => {
-      handler = new SettingsHandler({
-        platform: platform as any,
-      });
-      const update = {
-        temperature: 0.5,
-        maxTokens: 8192,
-      };
-      await handler.handleUpdateSettings(webview as any, update);
-
-      expect(platform.config.applyRuntimeAssistantSettingsFromWebview).toHaveBeenCalledWith(update);
-    });
-
-    it('should update execution mode', async () => {
-      handler = new SettingsHandler({
-        platform: platform as any,
-      });
-      const update = { executionMode: 'plan' };
-      await handler.handleUpdateSettings(webview as any, update);
-
-      expect(platform.config.applyRuntimeAssistantSettingsFromWebview).toHaveBeenCalledWith(update);
-    });
-
-    it('emits visible activation progress for explicit execution mode changes', async () => {
-      handler = new SettingsHandler({
-        platform: platform as any,
-      });
-
-      await handler.handleUpdateSettings(
-        webview as any,
-        { executionMode: 'plan' },
-        { conversationId: 'conv-1' },
-      );
-
-      const progressMessages = webview.postMessage.mock.calls
-        .map(([message]) => message)
-        .filter((message) => message.type === 'agentCapabilityActivationProgress');
-      expect(progressMessages.map((message) => message.events[0].step)).toEqual([
-        'requested',
-        'validated',
-        'projected',
-        'active',
-      ]);
-      expect(progressMessages).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({
-            conversationId: 'conv-1',
-            events: [
-              expect.objectContaining({
-                target: 'execution-mode',
-                action: 'set',
-                name: 'plan',
-                source: 'user-explicit',
-                requestedBy: 'user',
-                status: 'succeeded',
-              }),
-            ],
-          }),
-        ]),
-      );
-      expect(webview.postMessage).toHaveBeenCalledWith({
-        type: 'settingsUpdated',
-        success: true,
-      });
-    });
-
-    it('should report failure when platform is unavailable', async () => {
-      handler = new SettingsHandler({});
-      await handler.handleUpdateSettings(webview as any, {
-        temperature: 0.3,
-      });
-
-      expect(webview.postMessage).toHaveBeenCalledWith({
-        type: 'settingsUpdated',
-        success: false,
-        error: 'Platform is not initialized',
-      });
-    });
-
-    it('should report failure when platform rejects settings update', async () => {
-      platform.config.applyRuntimeAssistantSettingsFromWebview.mockRejectedValue(
-        new Error('Config write failed'),
-      );
-      handler = new SettingsHandler({
-        platform: platform as any,
-      });
-
-      await handler.handleUpdateSettings(webview as any, { temperature: 0.3 });
-
-      expect(webview.postMessage).toHaveBeenCalledWith({
-        type: 'settingsUpdated',
-        success: false,
-        error: 'Config write failed',
-      });
+    expect(webview.postMessage).toHaveBeenCalledWith({
+      type: 'settingsUpdated',
+      success: false,
+      error: 'Invalid model for conversation-b',
     });
   });
 });

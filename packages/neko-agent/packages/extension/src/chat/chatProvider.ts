@@ -384,7 +384,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
     private readonly _options: ChatViewProviderOptions = {},
   ) {
     // Initialize managers
-    this._settings = new SettingsManager();
+    this._settings = new SettingsManager(undefined, _context.workspaceState);
     this._systemPrompt = new SystemPromptManager();
     this._systemPrompt.setLocale(vscode.env.language);
     this._accountAiCatalog = new AccountAiCatalogCache({
@@ -672,8 +672,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
         this._settingsHandler.updateDeps({
           platform: this._platform,
           accountAiCatalog: this._accountAiCatalog,
-          agentRunState: this._agentManager,
-          taskState: this._taskManager,
+          conversationSettings: this._settings,
         });
         this._contextHandler.updateDeps({ agentManager: this._agentManager });
         this._slashCommandHandler.updateDeps({
@@ -1004,7 +1003,10 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
   ): void {
     if (!this._platform) return;
     this._platform.config.reloadConfig();
-    void this._settingsHandler.sendSettings(webview);
+    const conversationId = this._conversations.getActiveId();
+    if (conversationId) {
+      void this._settingsHandler.sendSettings(webview, { conversationId });
+    }
     void this._configBridge?.sendConfigState(postMessage);
   }
 
@@ -1031,7 +1033,9 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
           break;
         case 'sendSettings':
           if (webview) {
-            void this._settingsHandler.sendSettings(webview);
+            void this._settingsHandler.sendSettings(webview, {
+              conversationId: action.conversationId,
+            });
           }
           break;
         case 'postTabState':
@@ -1365,9 +1369,12 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
   }
 
   private _getSelectedChatModelRef(): import('@neko-agent/types').ModelRef<'llm'> | undefined {
-    const modelId = this._settings.selectedModelId;
+    const conversationId = this._conversations.getActiveId();
+    if (!conversationId) return undefined;
+    const settings = this._settings.snapshotForConversation(conversationId);
+    const modelId = settings.selectedModelId;
     if (!modelId) return undefined;
-    const providerId = this._settings.selectedProviderId;
+    const providerId = settings.selectedProviderId;
     if (!providerId) return undefined;
     return { providerId, modelId, category: 'llm' };
   }

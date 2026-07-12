@@ -7,7 +7,9 @@ export function tryHandleSettingsRoute(
 ): boolean {
   switch (message.type) {
     case 'getSettings':
-      void deps.settingsHandler.sendSettings(deps.webview);
+      void deps.settingsHandler.sendSettings(deps.webview, {
+        conversationId: message.conversationId,
+      });
       return true;
 
     case 'refreshConfigSnapshot':
@@ -16,7 +18,7 @@ export function tryHandleSettingsRoute(
 
     case 'updateSettings':
       void deps.settingsHandler.handleUpdateSettings(deps.webview, message.settings, {
-        ...(message.conversationId ? { conversationId: message.conversationId } : {}),
+        conversationId: message.conversationId,
       });
       return true;
 

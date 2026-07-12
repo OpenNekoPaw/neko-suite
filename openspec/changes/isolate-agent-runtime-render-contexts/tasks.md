@@ -9,11 +9,11 @@
 ## 2. Conversation Runtime and Configuration
 
 - [ ] 2.1 Introduce the conversation runtime context around the existing Agent runtime/session pool with explicit ready/dispose lifecycle.
-- [ ] 2.2 Add per-conversation configuration storage initialized from validated global defaults and restored with the conversation.
-- [ ] 2.3 Capture an immutable turn configuration snapshot at turn start and route model/child execution through it.
-- [ ] 2.4 Change Webview/Extension configuration messages and handlers to require `conversationId` and update only that conversation.
-- [ ] 2.5 Remove global running-Agent and active-Task configuration locks and poison their old call path in regression tests.
-- [ ] 2.6 Verify concurrent A/B runs and future-turn configuration changes do not mutate active turn snapshots.
+- [x] 2.2 Add per-conversation configuration storage initialized from validated global defaults and restored with the conversation.
+- [x] 2.3 Capture an immutable turn configuration snapshot at turn start and route model/child execution through it.
+- [x] 2.4 Change Webview/Extension configuration messages and handlers to require `conversationId` and update only that conversation.
+- [x] 2.5 Remove global running-Agent and active-Task configuration locks and poison their old call path in regression tests.
+- [x] 2.6 Verify concurrent A/B runs and future-turn configuration changes do not mutate active turn snapshots.
 
 ## 3. Scoped SubAgent and Task Runtime
 
