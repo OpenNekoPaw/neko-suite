@@ -103,6 +103,7 @@ import {
   projectConversationSessionState,
 } from '@/presenters/conversation-session-state-presenter';
 import { DEFAULT_GENERATION_PARAMS } from '@/components/ChatView/InputArea/types';
+import { useTabRenderRuntimeRegistry } from '@/render-runtime/useTabRenderRuntimeRegistry';
 
 // =============================================================================
 // Props
@@ -201,6 +202,7 @@ export function ConversationController({
     setActiveTabId,
     clearMessages,
   } = conversation;
+  useTabRenderRuntimeRegistry(openTabs, activeTabId);
 
   // ---- UI state for active tab ----
   const [activeTab, setActiveTab] = useState<TabType>('chat');
