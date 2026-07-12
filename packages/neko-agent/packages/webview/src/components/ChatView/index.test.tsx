@@ -108,12 +108,12 @@ describe('ChatView empty state', () => {
 
   it('passes active skill context into the conversation message list', () => {
     renderChatView({
-      activeSkill: { skillName: 'comic-to-storyboard', allowedTools: ['ReadDocument'] },
+      activeSkill: { skillName: 'storyboard', allowedTools: ['ReadDocument'] },
       onClearActiveSkill: vi.fn(),
     });
 
     expect(screen.getByTestId('message-list')).toBeTruthy();
-    expect(screen.getByText('comic-to-storyboard')).toBeTruthy();
+    expect(screen.getByText('storyboard')).toBeTruthy();
     expect(screen.queryByRole('heading', { name: 'Neko Suite AI Assistant' })).toBeNull();
   });
 });

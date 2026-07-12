@@ -11,7 +11,7 @@ describe('createConversationSkillProvider', () => {
       name: 'review',
       description: 'Review code',
       domain: 'media',
-      referencedSkills: [{ id: 'comic-to-storyboard', relationship: 'delegator' }],
+      referencedSkills: [{ id: 'storyboard', relationship: 'delegator' }],
       mediaWorkflow: {
         acceptedModalities: ['comic'],
         producedArtifacts: ['StoryboardTable'],
@@ -27,7 +27,7 @@ describe('createConversationSkillProvider', () => {
         name: 'review',
         description: 'Review code',
         domain: 'media',
-        relatedSkills: [{ id: 'comic-to-storyboard', relationship: 'delegator' }],
+        relatedSkills: [{ id: 'storyboard', relationship: 'delegator' }],
         mediaWorkflow: {
           acceptedModalities: ['comic'],
           producedArtifacts: ['StoryboardTable'],
@@ -221,16 +221,16 @@ describe('createConversationSkillProvider', () => {
 
   it('activates a related focused skill through the same lazy loading path without inheriting parent tools', async () => {
     const parent = createSkill({
-      name: 'media-to-video',
+      name: 'media-production',
       allowedTools: ['ReadDocument', 'GenerateVideo'],
-      referencedSkills: [{ id: 'comic-to-storyboard', relationship: 'delegator' }],
+      referencedSkills: [{ id: 'storyboard', relationship: 'delegator' }],
     });
     const child = createSkill({
-      name: 'comic-to-storyboard',
+      name: 'storyboard',
       allowedTools: ['ReadDocument', 'ReadImage'],
     });
     const injection: SkillInjection = {
-      name: 'comic-to-storyboard',
+      name: 'storyboard',
       type: 'skill',
       systemPrompt: 'Comic storyboard instructions',
       allowedTools: ['ReadDocument', 'ReadImage'],
@@ -241,16 +241,16 @@ describe('createConversationSkillProvider', () => {
 
     await expect(
       provider.activateSkill({
-        name: 'comic-to-storyboard',
+        name: 'storyboard',
         reason: 'Agent selected storyboard workflow',
       }),
     ).resolves.toEqual({
       success: true,
-      skillName: 'comic-to-storyboard',
+      skillName: 'storyboard',
       allowedTools: ['ReadDocument', 'ReadImage'],
     });
 
-    expect(skillService.registry.ensureLoaded).toHaveBeenCalledWith('comic-to-storyboard');
+    expect(skillService.registry.ensureLoaded).toHaveBeenCalledWith('storyboard');
     expect(effects.applySkillInjection).toHaveBeenCalledWith(injection, child);
     expect(injection.allowedTools).not.toContain('GenerateVideo');
   });

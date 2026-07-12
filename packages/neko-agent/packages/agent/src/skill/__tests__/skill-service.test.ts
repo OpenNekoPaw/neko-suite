@@ -333,40 +333,29 @@ describe('KeywordSkillMatcher', () => {
   function makeMediaWorkflowSkills(): Skill[] {
     return [
       makeSkill({
-        name: 'comic-to-storyboard',
+        name: 'storyboard',
         description:
-          'Convert manga/comic pages into reviewable CreativeTable storyboards. Use only for storyboard table or shot breakdown requests, not content-only EPUB analysis.',
+          'Create canonical storyboards from prompts, scripts, documents, comics, or image sequences. Use only for storyboard or shot breakdown requests, not content-only analysis.',
         mediaWorkflow: {
+          acceptedModalities: ['text', 'document', 'comic', 'image-sequence'],
           producedArtifacts: ['CreativeTable'],
-          tags: ['comic', 'manga', 'storyboard'],
+          tags: ['storyboard', 'comic', 'manga'],
         },
       }),
       makeSkill({
-        name: 'comic-to-animation',
+        name: 'media-production',
         description:
-          'Focused comic-to-animation production entry point for comic/storyboard-to-animation or video requests, not content-only EPUB analysis.',
+          'Coordinate explicit source-to-video and source-to-animation production, not content-only document or comic analysis.',
         mediaWorkflow: {
-          producedArtifacts: [
-            'StoryboardTable',
-            'storyboard-plan-overlay',
-            'generated-media-ref',
-            'workflow-execution-summary',
-          ],
-          tags: ['comic-to-animation', 'comic', 'storyboard', 'animation', 'media-to-video'],
-        },
-      }),
-      makeSkill({
-        name: 'media-to-video',
-        description:
-          'Coordinate explicit media-to-video production, not content-only document or comic analysis.',
-        mediaWorkflow: {
+          acceptedModalities: ['text', 'document', 'comic', 'image-sequence'],
           producedArtifacts: [
             'StoryboardTable',
             'storyboard-plan-overlay',
             'cut-storyboard-payload',
             'generated-media-ref',
+            'workflow-execution-summary',
           ],
-          tags: ['media-to-video', 'orchestration', 'storyboard', 'animation'],
+          tags: ['orchestration', 'storyboard', 'animation', 'video'],
         },
       }),
     ];
@@ -375,7 +364,7 @@ describe('KeywordSkillMatcher', () => {
   it('matches Chinese storyboard-table requests through produced artifacts', () => {
     const matcher = new KeywordSkillMatcher();
     const storyboardSkill = makeSkill({
-      name: 'comic-to-storyboard',
+      name: 'storyboard',
       description: 'Convert manga/comic pages into reviewable CreativeTable storyboards.',
       mediaWorkflow: {
         producedArtifacts: ['CreativeTable'],
@@ -397,15 +386,15 @@ describe('KeywordSkillMatcher', () => {
   it('prioritizes focused storyboard producers over broad media orchestrators', () => {
     const matcher = new KeywordSkillMatcher();
     const broadSkill = makeSkill({
-      name: 'media-to-video',
-      description: 'Coordinate media-to-video workflows.',
+      name: 'media-production',
+      description: 'Coordinate source-to-video production workflows.',
       mediaWorkflow: {
         producedArtifacts: ['StoryboardTable', 'storyboard-plan-overlay', 'cut-storyboard-payload'],
-        tags: ['media-to-video', 'orchestration', 'storyboard'],
+        tags: ['orchestration', 'storyboard', 'video'],
       },
     });
     const focusedSkill = makeSkill({
-      name: 'comic-to-storyboard',
+      name: 'storyboard',
       description: 'Convert manga/comic pages into reviewable CreativeTable storyboards.',
       mediaWorkflow: {
         producedArtifacts: ['CreativeTable'],
@@ -415,10 +404,7 @@ describe('KeywordSkillMatcher', () => {
 
     const matches = matcher.match('生成分镜表', [broadSkill, focusedSkill]);
 
-    expect(matches.map((match) => match.skill.name)).toEqual([
-      'comic-to-storyboard',
-      'media-to-video',
-    ]);
+    expect(matches.map((match) => match.skill.name)).toEqual(['storyboard', 'media-production']);
   });
 
   it('does not auto-match production/storyboard skills for content-only EPUB analysis', () => {
@@ -443,7 +429,7 @@ describe('KeywordSkillMatcher', () => {
     const matches = matcher.match('为什么不直接生成 AnimationPlan？是否应该用分镜表代替？', [
       ...makeMediaWorkflowSkills(),
       makeSkill({
-        name: 'storyboard-to-animation-plan',
+        name: 'video',
         description:
           'Convert existing CompositeArtifact StoryboardTable domain blocks into animation plan overlays when the user asks for animation/video planning.',
         mediaWorkflow: {
@@ -457,24 +443,21 @@ describe('KeywordSkillMatcher', () => {
     expect(matches.map((match) => match.skill.name)).toEqual([]);
   });
 
-  it('routes explicit EPUB storyboard requests to comic-to-storyboard', () => {
+  it('routes explicit EPUB storyboard requests to storyboard', () => {
     const matcher = new KeywordSkillMatcher();
 
     const matches = matcher.match('把这个 EPUB 前10页生成分镜表', makeMediaWorkflowSkills());
 
-    expect(matches[0]?.skill.name).toBe('comic-to-storyboard');
+    expect(matches[0]?.skill.name).toBe('storyboard');
     expect(matches[0]?.reason).toContain("Candidate artifact 'CreativeTable'");
   });
 
-  it('routes explicit EPUB animation requests to comic-to-animation before broad media skills', () => {
+  it('routes explicit EPUB animation requests to media-production', () => {
     const matcher = new KeywordSkillMatcher();
 
     const matches = matcher.match('把这个 EPUB 前10页转动画并生成视频', makeMediaWorkflowSkills());
 
-    expect(matches.map((match) => match.skill.name).slice(0, 2)).toEqual([
-      'comic-to-animation',
-      'media-to-video',
-    ]);
+    expect(matches.map((match) => match.skill.name)).toContain('media-production');
   });
 
   it('routes explicit EPUB animation requests from workflow metadata without concrete skill names', () => {

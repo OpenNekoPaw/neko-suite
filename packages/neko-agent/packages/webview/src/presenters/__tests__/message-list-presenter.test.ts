@@ -9,7 +9,7 @@ describe('message-list-presenter', () => {
       isThinking: false,
       streamingMessageId: null,
       activeSkillNotice: {
-        skillName: 'comic-to-storyboard',
+        skillName: 'storyboard',
         allowedTools: ['ReadDocument'],
       },
     });
@@ -18,7 +18,7 @@ describe('message-list-presenter', () => {
       {
         kind: 'skill_notice',
         notice: {
-          skillName: 'comic-to-storyboard',
+          skillName: 'storyboard',
           allowedTools: ['ReadDocument'],
         },
         ownerMessageId: null,

@@ -229,9 +229,6 @@ export const settings = {
   'settings.skills.toolSkillPriority': '优先级',
   'settings.skills.toolSkillDependencies': '依赖',
   'settings.skills.noToolSkills': '暂无配置的工具组',
-  'settings.skills.builtin.ai-generate.name': 'AI 生成',
-  'settings.skills.builtin.ai-generate.description':
-    'AI 媒体生成能力，包括图像、视频、音频和音乐生成。',
   'settings.skills.builtin.video-editing.name': '视频编辑',
   'settings.skills.builtin.video-editing.description':
     '视频编辑助手：剪切、裁剪、转场、分割、合并片段等时间轴操作。',

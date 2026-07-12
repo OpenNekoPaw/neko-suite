@@ -162,7 +162,7 @@ describe('ConversationSkillRuntime', () => {
   });
 
   it('keeps supplemental reference skills active without replacing the domain skill', async () => {
-    const storyboard = createSkill('comic-to-storyboard');
+    const storyboard = createSkill('storyboard');
     const canvas: Skill = {
       ...createSkill('canvas-authoring'),
       allowedTools: ['canvas.createStoryboardFromMarkdown'],
@@ -174,7 +174,7 @@ describe('ConversationSkillRuntime', () => {
     });
 
     const domain = await runtime.activateDomainSkill({
-      skillName: 'comic-to-storyboard',
+      skillName: 'storyboard',
       conversationId: 'conv-1',
       reason: 'Create a storyboard creative table from comic evidence.',
     });
@@ -189,13 +189,13 @@ describe('ConversationSkillRuntime', () => {
 
     expect(domain.success).toBe(true);
     expect(reference.success).toBe(true);
-    expect(runtime.getActiveSkill('conv-1')?.skill.name).toBe('comic-to-storyboard');
+    expect(runtime.getActiveSkill('conv-1')?.skill.name).toBe('storyboard');
     expect(records.map((record) => [record.slot, record.skillName])).toEqual([
-      ['domainSkill', 'comic-to-storyboard'],
+      ['domainSkill', 'storyboard'],
       ['referenceSkill', 'canvas-authoring'],
     ]);
     expect(projection.promptSections.map((section) => section.skillName)).toEqual([
-      'comic-to-storyboard',
+      'storyboard',
       'canvas-authoring',
     ]);
     expect(projection.toolPolicy).toEqual({
@@ -350,7 +350,7 @@ describe('ConversationSkillRuntime', () => {
   });
 
   it('rejects natural-language auto activation without discovery, apply, or active state', async () => {
-    const storyboard = createSkill('comic-to-storyboard', undefined, undefined, {
+    const storyboard = createSkill('storyboard', undefined, undefined, {
       producedArtifacts: ['CreativeTable'],
       referencedCapabilities: ['canvas.authoring'],
       validationRequirements: ['CreativeTable'],
@@ -389,7 +389,7 @@ describe('ConversationSkillRuntime', () => {
   });
 
   it('rejects natural-language auto activation even when matches would require confirmation', async () => {
-    const storyboard = createSkill('comic-to-storyboard');
+    const storyboard = createSkill('storyboard');
     const skillService = createSkillService([storyboard], {
       found: true,
       matches: [{ skill: storyboard, relevance: 0.5, reason: 'weak match' }],
@@ -541,7 +541,7 @@ describe('ConversationSkillRuntime', () => {
   });
 
   it('records prompt-chain observation for explicit skill invocation with Agent-native creation metadata', async () => {
-    const skill = createSkill('comic-to-storyboard');
+    const skill = createSkill('storyboard');
     const skillService = createSkillService([skill]);
     const observations: AgentPromptChainObservation[] = [];
     const promptChainObservationPort = {
@@ -557,7 +557,7 @@ describe('ConversationSkillRuntime', () => {
     });
 
     const result = await runtime.applySkillInvocation({
-      skillName: 'comic-to-storyboard',
+      skillName: 'storyboard',
       conversationId: 'conv-1',
       reason: 'Generate storyboard table',
       creation: {
@@ -576,7 +576,7 @@ describe('ConversationSkillRuntime', () => {
         creationId: 'creation-1',
         iterationId: 'iteration-1',
         promptChainId: 'storyboard.creation',
-        skillName: 'comic-to-storyboard',
+        skillName: 'storyboard',
         observedAt: 301,
         reason: 'Generate storyboard table',
         metadata: expect.objectContaining({
@@ -589,7 +589,7 @@ describe('ConversationSkillRuntime', () => {
   });
 
   it('fails visibly when prompt-chain metadata is supplied without an observation port', async () => {
-    const skill = createSkill('comic-to-storyboard');
+    const skill = createSkill('storyboard');
     const skillService = createSkillService([skill]);
     const runtime = new ConversationSkillRuntime({
       skillService: skillService as any,
@@ -597,7 +597,7 @@ describe('ConversationSkillRuntime', () => {
     });
 
     const result = await runtime.applySkillInvocation({
-      skillName: 'comic-to-storyboard',
+      skillName: 'storyboard',
       conversationId: 'conv-1',
       reason: 'Generate storyboard table',
       creation: {

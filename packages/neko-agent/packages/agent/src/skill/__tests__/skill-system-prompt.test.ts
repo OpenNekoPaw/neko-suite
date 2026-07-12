@@ -30,7 +30,7 @@ describe('skill system prompt', () => {
       basePrompt: '基础提示',
       skills: [
         { name: 'video-editing', description: 'Video editing assistant for timeline operations.' },
-        { name: 'comic-to-storyboard', description: '将漫画页面转换成可审阅分镜表。' },
+        { name: 'storyboard', description: '将漫画页面转换成可审阅分镜表。' },
       ],
     });
 
@@ -38,7 +38,7 @@ describe('skill system prompt', () => {
     expect(prompt).toContain(
       '- **video-editing**: 领域能力说明以技能正文为准；仅在 Agent 判断需要后激活。',
     );
-    expect(prompt).toContain('- **comic-to-storyboard**: 将漫画页面转换成可审阅分镜表。');
+    expect(prompt).toContain('- **storyboard**: 将漫画页面转换成可审阅分镜表。');
     expect(prompt).not.toContain('Video editing assistant');
   });
 

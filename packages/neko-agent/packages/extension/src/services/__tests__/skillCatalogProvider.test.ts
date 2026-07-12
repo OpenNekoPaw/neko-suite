@@ -202,7 +202,7 @@ describe('skillCatalogProvider', () => {
   });
 
   it('preserves locales and media workflow tags on built-in projections', () => {
-    const skill = makeSkill('comic-to-storyboard', 'Analyze comics.');
+    const skill = makeSkill('storyboard', 'Create canonical storyboards.');
     skill.mediaWorkflow = {
       tags: ['comic', 'storyboard'],
     };

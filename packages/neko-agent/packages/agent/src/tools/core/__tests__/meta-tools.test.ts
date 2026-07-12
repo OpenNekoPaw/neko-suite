@@ -20,10 +20,10 @@ describe('core meta tools', () => {
       producedArtifacts: ['StoryboardTable'],
     };
     const mediaSkill: SkillContextSummary = {
-      name: 'media-to-video',
+      name: 'media-production',
       description: 'Coordinate media workflows',
       domain: 'media',
-      relatedSkills: [{ id: 'comic-to-storyboard', relationship: 'delegator' }],
+      relatedSkills: [{ id: 'storyboard', relationship: 'delegator' }],
       mediaWorkflow,
     };
     const tool = new GetContextTool(createCategoryRegistryMock(), createGroupRegistryMock());
@@ -38,10 +38,10 @@ describe('core meta tools', () => {
       success: true,
       data: {
         activeSkill: {
-          name: 'media-to-video',
+          name: 'media-production',
           description: 'Coordinate media workflows',
           domain: 'media',
-          relatedSkills: [{ id: 'comic-to-storyboard', relationship: 'delegator' }],
+          relatedSkills: [{ id: 'storyboard', relationship: 'delegator' }],
           mediaWorkflow: {
             acceptedModalities: ['comic'],
             producedArtifacts: ['StoryboardTable'],
@@ -49,10 +49,10 @@ describe('core meta tools', () => {
         },
         registeredSkills: [
           {
-            name: 'media-to-video',
+            name: 'media-production',
             description: 'Coordinate media workflows',
             domain: 'media',
-            relatedSkills: [{ id: 'comic-to-storyboard', relationship: 'delegator' }],
+            relatedSkills: [{ id: 'storyboard', relationship: 'delegator' }],
             mediaWorkflow: {
               acceptedModalities: ['comic'],
               producedArtifacts: ['StoryboardTable'],

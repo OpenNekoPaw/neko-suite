@@ -53,7 +53,7 @@ describe('InputEditor prefix suggestions', () => {
         skills: [
           {
             trigger: '$',
-            name: 'media-to-video',
+            name: 'media-production',
             description: 'Create video from media',
             kind: 'skill',
           },
@@ -63,7 +63,7 @@ describe('InputEditor prefix suggestions', () => {
 
     await writeInput(instance, '$');
 
-    expect(instance.lastFrame()).toContain('$media-to-video');
+    expect(instance.lastFrame()).toContain('$media-production');
     expect(instance.lastFrame()).toContain('[skill]');
   });
 

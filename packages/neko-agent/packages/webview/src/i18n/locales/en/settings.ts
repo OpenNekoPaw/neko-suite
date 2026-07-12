@@ -234,9 +234,6 @@ export const settings = {
   'settings.skills.toolSkillPriority': 'Priority',
   'settings.skills.toolSkillDependencies': 'Dependencies',
   'settings.skills.noToolSkills': 'No tool groups configured',
-  'settings.skills.builtin.ai-generate.name': 'AI Generate',
-  'settings.skills.builtin.ai-generate.description':
-    'AI media generation capabilities including image, video, audio, and music generation.',
   'settings.skills.builtin.video-editing.name': 'Video Editing',
   'settings.skills.builtin.video-editing.description':
     'Video editing assistant for timeline operations: cut, trim, transition, split, merge clips.',

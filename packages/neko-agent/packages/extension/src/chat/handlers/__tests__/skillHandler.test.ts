@@ -299,7 +299,7 @@ describe('SkillHandler', () => {
   describe('autoActivateSkill', () => {
     it('rejects natural-language auto activation without applying or posting injection', async () => {
       const mockSkill = {
-        name: 'comic-to-storyboard',
+        name: 'storyboard',
         description: 'Convert manga pages into StoryboardTable storyboards',
         content: 'Storyboard instructions',
         enabled: true,
@@ -317,7 +317,7 @@ describe('SkillHandler', () => {
       skillService.registry.getSkill.mockReturnValue(mockSkill);
       skillService.registry.ensureLoaded.mockResolvedValue(mockSkill);
       skillService.apply.mockResolvedValue({
-        name: 'comic-to-storyboard',
+        name: 'storyboard',
         systemPrompt: 'Storyboard instructions',
         allowedTools: ['ReadDocument', 'ReadImage'],
         type: 'skill' as const,

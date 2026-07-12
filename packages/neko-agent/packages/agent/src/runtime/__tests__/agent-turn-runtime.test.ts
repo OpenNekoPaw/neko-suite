@@ -911,14 +911,14 @@ describe('executeAgentTurn', () => {
   it('activates selected image model ToolSets alongside the active skill for the turn', async () => {
     const activeSkill = {
       skill: {
-        name: 'ai-generate',
+        name: 'image',
         description: 'Generate media',
         content: 'Generate media instructions',
         source: 'builtin' as const,
         enabled: true,
       },
       injection: {
-        name: 'ai-generate',
+        name: 'image',
         systemPrompt: 'Generate media instructions',
         type: 'skill' as const,
       },

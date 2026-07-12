@@ -329,7 +329,7 @@ describe('AgentExecutor', () => {
       const activationResp = toolCallResponse(
         'ActivateSkill',
         {
-          skillName: 'comic-to-storyboard',
+          skillName: 'storyboard',
           reason: 'The user requested a storyboard table after the task was understood.',
         },
         'activate-skill-call',
@@ -348,7 +348,7 @@ describe('AgentExecutor', () => {
         success: true,
         data: {
           activated: true,
-          skillName: 'comic-to-storyboard',
+          skillName: 'storyboard',
           reason: 'The user requested a storyboard table after the task was understood.',
         },
       });
@@ -386,7 +386,7 @@ describe('AgentExecutor', () => {
       const activationResp = toolCallResponse(
         'ActivateSkill',
         {
-          skillName: 'comic-to-storyboard',
+          skillName: 'storyboard',
           reason: 'The user requested a storyboard table after the task was understood.',
         },
         'activate-skill-call',
@@ -413,7 +413,7 @@ describe('AgentExecutor', () => {
         success: true,
         data: {
           activated: true,
-          skillName: 'comic-to-storyboard',
+          skillName: 'storyboard',
           reason: 'The user requested a storyboard table after the task was understood.',
         },
       });

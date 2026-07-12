@@ -1845,13 +1845,13 @@ describe('AgentSession', () => {
         session.applySkillLifecycleProjection({
           promptSections: [
             {
-              id: 'skill:comic-to-storyboard',
+              id: 'skill:storyboard',
               layer: 'skill',
               content: skillPrompt,
               priority: 100,
               recordId: 'record-comic',
               slot: 'domainSkill',
-              skillName: 'comic-to-storyboard',
+              skillName: 'storyboard',
             },
           ],
           toolPolicy: {
@@ -1863,7 +1863,7 @@ describe('AgentSession', () => {
           visibleIndicators: [
             {
               id: 'record-comic',
-              skillName: 'comic-to-storyboard',
+              skillName: 'storyboard',
               slot: 'domainSkill',
               owner: 'agent',
               clearable: true,
@@ -1873,14 +1873,14 @@ describe('AgentSession', () => {
         });
         return {
           success: true,
-          skillName: 'comic-to-storyboard',
+          skillName: 'storyboard',
           lifecycleRecordId: 'record-comic',
         };
       });
       session.setSkillProvider({
         listSkills: vi.fn(() => [
           {
-            name: 'comic-to-storyboard',
+            name: 'storyboard',
             description: 'Create storyboard creative tables.',
           },
         ]),
@@ -1898,7 +1898,7 @@ describe('AgentSession', () => {
         if (capturedSystemPrompts.length === 1) {
           yield* responseToStream(
             toolCallResponse('ActivateSkill', {
-              skillName: 'comic-to-storyboard',
+              skillName: 'storyboard',
               reason: 'The user requested a comic storyboard creative table.',
             }),
           );
@@ -2147,7 +2147,7 @@ describe('AgentSession', () => {
       expect(toolInjectionManager.getState().activeToolSets).not.toContain('ai-generation');
 
       session.applySkillInjection({
-        name: 'ai-generate',
+        name: 'image',
         systemPrompt: 'Generate media assets.',
         allowedTools: [TOOL_NAMES_MEDIA.GENERATE_IMAGE],
         type: 'skill',
@@ -2158,7 +2158,7 @@ describe('AgentSession', () => {
         TOOL_NAMES_MEDIA.GENERATE_IMAGE,
       );
 
-      session.removeSkillInjection('ai-generate');
+      session.removeSkillInjection('image');
 
       expect(toolInjectionManager.getState().activeToolSets).not.toContain('ai-generation');
     });

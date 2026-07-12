@@ -347,9 +347,9 @@ describe('agent-capability-injection-runtime', () => {
 
     runtime.register({
       identity: {
-        id: 'skill:comic-to-animation',
+        id: 'profile:media-production/from-comic',
         source: 'market',
-        sourceId: '@neko/comic-to-animation',
+        sourceId: 'media-production/from-comic',
         trustLevel: 'community',
       },
       metadata: {

@@ -143,7 +143,7 @@ function makeQuery() {
     },
     range: { startLine: 1, endLine: 20 },
     analysisKind: 'ocr',
-    skillId: 'comic-to-storyboard',
+    skillId: 'storyboard',
   };
 }
 

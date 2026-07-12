@@ -763,6 +763,55 @@ describe('agent architecture boundary guards', () => {
     expect(violations).toEqual([]);
   });
 
+  it('keeps removed creative Skill identities out of runtime fixtures and locale metadata', () => {
+    const removedSkillNames = [
+      'ai-generate',
+      'comic-to-animation',
+      'comic-to-storyboard',
+      'media-to-video',
+      'image-to-shot',
+      'storyboard-to-animation-plan',
+      'animation-plan-to-cut',
+      'generated-shot-assembly',
+      'export-video-package',
+    ] as const;
+    const allowedNegativeOrInternalReferences = new Map<string, ReadonlySet<string>>([
+      [
+        'packages/neko-agent/packages/extension/src/services/__tests__/skillCatalogProvider.test.ts',
+        new Set(removedSkillNames),
+      ],
+      ['packages/neko-skills/src/builtins/builtin-skills.test.ts', new Set(removedSkillNames)],
+      ['packages/neko-skills/src/builtins/creative-media.ts', new Set(['generated-shot-assembly'])],
+    ]);
+    const workspaceRoot = join(repoRoot, '../..');
+    const sourceRoots = [
+      join(workspaceRoot, 'packages/neko-agent'),
+      join(workspaceRoot, 'packages/neko-skills'),
+      join(workspaceRoot, 'scripts/agent-eval/scenarios'),
+    ];
+    const violations = sourceRoots
+      .flatMap((root) => listFiles(root))
+      .filter(
+        (file) =>
+          file.endsWith('.ts') ||
+          file.endsWith('.tsx') ||
+          file.endsWith('.json') ||
+          file.endsWith('.mjs'),
+      )
+      .filter((file) => !file.includes('/node_modules/') && !file.includes('/dist/'))
+      .filter((file) => !file.endsWith('architecture-boundary-guards.test.ts'))
+      .flatMap((file) => {
+        const relativePath = relative(workspaceRoot, file).replace(/\\/g, '/');
+        const allowedNames = allowedNegativeOrInternalReferences.get(relativePath);
+        const source = readFileSync(file, 'utf-8');
+        return removedSkillNames
+          .filter((name) => source.includes(name) && !allowedNames?.has(name))
+          .map((name) => `${relativePath} contains removed creative Skill identity ${name}`);
+      });
+
+    expect(violations).toEqual([]);
+  });
+
   it('keeps domain SubAgent presets out of Agent core', () => {
     const forbiddenFiles = [join(agentSrc, 'subagent/creative-presets.ts')];
     const existingForbiddenFiles = forbiddenFiles

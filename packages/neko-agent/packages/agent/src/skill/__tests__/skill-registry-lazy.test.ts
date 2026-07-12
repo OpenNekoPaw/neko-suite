@@ -64,7 +64,7 @@ describe('SkillRegistry — lazy loading', () => {
           schemaVersion: 1,
           interface: { iconSmall: 'sparkle' },
           relationships: {
-            skills: [{ name: 'comic-to-storyboard', relationship: 'delegator' }],
+            skills: [{ name: 'storyboard', relationship: 'delegator' }],
           },
         },
       });
@@ -77,7 +77,7 @@ describe('SkillRegistry — lazy loading', () => {
       expect(skill?.content).toBe(''); // placeholder
       expect(skill?.icon).toBe('sparkle');
       expect(skill?.nekoOverlay?.relationships?.skills).toEqual([
-        { name: 'comic-to-storyboard', relationship: 'delegator' },
+        { name: 'storyboard', relationship: 'delegator' },
       ]);
       expect(skill?.hostProjection).toMatchObject({
         source: 'personal',

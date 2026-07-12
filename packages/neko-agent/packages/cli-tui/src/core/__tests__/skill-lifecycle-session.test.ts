@@ -41,24 +41,20 @@ describe('wireCliSkillLifecycleSession', () => {
   });
 
   it('activates skills from structured Agent requests without passing the object as skillName', async () => {
-    const { provider, lifecycleRuntime } = createWiredProvider([
-      createSkill('comic-to-storyboard'),
-    ]);
+    const { provider, lifecycleRuntime } = createWiredProvider([createSkill('storyboard')]);
 
     const result = await provider.activateSkill({
-      name: 'comic-to-storyboard',
+      name: 'storyboard',
       reason: 'EPUB page analysis needs storyboard rules.',
       slot: 'referenceSkill',
     });
 
     expect(result.success).toBe(true);
-    expect(result).toEqual(
-      expect.objectContaining({ success: true, skillName: 'comic-to-storyboard' }),
-    );
+    expect(result).toEqual(expect.objectContaining({ success: true, skillName: 'storyboard' }));
     expect(result).not.toHaveProperty('message');
     expect(lifecycleRuntime.list('conversation-1')).toEqual([
       expect.objectContaining({
-        skillName: 'comic-to-storyboard',
+        skillName: 'storyboard',
         slot: 'referenceSkill',
         owner: 'agent',
         source: 'explicit-agent',

@@ -136,7 +136,7 @@ describe('skill runtime bootstrap', () => {
 
   it('uses caller-provided builtin skills during lazy population', () => {
     const registry = new SkillRegistry();
-    const localizedBuiltin = makeSkill('comic-to-storyboard');
+    const localizedBuiltin = makeSkill('storyboard');
     const bootstrap = createRuntimeSkillBootstrap({
       registry,
       builtinSkills: [
@@ -154,8 +154,8 @@ describe('skill runtime bootstrap', () => {
     });
 
     expect(summary.builtin).toBe(1);
-    expect(registry.getSkill('comic-to-storyboard')?.content).toBe('中文 Markdown Skill body');
-    expect(registry.getSkill('comic-to-storyboard')?.source).toBe('builtin');
+    expect(registry.getSkill('storyboard')?.content).toBe('中文 Markdown Skill body');
+    expect(registry.getSkill('storyboard')?.source).toBe('builtin');
   });
 
   it('creates conversation-scoped skill providers without host orchestration', async () => {

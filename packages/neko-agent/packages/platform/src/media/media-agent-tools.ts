@@ -1,7 +1,7 @@
 /**
  * Media Agent Tools - Tool executors for AI media generation in agent mode
  *
- * Bridges the ai-generate skill's tool definitions to the MediaGenerationService.
+ * Bridges canonical image/video capability tools to the MediaGenerationService.
  * Each tool returns { backgroundMode: true, taskId } so AgentStreamProcessor
  * can subscribe to progress and notify the webview.
  */
@@ -868,7 +868,7 @@ const MEDIA_TOOL_LOCALIZATION = {
 
 /**
  * Register media generation tools into the tool registry.
- * Tool names must match ai-generate skill's allowedTools exactly.
+ * Tool names must match the canonical image/video capability catalog exactly.
  */
 export function registerMediaAgentTools(
   toolRegistry: IToolRegistry,

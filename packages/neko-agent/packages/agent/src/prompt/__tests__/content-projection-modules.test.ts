@@ -188,7 +188,7 @@ describe('MemoryRecallModule locale projection', () => {
     mod.setContent(
       [
         '## Recent Actions',
-        '- Tool result: {"activated":true,"skillName":"ai-generate","message":"Activated skill \\"ai-generate\\""}',
+        '- Tool result: {"activated":true,"skillName":"image","message":"Activated skill \\"image\\""}',
         '- Tool result: {"text":"EPUB image document with 10 image pages"}',
         '- Tool result: {"text":"EPUB chapter range with 3 image pages"}',
         '- Tool result: {"text":"CBZ page range 1-4: 4 image pages"}',
@@ -199,7 +199,7 @@ describe('MemoryRecallModule locale projection', () => {
     const content = result?.[0]?.content ?? '';
 
     expect(content).toContain('## 最近操作');
-    expect(content).toContain(String.raw`Activated skill \"ai-generate\"`);
+    expect(content).toContain(String.raw`Activated skill \"image\"`);
     expect(content).toContain('EPUB image document with 10 image pages');
     expect(content).toContain('EPUB chapter range with 3 image pages');
     expect(content).toContain('CBZ page range 1-4: 4 image pages');

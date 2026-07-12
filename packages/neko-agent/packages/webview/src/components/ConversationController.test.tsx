@@ -493,12 +493,12 @@ describe('ConversationController entry state', () => {
           data: {
             type: 'agentCapabilityActivationProgress',
             conversationId: 'conv-a',
-            events: [createActivationEvent('conv-a', 'ai-generate')],
+            events: [createActivationEvent('conv-a', 'image')],
           },
         }),
       );
     });
-    expect(screen.getByTestId('workspace-activation-progress').textContent).toBe('ai-generate');
+    expect(screen.getByTestId('workspace-activation-progress').textContent).toBe('image');
     act(() => {
       window.dispatchEvent(
         new MessageEvent('message', {

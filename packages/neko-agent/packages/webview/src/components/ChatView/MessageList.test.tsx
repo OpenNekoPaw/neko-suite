@@ -420,7 +420,7 @@ describe('MessageList auto-scroll lifecycle', () => {
           streamingMessageId={null}
           activeConversationId="conv-1"
           activeSkillNotice={{
-            skillName: 'comic-to-storyboard',
+            skillName: 'storyboard',
             allowedTools: ['ReadDocument'],
           }}
           onClearActiveSkill={onClearActiveSkill}
@@ -429,11 +429,11 @@ describe('MessageList auto-scroll lifecycle', () => {
     );
 
     expect(screen.getByText('Active Skill records')).toBeTruthy();
-    expect(screen.getByText('comic-to-storyboard')).toBeTruthy();
+    expect(screen.getByText('storyboard')).toBeTruthy();
     expect(screen.getByText('Tool limit: 1')).toBeTruthy();
 
     fireEvent.click(
-      screen.getByRole('button', { name: 'Clear record: comic-to-storyboard (Domain skill)' }),
+      screen.getByRole('button', { name: 'Clear record: storyboard (Domain skill)' }),
     );
     expect(onClearActiveSkill).toHaveBeenCalledOnce();
   });

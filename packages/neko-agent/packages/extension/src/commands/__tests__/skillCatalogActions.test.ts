@@ -12,8 +12,8 @@ describe('skillCatalogActions', () => {
 
   it('runs skills through the Agent chat without requiring file paths', async () => {
     const deps = createDeps({
-      catalog: [makeSkillDef('comic-to-storyboard', 'builtin', ['run', 'fork'])],
-      builtins: [makeSkill('comic-to-storyboard')],
+      catalog: [makeSkillDef('storyboard', 'builtin', ['run', 'fork'])],
+      builtins: [makeSkill('storyboard')],
     });
 
     await executeSkillCatalogAction(
@@ -21,7 +21,7 @@ describe('skillCatalogActions', () => {
         action: 'run',
         skillRef: {
           extensionId: 'neko.neko-agent',
-          id: 'comic-to-storyboard',
+          id: 'storyboard',
           source: 'builtin',
         },
       },
@@ -29,10 +29,7 @@ describe('skillCatalogActions', () => {
     );
 
     expect(vscode.commands.executeCommand).toHaveBeenCalledWith('neko.aiAssistant.focus');
-    expect(deps.chatViewProvider.sendMessageToAssistant).toHaveBeenCalledWith(
-      '/comic-to-storyboard',
-      true,
-    );
+    expect(deps.chatViewProvider.sendMessageToAssistant).toHaveBeenCalledWith('/storyboard', true);
   });
 
   it('opens editable project skill files resolved by the host service', async () => {
@@ -87,24 +84,24 @@ describe('skillCatalogActions', () => {
     const deps = createDeps({
       catalog: [
         {
-          ...makeSkillDef('comic-to-storyboard', 'builtin', ['run', 'fork']),
+          ...makeSkillDef('storyboard', 'builtin', ['run', 'fork']),
           catalog: {
             role: 'focused-skill',
             source: 'builtin',
             visibility: 'advanced',
             editable: false,
-            groupId: 'media-to-video',
-            parentSkillIds: ['media-to-video'],
+            groupId: 'media-production',
+            parentSkillIds: ['media-production'],
             actions: [{ id: 'run' }, { id: 'fork' }],
           },
         },
       ],
       builtins: [
         {
-          ...makeSkill('comic-to-storyboard'),
+          ...makeSkill('storyboard'),
           content: '# legacy builtin body',
           portableDefinition: {
-            name: 'comic-to-storyboard',
+            name: 'storyboard',
             description: 'Convert comics into storyboard guidance.',
             body: '# Portable builtin body',
             license: 'MIT',
@@ -125,7 +122,7 @@ describe('skillCatalogActions', () => {
         action: 'fork',
         skillRef: {
           extensionId: 'neko.neko-agent',
-          id: 'comic-to-storyboard',
+          id: 'storyboard',
           source: 'builtin',
         },
         targetSource: 'project',
@@ -136,7 +133,7 @@ describe('skillCatalogActions', () => {
     expect(deps.skillFileService.createSkill).toHaveBeenCalledWith({
       target: 'project',
       skill: {
-        name: 'comic-to-storyboard',
+        name: 'storyboard',
         description: 'Convert comics into storyboard guidance.',
         body: '# Portable builtin body',
         license: 'MIT',
@@ -155,7 +152,7 @@ describe('skillCatalogActions', () => {
       }),
     );
     expect(vscode.workspace.openTextDocument).toHaveBeenCalledWith(
-      '/workspace/.agents/skills/comic-to-storyboard/SKILL.md',
+      '/workspace/.agents/skills/storyboard/SKILL.md',
     );
   });
 
