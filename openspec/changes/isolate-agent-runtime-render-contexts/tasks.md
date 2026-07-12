@@ -45,7 +45,7 @@
 
 - [x] 6.1 Introduce the conversation-owned immutable turn projection store and migrate ordered assistant/thinking/tool/task/media/completion accumulation into it.
 - [x] 6.2 Preserve bounded append/progress coalescing and telemetry without per-provider-chunk full snapshots or repeated Markdown parsing.
-- [ ] 6.3 Implement Extension attachment server state and one serialized snapshot/ACK/patch queue per Tab attachment.
+- [x] 6.3 Implement Extension attachment server state and one serialized snapshot/ACK/patch queue per Tab attachment.
 - [ ] 6.4 Implement Webview Tab attachment client and projection replica with endpoint/attachment/conversation/version/sequence validation.
 - [ ] 6.5 Reattach every retained Tab from an authoritative snapshot after endpoint replacement and reject old epoch frames/ACKs.
 - [ ] 6.6 Make live frame gaps and patch base mismatches fatal typed attachment diagnostics; recovery creates a new attachment rather than resuming the old one.

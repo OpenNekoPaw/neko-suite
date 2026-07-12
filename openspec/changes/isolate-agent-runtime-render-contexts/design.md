@@ -184,8 +184,8 @@ Lifecycle:
 ```mermaid
 stateDiagram-v2
   [*] --> Attaching
-  Attaching --> AwaitingSnapshotAck: send snapshot(version V, seq 1)
-  AwaitingSnapshotAck --> Live: ack snapshot(V, seq 1)
+  Attaching --> AwaitingSnapshotAck: send snapshot(version V, seq 0)
+  AwaitingSnapshotAck --> Live: ack snapshot(V, seq 0)
   Live --> Live: send patch(base V, version V+n, seq k)
   Live --> Detached: endpoint replaced / tab closed
   AwaitingSnapshotAck --> Detached: endpoint replaced / tab closed
