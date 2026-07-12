@@ -1383,3 +1383,61 @@ git diff --check
 ```
 
 本任务没有把 resolver 注册成新的通用 workflow service，也没有新增用户级 Skill/command；它保持为可注入的 Extension adapter 与 Agent stage orchestrator，避免继续膨胀创作入口。任务 8.4 仍负责 cancellation/interrupted-running 的 artifact validation 与 resume 语义。
+
+## 27. Validated Workflow Cancellation and Resume（2026-07-12）
+
+任务 8.4 已完成。Media Production workflow 现在把取消作为持久化状态而不是普通失败，并通过显式 recovery port 验证 durable source/stage artifact 后恢复；completed stage 保持不可重放，interrupted stage 必须先完成明确 reconciliation。
+
+### 状态机与恢复规则
+
+- `AbortError` 在 early-stage 与 project-authoring orchestrator 中统一转换为 persisted `cancelled` workflow/stage，不再误写为 `failed`/`stage-blocked`。
+- `resumeMediaProductionWorkflow(...)` 只接受 canonical persisted state：
+  - completed stage 原样保留；
+  - 没有 interrupted stage 时从 next pending stage 继续；
+  - interrupted/cancelled stage 缺少 explicit recovery 时 fail-visible；
+  - `retry` 只允许没有 persisted artifacts 且 recovery port 已明确判定可安全重试的 stage；
+  - 已产生 durable mutation 的 interrupted stage 必须以 `complete` reconciliation 返回经过验证的 typed artifacts，随后直接标记 completed，不能盲目重放。
+- blocked/failed workflow 不通过 resume 绕过 repair policy；必须由后续 repair flow 显式处理。
+- final interrupted stage reconciliation 完成后，workflow 会正确进入 `completed`，否则保持 `running` 并由 owning orchestrator 从 next pending stage 接续。
+
+### API-first validation boundary
+
+- `MediaProductionWorkflowRecoveryCoordinator` 在修改状态前依次验证所有 persisted source refs 与 completed stage artifacts。
+- 外部 revision/existence 检查通过必需的 `MediaProductionWorkflowRecoveryPort` 注入；不存在默认 no-op validator 或 path/cache fallback。
+- state contract 会在调用外部 recovery 前拒绝 runtime-only/cache identity；外部 validator 负责确认 stable ResourceRef/project revision 仍与 durable storage/owning facade 一致。
+- interrupted stage reconciliation 是独立 port operation，允许 provider task backfill、owning project facade 或其他领域 adapter 判断“安全重试”或返回已完成的 durable artifact，不把运行时 task handle 写入 workflow state。
+- recovery coordinator 继续受静态 authoring guard 约束，不依赖 feature-package internal import、command dispatch、Webview panel、`postMessage` 或 Webview snapshot。
+
+相关提交：
+
+```text
+c09ad0a43 feat(agent): resume validated media workflows
+```
+
+验证：
+
+```bash
+pnpm --dir packages/neko-types exec vitest run \
+  src/types/__tests__/media-production-workflow.test.ts \
+  src/project-authoring/__tests__/project-authoring.test.ts
+# 2 files, 16 tests passed
+
+pnpm --dir packages/neko-agent exec vitest run \
+  packages/agent/src/media-production/__tests__/early-stage-orchestrator.test.ts \
+  packages/agent/src/media-production/__tests__/project-authoring-orchestrator.test.ts \
+  packages/agent/src/media-production/__tests__/workflow-recovery-coordinator.test.ts \
+  packages/agent/src/task/__tests__/media-production-workflow-state.test.ts \
+  packages/extension/src/services/__tests__/mediaProductionProjectAuthoringResolver.test.ts
+# 5 files, 20 tests passed
+
+pnpm exec eslint <8.4 changed TypeScript files>
+# passed
+
+pnpm --dir packages/neko-agent run compile:extension
+# passed
+
+git diff --check
+# passed
+```
+
+该实现没有新增用户级 Skill、Slash command 或新的通用 workflow runtime；只增加一个稳定状态转换和一个可注入 recovery coordinator，实际 ResourceRef/project revision 校验继续由已有 lifecycle/owning facade adapter 组合，避免在 Agent 中复制 `.nk*` parser 或制造第二套资产真值。
