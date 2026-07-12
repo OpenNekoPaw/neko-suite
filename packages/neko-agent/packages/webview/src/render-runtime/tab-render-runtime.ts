@@ -1,19 +1,86 @@
+import type { AgentContextPayload } from '@neko/shared';
+import {
+  type PromptMode,
+  type SessionMode,
+  type TabType,
+  type AgentQueuedMessageItem,
+  type AgentSessionDiagnosticMessage,
+} from '@neko-agent/types';
+import type {
+  EntryPromptMenu,
+  GenCategory,
+  GenerationParams,
+  MessageAttachment,
+  SelectedFileReference,
+} from '@/components/ChatView/InputArea/types';
+import { DEFAULT_GENERATION_PARAMS } from '@/components/ChatView/InputArea/types';
+import type { MediaModelSelection, MediaUnderstandingSelection } from '@/hooks/useUIState';
+import {
+  DEFAULT_CONVERSATION_VIEWPORT,
+  type ConversationViewportSnapshot,
+} from '@/render-lifecycle/conversation-render-contract';
+
 export type TabRenderRuntimeLifecycle = 'attaching' | 'ready' | 'detached' | 'disposed';
 export type TabRenderVisibility = 'visible' | 'hidden';
+export type TabComposerFocusTarget = 'none' | 'input';
 
 export interface TabRenderBinding {
   readonly tabId: string;
   readonly conversationId: string;
 }
 
+export interface TabComposerCompositionState {
+  readonly isComposing: boolean;
+}
+
+export interface TabComposerFocusState {
+  readonly target: TabComposerFocusTarget;
+  readonly requestRevision: number;
+}
+
+export interface TabRenderMenuState {
+  readonly entryPrompt: EntryPromptMenu | null;
+}
+
+export interface TabQueuedEditState {
+  readonly requestId: number;
+  readonly item: AgentQueuedMessageItem;
+}
+
+export interface TabRenderState {
+  readonly activeSurface: TabType;
+  readonly inputValue: string;
+  readonly attachedFiles: readonly MessageAttachment[];
+  readonly selectedFileReferences: readonly SelectedFileReference[];
+  readonly contextReferences: readonly AgentContextPayload[];
+  readonly selectedModel: string;
+  readonly mediaModelSelection: Readonly<MediaModelSelection>;
+  readonly mediaUnderstandingSelection: Readonly<MediaUnderstandingSelection>;
+  readonly sessionMode: SessionMode;
+  readonly promptMode: PromptMode;
+  readonly generationCategory: GenCategory;
+  readonly generationParams: Readonly<GenerationParams>;
+  readonly composition: TabComposerCompositionState;
+  readonly focus: TabComposerFocusState;
+  readonly viewport: ConversationViewportSnapshot;
+  readonly menus: TabRenderMenuState;
+  readonly queuedEdit: TabQueuedEditState | null;
+  readonly diagnostics: readonly AgentSessionDiagnosticMessage[];
+}
+
+export type TabRenderStateUpdate =
+  Partial<TabRenderState> | ((state: TabRenderState) => Partial<TabRenderState>);
+
 export interface TabRenderStoreSnapshot extends TabRenderBinding {
   readonly visibility: TabRenderVisibility;
+  readonly state: TabRenderState;
   readonly revision: number;
 }
 
 export interface TabRenderStore {
   getSnapshot(): TabRenderStoreSnapshot;
   subscribe(listener: () => void): () => void;
+  updateState(update: TabRenderStateUpdate): void;
   setVisibility(visibility: TabRenderVisibility): void;
   dispose(): void;
 }
@@ -53,6 +120,7 @@ class DefaultTabRenderStore implements TabRenderStore {
     this.snapshot = Object.freeze({
       ...binding,
       visibility: 'hidden',
+      state: createInitialTabRenderState(),
       revision: 0,
     });
   }
@@ -67,21 +135,34 @@ class DefaultTabRenderStore implements TabRenderStore {
     return () => this.listeners.delete(listener);
   }
 
+  updateState(update: TabRenderStateUpdate): void {
+    this.assertActive();
+    const patch = typeof update === 'function' ? update(this.snapshot.state) : update;
+    if (Object.keys(patch).length === 0) return;
+    const nextState = Object.freeze({ ...this.snapshot.state, ...patch });
+    if (hasSameStateFields(this.snapshot.state, nextState)) return;
+    this.commit({ state: nextState });
+  }
+
   setVisibility(visibility: TabRenderVisibility): void {
     this.assertActive();
     if (this.snapshot.visibility === visibility) return;
-    this.snapshot = Object.freeze({
-      ...this.snapshot,
-      visibility,
-      revision: this.snapshot.revision + 1,
-    });
-    for (const listener of this.listeners) listener();
+    this.commit({ visibility });
   }
 
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
     this.listeners.clear();
+  }
+
+  private commit(patch: Partial<Pick<TabRenderStoreSnapshot, 'state' | 'visibility'>>): void {
+    this.snapshot = Object.freeze({
+      ...this.snapshot,
+      ...patch,
+      revision: this.snapshot.revision + 1,
+    });
+    for (const listener of this.listeners) listener();
   }
 
   private assertActive(): void {
@@ -225,6 +306,34 @@ class DefaultTabRenderRuntimeRegistry implements TabRenderRuntimeRegistry {
       throw new Error('Tab render runtime registry is disposed.');
     }
   }
+}
+
+function createInitialTabRenderState(): TabRenderState {
+  return Object.freeze({
+    activeSurface: 'chat',
+    inputValue: '',
+    attachedFiles: Object.freeze([]),
+    selectedFileReferences: Object.freeze([]),
+    contextReferences: Object.freeze([]),
+    selectedModel: '',
+    mediaModelSelection: Object.freeze({ image: 'none', video: 'none', audio: 'none' }),
+    mediaUnderstandingSelection: Object.freeze({ image: 'auto', video: 'auto', audio: 'auto' }),
+    sessionMode: 'agent',
+    promptMode: 'default',
+    generationCategory: 'image',
+    generationParams: Object.freeze({ ...DEFAULT_GENERATION_PARAMS }),
+    composition: Object.freeze({ isComposing: false }),
+    focus: Object.freeze({ target: 'none', requestRevision: 0 }),
+    viewport: Object.freeze({ ...DEFAULT_CONVERSATION_VIEWPORT }),
+    menus: Object.freeze({ entryPrompt: null }),
+    queuedEdit: null,
+    diagnostics: Object.freeze([]),
+  });
+}
+
+function hasSameStateFields(previous: TabRenderState, next: TabRenderState): boolean {
+  const keys = Object.keys(next) as Array<keyof TabRenderState>;
+  return keys.every((key) => Object.is(previous[key], next[key]));
 }
 
 function assertBinding(binding: TabRenderBinding): void {

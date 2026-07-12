@@ -2,6 +2,50 @@ import { describe, expect, it, vi } from 'vitest';
 import { createTabRenderRuntime, createTabRenderRuntimeRegistry } from '../tab-render-runtime';
 
 describe('TabRenderRuntime', () => {
+  it('owns independent composer, configuration, viewport, and diagnostic state', () => {
+    const runtimeA = createTabRenderRuntime({ tabId: 'tab-a', conversationId: 'conv-a' });
+    const runtimeB = createTabRenderRuntime({ tabId: 'tab-b', conversationId: 'conv-b' });
+    const diagnostic = {
+      type: 'sessionDiagnostic' as const,
+      code: 'active-tab-mismatch' as const,
+      severity: 'error' as const,
+      action: 'session-mutation',
+      message: 'A only',
+    };
+
+    runtimeA.store.updateState((state) => ({
+      inputValue: 'draft-a',
+      attachedFiles: [{ id: 'asset-a', name: 'a.png', type: 'image', data: 'data-a' }],
+      selectedModel: 'model-a',
+      generationParams: { ...state.generationParams, resolution: '4K' },
+      composition: { isComposing: true },
+      focus: { target: 'input', requestRevision: state.focus.requestRevision + 1 },
+      viewport: { followMode: 'detached', anchorMessageId: 'message-a', anchorOffset: 12 },
+      menus: { entryPrompt: 'generate-assets' },
+      diagnostics: [diagnostic],
+    }));
+
+    expect(runtimeA.store.getSnapshot().state).toMatchObject({
+      inputValue: 'draft-a',
+      selectedModel: 'model-a',
+      generationParams: { resolution: '4K' },
+      composition: { isComposing: true },
+      focus: { target: 'input', requestRevision: 1 },
+      viewport: { followMode: 'detached', anchorMessageId: 'message-a', anchorOffset: 12 },
+      menus: { entryPrompt: 'generate-assets' },
+    });
+    expect(runtimeB.store.getSnapshot().state).toMatchObject({
+      inputValue: '',
+      attachedFiles: [],
+      selectedModel: '',
+      composition: { isComposing: false },
+      focus: { target: 'none', requestRevision: 0 },
+      viewport: { followMode: 'follow-tail' },
+      menus: { entryPrompt: null },
+      diagnostics: [],
+    });
+  });
+
   it('owns an independent store and explicit lifecycle per Tab binding', () => {
     const runtimeA = createTabRenderRuntime({ tabId: 'tab-a', conversationId: 'conv-a' });
     const runtimeB = createTabRenderRuntime({ tabId: 'tab-b', conversationId: 'conv-b' });
