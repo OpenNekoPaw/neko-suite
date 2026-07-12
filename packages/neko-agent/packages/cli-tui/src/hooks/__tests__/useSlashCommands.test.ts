@@ -6,9 +6,10 @@ import { createStrictTranslator } from '@neko/shared/i18n';
 import { createAgentTerminalPresentationContext } from '../../presentation/context';
 import { CLI_TERMINAL_MESSAGE_SOURCE } from '../../presentation/terminal-messages';
 import { useSlashCommands } from '../useSlashCommands';
-import { useAgentStore } from '../../stores/agent-store';
-import { useConversationStore } from '../../stores/conversation-store';
-import { useConfigStore } from '../../stores/config-store';
+import { testAgentStore as useAgentStore } from '../../__tests__/test-runtime';
+import { testConversationStore as useConversationStore } from '../../__tests__/test-runtime';
+import { testConfigStore as useConfigStore } from '../../__tests__/test-runtime';
+import { SharedTuiTestRuntimeProvider } from '../../__tests__/test-runtime';
 import { DEFAULT_CLI_CONFIG } from '../../core/types';
 
 vi.mock('../../core/config', () => ({
@@ -322,7 +323,11 @@ function renderHarness(actions: {
     return React.createElement(React.Fragment);
   }
 
-  render(React.createElement(Harness));
+  render(
+    React.createElement(SharedTuiTestRuntimeProvider, {
+      children: React.createElement(Harness),
+    }),
+  );
   if (!handleCommand) {
     throw new Error('Slash command harness did not initialize');
   }

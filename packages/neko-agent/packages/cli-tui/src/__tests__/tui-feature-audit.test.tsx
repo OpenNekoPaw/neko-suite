@@ -32,9 +32,10 @@ import { AgentTerminalPresentationProvider } from '../presentation/react-context
 import { presentHelpCommand } from '../presentation/resource-command-presentation';
 import { createTestAgentTerminalPresentation } from '../presentation/testing';
 
-import { useAgentStore } from '../stores/agent-store';
-import { useConversationStore } from '../stores/conversation-store';
-import { useConfigStore } from '../stores/config-store';
+import { testAgentStore as useAgentStore } from './test-runtime';
+import { testConversationStore as useConversationStore } from './test-runtime';
+import { testConfigStore as useConfigStore } from './test-runtime';
+import { SharedTuiTestRuntimeProvider } from './test-runtime';
 
 import type { Message, TodoItem } from '../types/state';
 import { DEFAULT_CLI_CONFIG } from '../core/types';
@@ -46,9 +47,11 @@ const TEST_TUI_COMMANDS = createTuiSlashCommandCatalog(undefined, TEST_PRESENTAT
 
 function render(node: React.ReactElement): ReturnType<typeof renderInk> {
   return renderInk(
-    <AgentTerminalPresentationProvider value={TEST_PRESENTATION}>
-      {node}
-    </AgentTerminalPresentationProvider>,
+    <SharedTuiTestRuntimeProvider>
+      <AgentTerminalPresentationProvider value={TEST_PRESENTATION}>
+        {node}
+      </AgentTerminalPresentationProvider>
+    </SharedTuiTestRuntimeProvider>,
   );
 }
 

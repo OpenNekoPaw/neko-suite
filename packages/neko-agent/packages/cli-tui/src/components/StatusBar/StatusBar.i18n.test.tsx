@@ -8,8 +8,9 @@ import { createAgentTerminalPresentationContext } from '../../presentation/conte
 import { createAgentTerminalFormatters } from '../../presentation/formatters';
 import { AgentTerminalPresentationProvider } from '../../presentation/react-context';
 import { CLI_TERMINAL_MESSAGE_SOURCE } from '../../presentation/terminal-messages';
-import { useAgentStore } from '../../stores/agent-store';
-import { useConfigStore } from '../../stores/config-store';
+import { testAgentStore as useAgentStore } from '../../__tests__/test-runtime';
+import { testConfigStore as useConfigStore } from '../../__tests__/test-runtime';
+import { SharedTuiTestRuntimeProvider } from '../../__tests__/test-runtime';
 import { StatusBar } from './StatusBar';
 
 afterEach(() => {
@@ -25,9 +26,11 @@ function renderWithPresentation(node: React.ReactElement, locale: SupportedLocal
     formatters: createAgentTerminalFormatters({ locale, timeZone: 'UTC' }),
   });
   return inkRender(
-    <AgentTerminalPresentationProvider value={presentation}>
-      {node}
-    </AgentTerminalPresentationProvider>,
+    <SharedTuiTestRuntimeProvider>
+      <AgentTerminalPresentationProvider value={presentation}>
+        {node}
+      </AgentTerminalPresentationProvider>
+    </SharedTuiTestRuntimeProvider>,
   );
 }
 

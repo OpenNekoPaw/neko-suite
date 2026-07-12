@@ -5,7 +5,6 @@
  * Delegates all loading/saving to @neko/cli/config.
  */
 
-import { create } from 'zustand';
 import { createStore, type StateCreator, type StoreApi } from 'zustand/vanilla';
 import type { CLIConfig } from '../core/types';
 import { DEFAULT_CLI_CONFIG } from '../core/types';
@@ -56,8 +55,3 @@ function createConfigState(
     };
   };
 }
-
-/** @deprecated Use the application-owned store exposed by TuiRuntimeProvider. */
-export const useConfigStore = create<ConfigSlice>(
-  createConfigState(DEFAULT_CLI_CONFIG, () => undefined),
-);

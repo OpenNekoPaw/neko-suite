@@ -40,10 +40,10 @@
 
 ## 5. Independent TUI Application and Session Runtimes
 
-- [ ] 5.1 Introduce one mutable application runtime per TUI root and remove mutable module-singleton ownership.
-- [ ] 5.2 Introduce independent TUI conversation/session render controllers for roots that host multiple conversations.
-- [ ] 5.3 Route TUI configuration, cancellation, projection, and presentation through explicit application/conversation scope.
-- [ ] 5.4 Add tests proving two TUI roots and multiple hosted conversations dispose and update independently.
+- [x] 5.1 Introduce one mutable application runtime per TUI root and remove mutable module-singleton ownership.
+- [x] 5.2 Introduce independent TUI conversation/session render controllers for roots that host multiple conversations.
+- [x] 5.3 Route TUI configuration, cancellation, projection, and presentation through explicit application/conversation scope.
+- [x] 5.4 Add tests proving two TUI roots and multiple hosted conversations dispose and update independently.
 
 ## 6. Authoritative Projection and Attachment Delivery
 

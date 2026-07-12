@@ -25,14 +25,17 @@ export function createTuiTestRuntime(
   return { application, conversation };
 }
 
+export const sharedTuiTestRuntime = createTuiTestRuntime();
+
 export function renderWithPresentation(
   node: ReactElement,
   locale: SupportedLocale = 'en',
-  runtime: TuiTestRuntime = createTuiTestRuntime(),
+  runtime?: TuiTestRuntime,
 ) {
+  const selectedRuntime = runtime ?? sharedTuiTestRuntime;
   const presentation = createTestAgentTerminalPresentation(locale);
   const wrap = (child: ReactElement): ReactElement => (
-    <TuiApplicationRuntimeProvider runtime={runtime.application}>
+    <TuiApplicationRuntimeProvider runtime={selectedRuntime.application}>
       <AgentTerminalPresentationProvider value={presentation}>
         {child}
       </AgentTerminalPresentationProvider>

@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { createEventAdapter } from './event-adapter';
-import { useAgentStore } from '../stores/agent-store';
-import { useConversationStore } from '../stores/conversation-store';
-import { useUIStore } from '../stores/ui-store';
+import { testAgentStore as useAgentStore } from '../__tests__/test-runtime';
+import { testConversationStore as useConversationStore } from '../__tests__/test-runtime';
+import { testUIStore as useUIStore } from '../__tests__/test-runtime';
 import { createTestAgentTerminalPresentation } from '../presentation/testing';
 
 describe('createEventAdapter queue projection', () => {

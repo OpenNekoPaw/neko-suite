@@ -3,16 +3,19 @@ import { render as renderInk } from 'ink-testing-library';
 import { afterEach, describe, expect, it } from 'vitest';
 import { AgentTerminalPresentationProvider } from '../../presentation/react-context';
 import { createTestAgentTerminalPresentation } from '../../presentation/testing';
-import { useAgentStore } from '../../stores/agent-store';
-import { useConversationStore } from '../../stores/conversation-store';
+import { testAgentStore as useAgentStore } from '../../__tests__/test-runtime';
+import { testConversationStore as useConversationStore } from '../../__tests__/test-runtime';
+import { SharedTuiTestRuntimeProvider } from '../../__tests__/test-runtime';
 import { ActivityIndicator } from './ActivityIndicator';
 import { ThinkingBlock } from './ThinkingBlock';
 
 function renderInChinese(node: React.ReactElement): ReturnType<typeof renderInk> {
   return renderInk(
-    <AgentTerminalPresentationProvider value={createTestAgentTerminalPresentation('zh-cn')}>
-      {node}
-    </AgentTerminalPresentationProvider>,
+    <SharedTuiTestRuntimeProvider>
+      <AgentTerminalPresentationProvider value={createTestAgentTerminalPresentation('zh-cn')}>
+        {node}
+      </AgentTerminalPresentationProvider>
+    </SharedTuiTestRuntimeProvider>,
   );
 }
 

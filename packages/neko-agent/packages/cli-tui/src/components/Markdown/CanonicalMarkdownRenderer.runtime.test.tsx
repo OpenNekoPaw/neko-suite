@@ -5,7 +5,8 @@ import {
   subscribeTerminalMarkdownPathEvents,
   type TerminalMarkdownPathEvent,
 } from '../../markdown/path-observer';
-import { useUIStore } from '../../stores/ui-store';
+import { testUIStore as useUIStore } from '../../__tests__/test-runtime';
+import { SharedTuiTestRuntimeProvider } from '../../__tests__/test-runtime';
 import { DEFAULT_MARKDOWN_RESOURCE_POLICY } from '../../markdown/resource-policy';
 import { AgentTerminalPresentationProvider } from '../../presentation/react-context';
 import { createTestAgentTerminalPresentation } from '../../presentation/testing';
@@ -19,9 +20,11 @@ const TEST_PRESENTATION = createTestAgentTerminalPresentation('en');
 
 function CanonicalMarkdownRenderer(props: CanonicalMarkdownRendererProps): React.JSX.Element {
   return (
-    <AgentTerminalPresentationProvider value={TEST_PRESENTATION}>
-      <CanonicalMarkdownRendererImpl {...props} />
-    </AgentTerminalPresentationProvider>
+    <SharedTuiTestRuntimeProvider>
+      <AgentTerminalPresentationProvider value={TEST_PRESENTATION}>
+        <CanonicalMarkdownRendererImpl {...props} />
+      </AgentTerminalPresentationProvider>
+    </SharedTuiTestRuntimeProvider>
   );
 }
 

@@ -1,7 +1,7 @@
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render } from 'ink-testing-library';
-import { useAgentStore } from '../../stores/agent-store';
+import { testAgentStore as useAgentStore } from '../../__tests__/test-runtime';
 import type { SupportedLocale } from '@neko/shared/i18n';
 import { AgentTerminalPresentationProvider } from '../../presentation/react-context';
 import { createTestAgentTerminalPresentation } from '../../presentation/testing';

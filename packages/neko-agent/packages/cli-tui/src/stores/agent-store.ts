@@ -5,7 +5,6 @@
  * iteration progress, token usage, and timing.
  */
 
-import { create } from 'zustand';
 import { createStore, type StateCreator, type StoreApi } from 'zustand/vanilla';
 import type {
   AgentStatus,
@@ -202,6 +201,3 @@ function createAgentState(assertMutable: () => void): StateCreator<AgentSlice> {
     };
   };
 }
-
-/** @deprecated Use the application-owned store exposed by TuiRuntimeProvider. */
-export const useAgentStore = create<AgentSlice>(createAgentState(() => undefined));

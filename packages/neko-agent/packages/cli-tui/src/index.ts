@@ -72,12 +72,6 @@ export type {
 
 export type { InkColor, ColorPair, ThemeTokens } from './types';
 
-// Stores
-export { useConversationStore } from './stores/conversation-store';
-export { useAgentStore } from './stores/agent-store';
-export { useConfigStore } from './stores/config-store';
-export { useUIStore } from './stores/ui-store';
-
 export {
   createAgentTuiApplicationRuntime,
   TuiRuntimeError,
@@ -88,6 +82,17 @@ export {
   type TuiRuntimeDiagnosticCode,
   type TuiRuntimeLifecycle,
 } from './runtime/tui-application-runtime';
+export {
+  TuiApplicationRuntimeProvider,
+  TuiConversationRuntimeProvider,
+  useTuiAgentStore,
+  useTuiApplicationRuntime,
+  useTuiConfigStore,
+  useTuiConversationRuntime,
+  useTuiConversationStore,
+  useTuiConversationStores,
+  useTuiUIStore,
+} from './runtime/tui-runtime-context';
 
 // Theme
 export { INK_BRAILLE_SPINNER, INK_TODO_ICONS, INK_TOOL_ICONS, tokens } from './theme';

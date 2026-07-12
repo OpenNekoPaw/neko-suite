@@ -1,8 +1,25 @@
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { DEFAULT_CLI_CONFIG } from '../core/types';
 import { createAgentTuiApplicationRuntime } from './tui-application-runtime';
 
 describe('AgentTuiApplicationRuntime', () => {
+  it('keeps mutable store ownership out of module-level bound hooks', () => {
+    const srcRoot = resolve(import.meta.dirname, '..');
+    for (const relativePath of [
+      'stores/agent-store.ts',
+      'stores/config-store.ts',
+      'stores/conversation-store.ts',
+      'stores/ui-store.ts',
+      'stores/index.ts',
+      'index.ts',
+    ]) {
+      const source = readFileSync(resolve(srcRoot, relativePath), 'utf8');
+      expect(source).not.toMatch(/export const use(?:Agent|Config|Conversation|UI)Store/u);
+    }
+  });
+
   it('creates independent mutable state for two TUI application roots', () => {
     const applicationA = createAgentTuiApplicationRuntime('application-a');
     const applicationB = createAgentTuiApplicationRuntime('application-b');

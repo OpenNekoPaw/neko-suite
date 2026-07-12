@@ -5,7 +5,6 @@
  * tool call lifecycle, and todo items.
  */
 
-import { create } from 'zustand';
 import { createStore, type StateCreator, type StoreApi } from 'zustand/vanilla';
 import type { Message, TerminalTimelineRow, ToolCallState, TodoItem } from '../types/state';
 
@@ -257,11 +256,6 @@ function createConversationState(assertMutable: () => void): StateCreator<Conver
     };
   };
 }
-
-/** @deprecated Use the conversation-owned store exposed by TuiRuntimeProvider. */
-export const useConversationStore = create<ConversationSlice>(
-  createConversationState(() => undefined),
-);
 
 function mergeTimelineRows(
   currentRows: readonly TerminalTimelineRow[],

@@ -5,7 +5,6 @@
  * selection menus, scroll position, focus, terminal dimensions.
  */
 
-import { create } from 'zustand';
 import { createStore, type StateCreator, type StoreApi } from 'zustand/vanilla';
 import type { TerminalSize } from '../types/state';
 
@@ -183,11 +182,6 @@ function readProcessTerminalSize(): TerminalSize {
     columns: process.stdout.columns ?? 80,
   };
 }
-
-/** @deprecated Use the application-owned store exposed by TuiRuntimeProvider. */
-export const useUIStore = create<UISlice>(
-  createUIState(readProcessTerminalSize(), () => undefined),
-);
 
 function normalizeScrollRows(value: number): number {
   if (!Number.isFinite(value)) {
