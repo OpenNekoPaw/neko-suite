@@ -1308,3 +1308,78 @@ git diff --check
 ```
 
 Agent package 全量 `tsc --noEmit` 仍受并行 perception/session 工作区改动与既有测试 fixture 类型债务阻塞；本批聚焦 ESLint、共享契约测试、task persistence 和 orchestrator 路径测试均通过，未将全包 typecheck 误报为成功。
+
+## 26. Approved Asset Headless Project Authoring（2026-07-12）
+
+任务 8.3 已完成。`project-authoring` stage 现在只把通过 exact-revision Quality Gate 的 durable asset 交给 Canvas/Cut/Audio owning package 的 public headless authoring API，不经由 active Webview、`postMessage`、旧 command 或 active-editor fallback。
+
+### 契约与职责边界
+
+- shared extension API 暴露最小 owning authoring surface：
+  - `NekoCanvasAPI.authoring.importAsset(...)`
+  - `NekoCutAPI.authoring.importGeneratedClip(...)`
+  - `NekoAudioAPI.authoring.importSource(...)`
+- 所有 mutation 都要求显式 `file` 或 `new` target；`active` target 在持久化 authoring plan 和 owning API 边界 fail-visible。
+- owning package 返回 durable `QualityProjectRef`，revision 由实际写入内容计算并分别使用 `nkc:<digest>`、`nkv:<digest>`、`nka:<digest>`。
+- Agent Extension resolver 仅依赖 `@neko/agent` 与 `@neko/shared` public contract，不 import Canvas/Cut/Audio feature package 内部实现。
+- Canvas 直接消费 stable `ResourceRef`；Cut/Audio 通过注入的 API-first durable source resolver materialize owning API 所需 source path，不把 cache path 或 runtime handle持久化为资产身份。
+
+### Workflow Gate 与幂等边界
+
+- workflow state 持久化 versioned `projectAuthoringPlan`，每个 handoff 记录 domain、source artifact、output profile 和 explicit target。
+- handoff 只接受 `verdict=pass` 且 `resourceRef.id`、revision、可用时的 content digest 与 source artifact 精确匹配的 Quality Gate evidence。
+- owning API 的成功结果必须包含 domain/target 匹配的 `projectRef`；缺失或错配 revision 会以 `invalid-authoring-result` 失败并持久化 failed stage snapshot。
+- completed `project-authoring` stage 再次执行不会重放 mutation；interrupted `running` stage 当前明确拒绝隐式重放，留给任务 8.4 的 validated resume policy 处理。
+- project artifact 将 approved source artifact id 与 owning API 返回的 project revision 绑定，供后续 preflight/export lineage 使用。
+
+### Legacy path poison 证据
+
+- Canvas explicit-target 测试将 active-document lookup poison 为抛错，并证明 save/reopen 与 revision 返回不依赖 active editor、command 或 reveal。
+- Agent resolver 静态 guard 扫描 resolver 与 orchestrator 源码，拒绝 legacy command、Webview message/snapshot、command dispatch 和 feature-package cross import。
+- runtime adapter 测试证明 Cut/Audio 经 exported authoring namespace 调用，Canvas 不 materialize path，owning extension/API 缺失时返回 `authoring-capability-unavailable`，不静默降级。
+
+相关提交：
+
+```text
+1c4056fe9 feat(authoring): return durable project revisions
+929cbcff6 feat(canvas): return revision from headless authoring
+fc9467153 feat(cut): return revision from headless authoring
+30d3b11a1 feat(audio): expose headless project authoring
+f4e089c80 feat(media): expose owning project authoring APIs
+b4035900e feat(agent): orchestrate approved project authoring
+```
+
+本轮验证：
+
+```bash
+pnpm --dir packages/neko-types exec vitest run \
+  src/types/__tests__/media-production-workflow.test.ts \
+  src/project-authoring/__tests__/project-authoring.test.ts
+# 2 files, 15 tests passed
+
+pnpm --dir packages/neko-agent exec vitest run \
+  packages/agent/src/media-production/__tests__/early-stage-orchestrator.test.ts \
+  packages/agent/src/media-production/__tests__/project-authoring-orchestrator.test.ts \
+  packages/agent/src/task/__tests__/media-production-workflow-state.test.ts \
+  packages/extension/src/services/__tests__/mediaProductionProjectAuthoringResolver.test.ts
+# 4 files, 14 tests passed
+
+pnpm exec eslint \
+  packages/neko-types/src/types/media-production-workflow.ts \
+  packages/neko-types/src/types/__tests__/media-production-workflow.test.ts \
+  packages/neko-agent/packages/agent/src/media-production/project-authoring-orchestrator.ts \
+  packages/neko-agent/packages/agent/src/media-production/__tests__/project-authoring-orchestrator.test.ts \
+  packages/neko-agent/packages/agent/src/media-production/index.ts \
+  packages/neko-agent/packages/agent/src/index.ts \
+  packages/neko-agent/packages/extension/src/services/mediaProductionProjectAuthoringResolver.ts \
+  packages/neko-agent/packages/extension/src/services/__tests__/mediaProductionProjectAuthoringResolver.test.ts
+# passed
+
+pnpm --dir packages/neko-agent run compile:extension
+# passed
+
+git diff --check
+# passed
+```
+
+本任务没有把 resolver 注册成新的通用 workflow service，也没有新增用户级 Skill/command；它保持为可注入的 Extension adapter 与 Agent stage orchestrator，避免继续膨胀创作入口。任务 8.4 仍负责 cancellation/interrupted-running 的 artifact validation 与 resume 语义。
