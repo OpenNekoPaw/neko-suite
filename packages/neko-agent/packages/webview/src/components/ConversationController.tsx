@@ -515,6 +515,35 @@ export function ConversationController({
       entrySelectedModel,
     ],
   );
+  useEffect(() => {
+    const availableModelIds = new Set(activeSettings.chatModelOptions.map((option) => option.id));
+    const configuredModelId =
+      activeSettings.selectedProviderId && activeSettings.selectedModelId
+        ? `${activeSettings.selectedProviderId}:${activeSettings.selectedModelId}`
+        : '';
+    const firstChatModel = activeSettings.chatModelOptions.find(
+      (option) => (option.category ?? 'llm') === 'llm',
+    );
+    setEntrySelectedModel((current) =>
+      availableModelIds.has(current)
+        ? current
+        : availableModelIds.has(configuredModelId)
+          ? configuredModelId
+          : (firstChatModel?.id ?? ''),
+    );
+    setEntryMediaModelSelection(
+      (current) =>
+        projectMediaModelSelectionDefaults({
+          selection: current,
+          defaults: activeSettings.defaultMediaModels ?? {},
+        }).selection,
+    );
+  }, [
+    activeSettings.chatModelOptions,
+    activeSettings.defaultMediaModels,
+    activeSettings.selectedModelId,
+    activeSettings.selectedProviderId,
+  ]);
   const handleModelSelectForConversation = useCallback(
     (conversationId: string, modelId: string) => {
       const conversationModelOptions =

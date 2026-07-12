@@ -113,7 +113,18 @@ export interface AssistantSettingsData extends AssistantSettingsSnapshot {
 export interface AssistantConfigState {
   providers: AssistantProviderView[];
   configuredProviders: AssistantConfiguredProviderView[];
+  selectedProviderId: string | null;
+  selectedModelId: string | null;
+  customSystemPrompt: string;
+  autoExecuteTools: boolean;
+  streamResponses: boolean;
+  showToolCalls: boolean;
+  temperature: number;
+  maxTokens: number;
+  executionMode: AssistantExecutionMode;
+  chatModelOptions: ChatModelOption[];
   modelGroups: ModelSourceGroup[];
+  defaultMediaModels: Partial<Record<MediaModelType, string>>;
   mediaUnderstandingModels?: MediaUnderstandingModels;
   accountDiagnostics?: AccountAiCatalogDiagnostic[];
   configDiagnostic?: AssistantConfigDiagnostic;
@@ -183,7 +194,7 @@ export function buildAssistantProviderViews(config: Pick<MergedConfig, 'provider
 
 export function buildAssistantConfigState(
   config: Pick<MergedConfig, 'providers' | 'models'>,
-): AssistantConfigState {
+): Pick<AssistantConfigState, 'providers' | 'configuredProviders' | 'modelGroups'> {
   return {
     providers: buildAssistantProviderViews(config),
     configuredProviders: buildAssistantConfiguredProviderViews(config),

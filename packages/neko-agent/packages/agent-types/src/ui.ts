@@ -181,6 +181,8 @@ export interface SettingsState {
   promptMode: PromptMode;
   /** Chat model options for UI model selector (from Platform ConfigManager) */
   chatModelOptions: Array<ChatModelOption>;
+  /** Global defaults for the tabless composer; conversation snapshots remain authoritative. */
+  defaultMediaModels?: Partial<Record<'image' | 'video' | 'audio', string>>;
   /** Source/provider grouped model options for account gateway and explicit config providers. */
   modelGroups: Array<ModelSourceGroup>;
   /** Read-only projection of the models Agent will use for native media understanding. */

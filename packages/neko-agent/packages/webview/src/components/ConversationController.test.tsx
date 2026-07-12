@@ -315,9 +315,13 @@ vi.mock('@/components/ChatView/InputArea', async () => {
       disabled?: boolean;
       entryPromptMenu?: 'generate-assets' | 'roleplay' | null;
     }) => {
-      const { onRequestFiles } = useInputAreaContext();
+      const { onRequestFiles, selectedModel, mediaModelSelection } = useInputAreaContext();
       return (
         <div>
+          <span data-testid="entry-selected-model">{selectedModel}</span>
+          <span data-testid="entry-media-models">
+            {Object.values(mediaModelSelection).join('|')}
+          </span>
           <input
             placeholder="Type anything..."
             value={props.inputValue}
@@ -341,6 +345,42 @@ vi.mock('@/components/ChatView/InputArea', async () => {
 });
 
 describe('ConversationController entry state', () => {
+  it('hydrates the tabless composer from global config defaults', () => {
+    render(
+      <ConversationController
+        {...createProps({
+          settings: {
+            ...createSettings(),
+            selectedProviderId: 'nekoapi-chat',
+            selectedModelId: 'gpt-5.5',
+            chatModelOptions: [
+              {
+                id: 'nekoapi-chat:gpt-5.5',
+                label: 'GPT 5.5',
+                providerId: 'nekoapi-chat',
+                modelId: 'gpt-5.5',
+                category: 'llm',
+              },
+              {
+                id: 'nekoapi-media:gpt-image-2',
+                label: 'GPT Image 2',
+                providerId: 'nekoapi-media',
+                modelId: 'gpt-image-2',
+                category: 'image',
+              },
+            ],
+            defaultMediaModels: { image: 'nekoapi-media:gpt-image-2' },
+          },
+        })}
+      />,
+    );
+
+    expect(screen.getByTestId('entry-selected-model').textContent).toBe('nekoapi-chat:gpt-5.5');
+    expect(screen.getByTestId('entry-media-models').textContent).toBe(
+      'nekoapi-media:gpt-image-2|none|none',
+    );
+  });
+
   it('shows entry content only when no tabs are open and opens asset prompts from the entry button', () => {
     vi.clearAllMocks();
     render(<ConversationController {...createProps()} />);
@@ -1597,13 +1637,14 @@ function createActivationEvent(conversationId: string, name: string) {
 interface CreatePropsOptions {
   readonly history?: readonly ConversationSummary[];
   readonly workItemsByConversation?: Map<string, Map<string, AgentWorkItem>>;
+  readonly settings?: SettingsState;
 }
 
 function createProps(
   options: CreatePropsOptions = {},
 ): React.ComponentProps<typeof ConversationController> {
   return {
-    settings: createSettings(),
+    settings: options.settings ?? createSettings(),
     setSettings: vi.fn(),
     setHasConfigSnapshot: vi.fn(),
     setProjectFiles: vi.fn(),

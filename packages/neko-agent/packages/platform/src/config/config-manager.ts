@@ -301,10 +301,13 @@ export class ConfigManager {
   getAssistantConfigState(
     options: { accountCatalog?: AccountAiCatalogSnapshot | null } = {},
   ): AssistantConfigState {
+    const config = this.getConfig();
     const projection = this.resolveProviderSources(options.accountCatalog ?? null);
     const configDiagnostic = this.getProjectedConfigDiagnostic(projection);
-    const explicitState = buildAssistantConfigState(this.getConfig());
+    const explicitState = buildAssistantConfigState(config);
     const accountProviderViews = this.buildAccountProviderViews(options.accountCatalog ?? null);
+    const settings = this.getAssistantSettingsSnapshot();
+    const chatModelOptions = [...projection.chatModelOptions];
     return {
       ...explicitState,
       providers: [...accountProviderViews, ...explicitState.providers],
@@ -312,7 +315,22 @@ export class ConfigManager {
         ...accountProviderViews.map((provider) => ({ ...provider })),
         ...explicitState.configuredProviders,
       ],
+      selectedProviderId: settings.selectedProviderId,
+      selectedModelId: settings.selectedModelId,
+      customSystemPrompt: settings.customSystemPrompt,
+      autoExecuteTools: settings.autoExecuteTools,
+      streamResponses: settings.streamResponses,
+      showToolCalls: settings.showToolCalls,
+      temperature: settings.temperature,
+      maxTokens: settings.maxTokens,
+      executionMode: settings.executionMode,
+      chatModelOptions,
       modelGroups: [...projection.modelGroups],
+      defaultMediaModels: buildDefaultMediaModelOptionIds({
+        defaultMediaModels: this.getEffectiveAgentWorkspaceConfigSnapshot().defaultMediaModels,
+        chatModelOptions,
+        models: config.models.values(),
+      }),
       mediaUnderstandingModels: this.buildMediaUnderstandingModels(),
       ...(options.accountCatalog?.diagnostics
         ? {

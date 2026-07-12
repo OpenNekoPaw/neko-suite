@@ -29,6 +29,12 @@ describe('ConfigBridge', () => {
         providers: [],
         configuredProviders: [],
         modelGroups: [],
+        selectedProviderId: 'provider-default',
+        selectedModelId: 'model-default',
+        chatModelOptions: [],
+        defaultMediaModels: {},
+        maxTokens: 8192,
+        executionMode: 'ask',
       },
     });
 
@@ -59,6 +65,12 @@ function createPlatform(): Platform {
         providers: [],
         configuredProviders: [],
         modelGroups: [],
+        selectedProviderId: 'provider-default',
+        selectedModelId: 'model-default',
+        chatModelOptions: [],
+        defaultMediaModels: {},
+        maxTokens: 8192,
+        executionMode: 'ask',
       })),
     },
   } as unknown as Platform;

@@ -14,6 +14,7 @@
 - [x] 2.4 Change Webview/Extension configuration messages and handlers to require `conversationId` and update only that conversation.
 - [x] 2.5 Remove global running-Agent and active-Task configuration locks and poison their old call path in regression tests.
 - [x] 2.6 Verify concurrent A/B runs and future-turn configuration changes do not mutate active turn snapshots.
+- [x] 2.7 Project global defaults independently for the tabless composer and prevent conversation settings snapshots from mutating global entry state.
 
 ## 3. Scoped SubAgent and Task Runtime
 

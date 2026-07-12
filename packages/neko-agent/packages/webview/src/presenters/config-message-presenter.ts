@@ -260,11 +260,39 @@ export function projectConfigStateMessage(
   message: ConfigStateMessage,
 ): Partial<SettingsState> | null {
   if (!message.config) return null;
+  const config = asRecord(message.config);
+  if (!config) return null;
   const mediaUnderstandingModels = readMediaUnderstandingModels(
     message.config.mediaUnderstandingModels,
   );
+  const customSystemPrompt = readString(config, 'customSystemPrompt');
+  const autoExecuteTools = readBoolean(config, 'autoExecuteTools');
+  const streamResponses = readBoolean(config, 'streamResponses');
+  const showToolCalls = readBoolean(config, 'showToolCalls');
+  const temperature = readNumber(config, 'temperature');
+  const maxTokens = readNumber(config, 'maxTokens');
+  const executionMode = readShellExecutionMode(message.config.executionMode);
   return {
     configuredProviders: message.config.configuredProviders ?? [],
+    ...(message.config.selectedProviderId !== undefined
+      ? { selectedProviderId: message.config.selectedProviderId }
+      : {}),
+    ...(message.config.selectedModelId !== undefined
+      ? { selectedModelId: message.config.selectedModelId }
+      : {}),
+    ...(customSystemPrompt !== undefined ? { systemPrompt: customSystemPrompt } : {}),
+    ...(autoExecuteTools !== undefined ? { autoExecuteTools } : {}),
+    ...(streamResponses !== undefined ? { streamResponses } : {}),
+    ...(showToolCalls !== undefined ? { showToolCalls } : {}),
+    ...(temperature !== undefined ? { temperature } : {}),
+    ...(maxTokens !== undefined ? { maxTokens } : {}),
+    ...(executionMode ? { executionMode } : {}),
+    ...(Array.isArray(message.config.chatModelOptions)
+      ? { chatModelOptions: readChatModelOptions(message.config.chatModelOptions) }
+      : {}),
+    ...(message.config.defaultMediaModels !== undefined
+      ? { defaultMediaModels: readMediaModelDefaults(message.config.defaultMediaModels) }
+      : {}),
     ...(Array.isArray(message.config.modelGroups)
       ? {
           modelGroups: readModelSourceGroups(message.config.modelGroups),

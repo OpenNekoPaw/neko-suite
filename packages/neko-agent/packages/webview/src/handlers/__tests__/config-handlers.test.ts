@@ -51,7 +51,7 @@ describe('configHandlers', () => {
       context,
     );
 
-    expect(context.setSettings).toHaveBeenCalledTimes(1);
+    expect(context.setSettings).not.toHaveBeenCalled();
     expect(context.hydrateConversationSettings).toHaveBeenCalledWith(
       'conversation-1',
       expect.objectContaining({ selectedModel: '' }),
@@ -77,7 +77,7 @@ describe('configHandlers', () => {
       context,
     );
 
-    expect(context.setSettings).toHaveBeenCalledTimes(1);
+    expect(context.setSettings).not.toHaveBeenCalled();
     expect(context.setHasConfigSnapshot).not.toHaveBeenCalled();
     expect(context.hydrateConversationSettings).toHaveBeenCalledWith(
       'conversation-1',
@@ -178,10 +178,7 @@ describe('configHandlers', () => {
       'conversation-1',
       expect.objectContaining({ selectedModel: 'neko-account-gateway:auto' }),
     );
-    expect(context.updateSettings).toHaveBeenCalledWith({
-      selectedProviderId: 'neko-account-gateway',
-      selectedModelId: 'auto',
-    });
+    expect(context.updateSettings).not.toHaveBeenCalled();
     expect(messageMocks.updateSettingsMessage).toHaveBeenCalledWith(
       {
         providerId: 'neko-account-gateway',
@@ -227,10 +224,7 @@ describe('configHandlers', () => {
       'conversation-1',
       expect.objectContaining({ selectedModel: 'deepseek-direct:deepseek-chat' }),
     );
-    expect(context.updateSettings).toHaveBeenCalledWith({
-      selectedProviderId: 'deepseek-direct',
-      selectedModelId: 'deepseek-chat',
-    });
+    expect(context.updateSettings).not.toHaveBeenCalled();
     expect(messageMocks.updateSettingsMessage).toHaveBeenCalledWith(
       {
         providerId: 'deepseek-direct',

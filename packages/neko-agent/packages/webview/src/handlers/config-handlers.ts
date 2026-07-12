@@ -40,10 +40,6 @@ const handleSettingsData: MessageHandler<'settingsData'> = (
   context,
 ) => {
   const projection = projectSettingsDataMessage(message);
-  context.setSettings((prev) => ({
-    ...prev,
-    ...projection.settingsPatch,
-  }));
 
   const defaultChatModel = selectInitialChatModel(projection);
   context.hydrateConversationSettings(message.conversationId, {
@@ -54,10 +50,6 @@ const handleSettingsData: MessageHandler<'settingsData'> = (
     settingsPatch: projection.settingsPatch,
   });
   if (!projection.selectedModel && defaultChatModel) {
-    context.updateSettings({
-      selectedProviderId: defaultChatModel.providerId,
-      selectedModelId: defaultChatModel.modelId,
-    });
     AgentHostMessages.updateSettings(
       {
         providerId: defaultChatModel.providerId,

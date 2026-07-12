@@ -606,6 +606,20 @@ describe('config message presenter', () => {
         type: 'configState',
         config: {
           configuredProviders,
+          selectedProviderId: 'openai',
+          selectedModelId: 'gpt',
+          chatModelOptions: [
+            {
+              id: 'openai:gpt',
+              label: 'OpenAI / GPT',
+              providerId: 'openai',
+              modelId: 'gpt',
+              category: 'llm',
+            },
+          ],
+          defaultMediaModels: { image: 'openai:image' },
+          maxTokens: 16384,
+          executionMode: 'auto',
           mediaUnderstandingModels: {
             image: {
               category: 'image',
@@ -645,6 +659,20 @@ describe('config message presenter', () => {
       }),
     ).toEqual({
       configuredProviders,
+      selectedProviderId: 'openai',
+      selectedModelId: 'gpt',
+      chatModelOptions: [
+        {
+          id: 'openai:gpt',
+          label: 'OpenAI / GPT',
+          providerId: 'openai',
+          modelId: 'gpt',
+          category: 'llm',
+        },
+      ],
+      defaultMediaModels: { image: 'openai:image' },
+      maxTokens: 16384,
+      executionMode: 'auto',
       mediaUnderstandingModels: {
         image: {
           category: 'image',

@@ -837,7 +837,18 @@ export interface ConfigStateMessage {
   config?: {
     providers?: ConfiguredProvider[];
     configuredProviders?: ConfiguredProvider[];
+    selectedProviderId?: string | null;
+    selectedModelId?: string | null;
+    customSystemPrompt?: string;
+    autoExecuteTools?: boolean;
+    streamResponses?: boolean;
+    showToolCalls?: boolean;
+    temperature?: number;
+    maxTokens?: number;
+    executionMode?: SettingsState['executionMode'];
+    chatModelOptions?: ChatModelOption[];
     modelGroups?: SettingsState['modelGroups'];
+    defaultMediaModels?: Partial<Record<MediaModelCategory, string>>;
     mediaUnderstandingModels?: SettingsState['mediaUnderstandingModels'];
     configDiagnostic?: AgentConfigDiagnostic;
   };

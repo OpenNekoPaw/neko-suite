@@ -570,6 +570,59 @@ describe('ConfigManager', () => {
       });
     });
 
+    it('projects global model defaults for the tabless Agent composer', () => {
+      const provider: Provider = {
+        ...SAMPLE_PROVIDER,
+        id: 'local-provider',
+        type: 'ollama',
+        connectionKind: 'local',
+        requiresApiKey: false,
+      };
+      const chatModel: Model = {
+        ...SAMPLE_MODEL,
+        id: 'chat-model',
+        providerId: provider.id,
+      };
+      const imageModel: Model = {
+        ...SAMPLE_MODEL,
+        id: 'image-model',
+        providerId: provider.id,
+        type: 'image',
+        capabilities: ['text_to_image'],
+      };
+      const manager = new ConfigManager({
+        userConfigManager: createReadResultUserConfigManager({
+          status: 'ok',
+          filePath: '/tmp/neko/config.toml',
+          config: {
+            providers: [provider],
+            models: [chatModel, imageModel],
+            defaultModels: {
+              llm: { providerId: provider.id, modelId: chatModel.id },
+              image: { providerId: provider.id, modelId: imageModel.id },
+            },
+          },
+        }),
+      });
+
+      expect(manager.getAssistantConfigState()).toEqual(
+        expect.objectContaining({
+          selectedProviderId: provider.id,
+          selectedModelId: chatModel.id,
+          chatModelOptions: expect.arrayContaining([
+            expect.objectContaining({
+              id: `${provider.id}:${chatModel.id}`,
+              providerId: provider.id,
+              modelId: chatModel.id,
+            }),
+          ]),
+          defaultMediaModels: {
+            image: `${provider.id}:${imageModel.id}`,
+          },
+        }),
+      );
+    });
+
     it('keeps invalid explicit AI config diagnostic instead of falling back to account gateway', () => {
       const manager = new ConfigManager({
         userConfigManager: createReadResultUserConfigManager({
