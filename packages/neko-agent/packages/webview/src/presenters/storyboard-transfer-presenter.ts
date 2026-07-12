@@ -1,15 +1,55 @@
 import {
   projectStoryboardTableToCutPayload as projectSemanticStoryboardTableToCutPayload,
+  validateCanonicalStoryboardTable,
   type DocumentArchiveResourceRef,
   type StoryboardMediaRef,
+  type StoryboardTable,
 } from '@neko/shared';
-import type { PluginTransferAssetRef, PluginTransferPayload } from '@neko-agent/types';
+import type {
+  PluginTransferAssetRef,
+  PluginTransferPayload,
+  RequestCanvasAuthoringHandoffWebviewMessage,
+} from '@neko-agent/types';
 import type { StoryboardScene } from '@/components/ChatView/MediaPreview';
 import type {
   ResolvedCompositeMedia,
   ResolvedCompositeSection,
   StoryboardTableRichData,
 } from './composite-content-presenter';
+
+type StoryboardCanvasAuthoringHandoff = Omit<
+  RequestCanvasAuthoringHandoffWebviewMessage,
+  'type' | 'requestId' | 'conversationId'
+>;
+
+export function projectCanonicalStoryboardCanvasAuthoringHandoff(
+  storyboard: StoryboardTable,
+): StoryboardCanvasAuthoringHandoff | null {
+  if (!validateCanonicalStoryboardTable(storyboard).ok) return null;
+
+  const shotCount = storyboard.scenes.reduce((count, scene) => count + scene.shots.length, 0);
+  return {
+    sourceKind: 'structured-content',
+    sourceFormat: 'composite-artifact',
+    content: `Canonical Storyboard: ${storyboard.title} (${storyboard.scenes.length} scenes, ${shotCount} shots)`,
+    title: storyboard.title,
+    canonicalStoryboard: storyboard,
+    userIntent:
+      'Create Canvas storyboard production nodes from this canonical Storyboard without Markdown reconstruction or asset flattening.',
+    targetHints: {
+      declaredProfileHint: 'storyboard',
+      operationHint: 'canvas.createStoryboardFromMarkdown',
+    },
+  };
+}
+
+export function projectStoryboardTableCanvasAuthoringHandoff(
+  data: StoryboardTableRichData,
+): StoryboardCanvasAuthoringHandoff | null {
+  return data.storyboardTable
+    ? projectCanonicalStoryboardCanvasAuthoringHandoff(data.storyboardTable)
+    : null;
+}
 
 export function projectStoryboardScenesAssetBatch(
   scenes: readonly StoryboardScene[],

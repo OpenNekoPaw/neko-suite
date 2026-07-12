@@ -124,6 +124,58 @@ describe('ContentBlockItem Canvas transfer actions', () => {
     );
   });
 
+  it('routes embedded canonical Storyboard actions without Markdown reconstruction or asset flattening', () => {
+    const canonicalStoryboard = createCanonicalStoryboardFixture();
+    renderContentBlock({
+      id: 'canonical-storyboard',
+      type: 'text',
+      timestamp: 1,
+      content: `\`\`\`neko-composite\n${JSON.stringify({
+        ...canonicalStoryboard,
+        template: 'storyboard-table',
+      })}\n\`\`\``,
+    });
+
+    const canvasActions = screen.getAllByRole('button', { name: /Canvas/ });
+    expect(canvasActions.length).toBeGreaterThan(0);
+    for (const action of canvasActions) fireEvent.click(action);
+
+    const handoffMessages = mockPostMessage.mock.calls.map((call) => call[0]);
+    expect(handoffMessages.length).toBe(canvasActions.length);
+    for (const message of handoffMessages) {
+      expect(message).toEqual(
+        expect.objectContaining({
+          type: 'requestCanvasAuthoringHandoff',
+          conversationId: 'conv-1',
+          sourceKind: 'structured-content',
+          sourceFormat: 'composite-artifact',
+          canonicalStoryboard: expect.objectContaining({
+            revision: expect.objectContaining({ revisionId: 'storyboard-rev-1' }),
+            scenes: [
+              expect.objectContaining({
+                sceneId: 'scene-1',
+                shots: [
+                  expect.objectContaining({
+                    shotId: 'shot-1',
+                    imagePrompt: 'cat keyframe',
+                    videoPrompt: 'cat scene motion',
+                    sourceMediaRefs: [
+                      expect.objectContaining({
+                        refId: 'source-image-1',
+                        resourceRef: expect.objectContaining({ id: 'source-image-resource' }),
+                      }),
+                    ],
+                  }),
+                ],
+              }),
+            ],
+          }),
+        }),
+      );
+      expect(JSON.stringify(message)).not.toContain('assetBatch');
+    }
+  });
+
   it('renders Canvas transfer for storyboard-ready markdown', () => {
     renderContentBlock({
       id: 'storyboard',
@@ -437,4 +489,72 @@ function storyboardCreativeTableValue(header: string): string {
     duplicateOf: '',
   };
   return values[header] ?? '';
+}
+
+function createCanonicalStoryboardFixture() {
+  return {
+    schemaVersion: 1 as const,
+    kind: 'storyboard-table' as const,
+    contractVersion: 1 as const,
+    sourceProfile: 'from-script' as const,
+    revision: {
+      revisionId: 'storyboard-rev-1',
+      sequence: 1,
+      contentDigest: 'storyboard-rev-1',
+      createdAt: '2026-07-12T00:00:00.000Z',
+    },
+    sourceTrace: [
+      {
+        traceId: 'trace-1',
+        sourceProfile: 'from-script' as const,
+        sourceRef: {
+          id: 'story-source-resource',
+          scope: 'project' as const,
+          provider: 'workspace',
+          kind: 'document' as const,
+          source: { kind: 'file' as const, projectRelativePath: 'scripts/story.md' },
+          locator: { kind: 'file' as const, path: '${WORKSPACE}/scripts/story.md' },
+          fingerprint: { strategy: 'hash' as const, value: 'story-source' },
+        },
+      },
+    ],
+    title: 'Cats',
+    scenes: [
+      {
+        sceneId: 'scene-1',
+        sceneTitle: 'Hallway',
+        shots: [
+          {
+            shotId: 'shot-1',
+            shotNumber: 1,
+            duration: 3,
+            visualDescription: 'A cat enters.',
+            characterAction: 'The cat walks.',
+            imageStrategy: 'use-as-reference' as const,
+            imagePrompt: 'cat keyframe',
+            videoPrompt: 'cat scene motion',
+            sourceMediaRefs: [
+              {
+                refId: 'source-image-1',
+                role: 'source' as const,
+                locator: {
+                  type: 'workspace-path' as const,
+                  path: '${WORKSPACE}/assets/cat.png',
+                },
+                resourceRef: {
+                  id: 'source-image-resource',
+                  scope: 'project' as const,
+                  provider: 'workspace',
+                  kind: 'media' as const,
+                  source: { kind: 'file' as const, projectRelativePath: 'assets/cat.png' },
+                  locator: { kind: 'file' as const, path: '${WORKSPACE}/assets/cat.png' },
+                  fingerprint: { strategy: 'hash' as const, value: 'cat-image' },
+                },
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  };
 }

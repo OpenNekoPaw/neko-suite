@@ -28,6 +28,7 @@ import {
   parseCompositeContentJsonCandidates,
   type ContentBlock,
 } from '@neko-agent/types';
+import type { PluginsAvailable } from '@/components/ChatView/SendToMenu';
 import {
   isCanvasStoryboardReferenceImageProcessingPrompt,
   resolveCreativeTableField,
@@ -58,6 +59,8 @@ interface MarkdownRendererProps {
   sessionKey: string;
   contentBlockId?: string;
   siblingBlocks?: readonly ContentBlock[];
+  conversationId?: string | null;
+  plugins?: PluginsAvailable;
 }
 
 interface NormalizedMarkdownRenderContext {
@@ -67,6 +70,8 @@ interface NormalizedMarkdownRenderContext {
   readonly definitions: ReadonlyMap<string, MarkdownDefinitionNode>;
   readonly contentBlockId?: string;
   readonly siblingBlocks?: readonly ContentBlock[];
+  readonly conversationId?: string | null;
+  readonly plugins?: PluginsAvailable;
 }
 
 function renderNormalizedMarkdownDocument(
@@ -1355,17 +1360,26 @@ function projectStructuredCodeBlock(
   return (
     <div className="my-2 flex flex-col gap-2">
       {composites.map((composite, index) => {
-        const richContent = projectCompositeBlockRichContent({ composite });
+        const richContent = projectCompositeBlockRichContent({
+          composite,
+          plugins: context.plugins,
+        });
         return (
           <RichContentRenderer
             key={`${composite.template}-${composite.title ?? 'artifact'}-${index}`}
             kind={richContent.kind}
             data={richContent.data}
+            conversationId={context.conversationId}
           />
         );
       })}
       {artifacts.map((artifact) => (
-        <RichContentRenderer key={artifact.artifactId} kind="composite-artifact" data={artifact} />
+        <RichContentRenderer
+          key={artifact.artifactId}
+          kind="composite-artifact"
+          data={artifact}
+          conversationId={context.conversationId}
+        />
       ))}
     </div>
   );
@@ -1634,6 +1648,8 @@ function MarkdownRendererComponent({
   sessionKey,
   contentBlockId,
   siblingBlocks,
+  conversationId,
+  plugins,
 }: MarkdownRendererProps) {
   const locale = normalizeMarkdownDisplayLocale(getLocale());
   const snapshot = useCanonicalMarkdownSnapshot({ content, isStreaming, sessionKey });
@@ -1645,8 +1661,19 @@ function MarkdownRendererComponent({
         locale,
         contentBlockId,
         siblingBlocks,
+        conversationId,
+        plugins,
       }),
-    [contentBlockId, isStreaming, locale, markdownResources, siblingBlocks, snapshot],
+    [
+      contentBlockId,
+      conversationId,
+      isStreaming,
+      locale,
+      markdownResources,
+      plugins,
+      siblingBlocks,
+      snapshot,
+    ],
   );
 
   return (

@@ -1,6 +1,7 @@
 import type { CompositeBlockData, CompositeSection, MediaRef } from './message';
 import {
   hasBlockingStoryboardDiagnostics,
+  normalizeCanonicalStoryboardTable,
   normalizeStoryboardTable,
   normalizeStoryboardPlanOverlay,
   type ArtifactExtensionMap,
@@ -107,13 +108,16 @@ function normalizeCompositeBlock(value: unknown): CompositeBlockData | null {
 
   const semanticStoryboard =
     template === 'storyboard-table' && (value.schemaVersion === 1 || value.scenes !== undefined)
-      ? normalizeStoryboardTable({ value })
+      ? normalizeStoryboardCompositePayload(value)
       : undefined;
-  const title = readString(value, 'title') ?? semanticStoryboard?.table?.title;
+  const title = readString(value, 'title') ?? semanticStoryboard?.displayTable?.title;
   const sections = normalizeCompositeSections(value.sections);
   const projectedSections =
     template === 'storyboard-table'
-      ? createStoryboardDisplaySections(semanticStoryboard?.table, semanticStoryboard?.diagnostics)
+      ? createStoryboardDisplaySections(
+          semanticStoryboard?.displayTable,
+          semanticStoryboard?.diagnostics,
+        )
       : [];
   const normalizedSections = sections.length > 0 ? sections : projectedSections;
   if (normalizedSections.length === 0) return null;
@@ -121,13 +125,47 @@ function normalizeCompositeBlock(value: unknown): CompositeBlockData | null {
   return {
     template,
     ...(title ? { title } : {}),
-    ...(semanticStoryboard?.table ? { storyboardTable: semanticStoryboard.table } : {}),
+    ...(semanticStoryboard?.canonicalTable
+      ? { storyboardTable: semanticStoryboard.canonicalTable }
+      : {}),
     ...(semanticStoryboard?.diagnostics && semanticStoryboard.diagnostics.length > 0
       ? { storyboardDiagnostics: semanticStoryboard.diagnostics }
       : {}),
     ...projectExtensions(value.extensions),
     sections: normalizedSections,
   };
+}
+
+interface NormalizedStoryboardCompositePayload {
+  readonly displayTable?: StoryboardTable;
+  readonly canonicalTable?: StoryboardTable;
+  readonly diagnostics: readonly StoryboardValidationDiagnostic[];
+}
+
+function normalizeStoryboardCompositePayload(value: unknown): NormalizedStoryboardCompositePayload {
+  const display = normalizeStoryboardTable({ value });
+  const canonical = normalizeCanonicalStoryboardTable({ value });
+  const diagnostics = dedupeStoryboardDiagnostics([
+    ...display.diagnostics,
+    ...canonical.diagnostics,
+  ]);
+  return {
+    ...(display.table ? { displayTable: display.table } : {}),
+    ...(canonical.table ? { canonicalTable: canonical.table } : {}),
+    diagnostics,
+  };
+}
+
+function dedupeStoryboardDiagnostics(
+  diagnostics: readonly StoryboardValidationDiagnostic[],
+): readonly StoryboardValidationDiagnostic[] {
+  const seen = new Set<string>();
+  return diagnostics.filter((diagnostic) => {
+    const key = `${diagnostic.severity}:${diagnostic.code}:${diagnostic.path.join('.')}:${diagnostic.message}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 function normalizeArtifactBackedStoryboardBlock(
@@ -149,17 +187,17 @@ function normalizeArtifactBackedStoryboardBlock(
   }
   if (!storyboardBlock) return null;
 
-  const semanticStoryboard = normalizeStoryboardTable({ value: storyboardBlock.payload });
+  const semanticStoryboard = normalizeStoryboardCompositePayload(storyboardBlock.payload);
   const storyboardPlanOverlays = normalizeStoryboardPlanBlocks(
     animationPlanBlocks,
-    semanticStoryboard.table,
+    semanticStoryboard.canonicalTable,
   );
   const title =
     readString(storyboardBlock, 'title') ??
     readString(value, 'title') ??
-    semanticStoryboard.table?.title;
+    semanticStoryboard.displayTable?.title;
   const sections = createStoryboardDisplaySections(
-    semanticStoryboard.table,
+    semanticStoryboard.displayTable,
     semanticStoryboard.diagnostics,
   );
   if (sections.length === 0) return null;
@@ -168,7 +206,9 @@ function normalizeArtifactBackedStoryboardBlock(
   return {
     template: 'storyboard-table',
     ...(title ? { title } : {}),
-    ...(semanticStoryboard.table ? { storyboardTable: semanticStoryboard.table } : {}),
+    ...(semanticStoryboard.canonicalTable
+      ? { storyboardTable: semanticStoryboard.canonicalTable }
+      : {}),
     ...(storyboardPlanOverlays.length > 0 ? { storyboardPlanOverlays } : {}),
     ...(semanticStoryboard.diagnostics.length > 0
       ? { storyboardDiagnostics: semanticStoryboard.diagnostics }

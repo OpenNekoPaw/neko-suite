@@ -22,6 +22,7 @@ import type {
   ModelType,
   NpcTranscriptArtifact,
   SkillSummary,
+  StoryboardTable,
 } from '@neko/shared';
 import type {
   ConversationLifecycleAction,
@@ -39,6 +40,8 @@ import {
   parseDocumentArchiveResourceRef,
   parseDocumentLocator,
   parseDocumentSourceRef,
+  normalizeCanonicalStoryboardTable,
+  validateCanonicalStoryboardTable,
 } from '@neko/shared';
 import {
   isConversationLifecycleAction,
@@ -390,6 +393,7 @@ export interface RequestCanvasAuthoringHandoffWebviewMessage {
   sourceKind: CanvasAuthoringHandoffSourceKind;
   content: string;
   sourceFormat?: CanvasAuthoringHandoffSourceFormat;
+  canonicalStoryboard?: StoryboardTable;
   title?: string;
   resources?: readonly CanvasMarkdownResourceRef[];
   stableRefs?: readonly CanvasAuthoringHandoffStableRef[];
@@ -2437,6 +2441,8 @@ function parseRequestCanvasAuthoringHandoffMessage(
   const sourceFormat =
     raw.sourceFormat === undefined ? undefined : parseCanvasAuthoringSourceFormat(raw.sourceFormat);
   if (raw.sourceFormat !== undefined && sourceFormat === undefined) return null;
+  const canonicalStoryboard = parseCanonicalStoryboardHandoff(raw.canonicalStoryboard);
+  if (canonicalStoryboard === null) return null;
   const title = optionalString(raw.title);
   if (raw.title !== undefined && title === undefined) return null;
   const resources =
@@ -2484,6 +2490,7 @@ function parseRequestCanvasAuthoringHandoffMessage(
     sourceKind,
     content,
     ...(sourceFormat ? { sourceFormat } : {}),
+    ...(canonicalStoryboard ? { canonicalStoryboard } : {}),
     ...(title ? { title } : {}),
     ...(resources ? { resources } : {}),
     ...(stableRefs ? { stableRefs } : {}),
@@ -2494,6 +2501,13 @@ function parseRequestCanvasAuthoringHandoffMessage(
     ...(userIntent ? { userIntent } : {}),
     ...(targetHints ? { targetHints } : {}),
   };
+}
+
+function parseCanonicalStoryboardHandoff(value: unknown): StoryboardTable | null | undefined {
+  if (value === undefined) return undefined;
+  const normalized = normalizeCanonicalStoryboardTable({ value });
+  if (!normalized.table) return null;
+  return validateCanonicalStoryboardTable(normalized.table).ok ? normalized.table : null;
 }
 
 function parseCanvasMarkdownSourceFormat(

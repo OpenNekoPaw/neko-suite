@@ -715,6 +715,73 @@ describe('handleChatWebviewMessage', () => {
     );
   });
 
+  it('routes canonical Storyboard handoff with nested scene, shot, prompt, revision, and media ownership intact', async () => {
+    const deps = createDeps();
+    const canonicalStoryboard = createCanonicalStoryboardHandoffFixture();
+
+    handleChatWebviewMessage(
+      {
+        type: 'requestCanvasAuthoringHandoff',
+        requestId: 'req-canonical-storyboard',
+        conversationId: 'conv-1',
+        sourceKind: 'structured-content',
+        sourceFormat: 'composite-artifact',
+        content: 'Canonical Storyboard: Cats (1 scenes, 1 shots)',
+        title: 'Cats',
+        canonicalStoryboard,
+        userIntent:
+          'Create Canvas storyboard production nodes from this canonical Storyboard without Markdown reconstruction or asset flattening.',
+        targetHints: {
+          declaredProfileHint: 'storyboard',
+          operationHint: 'canvas.createStoryboardFromMarkdown',
+        },
+      },
+      deps,
+    );
+
+    await flushAsyncWork();
+
+    expect(sendGeneratedAssetToPlugin).not.toHaveBeenCalled();
+    expect(vscode.commands.executeCommand).not.toHaveBeenCalled();
+    expect(deps.messages?.handleUserMessage).toHaveBeenCalledTimes(1);
+    const routedRequest = (deps.messages?.handleUserMessage as any).mock.calls[0]?.[1];
+    const handoffData = routedRequest.contextPayloads[0].data;
+    expect(handoffData).toEqual(
+      expect.objectContaining({
+        kind: 'canvas-authoring-handoff',
+        sourceKind: 'structured-content',
+        sourceFormat: 'composite-artifact',
+        canonicalStoryboard: expect.objectContaining({
+          revision: expect.objectContaining({ revisionId: 'storyboard-rev-1' }),
+          scenes: [
+            expect.objectContaining({
+              sceneId: 'scene-1',
+              shots: [
+                expect.objectContaining({
+                  shotId: 'shot-1',
+                  imagePrompt: 'cat keyframe',
+                  videoPrompt: 'cat scene motion',
+                  sourceMediaRefs: [
+                    expect.objectContaining({
+                      refId: 'source-image-1',
+                      resourceRef: expect.objectContaining({ id: 'source-image-resource' }),
+                    }),
+                  ],
+                }),
+              ],
+            }),
+          ],
+        }),
+      }),
+    );
+    expect(routedRequest.messageText).toContain('canonicalStoryboard 原样传给');
+    expect(routedRequest.messageText).toContain('不得压平为 asset batch');
+    expect(routedRequest.messageText).toContain('scene 容器与其所属 shot 子节点');
+    expect(JSON.stringify(handoffData)).not.toContain('assetBatch');
+    expect(JSON.stringify(handoffData)).not.toContain('capabilityId');
+    expect(JSON.stringify(handoffData)).not.toContain('toolName');
+  });
+
   it('treats Markdown wording as source format instead of review-only Canvas ingestion', async () => {
     const deps = createDeps();
 
@@ -1614,3 +1681,71 @@ describe('handleChatWebviewMessage', () => {
     });
   });
 });
+
+function createCanonicalStoryboardHandoffFixture() {
+  return {
+    schemaVersion: 1 as const,
+    kind: 'storyboard-table' as const,
+    contractVersion: 1 as const,
+    sourceProfile: 'from-script' as const,
+    revision: {
+      revisionId: 'storyboard-rev-1',
+      sequence: 1,
+      contentDigest: 'storyboard-rev-1',
+      createdAt: '2026-07-12T00:00:00.000Z',
+    },
+    sourceTrace: [
+      {
+        traceId: 'trace-1',
+        sourceProfile: 'from-script' as const,
+        sourceRef: {
+          id: 'story-source-resource',
+          scope: 'project' as const,
+          provider: 'workspace',
+          kind: 'document' as const,
+          source: { kind: 'file' as const, projectRelativePath: 'scripts/story.md' },
+          locator: { kind: 'file' as const, path: '${WORKSPACE}/scripts/story.md' },
+          fingerprint: { strategy: 'hash' as const, value: 'story-source' },
+        },
+      },
+    ],
+    title: 'Cats',
+    scenes: [
+      {
+        sceneId: 'scene-1',
+        sceneTitle: 'Hallway',
+        shots: [
+          {
+            shotId: 'shot-1',
+            shotNumber: 1,
+            duration: 3,
+            visualDescription: 'A cat enters.',
+            characterAction: 'The cat walks.',
+            imageStrategy: 'use-as-reference' as const,
+            imagePrompt: 'cat keyframe',
+            videoPrompt: 'cat scene motion',
+            sourceMediaRefs: [
+              {
+                refId: 'source-image-1',
+                role: 'source' as const,
+                locator: {
+                  type: 'workspace-path' as const,
+                  path: '${WORKSPACE}/assets/cat.png',
+                },
+                resourceRef: {
+                  id: 'source-image-resource',
+                  scope: 'project' as const,
+                  provider: 'workspace',
+                  kind: 'media' as const,
+                  source: { kind: 'file' as const, projectRelativePath: 'assets/cat.png' },
+                  locator: { kind: 'file' as const, path: '${WORKSPACE}/assets/cat.png' },
+                  fingerprint: { strategy: 'hash' as const, value: 'cat-image' },
+                },
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  };
+}

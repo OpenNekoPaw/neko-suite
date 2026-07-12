@@ -18,7 +18,7 @@ import {
   isPublicGeneratedAssetResultUri,
   isEntityMemoryContribution,
   normalizeStoryboardPlanOverlay,
-  normalizeStoryboardTable,
+  normalizeCanonicalStoryboardTable,
   parseDocumentArchiveResourceRef,
 } from '@neko/shared';
 import type { PluginsAvailable } from '@/components/ChatView/SendToMenu';
@@ -245,7 +245,7 @@ function normalizeCompositeStoryboardTable(
   storyboardTable: StoryboardTable | undefined,
 ): StoryboardTable | undefined {
   if (!storyboardTable) return undefined;
-  return normalizeStoryboardTable({ value: storyboardTable }).table ?? storyboardTable;
+  return normalizeCanonicalStoryboardTable({ value: storyboardTable }).table;
 }
 
 function mergeStoryboardDiagnostics(

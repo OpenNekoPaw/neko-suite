@@ -346,6 +346,116 @@ describe('parseWebviewToExtensionMessage', () => {
     });
   });
 
+  it('accepts canonical Storyboard Canvas handoff without flattening scene or media ownership', () => {
+    const canonicalStoryboard = createCanonicalStoryboardHandoffFixture();
+    expect(
+      parseWebviewToExtensionMessage({
+        type: 'requestCanvasAuthoringHandoff',
+        requestId: 'request-storyboard-1',
+        conversationId: 'conv-1',
+        sourceKind: 'structured-content',
+        sourceFormat: 'composite-artifact',
+        content: 'Canonical Storyboard: Cats',
+        canonicalStoryboard,
+      }),
+    ).toEqual(
+      expect.objectContaining({
+        canonicalStoryboard: expect.objectContaining({
+          revision: expect.objectContaining({ revisionId: 'storyboard-rev-1' }),
+          scenes: [
+            expect.objectContaining({
+              sceneId: 'scene-1',
+              shots: [
+                expect.objectContaining({
+                  shotId: 'shot-1',
+                  imagePrompt: 'cat keyframe',
+                  videoPrompt: 'cat scene motion',
+                  sourceMediaRefs: [
+                    expect.objectContaining({
+                      refId: 'source-image-1',
+                      resourceRef: expect.objectContaining({ id: 'source-image-resource' }),
+                    }),
+                  ],
+                }),
+              ],
+            }),
+          ],
+        }),
+      }),
+    );
+  });
+
+  it('rejects flat Storyboard rows instead of reconstructing canonical scene ownership', () => {
+    const canonicalStoryboard = createCanonicalStoryboardHandoffFixture();
+    const shot = canonicalStoryboard.scenes[0]!.shots[0]!;
+
+    expect(
+      parseWebviewToExtensionMessage({
+        type: 'requestCanvasAuthoringHandoff',
+        requestId: 'request-storyboard-flat-scenes',
+        conversationId: 'conv-1',
+        sourceKind: 'structured-content',
+        content: 'invalid flat Storyboard',
+        canonicalStoryboard: {
+          ...canonicalStoryboard,
+          scenes: [
+            {
+              ...shot,
+              sceneId: 'scene-1',
+              sceneTitle: 'Opening',
+            },
+          ],
+        },
+      }),
+    ).toBeNull();
+  });
+
+  it('rejects malformed or runtime-only canonical Storyboard Canvas handoffs', () => {
+    const canonicalStoryboard = createCanonicalStoryboardHandoffFixture();
+    expect(
+      parseWebviewToExtensionMessage({
+        type: 'requestCanvasAuthoringHandoff',
+        requestId: 'request-storyboard-invalid-revision',
+        conversationId: 'conv-1',
+        sourceKind: 'structured-content',
+        content: 'invalid canonical Storyboard',
+        canonicalStoryboard: { ...canonicalStoryboard, revision: undefined },
+      }),
+    ).toBeNull();
+
+    const scene = canonicalStoryboard.scenes[0]!;
+    const shot = scene.shots[0]!;
+    expect(
+      parseWebviewToExtensionMessage({
+        type: 'requestCanvasAuthoringHandoff',
+        requestId: 'request-storyboard-runtime-ref',
+        conversationId: 'conv-1',
+        sourceKind: 'structured-content',
+        content: 'invalid canonical Storyboard',
+        canonicalStoryboard: {
+          ...canonicalStoryboard,
+          scenes: [
+            {
+              ...scene,
+              shots: [
+                {
+                  ...shot,
+                  sourceMediaRefs: [
+                    {
+                      refId: 'runtime-image',
+                      role: 'source',
+                      locator: { type: 'workspace-path', path: '/tmp/neko-cache/panel.png' },
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      }),
+    ).toBeNull();
+  });
+
   it('accepts tab state updates with explicit tab-to-conversation mapping', () => {
     expect(
       parseWebviewToExtensionMessage({
@@ -360,3 +470,71 @@ describe('parseWebviewToExtensionMessage', () => {
     });
   });
 });
+
+function createCanonicalStoryboardHandoffFixture() {
+  return {
+    schemaVersion: 1 as const,
+    kind: 'storyboard-table' as const,
+    contractVersion: 1 as const,
+    sourceProfile: 'from-script' as const,
+    revision: {
+      revisionId: 'storyboard-rev-1',
+      sequence: 1,
+      contentDigest: 'storyboard-rev-1',
+      createdAt: '2026-07-12T00:00:00.000Z',
+    },
+    sourceTrace: [
+      {
+        traceId: 'trace-1',
+        sourceProfile: 'from-script' as const,
+        sourceRef: {
+          id: 'story-source-resource',
+          scope: 'project' as const,
+          provider: 'workspace',
+          kind: 'document' as const,
+          source: { kind: 'file' as const, projectRelativePath: 'scripts/story.md' },
+          locator: { kind: 'file' as const, path: '${WORKSPACE}/scripts/story.md' },
+          fingerprint: { strategy: 'hash' as const, value: 'story-source' },
+        },
+      },
+    ],
+    title: 'Cats',
+    scenes: [
+      {
+        sceneId: 'scene-1',
+        sceneTitle: 'Hallway',
+        shots: [
+          {
+            shotId: 'shot-1',
+            shotNumber: 1,
+            duration: 3,
+            visualDescription: 'A cat enters.',
+            characterAction: 'The cat walks.',
+            imageStrategy: 'use-as-reference' as const,
+            imagePrompt: 'cat keyframe',
+            videoPrompt: 'cat scene motion',
+            sourceMediaRefs: [
+              {
+                refId: 'source-image-1',
+                role: 'source' as const,
+                locator: {
+                  type: 'workspace-path' as const,
+                  path: '${WORKSPACE}/assets/cat.png',
+                },
+                resourceRef: {
+                  id: 'source-image-resource',
+                  scope: 'project' as const,
+                  provider: 'workspace',
+                  kind: 'media' as const,
+                  source: { kind: 'file' as const, projectRelativePath: 'assets/cat.png' },
+                  locator: { kind: 'file' as const, path: '${WORKSPACE}/assets/cat.png' },
+                  fingerprint: { strategy: 'hash' as const, value: 'cat-source' },
+                },
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  };
+}

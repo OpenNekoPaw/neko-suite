@@ -6,7 +6,12 @@
  */
 
 import { memo } from 'react';
-import type { ContentBlock, ToolCall } from '@neko-agent/types';
+import {
+  extractCompositeContentFenceCandidates,
+  parseCompositeContentJson,
+  type ContentBlock,
+  type ToolCall,
+} from '@neko-agent/types';
 import { ToolCallDisplay, ToolCallGroupDisplay } from '@/components/ChatView/ToolCallDisplay';
 import { DiffBlock } from '@/components/ChatView/DiffBlock';
 import { PlanReview } from '@/components/ChatView/PlanReview';
@@ -18,6 +23,7 @@ import { SendToMenu } from '@/components/ChatView/SendToMenu';
 import { useTranslation } from '@/i18n/I18nContext';
 import { AgentHostMessages } from '@/messages';
 import { projectCanvasContentTransferTarget } from '@/presenters/plugin-transfer-presenter';
+import { projectCanonicalStoryboardCanvasAuthoringHandoff } from '@/presenters/storyboard-transfer-presenter';
 import { projectCanvasMarkdownHandoffRequest } from '@/presenters/canvas-markdown-handoff-presenter';
 import { projectMarkdownResourceRendering } from '@/presenters/markdown-resource-rendering-presenter';
 import {
@@ -45,6 +51,7 @@ import {
 import {
   isCanvasMarkdownCapabilityInput,
   isCanvasMarkdownCapabilityResult,
+  normalizeCanonicalStoryboardTable,
   type AgentCapabilityAction,
   type AgentCapabilityInvocationInput,
   type AgentCapabilityInvocationResult,
@@ -247,8 +254,18 @@ function renderBlockContent(
             ambientNodes: callbacks.ambientNodes,
           })
         : undefined;
-      const canvasMarkdownHandoff =
+      const canonicalStoryboardHandoff =
         !projection.renderStreaming && callbacks.pluginsAvailable?.canvas
+          ? projectEmbeddedCanonicalStoryboardHandoff({
+              markdown: projection.content,
+              contentBlockId: projection.id,
+              siblingBlocks: projection.siblingBlocks,
+            })
+          : null;
+      const canvasMarkdownHandoff =
+        !canonicalStoryboardHandoff &&
+        !projection.renderStreaming &&
+        callbacks.pluginsAvailable?.canvas
           ? projectCanvasMarkdownHandoffRequest({
               markdown: projection.content,
               markdownResources,
@@ -269,16 +286,19 @@ function renderBlockContent(
             markdownResources={markdownResources}
             contentBlockId={projection.id}
             siblingBlocks={projection.siblingBlocks}
+            conversationId={conversationId}
+            plugins={callbacks.pluginsAvailable}
             sessionKey={createAgentMarkdownSessionKey({
               conversationId,
               messageId,
               itemId: projection.id,
             })}
           />
-          {canvasMarkdownHandoff && callbacks.pluginsAvailable && (
+          {(canonicalStoryboardHandoff || canvasMarkdownHandoff) && callbacks.pluginsAvailable && (
             <div className="mt-1.5 flex flex-wrap gap-1.5 border-t border-[var(--agent-divider)] pt-1">
               <SendToMenu
-                canvasMarkdownHandoff={canvasMarkdownHandoff}
+                canvasAuthoringHandoff={canonicalStoryboardHandoff ?? undefined}
+                canvasMarkdownHandoff={canvasMarkdownHandoff ?? undefined}
                 conversationId={conversationId}
                 mediaType="image"
                 plugins={callbacks.pluginsAvailable}
@@ -367,6 +387,7 @@ function renderBlockContent(
           <RichContentRenderer
             kind={projection.richContent.kind}
             data={projection.richContent.data}
+            conversationId={conversationId}
           />
         </div>
       );
@@ -386,6 +407,38 @@ function renderBlockContent(
     case 'empty':
       return null;
   }
+}
+
+function projectEmbeddedCanonicalStoryboardHandoff(input: {
+  readonly markdown: string;
+  readonly contentBlockId: string;
+  readonly siblingBlocks?: readonly ContentBlock[];
+}) {
+  const derivedComposites = (input.siblingBlocks ?? [])
+    .filter((block) => {
+      const source = block.compositeSource;
+      return (
+        block.type === 'composite' &&
+        block.composite !== undefined &&
+        source !== undefined &&
+        source.sourceBlockId === input.contentBlockId
+      );
+    })
+    .flatMap((block) => (block.composite ? [block.composite] : []));
+  const composites =
+    derivedComposites.length > 0
+      ? derivedComposites
+      : extractCompositeContentFenceCandidates(input.markdown).flatMap((candidate) =>
+          parseCompositeContentJson(candidate.rawJson),
+        );
+
+  for (const composite of composites) {
+    if (composite.template !== 'storyboard-table' || !composite.storyboardTable) continue;
+    const normalized = normalizeCanonicalStoryboardTable({ value: composite.storyboardTable });
+    if (!normalized.table) return null;
+    return projectCanonicalStoryboardCanvasAuthoringHandoff(normalized.table);
+  }
+  return null;
 }
 
 function CanvasLifecycleResultCard({

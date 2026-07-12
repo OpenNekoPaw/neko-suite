@@ -187,6 +187,7 @@ function buildCanvasAuthoringHandoffContextPayload(
       content: message.content,
       title,
       ...(message.sourceFormat ? { sourceFormat: message.sourceFormat } : {}),
+      ...(message.canonicalStoryboard ? { canonicalStoryboard: message.canonicalStoryboard } : {}),
       ...(message.resources ? { resources: message.resources } : {}),
       ...(message.stableRefs ? { stableRefs: message.stableRefs } : {}),
       ...(message.diagnostics ? { diagnostics: message.diagnostics } : {}),
@@ -211,6 +212,13 @@ function defaultCanvasAuthoringHandoffTitle(
 function projectCanvasAuthoringSourceGuidanceZh(
   message: CanvasAuthoringHandoffRouteMessage,
 ): readonly string[] {
+  if (message.canonicalStoryboard) {
+    return [
+      '这是 canonical Storyboard 生产交接；必须把 handoff 上下文中的 canonicalStoryboard 原样传给现有 Canvas 分镜创建 capability。',
+      '不得压平为 asset batch，不得从可见 Markdown 重建 scene/shot，也不得丢弃 shot media refs。',
+      '创建结果必须包含 scene 容器与其所属 shot 子节点；失败或无新增引用时按阻塞处理。',
+    ];
+  }
   if (isStoryboardCreativeTableHandoff(message)) {
     if (isReviewOnlyCanvasHandoffIntent(message.userIntent)) {
       return [
@@ -238,6 +246,13 @@ function projectCanvasAuthoringSourceGuidanceZh(
 function projectCanvasAuthoringSourceGuidanceEn(
   message: CanvasAuthoringHandoffRouteMessage,
 ): readonly string[] {
+  if (message.canonicalStoryboard) {
+    return [
+      'This is a canonical Storyboard production handoff; pass canonicalStoryboard from the handoff context unchanged to the existing Canvas storyboard creation capability.',
+      'Do not flatten it to an asset batch, reconstruct scene/shot facts from visible Markdown, or drop shot media refs.',
+      'Creation must return scene containers and their owned shot child nodes; treat failure or no created refs as blocked.',
+    ];
+  }
   if (isStoryboardCreativeTableHandoff(message)) {
     if (isReviewOnlyCanvasHandoffIntent(message.userIntent)) {
       return [
