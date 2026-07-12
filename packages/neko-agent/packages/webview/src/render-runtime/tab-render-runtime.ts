@@ -5,15 +5,21 @@ import {
   type TabType,
   type AgentQueuedMessageItem,
   type AgentSessionDiagnosticMessage,
+  type AgentLlmConfig,
 } from '@neko-agent/types';
 import type {
+  ComposerMenuState,
   EntryPromptMenu,
   GenCategory,
   GenerationParams,
   MessageAttachment,
   SelectedFileReference,
 } from '@/components/ChatView/InputArea/types';
-import { DEFAULT_GENERATION_PARAMS } from '@/components/ChatView/InputArea/types';
+import {
+  DEFAULT_AGENT_LLM_CONFIG,
+  DEFAULT_COMPOSER_MENU_STATE,
+  DEFAULT_GENERATION_PARAMS,
+} from '@/components/ChatView/InputArea/types';
 import type { MediaModelSelection, MediaUnderstandingSelection } from '@/hooks/useUIState';
 
 export interface TabViewportSnapshot {
@@ -46,6 +52,7 @@ export interface TabComposerFocusState {
 
 export interface TabRenderMenuState {
   readonly entryPrompt: EntryPromptMenu | null;
+  readonly composer: Readonly<ComposerMenuState>;
 }
 
 export interface TabQueuedEditState {
@@ -68,6 +75,7 @@ export interface TabRenderState {
   readonly promptMode: PromptMode;
   readonly generationCategory: GenCategory;
   readonly generationParams: Readonly<GenerationParams>;
+  readonly llmConfig: Readonly<AgentLlmConfig>;
   readonly composition: TabComposerCompositionState;
   readonly focus: TabComposerFocusState;
   readonly viewport: TabViewportSnapshot;
@@ -343,10 +351,19 @@ function createInitialTabRenderState(): TabRenderState {
     promptMode: 'default',
     generationCategory: 'image',
     generationParams: Object.freeze({ ...DEFAULT_GENERATION_PARAMS }),
+    llmConfig: Object.freeze({ ...DEFAULT_AGENT_LLM_CONFIG }),
     composition: Object.freeze({ isComposing: false }),
     focus: Object.freeze({ target: 'none', requestRevision: 0 }),
     viewport: Object.freeze({ ...DEFAULT_TAB_VIEWPORT }),
-    menus: Object.freeze({ entryPrompt: null }),
+    menus: Object.freeze({
+      entryPrompt: null,
+      composer: Object.freeze({
+        ...DEFAULT_COMPOSER_MENU_STATE,
+        slash: Object.freeze({ ...DEFAULT_COMPOSER_MENU_STATE.slash }),
+        skill: Object.freeze({ ...DEFAULT_COMPOSER_MENU_STATE.skill }),
+        mention: Object.freeze({ ...DEFAULT_COMPOSER_MENU_STATE.mention }),
+      }),
+    }),
     queuedEdit: null,
     diagnostics: Object.freeze([]),
   });

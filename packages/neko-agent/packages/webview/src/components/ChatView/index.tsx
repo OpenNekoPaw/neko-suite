@@ -12,7 +12,11 @@ import {
 import { MessageList } from '@/components/ChatView/MessageList';
 import { MessageActionsProvider } from '@/components/ChatView/MessageActionsContext';
 import { InputArea, MessageAttachment } from '@/components/ChatView/InputArea';
-import type { EntryPromptMenu, SelectedFileReference } from '@/components/ChatView/InputArea/types';
+import type {
+  ComposerMenuState,
+  EntryPromptMenu,
+  SelectedFileReference,
+} from '@/components/ChatView/InputArea/types';
 import { DropZone } from '@/components/ChatView/DropZone';
 import type { PluginsAvailable } from '@/components/ChatView/SendToMenu';
 import type { AgentWorkItem, SubAgentWorkItem } from '@/components/AgentWorkItem';
@@ -84,6 +88,10 @@ interface ChatViewProps {
   onCancel?: () => void;
   entryPromptMenu?: EntryPromptMenu | null;
   onEntryPromptMenuChange?: (menu: EntryPromptMenu | null) => void;
+  llmConfig?: AgentLlmConfig;
+  onLlmConfigChange?: (config: AgentLlmConfig) => void;
+  composerMenuState?: ComposerMenuState;
+  onComposerMenuStateChange?: (state: ComposerMenuState) => void;
   /** Session-bound attached files (managed by parent) */
   attachedFiles?: MessageAttachment[];
   /** Callback to update attached files */
@@ -142,6 +150,10 @@ export function ChatView({
   onCancel,
   entryPromptMenu,
   onEntryPromptMenuChange,
+  llmConfig,
+  onLlmConfigChange,
+  composerMenuState,
+  onComposerMenuStateChange,
   attachedFiles,
   onAttachedFilesChange,
   selectedFileReferences,
@@ -272,6 +284,10 @@ export function ChatView({
           onCancel={onCancel}
           entryPromptMenu={entryPromptMenu}
           onEntryPromptMenuChange={onEntryPromptMenuChange}
+          llmConfig={llmConfig}
+          onLlmConfigChange={onLlmConfigChange}
+          composerMenuState={composerMenuState}
+          onComposerMenuStateChange={onComposerMenuStateChange}
           disabled={isConversationSwitching || foregroundConversationAvailability.kind !== 'ready'}
           attachedFiles={attachedFiles}
           onAttachedFilesChange={onAttachedFilesChange}

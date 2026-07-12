@@ -2,7 +2,7 @@
  * InputArea Types and Constants
  */
 
-import type { AgentFileReference } from '@neko-agent/types';
+import type { AgentFileReference, AgentLlmConfig } from '@neko-agent/types';
 
 // Re-export MessageAttachment from shared
 export type { MessageAttachment, AttachmentType } from '@neko/shared';
@@ -77,6 +77,32 @@ export const DEFAULT_GENERATION_PARAMS: GenerationParams = {
   videoFps: 24,
   audioDuration: 'auto',
   audioType: 'sfx',
+};
+
+export interface ComposerMenuSelectionState {
+  readonly open: boolean;
+  readonly filter: string;
+  readonly selectedIndex: number;
+}
+
+export interface ComposerMenuState {
+  readonly slash: ComposerMenuSelectionState;
+  readonly skill: ComposerMenuSelectionState;
+  readonly mention: ComposerMenuSelectionState;
+  readonly queueExpanded: boolean;
+}
+
+export const DEFAULT_AGENT_LLM_CONFIG: Readonly<AgentLlmConfig> = {
+  reasoningPreset: 'balanced',
+  verbosityPreset: 'standard',
+  creativityPreset: 'creative',
+};
+
+export const DEFAULT_COMPOSER_MENU_STATE: Readonly<ComposerMenuState> = {
+  slash: { open: false, filter: '', selectedIndex: 0 },
+  skill: { open: false, filter: '', selectedIndex: 0 },
+  mention: { open: false, filter: '', selectedIndex: 0 },
+  queueExpanded: false,
 };
 
 // Project file for @ reference

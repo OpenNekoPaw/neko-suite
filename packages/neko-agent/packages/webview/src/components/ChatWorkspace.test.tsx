@@ -2,9 +2,10 @@ import { act, fireEvent, render, screen } from '@testing-library/react';
 import { createRef, type ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AgentContextPayload } from '@neko/shared';
-import type { Message, SettingsState } from '@neko-agent/types';
+import type { AgentLlmConfig, Message, SettingsState } from '@neko-agent/types';
 import type { ChatWorkspaceProps } from './ChatWorkspace';
 import { ChatWorkspace } from './ChatWorkspace';
+import type { ComposerMenuState } from '@/components/ChatView/InputArea/types';
 import { createTabRenderRuntime } from '@/render-runtime/tab-render-runtime';
 
 const vscodeMocks = vi.hoisted(() => ({
@@ -131,6 +132,10 @@ vi.mock('@/components/ChatView', () => ({
       anchorMessageId?: string;
       anchorOffset?: number;
     }) => void;
+    llmConfig?: AgentLlmConfig;
+    onLlmConfigChange?: (config: AgentLlmConfig) => void;
+    composerMenuState?: ComposerMenuState;
+    onComposerMenuStateChange?: (state: ComposerMenuState) => void;
   }) => (
     <div>
       <button
@@ -216,6 +221,38 @@ vi.mock('@/components/ChatView', () => ({
         {props.viewport?.followMode ?? 'none'}:{props.viewport?.anchorMessageId ?? 'none'}:
         {props.viewport?.anchorOffset ?? 0}
       </span>
+      <span data-testid="llm-config-state">
+        {props.llmConfig?.reasoningPreset ?? 'balanced'}:
+        {props.llmConfig?.verbosityPreset ?? 'standard'}:
+        {props.llmConfig?.creativityPreset ?? 'creative'}
+      </span>
+      <span data-testid="composer-menu-state">
+        {String(props.composerMenuState?.slash.open ?? false)}:
+        {props.composerMenuState?.slash.filter ?? ''}:
+        {props.composerMenuState?.slash.selectedIndex ?? 0}
+      </span>
+      <button
+        type="button"
+        data-testid="set-deep-llm-config"
+        onClick={() =>
+          props.onLlmConfigChange?.({
+            reasoningPreset: 'deep',
+            verbosityPreset: 'detailed',
+            creativityPreset: 'stable',
+          })
+        }
+      />
+      <button
+        type="button"
+        data-testid="open-slash-menu"
+        onClick={() =>
+          props.composerMenuState &&
+          props.onComposerMenuStateChange?.({
+            ...props.composerMenuState,
+            slash: { open: true, filter: 'sto', selectedIndex: 2 },
+          })
+        }
+      />
       <button
         type="button"
         data-testid="detach-viewport"
@@ -557,6 +594,32 @@ describe('ChatWorkspace pending send', () => {
 
     expect(getByTestId('selected-model').textContent).toBe('test-model');
     expect(runtimeB.store.getSnapshot().state.selectedModel).toBe('test-model');
+  });
+
+  it('keeps LLM configuration and composer menus in their owning Tab store while switching', () => {
+    const runtimeA = createTabRenderRuntime({ tabId: 'tab-a', conversationId: 'conv-a' });
+    const runtimeB = createTabRenderRuntime({ tabId: 'tab-b', conversationId: 'conv-b' });
+    const propsFor = (runtime: typeof runtimeA, conversationId: string) =>
+      createProps({
+        tabRenderStore: runtime.store,
+        activeConversationId: conversationId,
+        activeConversationIdRef: createRefWithCurrent<string | null>(conversationId),
+        activeTabConversationId: conversationId,
+      });
+    const { getByTestId, rerender } = render(<ChatWorkspace {...propsFor(runtimeA, 'conv-a')} />);
+
+    fireEvent.click(getByTestId('set-deep-llm-config'));
+    fireEvent.click(getByTestId('open-slash-menu'));
+    expect(getByTestId('llm-config-state').textContent).toBe('deep:detailed:stable');
+    expect(getByTestId('composer-menu-state').textContent).toBe('true:sto:2');
+
+    rerender(<ChatWorkspace {...propsFor(runtimeB, 'conv-b')} />);
+    expect(getByTestId('llm-config-state').textContent).toBe('balanced:standard:creative');
+    expect(getByTestId('composer-menu-state').textContent).toBe('false::0');
+
+    rerender(<ChatWorkspace {...propsFor(runtimeA, 'conv-a')} />);
+    expect(getByTestId('llm-config-state').textContent).toBe('deep:detailed:stable');
+    expect(getByTestId('composer-menu-state').textContent).toBe('true:sto:2');
   });
 
   it('keeps context references in their owning Tab store while switching', () => {

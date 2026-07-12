@@ -3,7 +3,7 @@
  * Codex-style design with inline action buttons
  */
 
-import { useRef, useState, useCallback, useEffect, type ReactNode } from 'react';
+import { useRef, useState, useCallback, useEffect, useMemo, type ReactNode } from 'react';
 import { SendIcon, StopIcon, PlusIcon, EditIcon, CloseIcon } from '@neko/shared/icons';
 import { ModeConfigBar } from './ModeConfigBar';
 import { ModeSelector } from './ModeSelector';
@@ -23,6 +23,9 @@ import {
   SlashCommand,
   MentionItem,
   EntryPromptMenu,
+  DEFAULT_AGENT_LLM_CONFIG,
+  DEFAULT_COMPOSER_MENU_STATE,
+  type ComposerMenuState,
   type GenCategory,
   type SelectedFileReference,
 } from './types';
@@ -82,6 +85,10 @@ interface InputAreaProps {
   onCancel?: () => void;
   entryPromptMenu?: EntryPromptMenu | null;
   onEntryPromptMenuChange?: (menu: EntryPromptMenu | null) => void;
+  llmConfig?: AgentLlmConfig;
+  onLlmConfigChange?: (config: AgentLlmConfig) => void;
+  composerMenuState?: ComposerMenuState;
+  onComposerMenuStateChange?: (state: ComposerMenuState) => void;
   disabled?: boolean;
   /** Session-bound attached files (managed by parent for conversation isolation) */
   attachedFiles?: MessageAttachment[];
@@ -99,6 +106,66 @@ interface InputAreaProps {
 }
 
 type InputAreaTranslator = (key: string, params?: Record<string, string | number>) => string;
+type StateAction<T> = T | ((previous: T) => T);
+type StateUpdater<T> = (action: StateAction<T>) => void;
+
+function useOptionalControlledState<T>(
+  controlledValue: T | undefined,
+  onControlledChange: ((value: T) => void) | undefined,
+  initialValue: T,
+): readonly [T, StateUpdater<T>] {
+  const [internalValue, setInternalValue] = useState(initialValue);
+  const value = controlledValue ?? internalValue;
+  const valueRef = useRef(value);
+  const onControlledChangeRef = useRef(onControlledChange);
+  valueRef.current = value;
+  onControlledChangeRef.current = onControlledChange;
+  const setValue = useCallback<StateUpdater<T>>((action) => {
+    const nextValue = resolveStateAction(action, valueRef.current);
+    valueRef.current = nextValue;
+    if (onControlledChangeRef.current) {
+      onControlledChangeRef.current(nextValue);
+      return;
+    }
+    setInternalValue(nextValue);
+  }, []);
+  return [value, setValue] as const;
+}
+
+function createComposerMenuFieldSetter<
+  TSection extends 'slash' | 'skill' | 'mention',
+  TField extends keyof ComposerMenuState[TSection],
+>(
+  setComposerMenuState: StateUpdater<ComposerMenuState>,
+  section: TSection,
+  field: TField,
+): StateUpdater<ComposerMenuState[TSection][TField]> {
+  return (action) => {
+    setComposerMenuState((state) => ({
+      ...state,
+      [section]: {
+        ...state[section],
+        [field]: resolveStateAction(action, state[section][field]),
+      },
+    }));
+  };
+}
+
+function createComposerMenuRootFieldSetter<TField extends 'queueExpanded'>(
+  setComposerMenuState: StateUpdater<ComposerMenuState>,
+  field: TField,
+): StateUpdater<ComposerMenuState[TField]> {
+  return (action) => {
+    setComposerMenuState((state) => ({
+      ...state,
+      [field]: resolveStateAction(action, state[field]),
+    }));
+  };
+}
+
+function resolveStateAction<T>(action: StateAction<T>, previous: T): T {
+  return typeof action === 'function' ? (action as (value: T) => T)(previous) : action;
+}
 
 export function InputArea({
   inputValue,
@@ -116,6 +183,10 @@ export function InputArea({
   onCancel,
   entryPromptMenu,
   onEntryPromptMenuChange,
+  llmConfig: controlledLlmConfig,
+  onLlmConfigChange,
+  composerMenuState: controlledComposerMenuState,
+  onComposerMenuStateChange,
   disabled = false,
   attachedFiles: externalAttachedFiles,
   onAttachedFilesChange,
@@ -181,27 +252,66 @@ export function InputArea({
   const { addToHistory, navigateUp, navigateDown, resetNavigation, isNavigating } =
     useInputHistory();
 
-  // Slash command state
-  const [showSlashMenu, setShowSlashMenu] = useState(false);
-  const [slashFilter, setSlashFilter] = useState('');
-  const [selectedCommandIndex, setSelectedCommandIndex] = useState(0);
-
-  const [showSkillMenu, setShowSkillMenu] = useState(false);
-  const [skillFilter, setSkillFilter] = useState('');
-  const [selectedSkillIndex, setSelectedSkillIndex] = useState(0);
-
-  // File reference state
-  const [showAtMenu, setShowAtMenu] = useState(false);
-  const [atFilter, setAtFilter] = useState('');
-  const [selectedFileIndex, setSelectedFileIndex] = useState(0);
+  const [llmConfig, setLlmConfig] = useOptionalControlledState(
+    controlledLlmConfig,
+    onLlmConfigChange,
+    DEFAULT_AGENT_LLM_CONFIG,
+  );
+  const [composerMenuState, setComposerMenuState] = useOptionalControlledState(
+    controlledComposerMenuState,
+    onComposerMenuStateChange,
+    DEFAULT_COMPOSER_MENU_STATE,
+  );
+  const showSlashMenu = composerMenuState.slash.open;
+  const slashFilter = composerMenuState.slash.filter;
+  const selectedCommandIndex = composerMenuState.slash.selectedIndex;
+  const showSkillMenu = composerMenuState.skill.open;
+  const skillFilter = composerMenuState.skill.filter;
+  const selectedSkillIndex = composerMenuState.skill.selectedIndex;
+  const showAtMenu = composerMenuState.mention.open;
+  const atFilter = composerMenuState.mention.filter;
+  const selectedFileIndex = composerMenuState.mention.selectedIndex;
+  const isQueueExpanded = composerMenuState.queueExpanded;
+  const {
+    setShowSlashMenu,
+    setSlashFilter,
+    setSelectedCommandIndex,
+    setShowSkillMenu,
+    setSkillFilter,
+    setSelectedSkillIndex,
+    setShowAtMenu,
+    setAtFilter,
+    setSelectedFileIndex,
+    setIsQueueExpanded,
+  } = useMemo(
+    () => ({
+      setShowSlashMenu: createComposerMenuFieldSetter(setComposerMenuState, 'slash', 'open'),
+      setSlashFilter: createComposerMenuFieldSetter(setComposerMenuState, 'slash', 'filter'),
+      setSelectedCommandIndex: createComposerMenuFieldSetter(
+        setComposerMenuState,
+        'slash',
+        'selectedIndex',
+      ),
+      setShowSkillMenu: createComposerMenuFieldSetter(setComposerMenuState, 'skill', 'open'),
+      setSkillFilter: createComposerMenuFieldSetter(setComposerMenuState, 'skill', 'filter'),
+      setSelectedSkillIndex: createComposerMenuFieldSetter(
+        setComposerMenuState,
+        'skill',
+        'selectedIndex',
+      ),
+      setShowAtMenu: createComposerMenuFieldSetter(setComposerMenuState, 'mention', 'open'),
+      setAtFilter: createComposerMenuFieldSetter(setComposerMenuState, 'mention', 'filter'),
+      setSelectedFileIndex: createComposerMenuFieldSetter(
+        setComposerMenuState,
+        'mention',
+        'selectedIndex',
+      ),
+      setIsQueueExpanded: createComposerMenuRootFieldSetter(setComposerMenuState, 'queueExpanded'),
+    }),
+    [setComposerMenuState],
+  );
   const lastRequestedMentionFilterRef = useRef<string | null>(null);
   const suppressedPromotedMentionInputRef = useRef<string | null>(null);
-  const [llmConfig, setLlmConfig] = useState<AgentLlmConfig>({
-    reasoningPreset: 'balanced',
-    verbosityPreset: 'standard',
-    creativityPreset: 'creative',
-  });
-  const [isQueueExpanded, setIsQueueExpanded] = useState(false);
 
   // Attached files - use external state if provided (for conversation isolation)
   const [internalAttachedFiles, setInternalAttachedFiles] = useState<MessageAttachment[]>([]);
@@ -298,7 +408,7 @@ export function InputArea({
     if (allowCommandMenus) return;
     setShowSlashMenu(false);
     setShowSkillMenu(false);
-  }, [allowCommandMenus]);
+  }, [allowCommandMenus, setShowSkillMenu, setShowSlashMenu]);
 
   const closeEntryPromptMenu = useCallback(() => {
     onEntryPromptMenuChange?.(null);
@@ -328,7 +438,7 @@ export function InputArea({
         onRequestFiles?.(trailingMention.requestFilter);
       }
     },
-    [onRequestFiles],
+    [onRequestFiles, setAtFilter, setSelectedFileIndex, setShowAtMenu],
   );
 
   useEffect(() => {

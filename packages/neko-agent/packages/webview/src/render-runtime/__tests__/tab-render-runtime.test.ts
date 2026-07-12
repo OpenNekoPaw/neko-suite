@@ -18,10 +18,11 @@ describe('TabRenderRuntime', () => {
       attachedFiles: [{ id: 'asset-a', name: 'a.png', type: 'image', data: 'data-a' }],
       selectedModel: 'model-a',
       generationParams: { ...state.generationParams, resolution: '4K' },
+      llmConfig: { ...state.llmConfig, reasoningPreset: 'deep' },
       composition: { isComposing: true },
       focus: { target: 'input', requestRevision: state.focus.requestRevision + 1 },
       viewport: { followMode: 'detached', anchorMessageId: 'message-a', anchorOffset: 12 },
-      menus: { entryPrompt: 'generate-assets' },
+      menus: { ...state.menus, entryPrompt: 'generate-assets' },
       diagnostics: [diagnostic],
     }));
 
@@ -29,6 +30,7 @@ describe('TabRenderRuntime', () => {
       inputValue: 'draft-a',
       selectedModel: 'model-a',
       generationParams: { resolution: '4K' },
+      llmConfig: { reasoningPreset: 'deep' },
       composition: { isComposing: true },
       focus: { target: 'input', requestRevision: 1 },
       viewport: { followMode: 'detached', anchorMessageId: 'message-a', anchorOffset: 12 },
@@ -41,7 +43,20 @@ describe('TabRenderRuntime', () => {
       composition: { isComposing: false },
       focus: { target: 'none', requestRevision: 0 },
       viewport: { followMode: 'follow-tail' },
-      menus: { entryPrompt: null },
+      llmConfig: {
+        reasoningPreset: 'balanced',
+        verbosityPreset: 'standard',
+        creativityPreset: 'creative',
+      },
+      menus: {
+        entryPrompt: null,
+        composer: {
+          slash: { open: false, filter: '', selectedIndex: 0 },
+          skill: { open: false, filter: '', selectedIndex: 0 },
+          mention: { open: false, filter: '', selectedIndex: 0 },
+          queueExpanded: false,
+        },
+      },
       diagnostics: [],
     });
   });

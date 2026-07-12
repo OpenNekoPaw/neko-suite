@@ -25,6 +25,7 @@ import {
   type CharacterDialogueSessionProjection,
   type EmbodyCharacterSessionProjection,
   type AgentQueuedMessageItem,
+  type AgentLlmConfig,
 } from '@neko-agent/types';
 import type {
   MediaUnderstandingModelSelections,
@@ -37,6 +38,7 @@ import { AgentHostMessages } from '@/messages';
 import { ChatView } from '@/components/ChatView';
 import { InputAreaProvider } from '@/components/ChatView/InputAreaContext';
 import type {
+  ComposerMenuState,
   EntryPromptMenu,
   SkillSummary,
   MentionItem,
@@ -209,6 +211,8 @@ export function ChatWorkspace({
   const mediaUnderstandingSelection = tabState.mediaUnderstandingSelection;
   const sessionMode = tabState.sessionMode;
   const entryPromptMenu = tabState.menus.entryPrompt;
+  const llmConfig = tabState.llmConfig;
+  const composerMenuState = tabState.menus.composer;
   const composition = tabState.composition;
   const focus = tabState.focus;
   const viewport = tabState.viewport;
@@ -331,6 +335,20 @@ export function ChatWorkspace({
           value,
           state.mediaUnderstandingSelection,
         ),
+      }));
+    },
+    [updateTabRenderState],
+  );
+  const setLlmConfig = useCallback(
+    (config: AgentLlmConfig) => {
+      updateTabRenderState({ llmConfig: config });
+    },
+    [updateTabRenderState],
+  );
+  const setComposerMenuState = useCallback(
+    (composer: ComposerMenuState) => {
+      updateTabRenderState((state) => ({
+        menus: { ...state.menus, composer },
       }));
     },
     [updateTabRenderState],
@@ -528,6 +546,7 @@ export function ChatWorkspace({
     onInitialEntryPromptMenuRequestConsumed,
     onMentionSearchFilterChange,
     sessionMutationConversationId,
+    setEntryPromptMenu,
   ]);
 
   useEffect(() => {
@@ -733,7 +752,7 @@ export function ChatWorkspace({
         return projection.updated ? projection.mediaModelSelection : prev;
       });
     },
-    [settings.chatModelOptions, setMediaModelSelection, setVisibleSessionMode],
+    [settings.chatModelOptions, setEntryPromptMenu, setMediaModelSelection, setVisibleSessionMode],
   );
   const isModelConfigurationBusy = isThinking || workItems.some(isActiveWorkItem);
 
@@ -871,6 +890,10 @@ export function ChatWorkspace({
         onEditQueuedMessage={handleEditQueuedMessage}
         entryPromptMenu={entryPromptMenu}
         onEntryPromptMenuChange={setEntryPromptMenu}
+        llmConfig={llmConfig}
+        onLlmConfigChange={setLlmConfig}
+        composerMenuState={composerMenuState}
+        onComposerMenuStateChange={setComposerMenuState}
         attachedFiles={attachedFiles}
         onAttachedFilesChange={setAttachedFiles}
         selectedFileReferences={selectedFileReferences}

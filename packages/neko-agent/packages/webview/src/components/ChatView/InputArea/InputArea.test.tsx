@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AgentContextPayload, ChatModelOption, MessageAttachment } from '@neko/shared';
 import type { ConversationKind, MediaUnderstandingModels, SessionMode } from '@neko-agent/types';
 import { InputAreaProvider } from '@/components/ChatView/InputAreaContext';
-import { DEFAULT_GENERATION_PARAMS } from './types';
+import { DEFAULT_COMPOSER_MENU_STATE, DEFAULT_GENERATION_PARAMS } from './types';
 import { InputArea } from './InputArea';
 
 const vscodeMocks = vi.hoisted(() => ({
@@ -346,6 +346,29 @@ vi.mock('@/i18n/I18nContext', () => ({
 describe('InputArea composer controls', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  it('merges controlled slash menu updates against the latest Tab-owned state', () => {
+    const onComposerMenuStateChange = vi.fn();
+    render(
+      <Harness>
+        <InputArea
+          inputValue=""
+          isThinking={false}
+          composerMenuState={DEFAULT_COMPOSER_MENU_STATE}
+          onComposerMenuStateChange={onComposerMenuStateChange}
+          onInputChange={vi.fn()}
+          onSend={vi.fn()}
+        />
+      </Harness>,
+    );
+
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: '/sto' } });
+
+    expect(onComposerMenuStateChange).toHaveBeenLastCalledWith({
+      ...DEFAULT_COMPOSER_MENU_STATE,
+      slash: { open: true, filter: 'sto', selectedIndex: 0 },
+    });
   });
 
   it('reports IME composition and blocks send while the Tab is composing', () => {
