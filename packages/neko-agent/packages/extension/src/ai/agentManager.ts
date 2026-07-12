@@ -45,11 +45,6 @@ export interface IAgentManager extends vscode.Disposable {
   isRunning(conversationId: string): boolean;
 
   /**
-   * 检查是否有任何 Agent 在运行
-   */
-  hasRunningAgents(): boolean;
-
-  /**
    * 获取所有运行中的会话 ID
    */
   getRunningConversations(): string[];
@@ -255,10 +250,6 @@ export class AgentManager implements IAgentManager {
 
   isRunning(conversationId: string): boolean {
     return this._runtime.isRunning(conversationId);
-  }
-
-  hasRunningAgents(): boolean {
-    return this._runtime.hasRunningAgents();
   }
 
   getRunningConversations(): string[] {

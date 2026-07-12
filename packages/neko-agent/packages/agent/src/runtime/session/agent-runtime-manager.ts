@@ -78,7 +78,6 @@ export interface AgentRuntimeManager<TAgent extends AgentRuntimeManagerAgent> {
   get(conversationId: string): TAgent | undefined;
   getContext(conversationId: string): ConversationRuntimeContext<TAgent> | undefined;
   isRunning(conversationId: string): boolean;
-  hasRunningAgents(): boolean;
   getRunningConversations(): string[];
   getAllConversations(): string[];
   remove(conversationId: string): void;
@@ -164,10 +163,6 @@ class DefaultAgentRuntimeManager<
 
   isRunning(conversationId: string): boolean {
     return this.pool.isRunning(conversationId);
-  }
-
-  hasRunningAgents(): boolean {
-    return this.pool.hasRunningAgents();
   }
 
   getRunningConversations(): string[] {

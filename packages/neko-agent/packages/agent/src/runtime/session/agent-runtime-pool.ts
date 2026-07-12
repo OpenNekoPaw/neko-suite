@@ -84,13 +84,6 @@ export class AgentRuntimePool<TAgent extends ManagedAgentRuntime> {
     return this._contexts.get(conversationId)?.session.isRunning() ?? false;
   }
 
-  hasRunningAgents(): boolean {
-    for (const context of this._contexts.values()) {
-      if (context.session.isRunning()) return true;
-    }
-    return false;
-  }
-
   getRunningConversations(): string[] {
     const running: string[] = [];
     for (const [conversationId, context] of this._contexts) {

@@ -101,7 +101,7 @@ Webview/Extension 与 Terminal TUI/headless 是不同本地宿主，不要求功
 | 数据面                    | 共享规则                                                                                                                                                                                                                            |
 | ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Effective config snapshot | `~/.neko/config.toml`、`.neko/config.toml`、环境凭据和账号 catalog 统一解析；Webview/TUI 对 provider、model、scalar、MCP 得到同一结果或同一 diagnostic。运行时模型/参数选择只影响当前 session，不自动重写 TOML。                    |
-| Conversation/session      | 交互式会话使用 canonical runtime assembly 和 workspace-scoped canonical conversation id；旧 `cli-*` id 不作为 TUI resume 兼容输入，旧 runtime state source 也不能作为共享状态成功读入。                                             |
+| Conversation/session      | 每个 conversation 拥有独立 runtime/config/run tree/projection；交互式会话使用 canonical runtime assembly 和 workspace-scoped canonical conversation id。旧 `cli-*` id 不作为 TUI resume 兼容输入。                                 |
 | Skill/command catalog     | Portable Skill 的标准用户/工作区来源是 `~/.agents/skills`、`.agents/skills`；Command 仍使用 `~/.neko/commands`、`.neko/commands`。其他来源不能让 TUI/headless 单独看到不同 catalog，必须通过显式 source provider 暴露 diagnostics。 |
 | Async task facts          | 可跨宿主观察的任务状态进入 workspace-visible task record；live handle、lease、recovery token 和 no-workspace state 保持 host-private。                                                                                              |
 | Context/memory            | project memory、AGENTS overlays、context settings、授权读根和 capability prompt fragments 通过 shared runtime assembly 注入。                                                                                                       |
@@ -120,6 +120,10 @@ Webview/Extension 与 Terminal TUI/headless 是不同本地宿主，不要求功
 - 同一工作区的媒体生成结果必须能被任一宿主通过 workspace-visible task record、conversation journal、`ResourceRef` 或 generated asset index 观察；Webview URI、blob URL、临时下载路径和 host-private live handle 不能作为业务事实。
 
 TUI 不读取 VS Code 注入设置，也不模拟 Webview 消息；它通过 Node adapter 复用 `AgentEventStreamRuntimeProcessor`、task-result observation runtime 和 platform media delivery projection。Webview/Extension 可以有 VS Code 专属资源投影、setting bridge 和通知，但不能因此复制一套 task observation 或 token/usage 计算路径。
+
+Webview 和 TUI 的可变展示状态遵循相同 ownership 规则，但不共享 UI 实现。每个 Webview Tab 拥有独立 `TabRenderRuntime`、projection attachment、store 与 keyed React subtree；切换 Tab 只改变 visibility。每个 Ink root 拥有独立 `AgentTuiApplicationRuntime`，每个 hosted conversation 拥有独立 session/render controller 和 store bundle；resume 切换 controller，不重绑模块单例。共享目录、catalog 和默认配置只能以只读服务或不可变 snapshot 注入。
+
+旧 Timeline delivery revision、snapshot-request recovery、foreground flush/discard 和 TUI module store singleton 已被 authoritative conversation projection、attachment snapshot/ACK/patch 和 instance-scoped runtime 取代。live attachment gap 必须 fail-visible；恢复创建新 attachment，不能在旧 attachment 上继续。
 
 ## 控制面
 

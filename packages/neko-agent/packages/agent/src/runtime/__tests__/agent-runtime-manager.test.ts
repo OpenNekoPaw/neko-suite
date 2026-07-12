@@ -116,6 +116,12 @@ function makeMessage(content: string): ChatMessage {
 }
 
 describe('AgentRuntimeManager', () => {
+  it('does not expose the removed global running-agent lock query', () => {
+    const manager = createAgentRuntimeManager({ createAgent: () => new MockAgent() });
+
+    expect('hasRunningAgents' in manager).toBe(false);
+  });
+
   it('exposes one ready conversation context and disposes only its owned state', () => {
     const manager = createAgentRuntimeManager({
       createAgent: ({ conversationId }) => new MockAgent(conversationId),

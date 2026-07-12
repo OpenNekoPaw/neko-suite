@@ -236,11 +236,10 @@ React 对话界面，通过 postMessage 与 Extension Host 通信。117 个源�
 ```text
 provider transport fragments
   -> turn-scoped semantic accumulator
-  -> explicit Timeline V2 operations
-  -> Extension delivery scheduler
-  -> webview.postMessage delivery batch
-  -> Webview frame commit scheduler
-  -> message/item-scoped MarkdownStreamingSession
+  -> conversation-owned ConversationProjectionStore
+  -> attachment-scoped snapshot / ACK / patch queue
+  -> TabRenderRuntime projection replica
+  -> Tab-owned MarkdownStreamingSession
   -> React normalized Markdown adapter
 
 conversation snapshots
@@ -254,42 +253,42 @@ conversation snapshots
 - working-memory、journal、history 与 context compaction 只在真正的语义事件、回合/模型预算边界或终态发生时更新；禁止按 provider chunk 执行完整投影或 compaction。
 - turn accumulator 只在一个 `conversationId + turnId + messageId` 生命周期内复用。禁止跨 turn 共享 mutable accumulator，也不建立全局 Timeline mutable state。
 
-#### Timeline V2 与 Extension delivery
+#### Authoritative projection 与 attachment delivery
 
-`agentTurnTimeline` schema version 2 是活动回合显示顺序的权威契约。身份包含稳定的 `conversationId`、`turnId`、`messageId`、`itemId`，以及 Webview endpoint incarnation 的 `connectionEpoch`；source generation 和 revision 都必须显式。live delta 的 `deliveryRevision` 必须连续，缺口表示可能丢失 IPC batch；每个 item 的 `itemRevision` 只要求严格递增，Extension 合并多个 mutation 后允许跳号，item 跳号不得触发 snapshot recovery。
+`ConversationProjectionStore` 是活动回合显示顺序的唯一权威。它由 conversation runtime 持有，以稳定的 conversation、turn、message 和 item identity 累积 assistant、thinking、tool、task、media 与 completion 投影；相邻文本 append 和 latest-value progress 在发送前有界合并，provider chunk 数量不得直接等于跨进程消息数量。
 
-- 文本变更必须使用 `append`、`replace`、`snapshot`、`complete` 中的明确操作；不得通过累计全文、字段 alias 或字符串前缀推断更新语义。
-- `AgentTimelineDeliveryChannel` 在一个活动 turn 内复用，合并相邻 append 和 latest-value progress。tool、error、replace、complete 是 hard flush boundary。
-- delivery scheduler 限制 pending operations、pending text bytes 和 flush latency，并串行调用 `webview.postMessage`。provider chunk 数量不得直接等于跨进程消息数量。
-- Webview reload 或 revision gap 通过显式 snapshot request/response 恢复；snapshot 必须与 connection/conversation/turn/message identity 对齐。不存在的活动 turn 返回 typed diagnostic，不能返回空成功结果。
-- Webview endpoint 重建时复用权威 accumulator/channel 状态并重新绑定 endpoint；同一 mutable channel 不跨 turn 复用。为支持显式 reload recovery，每个 conversation 最多保留最新一个 active/terminal 权威 channel；下一 turn 开始前、conversation clear 或 Extension dispose 时释放，且不保留历史 delta log。
+- 每个打开的 Tab 建立独立 attachment，并通过同一串行队列执行 snapshot、ACK、patch 和 detach。snapshot ACK 前不得发送 patch。
+- attachment identity 包含 endpoint epoch、attachment、Tab 与 conversation。endpoint 重建会使旧 attachment 全部失效，并为保留 Tab 创建新 attachment 和权威 snapshot。
+- established live attachment 的 frame gap、base-version mismatch 或 identity mismatch 是 typed fatal diagnostic。旧 attachment 不得请求 snapshot 后继续运行；恢复必须创建新 attachment。
+- Tab visibility 只改变 keyed component subtree 的显示状态，不 attach、detach、flush、discard、重置或改变投影序列。
+- rebuildable delivery revision、connection recovery descriptor 和 Timeline snapshot-request protocol 已删除；conversation projection 与持久历史不依赖 React commit 顺序。
 
 #### Webview commit 与 canonical Markdown
 
-- 一个有效 Timeline delivery batch 只产生一次会话状态 transaction。多个 host delivery 若落在同一 animation frame，会按 item 合并为至多一次 streaming render revision。
+- 一个有效 projection frame 只产生一次 Tab runtime state transaction。多个 host frame 若落在同一 animation frame，会按 item 合并为至多一次 streaming render revision。
 - 会话投影与 Markdown external store 使用同一有序提交边界：先把已接受 delivery 提交到 Markdown session 但不通知订阅者，再提交 conversation refs/React state，最后每个受影响 session 只 publish 一次。Renderer 保留 source identity fail-visible 检查，禁止用 catch、fallback 或关闭检查掩盖跨状态源竞态。
-- completion、replace、error、conversation switch、unmount 与 Webview disposal 必须 flush 或 cancel 待提交 frame，禁止遗失最后一个 delta。
+- completion、replace、error、attachment detach 与 Webview disposal 必须 flush 或 cancel 待提交 frame，禁止遗失最后一个 delta；Tab switch 不参与 delivery lifecycle。
 - 每个 assistant text/thinking item 复用一个 `@neko/markdown` `MarkdownStreamingSession`。append 推进同一个 session；replace 创建新的 source generation；snapshot 只用于 resync；complete finalizes 同一 session。
 - 历史完成消息也进入同一 normalized session/React adapter，不允许 `react-markdown`、final-only parser 或 raw-source success fallback。
 - 原始 fenced Markdown 是视觉 source authority。normalized `codeBlock` node 可投影带 source range/provenance 的 semantic composite metadata，但不得删除原始 fence，也不得把 derived composite 再显示成第二个独立 artifact。
 - normalized contract 的未知 node/schema、活动流缺失 Markdown session 或 source mismatch 都必须 fail-visible。
 
-#### Conversation render ownership 与激活事务
+#### Conversation render ownership 与 Tab visibility
 
-- `ConversationRenderCoordinator` 是 Webview 内 canonical 的 per-conversation render owner，统一拥有消息投影、streaming/active Timeline、队列、运行状态、render revision、可见性与 viewport intent。`conversationMessagesRef`、`conversationStreamingRef` 只保留为 React compatibility projection，不是第二事实来源，也不得由 handler 直接写入。
-- UI Conversation Tab、character-role Tab、Extension `tabState` 与 `activeConversation` 必须进入同一个 activation transaction：
+- `TabRenderRuntime` 是 Webview 内 canonical 的 per-Tab render owner，拥有输入、附件、引用、配置选择、投影 replica、Markdown session、焦点、滚动、菜单和诊断。`ConversationRenderCoordinator` 只负责 conversation-scoped host mutation projection，不拥有 foreground UI 状态。
+- 每个打开的 UI Conversation Tab 和 character-role Tab 都创建独立 keyed subtree：
 
   ```text
-  ingest authoritative snapshot
-    -> prepare renderer resources from activeTurnTimeline
-    -> commit visible React state and foreground owner
-    -> publish Markdown external-store observers
+  create TabRenderRuntime(tabId, conversationId)
+    -> attach authoritative conversation projection
+    -> hydrate Tab-owned config and input state
+    -> render keyed ConversationTabRuntimeView
+    -> activation changes visibility only
   ```
 
-- 激活准备阶段必须先确认 snapshot identity、revision 与 renderer ownership。Markdown session 缺失、Timeline snapshot 不可用、重复提交或 publication 顺序非法时 fail-visible；禁止回退 raw Markdown、历史 renderer 或空成功结果。
-- background mutation 只能推进 owning conversation snapshot、renderer resource 与订阅 revision；不得写当前 visible state/ref，不得触发前台 scroll/focus effect。Tab badge/status 通过 conversation revision 订阅更新，不要求隐藏 conversation 保持 DOM 渲染。
-- composer enablement、queued-message submission、status、elapsed-time baseline 与 viewport intent 都从当前 active snapshot 派生。elapsed display 的周期 tick 属 UI-local；`follow-tail`/`detached` 与稳定 anchor 按 conversation 保存，切回时恢复，后台更新不得夺取滚动或焦点。
-- cleanup 按 scope 分离：active-turn release 只释放当前 turn renderer 资源；component detach/React StrictMode cleanup 只解除 UI 订阅并允许从 canonical snapshot 重建；hide/reveal 允许 realm 重建和重新激活；Webview realm teardown 释放 frame、Markdown session 与 subscription；conversation disposal 只清理目标 conversation 的 snapshot、scheduled frame、viewport intent 与 renderer resource。
+- activation 不复制输入或配置，不重绑 session，不 flush/discard projection，也不触发 foreground save/restore effect。隐藏 Tab 继续接收自己的 projection；后台更新不得夺取其他 Tab 的滚动、焦点或 composer 状态。
+- 干净的 inactive historical subtree 可按有界策略 unmount，但独立 store 与 projection replica 保留；remount 只能从自己的 runtime 或新 attachment snapshot 恢复。
+- cleanup 按 scope 分离：Tab close 释放该 view runtime 与 attachment；Webview endpoint teardown 使旧 attachments 失效；conversation disposal 只清理目标 conversation runtime。关闭 Tab 不取消仍在运行或可恢复的 conversation。
 - `pagehide` realm teardown 清空 Markdown session/subscription 时不得再通知正在卸载的 React subscriber，否则旧 React tree 会在真正销毁前读取已经删除的活动 session。conversation/turn scoped disposal 仍保留 scoped invalidation。
 
 #### 串行持久化与 completion barrier
@@ -297,15 +296,16 @@ conversation snapshots
 - 每个本地 conversation storage authority 复用一个 `ConversationPersistenceCoordinator`；不同 runtime 不得并发写同一 storage scope。
 - partial snapshot 使用 latest-wins coalescing；terminal save/delete 是 required operation，必须可等待。`flush()` 只等待其调用水位，`dispose()` 必须 drain 已接纳写入后再释放 storage。
 - 同进程正常单 turn 不应产生 stale-write；真正的外部 writer conflict 保持 fail-visible，不重试成静默成功。
-- 正常完成顺序是：finalize accumulator → flush terminal Timeline delivery → 发送 final blocks → await terminal persistence → 返回区分 model completion、Webview delivery、resync availability 和 durability 的 typed lifecycle result。
-- cancellation、conversation clear、Webview close 和 Extension deactivation 必须停止 late callbacks，并释放 timer、subscription、delivery channel、Markdown session、frame callback 与 pending write。
+- 正常完成顺序是：finalize accumulator → commit authoritative projection → enqueue terminal attachment patch → await terminal persistence → 返回区分 model completion、projection delivery、attachment state 和 durability 的 typed lifecycle result。
+- cancellation、conversation clear、Webview close 和 Extension deactivation 必须停止 late callbacks，并释放 timer、subscription、attachment queue、Markdown session、frame callback 与 pending write。
 
 #### 实例复用边界
 
 | 实例                                    | 复用范围                                                             | 禁止范围                            |
 | --------------------------------------- | -------------------------------------------------------------------- | ----------------------------------- |
-| semantic accumulator / Timeline channel | 同一 turn；每 conversation 最多保留最新 active/terminal channel 用于显式 reload recovery | 不跨 turn 共享 mutable state，不保留历史 delta log |
-| Extension delivery scheduler            | 同一活动 turn 与 endpoint generation，可在 reload 时 rebind endpoint | 不作为全局 mutable bus              |
+| semantic accumulator / projection store | accumulator 限定同一 turn；projection store 属于一个 conversation runtime | 不跨 conversation 共享 mutable state |
+| projection attachment queue             | 一个 Tab attachment 与 endpoint epoch                              | 不跨 Tab 共享序列或 ACK 状态          |
+| Tab render runtime                       | 一个打开 Tab；可有界保留 store/replica                              | 不通过 active 标记模拟多个 Tab         |
 | Markdown streaming session              | 同一 message/item/source generation                                  | replace 后不得继续复用旧 generation |
 | persistence coordinator                 | 同一本地 storage authority 生命周期                                  | 不跨独立 storage authority 共享     |
 | Webview frame scheduler                 | 一个 Webview runtime                                                 | dispose 后不得接收新 delivery       |
@@ -317,6 +317,10 @@ conversation snapshots
 独立终端 TUI 与 headless/validation 命令包，直接复用 `@neko/agent` + `@neko/platform`。
 
 TUI/headless 特有的 bootstrap 层（`createCLIPlatform()`）负责：
+
+- 每个 Ink application root 创建一个 `AgentTuiApplicationRuntime`，每个 hosted conversation 创建独立 `TuiConversationRuntime` 和 agent/config/conversation/UI store bundle。
+- resume 激活目标 conversation controller 并切换 keyed component subtree，不把同一模块 store 重绑到另一个 conversation。
+- application/session unmount 先取消异步初始化并释放 session 资源，再 dispose runtime；unmount cleanup 不调用 React state setter。
 
 - 从环境变量注入 API Key（`ANTHROPIC_API_KEY`、`OPENAI_API_KEY` 等）
 - 基于文件的用户配置（`~/.neko/config.toml`，与 Extension 共享）
@@ -395,11 +399,13 @@ Webview → Extension:
   getSettings, updateSettings, invokeSlashCommand,
   clearActiveSkill, planApprove/Reject,
   searchProjectFiles, getTasks, cancelTask,
-  requestAgentTurnTimelineSnapshot,
+  projectionEndpointDiscover, projectionAttach,
+  projectionSnapshotAck, projectionDetach,
   requestCanvasAuthoringHandoff
 
 Extension → Webview:
-  agentTurnTimeline (schema v2), agentTurnTimelineDiagnostic,
+  projectionEndpointReady, projectionSnapshot,
+  projectionPatch, projectionAttachmentDiagnostic,
   thinking, streamText, streamThinking,
   toolCall, toolResult, toolConfirmation,
   streamComplete, agentPhase, error,

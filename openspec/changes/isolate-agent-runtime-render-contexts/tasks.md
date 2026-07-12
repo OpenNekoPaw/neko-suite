@@ -3,7 +3,7 @@
 - [x] 1.1 Add Layer-0 conversation/run/child-run scope contracts and validators with owner-mismatch diagnostics.
 - [x] 1.2 Add conversation-config and immutable turn-config snapshot contracts without VS Code, React, or provider implementation dependencies.
 - [x] 1.3 Add projection attachment, snapshot, acknowledgement, patch, detach, and protocol diagnostic contracts.
-- [ ] 1.4 Add red producer/consumer tests proving global config locks, bare child IDs, shared Tab input state, visibility-coupled Timeline delivery, and revision-gap recovery violate the target path.
+- [x] 1.4 Add red producer/consumer tests proving global config locks, bare child IDs, shared Tab input state, visibility-coupled Timeline delivery, and revision-gap recovery violate the target path.
 - [x] 1.5 Add architecture guards that prevent Webview/TUI/Extension types from entering Layer-0 isolation contracts.
 
 ## 2. Conversation Runtime and Configuration
@@ -59,8 +59,8 @@
 ## 7. Legacy Removal, Documentation, and Validation
 
 - [x] 7.1 Remove legacy Timeline delivery revision/snapshot-request recovery messages, handlers, scheduler state, foreground flush/discard hooks, and persisted connection-epoch recovery descriptors.
-- [ ] 7.2 Remove obsolete global settings projections, shared input/session caches, bare child-run adapters, compatibility branches, tests, exports, and dependencies.
-- [ ] 7.3 Update Agent domain/runtime/Webview/TUI architecture documentation and mark prior session/stream isolation claims as superseded where necessary.
+- [x] 7.2 Remove obsolete global settings projections, shared input/session caches, bare child-run adapters, compatibility branches, tests, exports, and dependencies.
+- [x] 7.3 Update Agent domain/runtime/Webview/TUI architecture documentation and mark prior session/stream isolation claims as superseded where necessary.
 - [ ] 7.4 Run focused contract, Agent runtime, SubAgent, Task, Extension, Webview, Markdown, and TUI tests after each implementation batch.
 - [ ] 7.5 Run affected package typecheck/build plus `pnpm build`, `pnpm test`, and `pnpm check` for the cross-package contract migration.
 - [ ] 7.6 Run `pnpm check:legacy-debt`, `pnpm check:unused`, and `git diff --check`; resolve new debt without modifying unrelated workspace changes.
