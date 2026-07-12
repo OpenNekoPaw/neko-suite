@@ -1,23 +1,38 @@
+import { AGENT_COMMAND_MESSAGE_SOURCE } from '@neko/agent/commands/terminal-messages';
+import { createStrictTranslator } from '@neko/shared/i18n';
 import { describe, expect, it } from 'vitest';
-import { formatTuiReferenceDiagnostics } from './reference-diagnostics';
+import { createAgentTerminalPresentationContext } from '../presentation/context';
+import { createAgentTerminalFormatters } from '../presentation/formatters';
+import { presentReferenceLoadingDiagnostics } from '../presentation/reference-presentation';
+import { CLI_TERMINAL_MESSAGE_SOURCE } from '../presentation/terminal-messages';
 
-describe('formatTuiReferenceDiagnostics', () => {
+function createPresentation(locale: 'en' | 'zh-cn') {
+  return createAgentTerminalPresentationContext({
+    translator: createStrictTranslator(locale, [
+      AGENT_COMMAND_MESSAGE_SOURCE,
+      CLI_TERMINAL_MESSAGE_SOURCE,
+    ] as const),
+    formatters: createAgentTerminalFormatters({ locale, timeZone: 'UTC' }),
+  });
+}
+
+describe('presentReferenceLoadingDiagnostics', () => {
   it('returns undefined when there are no reference loading errors', () => {
-    expect(formatTuiReferenceDiagnostics([])).toBeUndefined();
+    expect(presentReferenceLoadingDiagnostics([], createPresentation('en'))).toBeUndefined();
   });
 
-  it('formats a visible diagnostic for unknown or unreadable references', () => {
-    expect(
-      formatTuiReferenceDiagnostics([
-        { reference: '@missing.md', error: 'ENOENT: no such file or directory' },
-        { reference: '@node_modules/pkg/index.ts', error: 'File is in excluded directory' },
-      ]),
-    ).toBe(
-      [
-        'Reference errors:',
-        '- @missing.md: ENOENT: no such file or directory',
-        '- @node_modules/pkg/index.ts: File is in excluded directory',
-      ].join('\n'),
-    );
-  });
+  it.each([
+    ['en', 'Reference error:', '- @missing.md: ENOENT: /external/原文'],
+    ['zh-cn', '引用错误：', '- @missing.md：ENOENT: /external/原文'],
+  ] as const)(
+    'localizes owned prose while preserving external details for %s',
+    (locale, header, row) => {
+      expect(
+        presentReferenceLoadingDiagnostics(
+          [{ reference: '@missing.md', error: 'ENOENT: /external/原文' }],
+          createPresentation(locale),
+        ),
+      ).toBe([header, row].join('\n'));
+    },
+  );
 });

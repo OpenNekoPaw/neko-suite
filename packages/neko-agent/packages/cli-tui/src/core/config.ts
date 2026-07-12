@@ -12,7 +12,12 @@
  * 4. Default values
  */
 
-import { ConfigManager, FileUserConfigManager, type ConfigManagerOptions } from '@neko/platform';
+import {
+  ConfigManager,
+  FileUserConfigManager,
+  type AssistantConfigDiagnostic,
+  type ConfigManagerOptions,
+} from '@neko/platform';
 import type { CLIConfig } from './types';
 import { DEFAULT_CLI_CONFIG } from './types';
 import type { ChatModelOption } from '@neko/shared';
@@ -74,6 +79,23 @@ export function createConfigManager(workDir?: string): ConfigManager {
 // Configuration Loading
 // =============================================================================
 
+export type CliConfigLoadDiagnostic =
+  | Readonly<{
+      readonly code: 'platform-config-unavailable';
+      readonly configCode: AssistantConfigDiagnostic['code'];
+      readonly filePath: string;
+    }>
+  | Readonly<{ readonly code: 'missing-default-provider' }>
+  | Readonly<{ readonly code: 'provider-not-configured'; readonly providerId: string }>
+  | Readonly<{ readonly code: 'missing-provider-model'; readonly providerId: string }>;
+
+export class CliConfigLoadError extends Error {
+  public constructor(readonly diagnostic: CliConfigLoadDiagnostic) {
+    super(`CLI configuration load failed: ${diagnostic.code}`);
+    this.name = 'CliConfigLoadError';
+  }
+}
+
 /** Media generation capabilities used to identify media models */
 const MEDIA_CAPABILITIES = new Set([
   'text_to_image',
@@ -110,17 +132,21 @@ export function loadConfig(
       maxTokens: overrides.maxTokens,
     });
     if (effectiveConfig.blockingDiagnostic) {
-      throw new Error(effectiveConfig.blockingDiagnostic.message);
+      throw new CliConfigLoadError({
+        code: 'platform-config-unavailable',
+        configCode: effectiveConfig.blockingDiagnostic.code,
+        filePath: effectiveConfig.blockingDiagnostic.filePath,
+      });
     }
 
     const providerId = effectiveConfig.providerId ?? undefined;
     if (!providerId) {
-      throw new Error('Default provider is not configured in ~/.neko/config.toml.');
+      throw new CliConfigLoadError({ code: 'missing-default-provider' });
     }
     const provider = effectiveConfig.provider ?? cm.getProvider(providerId);
     const providerType = provider?.type;
     if (!providerType) {
-      throw new Error(`Provider "${providerId}" is not configured in ~/.neko/config.toml.`);
+      throw new CliConfigLoadError({ code: 'provider-not-configured', providerId });
     }
     const providerRequiresApiKey = provider.requiresApiKey !== false;
 
@@ -130,7 +156,7 @@ export function loadConfig(
 
     const model = effectiveConfig.modelId ?? undefined;
     if (!model) {
-      throw new Error(`No model is configured for provider "${providerId}".`);
+      throw new CliConfigLoadError({ code: 'missing-provider-model', providerId });
     }
 
     const selectedModelConfig = effectiveConfig.model ?? cm.getModel(model);
@@ -162,6 +188,7 @@ export function loadConfig(
       .map((m) => m.id);
 
     const defaultMediaModels = effectiveConfig.defaultMediaModels;
+    const perceptionModels = buildDefaultPerceptionModelRefs(cm);
     const maxTokens = effectiveConfig.maxTokens;
     const temperature = effectiveConfig.temperature;
     const thinkingBudget = effectiveConfig.thinkingBudget;
@@ -189,6 +216,7 @@ export function loadConfig(
       },
       mediaModels,
       defaultMediaModels,
+      perceptionModels,
       apiKey,
       baseUrl,
       maxTokens,
@@ -301,42 +329,66 @@ export function listConfiguredProviders(workDir?: string): string[] {
   }
 }
 
+function buildDefaultPerceptionModelRefs(cm: ConfigManager): CLIConfig['perceptionModels'] {
+  const image = formatModelRef(cm.getDefaultModelPurposeRef('image.understand'));
+  const audio = formatModelRef(cm.getDefaultModelPurposeRef('audio.understand'));
+  const video = formatModelRef(cm.getDefaultModelPurposeRef('video.understand'));
+  if (!image && !audio && !video) return undefined;
+  return {
+    ...(image ? { image } : {}),
+    ...(audio ? { audio } : {}),
+    ...(video ? { video } : {}),
+  };
+}
+
+function formatModelRef(
+  ref: { readonly providerId: string; readonly modelId: string } | undefined,
+) {
+  if (!ref) return undefined;
+  return `${ref.providerId}:${ref.modelId}`;
+}
+
 // =============================================================================
 // Validation
 // =============================================================================
 
+export type CliConfigValidationDiagnostic =
+  | Readonly<{ readonly code: 'missing-api-key'; readonly providerId: string }>
+  | Readonly<{ readonly code: 'missing-model' }>
+  | Readonly<{ readonly code: 'invalid-temperature'; readonly value: number }>
+  | Readonly<{ readonly code: 'invalid-max-tokens'; readonly value: number }>
+  | Readonly<{ readonly code: 'invalid-output-format'; readonly value: string }>;
+
+export interface CliConfigValidationResult {
+  readonly valid: boolean;
+  readonly diagnostics: readonly CliConfigValidationDiagnostic[];
+}
+
 /**
- * Validate configuration.
+ * Validate configuration without producing terminal prose.
  */
-export function validateConfig(config: CLIConfig): { valid: boolean; errors: string[] } {
-  const errors: string[] = [];
+export function validateConfig(config: CLIConfig): CliConfigValidationResult {
+  const diagnostics: CliConfigValidationDiagnostic[] = [];
 
   if (config.providerRequiresApiKey && !config.apiKey) {
-    errors.push(
-      `API key not found for provider "${config.provider}". ` +
-        `Set the appropriate environment variable (e.g. ANTHROPIC_API_KEY), ` +
-        `use --api-key option, or configure in ~/.neko/config.toml`,
-    );
+    diagnostics.push({ code: 'missing-api-key', providerId: config.provider });
   }
 
   if (!config.model) {
-    errors.push('Model is required. Use --model option or configure in config file.');
+    diagnostics.push({ code: 'missing-model' });
   }
 
   if (config.temperature < 0 || config.temperature > 2) {
-    errors.push(`Temperature must be between 0 and 2, got ${config.temperature}.`);
+    diagnostics.push({ code: 'invalid-temperature', value: config.temperature });
   }
 
   if (!Number.isInteger(config.maxTokens) || config.maxTokens <= 0) {
-    errors.push(`maxTokens must be a positive integer, got ${config.maxTokens}.`);
+    diagnostics.push({ code: 'invalid-max-tokens', value: config.maxTokens });
   }
 
-  const validFormats = ['text', 'json', 'markdown'];
-  if (!validFormats.includes(config.outputFormat)) {
-    errors.push(
-      `outputFormat must be one of ${validFormats.join(', ')}, got "${config.outputFormat}".`,
-    );
+  if (!['text', 'json', 'markdown'].includes(config.outputFormat)) {
+    diagnostics.push({ code: 'invalid-output-format', value: config.outputFormat });
   }
 
-  return { valid: errors.length === 0, errors };
+  return { valid: diagnostics.length === 0, diagnostics };
 }

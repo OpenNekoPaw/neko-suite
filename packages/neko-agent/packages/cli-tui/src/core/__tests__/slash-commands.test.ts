@@ -1,5 +1,4 @@
 import { describe, expect, it, vi } from 'vitest';
-import { FileConversationStorage, type ConversationRecord } from '@neko/agent';
 import { getBuiltinSkills } from '@neko/skills';
 import type { Skill } from '@neko/shared';
 import { handleSkillInvocation, handleSlashCommand, isSkillInvocation } from '../slash-commands';
@@ -20,25 +19,6 @@ function createConfig(): CLIConfig {
     outputFormat: 'text',
     thinkingBudget: 0,
   };
-}
-
-function createMemoryConversationStorage(workDir: string): FileConversationStorage {
-  const files = new Map<string, string>();
-  return new FileConversationStorage({
-    indexFilePath: '/tmp/conversations-index.json',
-    workDir,
-    readFile: async (filePath) => {
-      const content = files.get(filePath);
-      if (content === undefined) {
-        throw new Error(`File not found: ${filePath}`);
-      }
-      return content;
-    },
-    writeFile: async (filePath, content) => {
-      files.set(filePath, content);
-    },
-    exists: async (filePath) => files.has(filePath),
-  });
 }
 
 describe('handleSlashCommand', () => {
@@ -63,11 +43,14 @@ describe('handleSlashCommand', () => {
     };
 
     const result = await handleSlashCommand('/commit fix bug', {
+      locale: 'en',
       config: createConfig(),
       skillService: skillService as never,
     });
 
     expect(result.handled).toBe(true);
+    expect(result.output).toBeUndefined();
+    expect(result.skillSemantic).toEqual({ kind: 'activated', skillName: '/commit' });
     expect(result.agentPrompt).toBe('fix bug');
     expect(result.lifecycleActivation).toEqual({
       skillName: '剪辑: 快速 workflow',
@@ -104,18 +87,21 @@ describe('handleSlashCommand', () => {
     };
 
     const result = await handleSlashCommand('/commit fix bug', {
+      locale: 'en',
       config: createConfig(),
       skillService: skillService as never,
     });
 
     expect(skillService.registry.getSkillByCommand).not.toHaveBeenCalled();
     expect(skillService.apply).not.toHaveBeenCalled();
-    expect(result.handled).toBe(false);
-    expect(result.error).toContain('Unknown command: /commit');
+    expect(result).toEqual({ handled: false, continueExecution: true });
+    expect(result.output).toBeUndefined();
+    expect(result.error).toBeUndefined();
   });
 
   it('does not treat builtin commands as agent-execution slash prompts', async () => {
     const result = await handleSlashCommand('/plan', {
+      locale: 'en',
       config: createConfig(),
     });
 
@@ -123,83 +109,46 @@ describe('handleSlashCommand', () => {
     expect(result.agentPrompt).toBeUndefined();
   });
 
-  it('localizes help output when the TUI slash context is Chinese', async () => {
-    const result = await handleSlashCommand('/help', {
-      locale: 'zh',
-      config: createConfig(),
-    });
+  it('poisons shared final-prose paths for TUI resource commands', async () => {
+    for (const input of ['/help', '/h', '/skills', '/commands', '/cmds', '/tools']) {
+      const result = await handleSlashCommand(input, {
+        locale: 'zh-cn',
+        config: createConfig(),
+      });
 
-    expect(result.handled).toBe(true);
-    expect(result.output).toContain('可用命令');
-    expect(result.output).toContain('显示可用命令帮助');
-    expect(result.output).not.toContain('Available Commands');
-    expect(result.output).not.toContain('Show help message with available commands');
+      expect(result).toEqual({ handled: false, continueExecution: true });
+      expect(result.output).toBeUndefined();
+      expect(result.error).toBeUndefined();
+    }
   });
 
-  it('rejects removed config migration subcommand', async () => {
-    const result = await handleSlashCommand('/config migrate', {
-      config: createConfig(),
-    });
+  it('does not retain legacy config, resume, or history success paths', async () => {
+    for (const input of [
+      '/config',
+      '/config migrate',
+      '/resume conversation-id',
+      '/history',
+      '/market',
+    ]) {
+      const result = await handleSlashCommand(input, {
+        locale: 'en',
+        config: createConfig(),
+      });
 
-    expect(result.handled).toBe(true);
-    expect(result.output).toBeUndefined();
-    expect(result.error).toContain('Unknown config subcommand: migrate');
+      expect(result.handled).toBe(false);
+      expect(result.output).toBeUndefined();
+      expect(result.error).toBeUndefined();
+    }
   });
 
-  it('resumes a full conversation record through the shared runtime callback', async () => {
-    const config = createConfig();
-    const storage = createMemoryConversationStorage(config.workDir);
-    const record: ConversationRecord = {
-      id: 'conv-resume',
-      version: 1,
-      title: 'Storyboard draft',
-      workDir: config.workDir,
-      messages: [
-        { role: 'user', content: '分析前10页' },
-        { role: 'assistant', content: '已生成分镜表' },
-      ],
-      createdAt: 10,
-      updatedAt: 20,
-      source: 'tui',
-    };
-    await storage.save(record);
-    await storage.flush();
-    const onResumeConversation = vi.fn();
-    const onLoadHistory = vi.fn();
-
-    const result = await handleSlashCommand('/resume conv-resume', {
-      config,
-      conversationStorage: storage,
-      currentConversationId: 'conv-current',
-      onResumeConversation,
-      onLoadHistory,
-    });
-
-    expect(result.error).toBeUndefined();
-    expect(result.output).toContain('Resumed: "Storyboard draft"');
-    expect(onResumeConversation).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 'conv-resume', title: 'Storyboard draft' }),
-    );
-    expect(onLoadHistory).not.toHaveBeenCalled();
-  });
-
-  it('labels maxTokens as max output tokens in config output', async () => {
-    const result = await handleSlashCommand('/config', {
-      config: createConfig(),
-    });
-
-    expect(result.handled).toBe(true);
-    expect(result.output).toContain('maxOutputTokens: 4096');
-    expect(result.output).not.toContain('maxTokens:');
-  });
-
-  it('rejects music as a top-level media category', async () => {
+  it('does not retain a second legacy media command success path', async () => {
     const result = await handleSlashCommand('/media music', {
+      locale: 'en',
       config: createConfig(),
     });
 
-    expect(result.handled).toBe(true);
-    expect(result.error).toContain('Valid: image, video, audio, reset');
+    expect(result.handled).toBe(false);
+    expect(result.output).toBeUndefined();
   });
 });
 
@@ -208,6 +157,7 @@ describe('handleSkillInvocation', () => {
     const skillService = createSkillServiceMock(getBuiltinSkills());
 
     const result = await handleSkillInvocation('$skill-creator create a reusable review skill', {
+      locale: 'en',
       config: createConfig(),
       skillService: skillService as never,
     });
@@ -217,7 +167,7 @@ describe('handleSkillInvocation', () => {
     expect(result).toEqual(
       expect.objectContaining({
         handled: true,
-        output: 'Skill activated: skill-creator',
+        semantic: { kind: 'activated', skillName: 'skill-creator' },
         lifecycleActivation: {
           skillName: 'skill-creator',
           args: 'create a reusable review skill',
@@ -236,6 +186,7 @@ describe('handleSkillInvocation', () => {
     const skillService = createSkillServiceMock([skill]);
 
     const result = await handleSkillInvocation('$quality-review changed files', {
+      locale: 'en',
       config: createConfig(),
       skillService: skillService as never,
     });
@@ -248,7 +199,7 @@ describe('handleSkillInvocation', () => {
     expect(result).toEqual(
       expect.objectContaining({
         handled: true,
-        output: 'Skill activated: quality-review',
+        semantic: { kind: 'activated', skillName: 'quality-review' },
         lifecycleActivation: {
           skillName: 'quality-review',
           args: 'changed files',
@@ -278,16 +229,24 @@ describe('handleSkillInvocation', () => {
 
     await expect(
       handleSkillInvocation('$missing', {
+        locale: 'en',
         config: createConfig(),
         skillService: skillService as never,
       }),
-    ).resolves.toEqual({ handled: true, error: 'Unknown skill: $missing' });
+    ).resolves.toEqual({
+      handled: true,
+      semantic: { kind: 'not-found', skillName: 'missing' },
+    });
     await expect(
       handleSkillInvocation('$disabled-skill', {
+        locale: 'en',
         config: createConfig(),
         skillService: skillService as never,
       }),
-    ).resolves.toEqual({ handled: true, error: 'Skill is disabled: $disabled-skill' });
+    ).resolves.toEqual({
+      handled: true,
+      semantic: { kind: 'disabled', skillName: 'disabled-skill' },
+    });
   });
 });
 

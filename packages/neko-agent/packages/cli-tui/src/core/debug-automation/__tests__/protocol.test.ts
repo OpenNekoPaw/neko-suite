@@ -43,6 +43,18 @@ describe('TUI debug automation protocol', () => {
     ).toThrow('Unknown debug automation method');
   });
 
+  it('accepts message.cancel as a generic active-turn control', () => {
+    const request = parseTuiDebugAutomationRequest(
+      JSON.stringify({
+        schema: TUI_DEBUG_AUTOMATION_REQUEST_SCHEMA,
+        id: 'cancel-1',
+        method: 'message.cancel',
+        params: { sessionId: 'debug-session-1' },
+      }),
+    );
+    expect(request.method).toBe('message.cancel');
+  });
+
   it('accepts terminal.resize and validates its positive integer bounds', () => {
     const request = parseTuiDebugAutomationRequest(
       JSON.stringify({

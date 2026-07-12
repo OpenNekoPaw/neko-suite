@@ -326,7 +326,7 @@ describe('createTuiCapabilityLoader', () => {
 
     const result = loader.registerProviders([provider]);
 
-    expect(skillRegistry.getSkill('safe-skill')).toBe(safeSkill);
+    expect(skillRegistry.getSkill('safe-skill')).toMatchObject(safeSkill);
     expect(skillRegistry.getSkill('vscode-skill')).toBeUndefined();
     expect(toolGroupRegistry.get('safe-tools')).toBe(safeGroup);
     expect(toolGroupRegistry.get('vscode-tools')).toBeUndefined();
@@ -387,7 +387,9 @@ describe('createTuiCapabilityLoader', () => {
     expect(providerExpressionProfileRegistry.get('provider-expression:flux', '1.0.0')).toBe(
       providerExpressionProfile,
     );
-    expect(providerExpressionProfileRegistry.get('provider-expression:vscode', '1.0.0')).toBeUndefined();
+    expect(
+      providerExpressionProfileRegistry.get('provider-expression:vscode', '1.0.0'),
+    ).toBeUndefined();
     expect(result.providers[0]?.loaded).toEqual([
       { kind: 'artifactProfile', name: 'studio.storyboard@1' },
       { kind: 'creationProfile', name: 'studio.creation@1.0.0' },

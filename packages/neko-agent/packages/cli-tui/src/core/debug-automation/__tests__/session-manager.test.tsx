@@ -101,6 +101,15 @@ describe('TuiDebugAutomationSessionManager', () => {
 
     expect(mockState.submittedPrompts).toEqual(['hello']);
 
+    await expect(
+      manager.handle({
+        schema: 'neko.tui-debug-automation.request.v1',
+        id: 'cancel',
+        method: 'message.cancel',
+        params: { sessionId: 'debug-session-test' },
+      }),
+    ).resolves.toMatchObject({ accepted: true });
+
     await manager.handle({
       schema: 'neko.tui-debug-automation.request.v1',
       id: '3',
@@ -136,7 +145,7 @@ describe('TuiDebugAutomationSessionManager', () => {
         method: 'session.resume',
         params: { conversationId: 'cli-legacy-123' },
       }),
-    ).rejects.toThrow('TUI resume conversation id must be canonical');
+    ).rejects.toThrow('non-canonical');
     expect(mockState.renderedAppProps).toBeUndefined();
   });
 });
@@ -148,6 +157,9 @@ function createFakePort(): TuiDebugAutomationAppPort {
     getConversationId: () => 'tui-2026-01-01T00-00-00-000Z-test',
     async submitMessage(input) {
       mockState.submittedPrompts.push(input.prompt);
+    },
+    cancelActiveMessage() {
+      return true;
     },
     resizeTerminal(input) {
       mockState.terminalSizes.push(input);

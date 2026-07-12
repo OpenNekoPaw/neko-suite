@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { createTestAgentTerminalPresentation } from '../../presentation/testing';
 import {
   createTuiSkillInvocationCatalog,
   createTuiSlashCommandCatalog,
@@ -7,7 +8,10 @@ import {
 
 describe('createTuiSlashCommandCatalog', () => {
   it('includes builtin slash commands by default', () => {
-    const commands = createTuiSlashCommandCatalog();
+    const commands = createTuiSlashCommandCatalog(
+      undefined,
+      createTestAgentTerminalPresentation('en'),
+    );
     const names = commands.map((command) => command.name);
 
     expect(names).toContain('help');
@@ -28,26 +32,29 @@ describe('createTuiSlashCommandCatalog', () => {
   });
 
   it('adds enabled command artifacts and deduplicates builtin names', () => {
-    const commands = createTuiSlashCommandCatalog([
-      {
-        entryPointKind: 'command-artifact',
-        command: 'commit',
-        description: 'Create a commit message',
-        enabled: true,
-      },
-      {
-        entryPointKind: 'command-artifact',
-        command: 'plan',
-        description: 'Override builtin description',
-        enabled: true,
-      },
-      {
-        entryPointKind: 'command-artifact',
-        command: 'draft-only',
-        description: 'Disabled command should stay hidden',
-        enabled: false,
-      },
-    ]);
+    const commands = createTuiSlashCommandCatalog(
+      [
+        {
+          entryPointKind: 'command-artifact',
+          command: 'commit',
+          description: 'Create a commit message',
+          enabled: true,
+        },
+        {
+          entryPointKind: 'command-artifact',
+          command: 'plan',
+          description: 'Override builtin description',
+          enabled: true,
+        },
+        {
+          entryPointKind: 'command-artifact',
+          command: 'draft-only',
+          description: 'Disabled command should stay hidden',
+          enabled: false,
+        },
+      ],
+      createTestAgentTerminalPresentation('en'),
+    );
 
     expect(commands).toContainEqual({
       name: 'commit',
@@ -58,7 +65,10 @@ describe('createTuiSlashCommandCatalog', () => {
   });
 
   it('localizes builtin and TUI-local command descriptions for Chinese autocomplete', () => {
-    const commands = createTuiSlashCommandCatalog(undefined, 'zh');
+    const commands = createTuiSlashCommandCatalog(
+      undefined,
+      createTestAgentTerminalPresentation('zh-cn'),
+    );
 
     expect(commands).toContainEqual({
       name: 'help',
@@ -74,7 +84,7 @@ describe('createTuiSlashCommandCatalog', () => {
   });
 
   it('declares TUI-local command effects with explicit surface scope', () => {
-    const localEffects = listTuiLocalCommandEffects('en');
+    const localEffects = listTuiLocalCommandEffects(createTestAgentTerminalPresentation('en'));
 
     expect(localEffects).toEqual(
       expect.arrayContaining([
@@ -87,19 +97,25 @@ describe('createTuiSlashCommandCatalog', () => {
   });
 
   it('projects ordinary skills and legacy aliases into the dollar catalog without slash entries', () => {
-    const slashCommands = createTuiSlashCommandCatalog([]);
-    const skillCommands = createTuiSkillInvocationCatalog([
-      {
-        name: 'quality-review',
-        description: 'Review changed files',
-        enabled: true,
-      },
-      {
-        name: 'disabled-skill',
-        description: 'Hidden',
-        enabled: false,
-      },
-    ]);
+    const slashCommands = createTuiSlashCommandCatalog(
+      [],
+      createTestAgentTerminalPresentation('en'),
+    );
+    const skillCommands = createTuiSkillInvocationCatalog(
+      [
+        {
+          name: 'quality-review',
+          description: 'Review changed files',
+          enabled: true,
+        },
+        {
+          name: 'disabled-skill',
+          description: 'Hidden',
+          enabled: false,
+        },
+      ],
+      createTestAgentTerminalPresentation('en'),
+    );
 
     expect(slashCommands.some((command) => command.name === 'quality-review')).toBe(false);
     expect(skillCommands).toEqual([
@@ -118,7 +134,7 @@ describe('createTuiSlashCommandCatalog', () => {
           enabled: true,
         },
       ],
-      'zh',
+      createTestAgentTerminalPresentation('zh-cn'),
     );
 
     expect(skillCommands).toEqual([

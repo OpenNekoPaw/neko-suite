@@ -20,6 +20,7 @@ import { TuiDebugAutomationProtocolError } from './protocol';
 export interface TuiAutomationSessionHandle {
   readonly isReady: boolean;
   readonly submit: (prompt: string) => Promise<void>;
+  readonly cancel: () => void;
   readonly listTasks: () => Promise<readonly Task[]>;
   readonly getCurrentConversationId: () => string;
   readonly getHistory: () => readonly unknown[];
@@ -34,6 +35,8 @@ export interface TuiAutomationAppPortOptions {
 export function createTuiAutomationAppPort(
   options: TuiAutomationAppPortOptions,
 ): TuiDebugAutomationAppPort {
+  const inFlightSubmissions = new Set<Promise<void>>();
+  let latestSubmission: Promise<void> | null = null;
   return {
     ownerKind: 'tui-app-session-owner',
 
@@ -53,7 +56,21 @@ export function createTuiAutomationAppPort(
           'TUI session is not ready for message submission.',
         );
       }
-      await handle.submit(input.prompt);
+      const messageCountBeforeSubmit = useConversationStore.getState().messages.length;
+      const execution = handle.submit(input.prompt);
+      latestSubmission = execution;
+      inFlightSubmissions.add(execution);
+      void execution.finally(() => {
+        inFlightSubmissions.delete(execution);
+      });
+      await waitForSubmissionAcceptance(execution, messageCountBeforeSubmit);
+    },
+
+    cancelActiveMessage(): boolean {
+      const handle = options.readHandle();
+      const wasRunning = useAgentStore.getState().status === 'running';
+      handle.cancel();
+      return wasRunning;
     },
 
     resizeTerminal(input): void {
@@ -61,6 +78,9 @@ export function createTuiAutomationAppPort(
     },
 
     async waitForIdle(input): Promise<TuiDebugAutomationIdleState> {
+      if (latestSubmission) await latestSubmission;
+      await Promise.all([...inFlightSubmissions]);
+      await new Promise<void>((resolve) => setTimeout(resolve, 50));
       return waitForTuiAutomationIdle({
         readIdle: async () => readTuiAutomationIdleState(options.readHandle()),
         timeoutMs: input.timeoutMs,
@@ -95,6 +115,35 @@ export function createTuiAutomationAppPort(
       };
     },
   };
+}
+
+async function waitForSubmissionAcceptance(
+  execution: Promise<void>,
+  messageCountBeforeSubmit: number,
+): Promise<void> {
+  let settled = false;
+  void execution.finally(() => {
+    settled = true;
+  });
+  const startedAt = Date.now();
+  for (;;) {
+    if (useAgentStore.getState().status === 'running') return;
+    if (settled && hasProjectedAssistantAfter(messageCountBeforeSubmit)) return;
+    if (Date.now() - startedAt >= 5_000) {
+      throw new TuiDebugAutomationProtocolError(
+        'session-timeout',
+        'TUI message submission was not accepted or projected within 5000ms.',
+      );
+    }
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+}
+
+function hasProjectedAssistantAfter(messageCountBeforeSubmit: number): boolean {
+  return useConversationStore
+    .getState()
+    .messages.slice(messageCountBeforeSubmit)
+    .some((message) => message.role === 'assistant');
 }
 
 async function waitForTuiAutomationIdle(input: {
@@ -162,13 +211,7 @@ async function readTasks(handle: TuiAutomationSessionHandle): Promise<readonly T
   if (!handle.isReady) {
     return [];
   }
-  try {
-    return await handle.listTasks();
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    useConversationStore.getState().addError(new Error(`Debug task fact read failed: ${message}`));
-    return [];
-  }
+  return handle.listTasks();
 }
 
 function idleConcern(status: string, terminal: boolean): TuiDebugAutomationIdleConcern {
@@ -213,6 +256,15 @@ function readTurnSummaries(): readonly TuiDebugAutomationTurnSummary[] {
     content: readMessageSummaryContent(message),
     ...(message.isError ? { isError: true } : {}),
     toolCalls: readMessageToolCallSummaries(message),
+    timeline: (message.timelineRows ?? []).map((row) => ({
+      id: row.id,
+      sequence: row.sequence,
+      kind: row.kind,
+      status: row.status,
+      ...(row.content !== undefined ? { content: row.content } : {}),
+      ...(row.toolCallId !== undefined ? { toolCallId: row.toolCallId } : {}),
+      ...(row.toolName !== undefined ? { toolName: row.toolName } : {}),
+    })),
     timestamp: message.timestamp,
   }));
 }

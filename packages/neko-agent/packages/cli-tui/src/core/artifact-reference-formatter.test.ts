@@ -9,7 +9,6 @@ import {
 } from '@neko/shared';
 import {
   collectTuiArtifactReferences,
-  formatTuiArtifactReference,
   referenceFromArtifactMediaItem,
   referenceFromAttachment,
   referenceFromPerceptionCard,
@@ -46,7 +45,7 @@ describe('artifact-reference-formatter', () => {
       probe: 'image/png',
       diagnostics: [],
     });
-    expect(formatTuiArtifactReference(ref)).toContain('/artifact show asset-img-1');
+    expect(ref.commands).toContain('/artifact show asset-img-1');
   });
 
   it('formats video and audio perception summaries', () => {

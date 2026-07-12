@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import type { UnifiedConfig } from '@neko/shared';
 import { writeConfigFile } from '@neko/shared/config/config-reader';
 import { ConfigManager, FileUserConfigManager } from '@neko/platform';
-import { loadConfig } from '../config';
+import { CliConfigLoadError, loadConfig } from '../config';
 
 const originalHome = process.env['HOME'];
 
@@ -39,7 +39,10 @@ describe('TUI/Webview effective workspace runtime alignment', () => {
       expect(tuiConfig.maxTokens).toBe(webviewSettings.maxTokens);
       expect(tuiConfig.thinkingBudget).toBe(webviewSettings.thinkingBudget);
       expect(tuiConfig.defaultMediaModels).toEqual(webviewData.defaultMediaModels);
-      expect(tuiConfig.mcpServers.map((server) => server.id)).toEqual(['user-files', 'workspace-search']);
+      expect(tuiConfig.mcpServers.map((server) => server.id)).toEqual([
+        'user-files',
+        'workspace-search',
+      ]);
       expect(webviewData.configDiagnostic).toBeUndefined();
     } finally {
       webviewConfig.dispose();
@@ -70,7 +73,17 @@ describe('TUI/Webview effective workspace runtime alignment', () => {
           filePath: fixture.workspaceConfigPath,
         }),
       );
-      expect(() => loadConfig(fixture.workDir)).toThrow(diagnostic?.message);
+      try {
+        loadConfig(fixture.workDir);
+        expect.fail('Expected configuration loading to fail.');
+      } catch (error) {
+        expect(error).toBeInstanceOf(CliConfigLoadError);
+        expect((error as CliConfigLoadError).diagnostic).toEqual({
+          code: 'platform-config-unavailable',
+          configCode: 'invalidDefaultProvider',
+          filePath: fixture.workspaceConfigPath,
+        });
+      }
     } finally {
       webviewConfig.dispose();
     }

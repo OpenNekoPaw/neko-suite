@@ -23,6 +23,12 @@ export interface TuiTaskResultObservationPort {
   ): Promise<void>;
 }
 
+export type TuiMediaBackgroundDiagnostic = Readonly<{
+  readonly code: 'progress-delivery-failed';
+  readonly taskId: string;
+  readonly error?: unknown;
+}>;
+
 export interface CreateTuiMediaBackgroundTasksInput {
   readonly platform?: Platform;
   readonly deliveryHost: NodeMediaTaskDeliveryHost;
@@ -32,7 +38,7 @@ export interface CreateTuiMediaBackgroundTasksInput {
     MediaTaskProgressDeliveryPlan
   >['persistResultUrls'];
   readonly onTaskProgress?: () => void;
-  readonly onDiagnostic?: (message: string, error?: unknown) => void;
+  readonly onDiagnostic?: (diagnostic: TuiMediaBackgroundDiagnostic) => void;
 }
 
 export function createTuiMediaBackgroundTasks(
@@ -83,10 +89,7 @@ export function createTuiMediaBackgroundTasks(
     waitForCompletion: (waitInput) => waitForMediaTask(media, waitInput.taskId, waitInput.signal),
     createRecoveryProgress: (task) => createMediaTaskProgressView({ task }),
     createProgressDelivery: async (task, context) => {
-      const delivery = await input.deliveryHost.createProgressViewDelivery(
-        task,
-        context.taskType,
-      );
+      const delivery = await input.deliveryHost.createProgressViewDelivery(task, context.taskType);
       return {
         progress: delivery.view,
         deliveryPlan: delivery.deliveryPlan,
@@ -106,7 +109,7 @@ export function createTuiMediaBackgroundTasks(
     shouldForgetSubscriptionAfterProgressError: (event) =>
       Boolean(event.recoveryTask?.deliveryPlan?.shouldUnsubscribe),
     onProgressDeliveryError: ({ taskId, error }) => {
-      input.onDiagnostic?.(`Failed to deliver media task progress: ${taskId}`, error);
+      input.onDiagnostic?.({ code: 'progress-delivery-failed', taskId, error });
     },
     onTerminalTask: async (event) => {
       const deliveryPolicy = readMediaTaskResultDeliveryPolicy(event.sourceTask.request.metadata);

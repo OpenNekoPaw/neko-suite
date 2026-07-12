@@ -2,9 +2,10 @@ import React from 'react';
 import { render, type Instance } from 'ink';
 import { Readable, Writable } from 'node:stream';
 import type { CLIConfig } from '../types';
-import { loadConfig, validateConfig } from '../config';
+import { CliConfigLoadError, loadConfig, validateConfig } from '../config';
 import { App } from '../../components/App';
 import { assertCanonicalTuiConversationId } from '../tui-conversation-id';
+import { createNodeTerminalInvocationContext } from '../node-locale-bootstrap';
 import {
   subscribeTerminalMarkdownPathEvents,
   type TerminalMarkdownPathEvent,
@@ -24,6 +25,8 @@ import type {
   TuiDebugAutomationDisposeParams,
   TuiDebugAutomationFactsParams,
   TuiDebugAutomationMarkdownFacts,
+  TuiDebugAutomationMessageCancelParams,
+  TuiDebugAutomationMessageCancelled,
   TuiDebugAutomationMessageSubmitParams,
   TuiDebugAutomationRequest,
   TuiDebugAutomationSessionCreateParams,
@@ -65,6 +68,8 @@ export class TuiDebugAutomationSessionManager {
         return this.resumeSession(readResumeParams(request));
       case 'message.submit':
         return this.submitMessage(readMessageSubmitParams(request));
+      case 'message.cancel':
+        return this.cancelMessage(readMessageCancelParams(request));
       case 'terminal.resize':
         return this.resizeTerminal(readTerminalResizeParams(request));
       case 'session.waitForIdle':
@@ -112,6 +117,7 @@ export class TuiDebugAutomationSessionManager {
           config={config}
           initialPrompt={params.initialPrompt}
           resumeConversationId={resumeConversationId}
+          terminal={createNodeTerminalInvocationContext({ workDir: config.workDir })}
           automation={controller}
         />,
         {
@@ -143,9 +149,7 @@ export class TuiDebugAutomationSessionManager {
     }
   }
 
-  private async submitMessage(
-    params: TuiDebugAutomationMessageSubmitParams,
-  ): Promise<{
+  private async submitMessage(params: TuiDebugAutomationMessageSubmitParams): Promise<{
     readonly sessionId: string;
     readonly conversationId: string;
     readonly queued: boolean;
@@ -160,6 +164,17 @@ export class TuiDebugAutomationSessionManager {
       sessionId: params.sessionId,
       conversationId: after.conversationId,
       queued: afterPending > beforePending,
+    };
+  }
+
+  private cancelMessage(
+    params: TuiDebugAutomationMessageCancelParams,
+  ): TuiDebugAutomationMessageCancelled {
+    const session = this.requireSession(params);
+    return {
+      sessionId: params.sessionId,
+      conversationId: session.port.getConversationId(),
+      accepted: session.port.cancelActiveMessage(),
     };
   }
 
@@ -229,17 +244,29 @@ export class TuiDebugAutomationSessionManager {
 
   private loadSessionConfig(params: TuiDebugAutomationSessionCreateParams): CLIConfig {
     const workDir = params.workDir ?? this.options.defaultWorkDir;
-    const config = loadConfig(workDir, {
-      provider: params.provider ?? this.options.provider,
-      model: params.model ?? this.options.model,
-      apiKey: params.apiKey ?? this.options.apiKey,
-    });
+    let config: CLIConfig;
+    try {
+      config = loadConfig(workDir, {
+        provider: params.provider ?? this.options.provider,
+        model: params.model ?? this.options.model,
+        apiKey: params.apiKey ?? this.options.apiKey,
+      });
+    } catch (error) {
+      if (error instanceof CliConfigLoadError) {
+        throw new TuiDebugAutomationProtocolError(
+          'invalid-request',
+          'Debug automation session configuration could not be loaded.',
+          { diagnostic: error.diagnostic },
+        );
+      }
+      throw error;
+    }
     const validation = validateConfig(config);
     if (!validation.valid) {
       throw new TuiDebugAutomationProtocolError(
         'invalid-request',
         'Debug automation session configuration is invalid.',
-        { errors: validation.errors },
+        { diagnostics: validation.diagnostics },
       );
     }
     return config;
@@ -450,6 +477,15 @@ function readMessageSubmitParams(
   return {
     sessionId: readRequiredStringParam(params, 'sessionId', request.method),
     prompt: readRequiredStringParam(params, 'prompt', request.method),
+  };
+}
+
+function readMessageCancelParams(
+  request: TuiDebugAutomationRequest,
+): TuiDebugAutomationMessageCancelParams {
+  const params = assertRecordParams(request.params, request.method);
+  return {
+    sessionId: readRequiredStringParam(params, 'sessionId', request.method),
   };
 }
 

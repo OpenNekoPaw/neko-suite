@@ -14,6 +14,7 @@ import {
   toSharedService,
   type Platform,
 } from '@neko/platform';
+import type { PerceptionAssetLoader } from '@neko/ai-sdk';
 import {
   TaskManager,
   createFileTaskStorage,
@@ -40,6 +41,7 @@ export interface CLIPlatformResult {
   platform: Platform;
   service: IService;
   taskManager: IRuntimeTaskManager;
+  perceptionAssetLoader: PerceptionAssetLoader;
 }
 
 export interface CLISharedServiceOptions {
@@ -93,9 +95,11 @@ function collectEnvApiKeys(): Record<string, string> {
 export function createCLIPlatform(options: CLIPlatformOptions): CLIPlatformResult {
   const userConfigManager = new FileUserConfigManager();
 
-  const taskManager = options.taskManager ?? createCLITaskManager({
-    workspacePath: options.workspacePath,
-  });
+  const taskManager =
+    options.taskManager ??
+    createCLITaskManager({
+      workspacePath: options.workspacePath,
+    });
 
   const platform = createPlatform({
     userConfigManager,
@@ -130,20 +134,25 @@ export function createCLIPlatform(options: CLIPlatformOptions): CLIPlatformResul
     workspacePath: options.workspacePath,
     providerCardRegistry: options.providerCardRegistry,
   });
-  return { platform, service, taskManager };
+  return {
+    platform,
+    service: service.service,
+    taskManager,
+    perceptionAssetLoader: service.assetLoader,
+  };
 }
 
 export function createCLISharedService(
   platform: Platform,
   options: CLISharedServiceOptions = {},
-): IService {
+): { readonly service: IService; readonly assetLoader: PerceptionAssetLoader } {
   const workspacePath = path.resolve(options.workspacePath ?? process.cwd());
   const host = createNodeWorkspaceContentHostAdapter({ workDir: workspacePath });
   const contentAccessRuntime = createNodeContentAccessRuntime({ host });
-  return toSharedService(platform.createService(), {
-    ...(options.providerCardRegistry
-      ? { providerCardRegistry: options.providerCardRegistry }
-      : {}),
-    assetLoader: createNodePerceptionAssetLoader(contentAccessRuntime),
+  const assetLoader = createNodePerceptionAssetLoader(contentAccessRuntime);
+  const service = toSharedService(platform.createService(), {
+    ...(options.providerCardRegistry ? { providerCardRegistry: options.providerCardRegistry } : {}),
+    assetLoader,
   });
+  return { service, assetLoader };
 }

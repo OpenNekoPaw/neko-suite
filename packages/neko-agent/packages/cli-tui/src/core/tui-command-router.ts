@@ -7,17 +7,91 @@ import type {
   Task,
   TaskStatus,
 } from '@neko/shared';
+import {
+  buildAgentTerminalHelpSemantic,
+  executeAgentTerminalCommandsSemantic,
+  executeAgentTerminalSkillsSemantic,
+  executeAgentTerminalToolsSemantic,
+} from '@neko/agent';
 import type { AgentMessageQueueSnapshot, AgentQueuedMessageItem } from '@neko-agent/types';
 import type { AgentLlmAdvancedParams, AgentLlmConfig } from '@neko-agent/types';
 import type { TuiArtifactReference } from './artifact-reference-formatter';
-import { formatTuiArtifactReference } from './artifact-reference-formatter';
 import type { CLIConfig } from './types';
-import { getProviderModels } from './config';
+import { handleMarketCommandSemantic } from '../commands/market';
+import { presentCommandShellDiagnostic } from '../presentation/command-shell-presentation';
+import { presentTuiStatus, type TuiStatusSnapshot } from './status-presentation';
+import type { AgentTerminalPresentationContext } from '../presentation/context';
+import type { AgentTerminalMessageKey } from '../presentation/terminal-messages';
+import {
+  presentArtifactCommand,
+  type ArtifactCommandSemanticResult,
+} from '../presentation/artifact-presentation';
+import {
+  presentConfigCommand,
+  presentHistoryCommand,
+  presentResumeCommand,
+  type ConfigCommandSemanticResult,
+  type HistoryCommandSemanticResult,
+  type ResumeCommandSemanticResult,
+} from '../presentation/config-history-presentation';
+import {
+  presentCapabilityCommand,
+  presentMcpCommand,
+  type CapabilityCommandSemanticResult,
+  type McpCommandSemanticResult,
+  type TerminalMcpServerSnapshot,
+} from '../presentation/infrastructure-presentation';
+import {
+  presentMarketCommand,
+  type MarketCommandSemanticResult,
+} from '../presentation/market-presentation';
+import {
+  presentMediaCommand,
+  presentModelCommand,
+  presentPerceptionCommand,
+  type AgentTerminalCommandProjection,
+  type AgentTerminalModelOption,
+  type MediaCommandSemanticResult,
+  type ModelCommandSemanticResult,
+  type PerceptionCommandSemanticResult,
+} from '../presentation/model-family-presentation';
+import {
+  presentSessionControlCommand,
+  type SessionControlSemanticResult,
+} from '../presentation/session-control-presentation';
+import {
+  presentSkillCommand,
+  presentSkillMenu,
+  type SkillSemanticResult,
+} from '../presentation/skill-presentation';
+import {
+  presentParameterCommand,
+  TERMINAL_ADVANCED_PARAMETER_KEYS,
+  type ParameterApplicationProjection,
+  type ParameterDiagnostic,
+  type ParameterSemanticResult,
+  type ParameterValidationDiagnostic,
+} from '../presentation/parameter-presentation';
+import {
+  presentQueueCommand,
+  presentTaskCommand,
+  type QueueCommandSemanticResult,
+  type TaskCommandRow,
+  type TaskCommandSemanticResult,
+} from '../presentation/work-queue-presentation';
+import {
+  presentCommandsCommand,
+  presentHelpCommand,
+  presentSkillsCommand,
+  presentToolsCommand,
+  type AgentResourceCommandProjection,
+} from '../presentation/resource-command-presentation';
+import { getProviderModels, listProviders } from './config';
 import { supportsPerceptionCategory } from './media-model-metadata';
-import { formatTuiQueueError, formatTuiQueueSnapshot } from './message-queue-format';
+import { toQueueOperationDiagnostic } from './message-queue-semantics';
 import {
   handleSlashCommand,
-  type MediaModelOverrides,
+  toCommandContext,
   type SlashCommandContext,
   type SlashCommandResult,
 } from './slash-commands';
@@ -40,15 +114,6 @@ const TUI_PARAM_PRESET_KEYS: readonly TuiParamPresetKey[] = [
   'verbosity',
   'creativity',
 ];
-const TUI_PARAM_ADVANCED_KEYS: readonly (keyof AgentLlmAdvancedParams)[] = [
-  'temperature',
-  'topP',
-  'maxOutputTokens',
-  'reasoningEffort',
-  'thinkingBudget',
-  'verbosity',
-  'serviceTier',
-];
 
 export interface TuiSelectionItem {
   readonly id: string;
@@ -57,29 +122,12 @@ export interface TuiSelectionItem {
   readonly active?: boolean;
 }
 
-export interface TuiStatusSnapshot {
-  readonly executionMode: TuiExecutionMode;
-  readonly sessionMode?: TuiSessionMode;
-  readonly agentStatus: string;
-  readonly tokensTotal?: number;
-  readonly activeSkillSummary?: string;
-  readonly queueCount?: number;
-  readonly runningTaskSummary?: string;
-  readonly chatModelIdentity?: string;
-  readonly mediaModelSummary?: string;
-  readonly perceptionModelSummary?: string;
-  readonly llmParameterSummary?: string;
-}
-
 export interface TuiModelPorts {
   readonly listChatModels?: () => readonly string[];
   readonly listChatModelOptions?: () => readonly ChatModelOption[];
-  readonly selectChatModel?: (model: string | TuiModelIdentity) => void | Promise<void>;
-  readonly selectModelFromMenu?: (input: {
-    readonly title: string;
-    readonly models: readonly string[];
-    readonly currentModel: string;
-  }) => Promise<string | null>;
+  readonly selectChatModel?: (
+    model: string | TuiModelIdentity,
+  ) => TuiModelIdentity | Promise<TuiModelIdentity>;
   readonly selectMenuItem?: (input: {
     readonly title: string;
     readonly items: readonly TuiSelectionItem[];
@@ -102,8 +150,10 @@ export interface TuiMediaModelPorts {
   readonly setMediaModel?: (
     category: TuiMediaCategory,
     model: TuiModelIdentity | 'none',
-  ) => void | Promise<void>;
-  readonly resetMediaModels?: () => void | Promise<void>;
+  ) => TuiModelIdentity | 'none' | Promise<TuiModelIdentity | 'none'>;
+  readonly resetMediaModels?: () =>
+    | Readonly<Partial<Record<TuiMediaCategory, string>>>
+    | Promise<Readonly<Partial<Record<TuiMediaCategory, string>>>>;
 }
 
 export interface TuiPerceptionModelPorts {
@@ -112,8 +162,10 @@ export interface TuiPerceptionModelPorts {
   readonly setPerceptionModel?: (
     category: TuiMediaCategory,
     model: TuiModelIdentity | 'auto',
-  ) => void | Promise<void>;
-  readonly resetPerceptionModels?: () => void | Promise<void>;
+  ) => TuiModelIdentity | 'auto' | Promise<TuiModelIdentity | 'auto'>;
+  readonly resetPerceptionModels?: () =>
+    | Readonly<Partial<Record<TuiMediaCategory, string>>>
+    | Promise<Readonly<Partial<Record<TuiMediaCategory, string>>>>;
 }
 
 export interface TuiParameterValidationResult {
@@ -125,8 +177,7 @@ export interface TuiParameterValidationResult {
     readonly thinkingBudget?: number;
   };
   readonly providerOptions?: Record<string, unknown>;
-  readonly diagnostics?: readonly string[];
-  readonly summary?: string;
+  readonly diagnostics?: readonly ParameterValidationDiagnostic[];
 }
 
 export interface TuiParameterPorts {
@@ -159,30 +210,22 @@ export interface TuiSkillOption {
 }
 
 export interface TuiContextPorts {
-  readonly getTokenCount?: () => number;
   readonly compact?: () => Promise<TuiCompressionResult>;
 }
 
 export interface TuiQueuePorts {
-  readonly getSnapshot: () => AgentMessageQueueSnapshot;
-  readonly promote: (queueItemId: string) => AgentQueuedMessageItem;
-  readonly cancel: (queueItemId: string) => AgentQueuedMessageItem;
+  readonly getSnapshot: () => AgentMessageQueueSnapshot | null;
+  readonly promote?: (queueItemId: string) => AgentQueuedMessageItem;
+  readonly cancel?: (queueItemId: string) => AgentQueuedMessageItem;
   readonly discardContinuation?: (queueItemId: string) => AgentQueuedMessageItem;
-  readonly edit: (queueItemId: string, content: string) => AgentQueuedMessageItem;
+  readonly edit?: (queueItemId: string, content: string) => AgentQueuedMessageItem;
 }
 
 export interface TuiTaskPorts {
   readonly list: (status?: TaskStatus) => readonly Task[] | Promise<readonly Task[]>;
 }
 
-export interface TuiMcpServerSnapshot {
-  readonly id: string;
-  readonly name: string;
-  readonly enabled: boolean;
-  readonly connected: boolean;
-  readonly transport?: string;
-  readonly toolCount?: number;
-}
+export type TuiMcpServerSnapshot = TerminalMcpServerSnapshot;
 
 export interface TuiMcpPorts {
   readonly listServers: () => readonly TuiMcpServerSnapshot[];
@@ -207,15 +250,15 @@ export interface TuiCompressionResult {
 export interface TuiArtifactPorts {
   readonly list?: () => readonly TuiArtifactReference[];
   readonly show?: (artifactId: string) => TuiArtifactReference | null | undefined;
-  readonly open?: (artifactId: string) => string | void | Promise<string | void>;
-  readonly send?: (target: string, artifactId: string) => string | void | Promise<string | void>;
+  readonly open?: (artifactId: string) => void | Promise<void>;
+  readonly send?: (target: string, artifactId: string) => void | Promise<void>;
 }
 
 export interface TuiCommandRouterPorts {
   readonly mode?: {
-    readonly setExecutionMode: (mode: TuiExecutionMode) => string | void | Promise<string | void>;
+    readonly setExecutionMode: (mode: TuiExecutionMode) => void | Promise<void>;
     readonly getSessionMode?: () => TuiSessionMode;
-    readonly setSessionMode?: (mode: TuiSessionMode) => string | void | Promise<string | void>;
+    readonly setSessionMode?: (mode: TuiSessionMode) => void | Promise<void>;
   };
   readonly model?: TuiModelPorts;
   readonly media?: TuiMediaModelPorts;
@@ -232,7 +275,7 @@ export interface TuiCommandRouterPorts {
     readonly getSnapshot: () => TuiStatusSnapshot;
   };
   readonly history?: {
-    readonly clear: () => string | void | Promise<string | void>;
+    readonly clear: () => void | Promise<void>;
   };
   readonly lifecycle?: {
     readonly exit: () => void | Promise<void>;
@@ -244,18 +287,22 @@ export interface TuiCommandRouterPorts {
 }
 
 export interface TuiCommandRouterContext {
+  readonly presentation: AgentTerminalPresentationContext<AgentTerminalMessageKey>;
   readonly slash: SlashCommandContext;
   readonly ports: TuiCommandRouterPorts;
 }
 
 export interface TuiCommandRouterResult extends SlashCommandResult {
-  readonly source: 'tui-router' | 'slash-core';
+  readonly source: 'tui-router';
 }
 
 export async function handleTuiControlCommand(
   input: string,
   context: TuiCommandRouterContext,
 ): Promise<TuiCommandRouterResult> {
+  if (!context.presentation) {
+    throw new Error('AgentTerminalPresentationContext is required by the TUI command router.');
+  }
   const commandText = input.trim();
   const commandName = commandText.split(/\s+/)[0]?.slice(1).toLowerCase() ?? '';
 
@@ -264,7 +311,51 @@ export async function handleTuiControlCommand(
     case 'quit':
     case 'q':
       await context.ports.lifecycle?.exit();
-      return handled({ continueExecution: false, output: 'Goodbye!' });
+      return projectSessionControlResult({ kind: 'exit' }, context, false);
+
+    case 'help':
+    case 'h':
+    case '?':
+      return projectResourceCommand(
+        presentHelpCommand(
+          buildAgentTerminalHelpSemantic(toCommandContext(context.slash)),
+          context.presentation,
+        ),
+      );
+
+    case 'skills':
+      return projectResourceCommand(
+        presentSkillsCommand(
+          executeAgentTerminalSkillsSemantic(
+            commandText.split(/\s+/).slice(1),
+            toCommandContext(context.slash),
+          ),
+          context.presentation,
+        ),
+      );
+
+    case 'commands':
+    case 'cmds':
+      return projectResourceCommand(
+        presentCommandsCommand(
+          executeAgentTerminalCommandsSemantic(
+            commandText.split(/\s+/).slice(1),
+            toCommandContext(context.slash),
+          ),
+          context.presentation,
+        ),
+      );
+
+    case 'tools':
+      return projectResourceCommand(
+        presentToolsCommand(
+          executeAgentTerminalToolsSemantic(
+            commandText.split(/\s+/).slice(1),
+            toCommandContext(context.slash),
+          ),
+          context.presentation,
+        ),
+      );
 
     case 'clear':
     case 'cls':
@@ -311,20 +402,196 @@ export async function handleTuiControlCommand(
     case 'artifact':
       return handleArtifact(commandText, context);
 
+    case 'config':
+    case 'cfg':
+      return handleConfig(commandText, context);
+
+    case 'resume':
+      return handleResume(commandText, context);
+
+    case 'history':
+      return handleHistory(context);
+
+    case 'market':
+      return projectMarketResult(
+        await handleMarketCommandSemantic(commandText.split(/\s+/).slice(1)),
+        context,
+      );
+
     case 'plan':
-      return setMode('plan', 'Plan mode enabled', context);
+      return setMode('plan', context);
 
     case 'auto':
-      return setMode('auto', 'Auto mode enabled', context);
+      return setMode('auto', context);
 
     case 'ask':
-      return setMode('ask', 'Ask mode enabled', context);
+      return setMode('ask', context);
 
     default: {
       const result = await handleSlashCommand(input, context.slash);
-      return { ...result, source: 'slash-core' };
+      if (result.skillSemantic) {
+        return {
+          ...projectSkillResult(result.skillSemantic, context),
+          continueExecution: result.continueExecution,
+          agentPrompt: result.agentPrompt,
+          executionOverrides: result.executionOverrides,
+          lifecycleActivation: result.lifecycleActivation,
+        };
+      }
+      if (!result.handled) {
+        return projectTerminalCommand(
+          presentCommandShellDiagnostic(
+            { kind: 'unknown-command', input: commandText },
+            context.presentation,
+          ),
+        );
+      }
+      throw new Error(`Slash core returned an unsupported final-prose result for /${commandName}.`);
     }
   }
+}
+
+function projectResourceCommand(
+  projection: AgentResourceCommandProjection,
+): TuiCommandRouterResult {
+  return projection.kind === 'output'
+    ? handled({ output: projection.output })
+    : handled({ error: projection.error, diagnosticCode: projection.diagnosticCode });
+}
+
+function projectSkillResult(
+  result: SkillSemanticResult,
+  context: TuiCommandRouterContext,
+): TuiCommandRouterResult {
+  return projectTerminalCommand(presentSkillCommand(result, context.presentation));
+}
+
+function projectParameterResult(
+  result: ParameterSemanticResult,
+  context: TuiCommandRouterContext,
+): TuiCommandRouterResult {
+  return projectTerminalCommand(presentParameterCommand(result, context.presentation));
+}
+
+function projectSessionControlResult(
+  result: SessionControlSemanticResult,
+  context: TuiCommandRouterContext,
+  continueExecution = true,
+): TuiCommandRouterResult {
+  return {
+    ...projectTerminalCommand(presentSessionControlCommand(result, context.presentation)),
+    continueExecution,
+  };
+}
+
+function projectQueueResult(
+  result: QueueCommandSemanticResult,
+  context: TuiCommandRouterContext,
+): TuiCommandRouterResult {
+  return projectTerminalCommand(presentQueueCommand(result, context.presentation));
+}
+
+function projectTaskResult(
+  result: TaskCommandSemanticResult,
+  context: TuiCommandRouterContext,
+): TuiCommandRouterResult {
+  return projectTerminalCommand(presentTaskCommand(result, context.presentation));
+}
+
+function projectMcpResult(
+  result: McpCommandSemanticResult,
+  context: TuiCommandRouterContext,
+): TuiCommandRouterResult {
+  return projectTerminalCommand(presentMcpCommand(result, context.presentation));
+}
+
+function projectCapabilityResult(
+  result: CapabilityCommandSemanticResult,
+  context: TuiCommandRouterContext,
+): TuiCommandRouterResult {
+  return projectTerminalCommand(presentCapabilityCommand(result, context.presentation));
+}
+
+function projectArtifactResult(
+  result: ArtifactCommandSemanticResult,
+  context: TuiCommandRouterContext,
+): TuiCommandRouterResult {
+  return projectTerminalCommand(presentArtifactCommand(result, context.presentation));
+}
+
+function projectMarketResult(
+  result: MarketCommandSemanticResult,
+  context: TuiCommandRouterContext,
+): TuiCommandRouterResult {
+  return projectTerminalCommand(presentMarketCommand(result, context.presentation));
+}
+
+function projectConfigResult(
+  result: ConfigCommandSemanticResult,
+  context: TuiCommandRouterContext,
+): TuiCommandRouterResult {
+  return projectTerminalCommand(presentConfigCommand(result, context.presentation));
+}
+
+function projectResumeResult(
+  result: ResumeCommandSemanticResult,
+  context: TuiCommandRouterContext,
+): TuiCommandRouterResult {
+  return projectTerminalCommand(presentResumeCommand(result, context.presentation));
+}
+
+function projectHistoryResult(
+  result: HistoryCommandSemanticResult,
+  context: TuiCommandRouterContext,
+): TuiCommandRouterResult {
+  return projectTerminalCommand(presentHistoryCommand(result, context.presentation));
+}
+
+function projectModelResult(
+  result: ModelCommandSemanticResult,
+  context: TuiCommandRouterContext,
+): TuiCommandRouterResult {
+  return projectTerminalCommand(presentModelCommand(result, context.presentation));
+}
+
+function projectMediaResult(
+  result: MediaCommandSemanticResult,
+  context: TuiCommandRouterContext,
+): TuiCommandRouterResult {
+  return projectTerminalCommand(presentMediaCommand(result, context.presentation));
+}
+
+function projectPerceptionResult(
+  result: PerceptionCommandSemanticResult,
+  context: TuiCommandRouterContext,
+): TuiCommandRouterResult {
+  return projectTerminalCommand(presentPerceptionCommand(result, context.presentation));
+}
+
+function projectTerminalCommand(
+  projection: AgentTerminalCommandProjection,
+): TuiCommandRouterResult {
+  switch (projection.kind) {
+    case 'output':
+      return handled({ output: projection.output });
+    case 'error':
+      return handled({ error: projection.error, diagnosticCode: projection.diagnosticCode });
+    case 'model-menu':
+      throw new Error('Model menu projections must be consumed before terminal result projection.');
+  }
+}
+
+function toTerminalModelOptions(
+  options: readonly ChatModelOption[],
+  isActive: (option: ChatModelOption) => boolean,
+): readonly AgentTerminalModelOption[] {
+  return options.map((option) => ({
+    id: option.id,
+    label: option.label,
+    providerId: option.providerId,
+    modelId: option.modelId,
+    active: isActive(option),
+  }));
 }
 
 function handled(overrides: Partial<TuiCommandRouterResult> = {}): TuiCommandRouterResult {
@@ -337,8 +604,231 @@ function handled(overrides: Partial<TuiCommandRouterResult> = {}): TuiCommandRou
 }
 
 async function handleClear(context: TuiCommandRouterContext): Promise<TuiCommandRouterResult> {
-  const output = await context.ports.history?.clear();
-  return handled({ ...(output ? { output } : {}) });
+  await context.ports.history?.clear();
+  return projectSessionControlResult({ kind: 'history-cleared' }, context);
+}
+
+async function handleConfig(
+  commandText: string,
+  context: TuiCommandRouterContext,
+): Promise<TuiCommandRouterResult> {
+  const args = commandText.split(/\s+/).slice(1);
+  const config = context.slash.config;
+  const subcommand = args[0]?.toLowerCase();
+
+  if (!subcommand) {
+    return projectConfigResult(
+      {
+        kind: 'status',
+        surface: 'slash',
+        config: {
+          provider: config.provider,
+          model: config.model,
+          ...(config.apiKey ? { maskedApiKey: `***${config.apiKey.slice(-4)}` } : {}),
+          ...(config.baseUrl ? { baseUrl: config.baseUrl } : {}),
+          maxOutputTokens: config.maxTokens,
+          temperature: config.temperature,
+          verbose: config.verbose,
+          outputFormat: config.outputFormat,
+          workDir: config.workDir,
+          mcpServerCount: config.mcpServers.length,
+        },
+      },
+      context,
+    );
+  }
+
+  if (subcommand === 'providers') {
+    return projectConfigResult(
+      {
+        kind: 'providers',
+        providers: listProviders(config.workDir).map((provider) => ({
+          id: provider.id,
+          displayName: provider.displayName,
+          type: provider.type,
+          hasApiKey: provider.hasApiKey,
+          models: provider.models,
+        })),
+      },
+      context,
+    );
+  }
+
+  if (subcommand === 'models') {
+    const models = getProviderModels(config.provider, config.workDir);
+    return projectConfigResult(
+      models.length > 0
+        ? {
+            kind: 'models',
+            providerId: config.provider,
+            currentModelId: config.model,
+            models,
+          }
+        : { kind: 'diagnostic', code: 'models-empty', providerId: config.provider },
+      context,
+    );
+  }
+
+  if (subcommand !== 'set') {
+    return projectConfigResult(
+      { kind: 'diagnostic', code: 'unknown-command', command: subcommand },
+      context,
+    );
+  }
+
+  const key = args[1];
+  const rawValue = args.slice(2).join(' ');
+  if (!key || !rawValue) {
+    return projectConfigResult({ kind: 'diagnostic', code: 'set-usage' }, context);
+  }
+  if (!context.slash.onConfigUpdate) {
+    return projectConfigResult({ kind: 'diagnostic', code: 'update-unavailable' }, context);
+  }
+
+  let update: Partial<CLIConfig>;
+  let presentedValue: string;
+  switch (key) {
+    case 'provider':
+      update = { provider: rawValue };
+      presentedValue = rawValue;
+      break;
+    case 'model':
+      update = { model: rawValue };
+      presentedValue = rawValue;
+      break;
+    case 'maxTokens': {
+      const value = Number(rawValue);
+      if (!Number.isFinite(value)) {
+        return projectConfigResult({ kind: 'diagnostic', code: 'invalid-max-tokens' }, context);
+      }
+      update = { maxTokens: value };
+      presentedValue = String(value);
+      break;
+    }
+    case 'temperature': {
+      const value = Number.parseFloat(rawValue);
+      if (!Number.isFinite(value) || value < 0 || value > 2) {
+        return projectConfigResult({ kind: 'diagnostic', code: 'invalid-temperature' }, context);
+      }
+      update = { temperature: value };
+      presentedValue = String(value);
+      break;
+    }
+    case 'verbose': {
+      const value = rawValue === 'true' || rawValue === '1';
+      update = { verbose: value };
+      presentedValue = String(value);
+      break;
+    }
+    case 'outputFormat':
+      if (!isOutputFormat(rawValue)) {
+        return projectConfigResult({ kind: 'diagnostic', code: 'invalid-output-format' }, context);
+      }
+      update = { outputFormat: rawValue };
+      presentedValue = rawValue;
+      break;
+    default:
+      return projectConfigResult({ kind: 'diagnostic', code: 'invalid-key', key }, context);
+  }
+
+  context.slash.onConfigUpdate(update);
+  return projectConfigResult({ kind: 'updated', key, value: presentedValue }, context);
+}
+
+function isOutputFormat(value: string): value is CLIConfig['outputFormat'] {
+  return value === 'text' || value === 'json' || value === 'markdown';
+}
+
+async function handleResume(
+  commandText: string,
+  context: TuiCommandRouterContext,
+): Promise<TuiCommandRouterResult> {
+  const storage = context.slash.conversationStorage;
+  if (!storage) {
+    return projectResumeResult({ kind: 'diagnostic', code: 'unavailable' }, context);
+  }
+
+  const conversationId = commandText.split(/\s+/)[1];
+  if (conversationId) {
+    let record;
+    try {
+      record = await storage.load(conversationId);
+    } catch (error) {
+      return projectResumeResult(
+        { kind: 'diagnostic', code: 'storage-failed', detail: externalErrorDetail(error) },
+        context,
+      );
+    }
+    if (!record) {
+      return projectResumeResult(
+        { kind: 'diagnostic', code: 'not-found', conversationId },
+        context,
+      );
+    }
+    if (context.slash.onResumeConversation) {
+      await context.slash.onResumeConversation(record);
+    } else {
+      context.slash.onLoadHistory?.(record.messages, record.messageEventIds);
+    }
+    return projectResumeResult(
+      {
+        kind: 'resumed',
+        title: record.title,
+        messageCount: record.messages.filter((message) => message.role !== 'system').length,
+        updatedAt: record.updatedAt,
+      },
+      context,
+    );
+  }
+
+  let records;
+  try {
+    records = await storage.list();
+  } catch (error) {
+    return projectResumeResult(
+      { kind: 'diagnostic', code: 'storage-failed', detail: externalErrorDetail(error) },
+      context,
+    );
+  }
+  return projectResumeResult(
+    {
+      kind: 'conversations',
+      conversations: records.slice(0, 20).map((record) => ({
+        id: record.id,
+        title: record.title,
+        updatedAt: record.updatedAt,
+        messageCount: record.messages.filter((message) => message.role !== 'system').length,
+        current: record.id === context.slash.currentConversationId,
+      })),
+    },
+    context,
+  );
+}
+
+function handleHistory(context: TuiCommandRouterContext): TuiCommandRouterResult {
+  const getHistory = context.slash.getHistory;
+  if (!getHistory) {
+    return projectHistoryResult({ kind: 'diagnostic', code: 'unavailable' }, context);
+  }
+  return projectHistoryResult(
+    {
+      kind: 'history',
+      rows: getHistory()
+        .filter(
+          (message): message is typeof message & { readonly role: 'user' | 'assistant' | 'tool' } =>
+            message.role !== 'system',
+        )
+        .map((message) => ({
+          role: message.role,
+          ...(typeof message.content === 'string'
+            ? {
+                preview: message.content.slice(0, 60) + (message.content.length > 60 ? '…' : ''),
+              }
+            : {}),
+        })),
+    },
+    context,
+  );
 }
 
 async function handleModel(
@@ -346,54 +836,53 @@ async function handleModel(
   context: TuiCommandRouterContext,
 ): Promise<TuiCommandRouterResult> {
   const args = input.slice('/model'.length).trim().split(/\s+/).filter(Boolean);
-  const forceList = args.length === 0 || args[0] === 'list' || args[0] === 'status';
   const modelPorts = context.ports.model;
-  const mediaPorts = context.ports.media;
-  const perceptionPorts = context.ports.perception;
   const allOptions = modelPorts?.listChatModelOptions?.() ?? [];
-  const chatOptions = allOptions.filter((option) => !isMediaModelCategory(option.category));
+  const chatOptions = buildChatModelOptions(context.slash.config, modelPorts, allOptions);
   const mediaOptions =
-    mediaPorts?.listMediaModelOptions?.() ??
+    context.ports.media?.listMediaModelOptions?.() ??
     allOptions.filter((option) => isMediaModelCategory(option.category));
   const perceptionOptions =
-    perceptionPorts?.listPerceptionModelOptions?.() ??
+    context.ports.perception?.listPerceptionModelOptions?.() ??
     allOptions.filter((option) => option.category === 'llm');
 
-  if (forceList) {
-    return handled({
-      output: formatUnifiedModelStatus({
-        config: context.slash.config,
-        chatOptions,
-        mediaOptions,
-        currentMediaModels: {
-          ...(context.slash.defaultMediaModels ?? {}),
-          ...(context.slash.currentMediaOverrides ?? {}),
-          ...(mediaPorts?.getCurrentMediaModels?.() ?? {}),
-        },
-        perceptionOptions,
-        currentPerceptionModels: perceptionPorts?.getCurrentPerceptionModels?.() ?? {},
-      }),
-    });
+  if (args.length === 0 || args[0] === 'list' || args[0] === 'status') {
+    const currentMediaModels = readCurrentMediaModels(context);
+    const currentPerceptionModels = context.ports.perception?.getCurrentPerceptionModels?.() ?? {};
+    const currentChatModel = readCurrentChatModelIdentity(context.slash.config, chatOptions);
+    return projectModelResult(
+      {
+        kind: 'status',
+        currentModelId: formatModelIdentity(currentChatModel),
+        options: toTerminalModelOptions(chatOptions, (option) =>
+          sameModelIdentity(option, currentChatModel),
+        ),
+        media: buildMediaCategoryStatuses(
+          TUI_MEDIA_CATEGORIES,
+          currentMediaModels,
+          mediaOptions,
+          context,
+        ),
+        perception: buildPerceptionCategoryStatuses(
+          TUI_MEDIA_CATEGORIES,
+          currentPerceptionModels,
+          perceptionOptions,
+        ),
+      },
+      context,
+    );
   }
 
   const target = args[0]?.toLowerCase();
-  if (target === 'set') {
+  if (target === 'set' || target === 'chat') {
     return handleChatModelSelection(args.slice(1).join(' '), chatOptions, context);
   }
-
-  if (target === 'chat') {
-    const chatArg = args.slice(1).join(' ');
-    return handleChatModelSelection(chatArg, chatOptions, context);
-  }
-
   if (target === 'perception' || target === 'perceive') {
     return handlePerception(`/perception ${args.slice(1).join(' ')}`, context);
   }
-
   if (isTuiMediaCategory(target)) {
-    return handleModelMediaSelection(target, args.slice(1).join(' '), mediaOptions, context);
+    return handleMediaCategorySelection(target, args.slice(1).join(' '), mediaOptions, context);
   }
-
   return handleChatModelSelection(args.join(' '), chatOptions, context);
 }
 
@@ -402,363 +891,548 @@ async function handleChatModelSelection(
   options: readonly ChatModelOption[],
   context: TuiCommandRouterContext,
 ): Promise<TuiCommandRouterResult> {
-  const config = context.slash.config;
   const modelPorts = context.ports.model;
+  const currentIdentity = readCurrentChatModelIdentity(context.slash.config, options);
 
-  if (modelArg) {
-    const identity = resolveModelIdentity(modelArg, options, config.provider);
-    if (!identity) {
-      return handled({
-        error: `Unknown chat model identity: ${modelArg}. Use /model chat to list available chat models.`,
-      });
-    }
-    await modelPorts?.selectChatModel?.(identity);
-    return handled({ output: `Chat model switched to: ${formatModelIdentity(identity)}` });
-  }
-
-  if (options.length > 0) {
-    const currentIdentity = readCurrentChatModelIdentity(config, options);
-
+  if (!modelArg) {
     if (!modelPorts?.selectMenuItem) {
-      return handled({ output: formatModelOptionList(currentIdentity, options) });
+      return projectModelResult(
+        {
+          kind: 'status',
+          currentModelId: formatModelIdentity(currentIdentity),
+          options: toTerminalModelOptions(options, (option) =>
+            sameModelIdentity(option, currentIdentity),
+          ),
+          media: [],
+          perception: [],
+        },
+        context,
+      );
     }
-
-    const selected = await modelPorts.selectMenuItem({
-      title: 'Chat Model',
-      items: options.map((option) => ({
-        id: option.id,
-        label: option.label,
-        description: `${option.providerId}/${option.modelId}`,
-        active: sameModelIdentity(option, currentIdentity),
-      })),
-    });
-    if (!selected) {
-      return handled();
-    }
-
-    const identity = resolveModelIdentity(selected, options, config.provider);
-    if (!identity) {
-      return handled({ error: `Unknown model identity selected: ${selected}` });
-    }
-    await modelPorts.selectChatModel?.(identity);
-    return handled({ output: `Chat model switched to: ${formatModelIdentity(identity)}` });
+    const projection = presentModelCommand(
+      {
+        kind: 'menu',
+        options: toTerminalModelOptions(options, (option) =>
+          sameModelIdentity(option, currentIdentity),
+        ),
+      },
+      context.presentation,
+    );
+    const selected = await selectProjectedModelMenu(projection, modelPorts.selectMenuItem);
+    if (!selected) return handled();
+    return selectChatModel(selected, options, context);
   }
 
-  const chatModels = [
-    ...(modelPorts?.listChatModels?.() ?? getProviderModels(config.provider, config.workDir)),
-  ];
-  if (!chatModels.includes(config.model)) {
-    chatModels.unshift(config.model);
-  }
-  const hasChatModels = chatModels.length > 0;
-
-  if (hasChatModels) {
-    if (!modelPorts?.selectModelFromMenu) {
-      return handled({ output: formatChatModelList(config.model, chatModels, config.provider) });
-    }
-    const selected = await modelPorts?.selectModelFromMenu?.({
-      title: 'Chat Model',
-      models: chatModels,
-      currentModel: config.model,
-    });
-    if (selected) {
-      await modelPorts?.selectChatModel?.(selected);
-      return handled({ output: `Chat model switched to: ${selected}` });
-    }
-    return handled();
-  }
-
-  return handled({ output: 'No chat models configured.' });
+  return selectChatModel(modelArg, options, context);
 }
 
-async function handleModelMediaSelection(
+async function selectChatModel(
+  rawIdentity: string,
+  options: readonly ChatModelOption[],
+  context: TuiCommandRouterContext,
+): Promise<TuiCommandRouterResult> {
+  const identity = resolveModelIdentity(rawIdentity, options, context.slash.config.provider);
+  if (!identity) {
+    return projectModelResult(
+      { kind: 'diagnostic', diagnostic: { code: 'model.unknown', data: { modelId: rawIdentity } } },
+      context,
+    );
+  }
+  const select = context.ports.model?.selectChatModel;
+  if (!select) {
+    return projectModelResult(
+      { kind: 'diagnostic', diagnostic: { code: 'model.selection-unavailable', data: {} } },
+      context,
+    );
+  }
+  let actualIdentity: TuiModelIdentity;
+  try {
+    actualIdentity = await select(identity);
+  } catch (error) {
+    return projectModelResult(
+      {
+        kind: 'diagnostic',
+        diagnostic: {
+          code: 'model.operation-failed',
+          data: {},
+          externalDetail: externalErrorDetail(error),
+        },
+      },
+      context,
+    );
+  }
+  return projectModelResult(
+    { kind: 'selected', modelId: formatModelIdentity(actualIdentity) },
+    context,
+  );
+}
+
+async function handleMediaCategorySelection(
   category: TuiMediaCategory,
   modelArg: string,
   options: readonly ChatModelOption[],
   context: TuiCommandRouterContext,
 ): Promise<TuiCommandRouterResult> {
-  const mediaPorts = context.ports.media;
-  const currentModels = {
-    ...(context.slash.defaultMediaModels ?? {}),
-    ...(context.slash.currentMediaOverrides ?? {}),
-    ...(mediaPorts?.getCurrentMediaModels?.() ?? {}),
-  };
-  const modelsForCategory = options.filter((option) => option.category === category);
+  const currentModels = readCurrentMediaModels(context);
+  const categoryOptions = options.filter((option) => option.category === category);
 
   if (!modelArg) {
-    const menuResult = await handleMediaModelMenuSelection(
+    const selectMenuItem = context.ports.model?.selectMenuItem;
+    if (!selectMenuItem || categoryOptions.length === 0) {
+      return projectMediaResult(
+        {
+          kind: 'status',
+          categories: buildMediaCategoryStatuses([category], currentModels, options, context),
+          scope: 'category',
+        },
+        context,
+      );
+    }
+    const projection = presentMediaCommand(
+      {
+        kind: 'menu',
+        category,
+        options: toTerminalModelOptions(categoryOptions, (option) =>
+          matchesCurrentModel(option, currentModels[category]),
+        ),
+      },
+      context.presentation,
+    );
+    const selected = await selectProjectedModelMenu(projection, selectMenuItem);
+    if (!selected) return handled();
+    return setMediaModelSelection(
       category,
-      currentModels[category],
-      modelsForCategory,
+      selected === '__none__'
+        ? 'none'
+        : resolveMediaModelIdentity(
+            category,
+            selected,
+            categoryOptions,
+            context.slash.config.provider,
+            context.slash.config.mediaModels,
+          ),
+      selected,
       context,
     );
-    if (menuResult) {
-      return menuResult;
-    }
-    return handled({
-      output: formatMediaCategoryList(
-        category,
-        currentModels[category],
-        modelsForCategory,
-        context.slash.config.mediaModels,
-      ),
-    });
   }
 
   if (modelArg === 'list' || modelArg === 'status') {
-    return handled({
-      output: formatMediaCategoryList(
-        category,
-        currentModels[category],
-        modelsForCategory,
-        context.slash.config.mediaModels,
-      ),
-    });
-  }
-
-  if (modelArg === 'none') {
-    if (!mediaPorts?.setMediaModel && !context.slash.onUpdateMediaOverrides) {
-      return handled({ error: 'Media model selection is not available for this session.' });
-    }
-    await mediaPorts?.setMediaModel?.(category, 'none');
-    if (!mediaPorts?.setMediaModel) {
-      context.slash.onUpdateMediaOverrides?.({ [category]: 'none' });
-    }
-    return handled({ output: `${category} media generation disabled for this session.` });
-  }
-
-  const identity = resolveMediaModelIdentity(
-    category,
-    modelArg,
-    modelsForCategory,
-    context.slash.config.provider,
-    context.slash.config.mediaModels,
-  );
-  if (!identity) {
-    return handled({
-      error: `Unknown ${category} model identity: ${modelArg}. Use /model ${category} to list available models.`,
-    });
-  }
-
-  if (!mediaPorts?.setMediaModel && !context.slash.onUpdateMediaOverrides) {
-    return handled({ error: 'Media model selection is not available for this session.' });
-  }
-
-  await mediaPorts?.setMediaModel?.(category, identity);
-  if (!mediaPorts?.setMediaModel) {
-    context.slash.onUpdateMediaOverrides?.({ [category]: identity.optionId ?? identity.modelId });
-  }
-  return handled({ output: `${category} model set to: ${formatModelIdentity(identity)}` });
-}
-
-async function handleMediaModelMenuSelection(
-  category: TuiMediaCategory,
-  current: string | undefined,
-  options: readonly ChatModelOption[],
-  context: TuiCommandRouterContext,
-): Promise<TuiCommandRouterResult | null> {
-  const selectMenuItem = context.ports.model?.selectMenuItem;
-  if (!selectMenuItem || options.length === 0) {
-    return null;
-  }
-
-  const selected = await selectMenuItem({
-    title: `${capitalize(category)} Model`,
-    items: [
-      ...options.map((option) => ({
-        id: option.id,
-        label: option.label,
-        description: `${option.providerId}/${option.modelId}`,
-        active: option.id === current || option.modelId === current,
-      })),
+    return projectMediaResult(
       {
-        id: '__none__',
-        label: 'None',
-        description: `Disable ${category} generation for this session`,
-        active: current === 'none' || !current,
+        kind: 'status',
+        categories: buildMediaCategoryStatuses([category], currentModels, options, context),
+        scope: 'category',
       },
-    ],
-  });
-  if (!selected) {
-    return handled();
+      context,
+    );
   }
 
-  if (selected === '__none__') {
-    return setMediaModelSelection(category, 'none', context);
-  }
-
-  const identity = resolveMediaModelIdentity(
-    category,
-    selected,
-    options,
-    context.slash.config.provider,
-    context.slash.config.mediaModels,
-  );
-  if (!identity) {
-    return handled({ error: `Unknown ${category} model identity selected: ${selected}` });
-  }
-  return setMediaModelSelection(category, identity, context);
+  const identity =
+    modelArg === 'none'
+      ? 'none'
+      : resolveMediaModelIdentity(
+          category,
+          modelArg,
+          categoryOptions,
+          context.slash.config.provider,
+          context.slash.config.mediaModels,
+        );
+  return setMediaModelSelection(category, identity, modelArg, context);
 }
 
 async function setMediaModelSelection(
   category: TuiMediaCategory,
-  model: TuiModelIdentity | 'none',
+  model: TuiModelIdentity | 'none' | null,
+  requestedIdentity: string,
   context: TuiCommandRouterContext,
 ): Promise<TuiCommandRouterResult> {
+  if (!model) {
+    return projectMediaResult(
+      {
+        kind: 'diagnostic',
+        diagnostic: { code: 'media.unknown', data: { category, modelId: requestedIdentity } },
+      },
+      context,
+    );
+  }
   const mediaPorts = context.ports.media;
-  if (!mediaPorts?.setMediaModel && !context.slash.onUpdateMediaOverrides) {
-    return handled({ error: 'Media model selection is not available for this session.' });
-  }
-
-  await mediaPorts?.setMediaModel?.(category, model);
   if (!mediaPorts?.setMediaModel) {
-    context.slash.onUpdateMediaOverrides?.({
-      [category]: model === 'none' ? 'none' : (model.optionId ?? model.modelId),
-    });
+    return projectMediaResult(
+      {
+        kind: 'diagnostic',
+        diagnostic: { code: 'media.selection-unavailable', data: { category } },
+      },
+      context,
+    );
+  }
+  try {
+    model = await mediaPorts.setMediaModel(category, model);
+  } catch (error) {
+    return projectMediaResult(
+      {
+        kind: 'diagnostic',
+        diagnostic: {
+          code: 'media.operation-failed',
+          data: { category },
+          externalDetail: externalErrorDetail(error),
+        },
+      },
+      context,
+    );
+  }
+  return model === 'none'
+    ? projectMediaResult({ kind: 'disabled', category }, context)
+    : projectMediaResult(
+        { kind: 'selected', category, modelId: formatModelIdentity(model) },
+        context,
+      );
+}
+
+async function handleMedia(
+  input: string,
+  context: TuiCommandRouterContext,
+): Promise<TuiCommandRouterResult> {
+  const args = input.slice('/media'.length).trim().split(/\s+/).filter(Boolean);
+  const mediaPorts = context.ports.media;
+  const options =
+    mediaPorts?.listMediaModelOptions?.() ??
+    context.ports.model
+      ?.listChatModelOptions?.()
+      .filter((option) => isMediaModelCategory(option.category)) ??
+    [];
+  const currentModels = readCurrentMediaModels(context);
+
+  if (args.length === 0 || args[0] === 'list' || args[0] === 'status') {
+    return projectMediaResult(
+      {
+        kind: 'status',
+        categories: buildMediaCategoryStatuses(
+          TUI_MEDIA_CATEGORIES,
+          currentModels,
+          options,
+          context,
+        ),
+        scope: 'all',
+      },
+      context,
+    );
   }
 
-  return handled({
-    output:
-      model === 'none'
-        ? `${category} media generation disabled for this session.`
-        : `${category} model set to: ${formatModelIdentity(model)}`,
+  const subcommand = args[0]?.toLowerCase();
+  if (subcommand === 'reset') {
+    if (!mediaPorts?.resetMediaModels) {
+      return projectMediaResult(
+        { kind: 'diagnostic', diagnostic: { code: 'media.reset-unavailable', data: {} } },
+        context,
+      );
+    }
+    let resetState: Readonly<Partial<Record<TuiMediaCategory, string>>>;
+    try {
+      resetState = await mediaPorts.resetMediaModels();
+    } catch (error) {
+      return projectMediaResult(
+        {
+          kind: 'diagnostic',
+          diagnostic: {
+            code: 'media.reset-failed',
+            data: {},
+            externalDetail: externalErrorDetail(error),
+          },
+        },
+        context,
+      );
+    }
+    assertResetState('media', resetState);
+    return projectMediaResult({ kind: 'reset' }, context);
+  }
+
+  if (!isTuiMediaCategory(subcommand)) {
+    return projectMediaResult(
+      { kind: 'diagnostic', diagnostic: { code: 'media.category-unknown', data: {} } },
+      context,
+    );
+  }
+  return handleMediaCategorySelection(subcommand, args.slice(1).join(' '), options, context);
+}
+
+async function handlePerception(
+  input: string,
+  context: TuiCommandRouterContext,
+): Promise<TuiCommandRouterResult> {
+  const args = input.slice('/perception'.length).trim().split(/\s+/).filter(Boolean);
+  const perceptionPorts = context.ports.perception;
+  const options =
+    perceptionPorts?.listPerceptionModelOptions?.() ??
+    context.ports.model?.listChatModelOptions?.().filter((option) => option.category === 'llm') ??
+    [];
+  const currentModels = perceptionPorts?.getCurrentPerceptionModels?.() ?? {};
+
+  if (args.length === 0 || args[0] === 'list' || args[0] === 'status') {
+    return projectPerceptionResult(
+      {
+        kind: 'status',
+        categories: buildPerceptionCategoryStatuses(TUI_MEDIA_CATEGORIES, currentModels, options),
+        scope: 'all',
+      },
+      context,
+    );
+  }
+
+  const subcommand = args[0]?.toLowerCase();
+  if (subcommand === 'reset') {
+    if (!perceptionPorts?.resetPerceptionModels) {
+      return projectPerceptionResult(
+        { kind: 'diagnostic', diagnostic: { code: 'perception.reset-unavailable', data: {} } },
+        context,
+      );
+    }
+    let resetState: Readonly<Partial<Record<TuiMediaCategory, string>>>;
+    try {
+      resetState = await perceptionPorts.resetPerceptionModels();
+    } catch (error) {
+      return projectPerceptionResult(
+        {
+          kind: 'diagnostic',
+          diagnostic: {
+            code: 'perception.reset-failed',
+            data: {},
+            externalDetail: externalErrorDetail(error),
+          },
+        },
+        context,
+      );
+    }
+    assertResetState('perception', resetState);
+    return projectPerceptionResult({ kind: 'reset' }, context);
+  }
+  if (!isTuiMediaCategory(subcommand)) {
+    return projectPerceptionResult(
+      { kind: 'diagnostic', diagnostic: { code: 'perception.category-unknown', data: {} } },
+      context,
+    );
+  }
+
+  const category = subcommand;
+  const modelArg = args.slice(1).join(' ');
+  const categoryOptions = options.filter((option) => supportsPerceptionCategory(option, category));
+  if (!modelArg) {
+    const selectMenuItem = context.ports.model?.selectMenuItem;
+    if (!selectMenuItem || categoryOptions.length === 0) {
+      return projectPerceptionResult(
+        {
+          kind: 'status',
+          categories: buildPerceptionCategoryStatuses([category], currentModels, options),
+          scope: 'category',
+        },
+        context,
+      );
+    }
+    const projection = presentPerceptionCommand(
+      {
+        kind: 'menu',
+        category,
+        options: toTerminalModelOptions(categoryOptions, (option) =>
+          matchesCurrentModel(option, currentModels[category]),
+        ),
+      },
+      context.presentation,
+    );
+    const selected = await selectProjectedModelMenu(projection, selectMenuItem);
+    if (!selected) return handled();
+    return setPerceptionModelSelection(
+      category,
+      selected === '__auto__'
+        ? 'auto'
+        : resolvePerceptionModelIdentity(
+            category,
+            selected,
+            categoryOptions,
+            context.slash.config.provider,
+          ),
+      selected,
+      context,
+    );
+  }
+  if (modelArg === 'list' || modelArg === 'status') {
+    return projectPerceptionResult(
+      {
+        kind: 'status',
+        categories: buildPerceptionCategoryStatuses([category], currentModels, options),
+        scope: 'category',
+      },
+      context,
+    );
+  }
+  const identity =
+    modelArg === 'auto'
+      ? 'auto'
+      : resolvePerceptionModelIdentity(
+          category,
+          modelArg,
+          categoryOptions,
+          context.slash.config.provider,
+        );
+  return setPerceptionModelSelection(category, identity, modelArg, context);
+}
+
+async function setPerceptionModelSelection(
+  category: TuiMediaCategory,
+  model: TuiModelIdentity | 'auto' | null,
+  requestedIdentity: string,
+  context: TuiCommandRouterContext,
+): Promise<TuiCommandRouterResult> {
+  if (!model) {
+    return projectPerceptionResult(
+      {
+        kind: 'diagnostic',
+        diagnostic: { code: 'perception.unknown', data: { category, modelId: requestedIdentity } },
+      },
+      context,
+    );
+  }
+  const setPerceptionModel = context.ports.perception?.setPerceptionModel;
+  if (!setPerceptionModel) {
+    return projectPerceptionResult(
+      {
+        kind: 'diagnostic',
+        diagnostic: { code: 'perception.selection-unavailable', data: { category } },
+      },
+      context,
+    );
+  }
+  try {
+    model = await setPerceptionModel(category, model);
+  } catch (error) {
+    return projectPerceptionResult(
+      {
+        kind: 'diagnostic',
+        diagnostic: {
+          code: 'perception.operation-failed',
+          data: { category },
+          externalDetail: externalErrorDetail(error),
+        },
+      },
+      context,
+    );
+  }
+  return model === 'auto'
+    ? projectPerceptionResult({ kind: 'automatic', category }, context)
+    : projectPerceptionResult(
+        { kind: 'selected', category, modelId: formatModelIdentity(model) },
+        context,
+      );
+}
+
+async function selectProjectedModelMenu(
+  projection: AgentTerminalCommandProjection,
+  selectMenuItem: NonNullable<TuiModelPorts['selectMenuItem']>,
+): Promise<string | null> {
+  if (projection.kind !== 'model-menu') {
+    throw new Error('Model-family menu Presenter did not return a model-menu projection.');
+  }
+  return selectMenuItem(projection.menu);
+}
+
+function buildChatModelOptions(
+  config: CLIConfig,
+  ports: TuiModelPorts | undefined,
+  registeredOptions: readonly ChatModelOption[],
+): readonly ChatModelOption[] {
+  const chatOptions = registeredOptions.filter((option) => !isMediaModelCategory(option.category));
+  if (chatOptions.length > 0) return chatOptions;
+  const models = [
+    ...(ports?.listChatModels?.() ?? getProviderModels(config.provider, config.workDir)),
+  ];
+  if (!models.includes(config.model)) models.unshift(config.model);
+  return models.map((modelId) => ({
+    id: `${config.provider}:${modelId}`,
+    label: modelId,
+    providerId: config.provider,
+    modelId,
+    category: 'llm' as const,
+  }));
+}
+
+function buildMediaCategoryStatuses(
+  categories: readonly TuiMediaCategory[],
+  currentModels: Partial<Record<TuiMediaCategory, string>>,
+  options: readonly ChatModelOption[],
+  context: TuiCommandRouterContext,
+) {
+  return categories.map((category) => {
+    const categoryOptions = options.filter((option) => option.category === category);
+    const current = currentModels[category];
+    return {
+      category,
+      ...(current && current !== 'none'
+        ? { currentModelId: formatCurrentModelId(current, categoryOptions) }
+        : {}),
+      source: readMediaModelSource(
+        category,
+        currentModels,
+        context.slash.config.defaultMediaModels,
+      ),
+      options: toTerminalModelOptions(categoryOptions, (option) =>
+        matchesCurrentModel(option, current),
+      ),
+    };
   });
 }
 
-function capitalize(value: string): string {
-  return `${value[0]?.toUpperCase() ?? ''}${value.slice(1)}`;
-}
-
-function formatModelOptionList(
-  currentModel: TuiModelIdentity,
-  options: readonly ChatModelOption[],
-): string {
-  return [
-    `Current: ${formatModelIdentity(currentModel)}`,
-    'Available chat models:',
-    ...options.map((option) => {
-      const marker = sameModelIdentity(option, currentModel) ? '* ' : '  ';
-      return `  ${marker}${option.id}  ${option.label}`;
-    }),
-    'Usage: /model chat <provider:model|provider/model|model-id>',
-  ].join('\n');
-}
-
-function formatUnifiedModelStatus(input: {
-  readonly config: CLIConfig;
-  readonly chatOptions: readonly ChatModelOption[];
-  readonly mediaOptions: readonly ChatModelOption[];
-  readonly currentMediaModels: Partial<Record<TuiMediaCategory, string>>;
-  readonly perceptionOptions: readonly ChatModelOption[];
-  readonly currentPerceptionModels: Partial<Record<TuiMediaCategory, string>>;
-}): string {
-  const currentChat = readCurrentChatModelIdentity(input.config, input.chatOptions);
-  const lines = ['Model Selection:', `  chat: ${formatModelIdentity(currentChat)}`];
-
-  lines.push('', 'Media Models:');
-  for (const category of TUI_MEDIA_CATEGORIES) {
-    const current = input.currentMediaModels[category];
-    const option = current ? resolveMediaOption(category, current, input.mediaOptions) : undefined;
-    const label = option ? `${option.id} (${option.label})` : (current ?? '(none)');
-    const source = contextMediaSource(
-      category,
-      input.config.defaultMediaModels,
-      input.currentMediaModels,
-    );
-    lines.push(`  ${category}: ${label} [${source}]`);
-  }
-
-  lines.push('', 'Perception Models:');
-  for (const category of TUI_MEDIA_CATEGORIES) {
-    const current = input.currentPerceptionModels[category];
-    const option = current
-      ? resolvePerceptionOption(category, current, input.perceptionOptions)
-      : undefined;
-    const label = option ? `${option.id} (${option.label})` : (current ?? 'auto');
-    lines.push(`  ${category}: ${label}`);
-  }
-
-  if (input.chatOptions.length > 0) {
-    lines.push('', 'Available chat models:');
-    for (const option of input.chatOptions) {
-      const marker = sameModelIdentity(option, currentChat) ? '* ' : '  ';
-      lines.push(`  ${marker}${option.id}  ${option.label}`);
-    }
-  }
-
-  if (input.mediaOptions.length > 0) {
-    lines.push('', 'Available media models:');
-    for (const option of input.mediaOptions) {
-      const category = isMediaModelCategory(option.category) ? option.category : 'media';
-      lines.push(`  ${category} ${option.id}  ${option.label}`);
-    }
-  } else if (input.config.mediaModels.length > 0) {
-    lines.push('', 'Available media models:');
-    for (const model of input.config.mediaModels) {
-      lines.push(`  ${model}`);
-    }
-  }
-
-  lines.push(
-    '',
-    'Usage:',
-    '  /model chat <provider:model|provider/model|model-id>',
-    '  /model <image|video|audio> <provider:model|provider/model|model-id|none>',
-    '  /model perception <image|video|audio> <provider:model|provider/model|model-id|auto>',
-    '  /media <image|video|audio> <provider:model|provider/model|model-id|none>',
-    '  /perception <image|video|audio> <provider:model|provider/model|model-id|auto>',
-  );
-  return lines.join('\n');
-}
-
-function formatPerceptionStatus(
+function buildPerceptionCategoryStatuses(
+  categories: readonly TuiMediaCategory[],
   currentModels: Partial<Record<TuiMediaCategory, string>>,
   options: readonly ChatModelOption[],
-): string {
-  const lines = ['Perception Model Selection:'];
-  for (const category of TUI_MEDIA_CATEGORIES) {
+) {
+  return categories.map((category) => {
+    const categoryOptions = options.filter((option) =>
+      supportsPerceptionCategory(option, category),
+    );
     const current = currentModels[category];
-    const option = current ? resolvePerceptionOption(category, current, options) : undefined;
-    const label = option ? `${option.id} (${option.label})` : (current ?? 'auto');
-    lines.push(`  ${category}: ${label}`);
-  }
-  const available = options.filter((option) =>
-    TUI_MEDIA_CATEGORIES.some((category) => supportsPerceptionCategory(option, category)),
-  );
-  if (available.length > 0) {
-    lines.push('', 'Available perception models:');
-    for (const option of available) {
-      const categories = TUI_MEDIA_CATEGORIES.filter((category) =>
-        supportsPerceptionCategory(option, category),
-      ).join(',');
-      lines.push(`  ${categories} ${option.id}  ${option.label}`);
-    }
-  }
-  lines.push(
-    '',
-    'Usage: /perception <image|video|audio> <provider:model|provider/model|model-id|auto>',
-  );
-  lines.push('       /perception reset');
-  return lines.join('\n');
+    return {
+      category,
+      ...(current && current !== 'auto'
+        ? { currentModelId: formatCurrentModelId(current, categoryOptions) }
+        : {}),
+      options: toTerminalModelOptions(categoryOptions, (option) =>
+        matchesCurrentModel(option, current),
+      ),
+    };
+  });
 }
 
-function formatPerceptionCategoryList(
+function readCurrentMediaModels(
+  context: TuiCommandRouterContext,
+): Partial<Record<TuiMediaCategory, string>> {
+  return {
+    ...(context.slash.config.defaultMediaModels ?? {}),
+    ...(context.ports.media?.getCurrentMediaModels?.() ?? {}),
+  };
+}
+
+function readMediaModelSource(
   category: TuiMediaCategory,
-  current: string | undefined,
-  options: readonly ChatModelOption[],
-): string {
-  const option = current ? resolvePerceptionOption(category, current, options) : undefined;
-  const currentLabel = option ? `${option.id} (${option.label})` : (current ?? 'auto');
-  const lines = [`${capitalize(category)} perception model: ${currentLabel}`];
-  if (options.length > 0) {
-    lines.push('', 'Available models:');
-    for (const candidate of options) {
-      const marker = candidate.id === current || candidate.modelId === current ? '* ' : '  ';
-      lines.push(`  ${marker}${candidate.id}  ${candidate.label}`);
-    }
-  }
-  lines.push('', `Usage: /perception ${category} <provider:model|provider/model|model-id|auto>`);
-  return lines.join('\n');
+  currentModels: Partial<Record<TuiMediaCategory, string>>,
+  defaults: CLIConfig['defaultMediaModels'],
+): 'session-override' | 'config-default' | 'not-set' {
+  const current = currentModels[category];
+  if (current !== undefined && current !== defaults?.[category]) return 'session-override';
+  return defaults?.[category] !== undefined ? 'config-default' : 'not-set';
+}
+
+function formatCurrentModelId(current: string, options: readonly ChatModelOption[]): string {
+  const option = options.find((candidate) => matchesCurrentModel(candidate, current));
+  return option ? `${option.id} (${option.label})` : current;
+}
+
+function matchesCurrentModel(option: ChatModelOption, current: string | undefined): boolean {
+  return (
+    current !== undefined &&
+    (option.id === current ||
+      option.modelId === current ||
+      `${option.providerId}/${option.modelId}` === current ||
+      `${option.providerId}:${option.modelId}` === current)
+  );
 }
 
 function readCurrentChatModelIdentity(
@@ -802,25 +1476,16 @@ function resolveModelIdentity(
       `${option.providerId}/${option.modelId}` === identity ||
       option.modelId === identity,
   );
-  if (byOption) {
-    return chatModelOptionToIdentity(byOption);
-  }
-
-  if (options.length > 0) {
-    return null;
-  }
-
-  const explicit = parseExplicitModelIdentity(identity);
-  if (explicit) {
-    return explicit;
-  }
-
-  return {
-    providerId: defaultProviderId,
-    modelId: identity,
-    optionId: `${defaultProviderId}:${identity}`,
-    label: `${defaultProviderId} / ${identity}`,
-  };
+  if (byOption) return chatModelOptionToIdentity(byOption);
+  if (options.length > 0) return null;
+  return (
+    parseExplicitModelIdentity(identity) ?? {
+      providerId: defaultProviderId,
+      modelId: identity,
+      optionId: `${defaultProviderId}:${identity}`,
+      label: `${defaultProviderId} / ${identity}`,
+    }
+  );
 }
 
 function parseExplicitModelIdentity(rawIdentity: string): TuiModelIdentity | null {
@@ -865,320 +1530,8 @@ function formatModelIdentity(identity: TuiModelIdentity): string {
   return `${identity.providerId}:${identity.modelId}${label}`;
 }
 
-function formatChatModelList(
-  currentModel: string,
-  models: readonly string[],
-  provider: string,
-): string {
-  const lines = [`Current: ${currentModel}`];
-  if (models.length > 0) {
-    lines.push(`Available (${provider}):`);
-    for (const model of models) {
-      const marker = model === currentModel ? '* ' : '  ';
-      lines.push(`  ${marker}${model}`);
-    }
-  }
-  return lines.join('\n');
-}
-
-async function handleMedia(
-  input: string,
-  context: TuiCommandRouterContext,
-): Promise<TuiCommandRouterResult> {
-  const args = input.slice('/media'.length).trim().split(/\s+/).filter(Boolean);
-  const mediaPorts = context.ports.media;
-  const options = mediaPorts?.listMediaModelOptions?.() ?? [];
-  const currentModels = {
-    ...(context.slash.defaultMediaModels ?? {}),
-    ...(context.slash.currentMediaOverrides ?? {}),
-    ...(mediaPorts?.getCurrentMediaModels?.() ?? {}),
-  };
-
-  if (args.length === 0 || args[0] === 'list' || args[0] === 'status') {
-    return handled({ output: formatMediaStatus(currentModels, options, context.slash.config) });
-  }
-
-  const subcommand = args[0]?.toLowerCase();
-  if (subcommand === 'reset') {
-    if (!mediaPorts?.resetMediaModels && !context.slash.onResetMediaOverrides) {
-      return handled({ error: 'Media model reset is not available for this session.' });
-    }
-    await mediaPorts?.resetMediaModels?.();
-    if (!mediaPorts?.resetMediaModels) {
-      context.slash.onResetMediaOverrides?.();
-    }
-    return handled({ output: 'Media model overrides reset to config defaults.' });
-  }
-
-  if (!isTuiMediaCategory(subcommand)) {
-    return handled({
-      error: `Unknown media category: "${subcommand ?? ''}". Valid: ${TUI_MEDIA_CATEGORIES.join(', ')}, reset`,
-    });
-  }
-
-  const category = subcommand;
-  const modelArg = args[1];
-  const modelsForCategory = options.filter((option) => option.category === category);
-
-  if (!modelArg) {
-    return handled({
-      output: formatMediaCategoryList(
-        category,
-        currentModels[category],
-        modelsForCategory,
-        context.slash.config.mediaModels,
-      ),
-    });
-  }
-
-  if (modelArg === 'none') {
-    if (!mediaPorts?.setMediaModel && !context.slash.onUpdateMediaOverrides) {
-      return handled({ error: 'Media model selection is not available for this session.' });
-    }
-    await mediaPorts?.setMediaModel?.(category, 'none');
-    if (!mediaPorts?.setMediaModel) {
-      context.slash.onUpdateMediaOverrides?.({ [category]: 'none' });
-    }
-    return handled({ output: `${category} media generation disabled for this session.` });
-  }
-
-  const identity = resolveMediaModelIdentity(
-    category,
-    modelArg,
-    modelsForCategory,
-    context.slash.config.provider,
-    context.slash.config.mediaModels,
-  );
-  if (!identity) {
-    return handled({
-      error: `Unknown ${category} media model identity: ${modelArg}. Use /media ${category} to list available models.`,
-    });
-  }
-
-  if (!mediaPorts?.setMediaModel && !context.slash.onUpdateMediaOverrides) {
-    return handled({ error: 'Media model selection is not available for this session.' });
-  }
-
-  await mediaPorts?.setMediaModel?.(category, identity);
-  if (!mediaPorts?.setMediaModel) {
-    context.slash.onUpdateMediaOverrides?.({ [category]: identity.optionId ?? identity.modelId });
-  }
-  return handled({ output: `${category} model set to: ${formatModelIdentity(identity)}` });
-}
-
-async function handlePerception(
-  input: string,
-  context: TuiCommandRouterContext,
-): Promise<TuiCommandRouterResult> {
-  const args = input.slice('/perception'.length).trim().split(/\s+/).filter(Boolean);
-  const perceptionPorts = context.ports.perception;
-  const allOptions =
-    perceptionPorts?.listPerceptionModelOptions?.() ??
-    context.ports.model?.listChatModelOptions?.().filter((option) => option.category === 'llm') ??
-    [];
-  const currentModels = perceptionPorts?.getCurrentPerceptionModels?.() ?? {};
-
-  if (args.length === 0 || args[0] === 'list' || args[0] === 'status') {
-    return handled({ output: formatPerceptionStatus(currentModels, allOptions) });
-  }
-
-  const subcommand = args[0]?.toLowerCase();
-  if (subcommand === 'reset') {
-    if (!perceptionPorts?.resetPerceptionModels) {
-      return handled({ error: 'Perception model reset is not available for this session.' });
-    }
-    await perceptionPorts.resetPerceptionModels();
-    return handled({ output: 'Perception model overrides reset to automatic selection.' });
-  }
-
-  if (!isTuiMediaCategory(subcommand)) {
-    return handled({
-      error: `Unknown perception category: "${subcommand ?? ''}". Valid: ${TUI_MEDIA_CATEGORIES.join(', ')}, reset`,
-    });
-  }
-
-  const category = subcommand;
-  const modelArg = args[1];
-  const options = allOptions.filter((option) => supportsPerceptionCategory(option, category));
-
-  if (!modelArg) {
-    const menuResult = await handlePerceptionModelMenuSelection(
-      category,
-      currentModels[category],
-      options,
-      context,
-    );
-    if (menuResult) return menuResult;
-    return handled({
-      output: formatPerceptionCategoryList(category, currentModels[category], options),
-    });
-  }
-
-  if (modelArg === 'list' || modelArg === 'status') {
-    return handled({
-      output: formatPerceptionCategoryList(category, currentModels[category], options),
-    });
-  }
-
-  if (modelArg === 'auto') {
-    return setPerceptionModelSelection(category, 'auto', context);
-  }
-
-  const identity = resolvePerceptionModelIdentity(
-    category,
-    modelArg,
-    options,
-    context.slash.config.provider,
-  );
-  if (!identity) {
-    return handled({
-      error: `Unknown ${category} perception model identity: ${modelArg}. Use /perception ${category} to list available models.`,
-    });
-  }
-
-  return setPerceptionModelSelection(category, identity, context);
-}
-
-async function handlePerceptionModelMenuSelection(
-  category: TuiMediaCategory,
-  current: string | undefined,
-  options: readonly ChatModelOption[],
-  context: TuiCommandRouterContext,
-): Promise<TuiCommandRouterResult | null> {
-  const selectMenuItem = context.ports.model?.selectMenuItem;
-  if (!selectMenuItem || options.length === 0) {
-    return null;
-  }
-
-  const selected = await selectMenuItem({
-    title: `${capitalize(category)} Perception Model`,
-    items: [
-      ...options.map((option) => ({
-        id: option.id,
-        label: option.label,
-        description: `${option.providerId}/${option.modelId}`,
-        active: option.id === current || option.modelId === current,
-      })),
-      {
-        id: '__auto__',
-        label: 'Auto',
-        description: `Use automatic ${category} perception model selection`,
-        active: current === 'auto' || !current,
-      },
-    ],
-  });
-  if (!selected) {
-    return handled();
-  }
-
-  if (selected === '__auto__') {
-    return setPerceptionModelSelection(category, 'auto', context);
-  }
-
-  const identity = resolvePerceptionModelIdentity(
-    category,
-    selected,
-    options,
-    context.slash.config.provider,
-  );
-  if (!identity) {
-    return handled({
-      error: `Unknown ${category} perception model identity selected: ${selected}`,
-    });
-  }
-  return setPerceptionModelSelection(category, identity, context);
-}
-
-async function setPerceptionModelSelection(
-  category: TuiMediaCategory,
-  model: TuiModelIdentity | 'auto',
-  context: TuiCommandRouterContext,
-): Promise<TuiCommandRouterResult> {
-  const perceptionPorts = context.ports.perception;
-  if (!perceptionPorts?.setPerceptionModel) {
-    return handled({ error: 'Perception model selection is not available for this session.' });
-  }
-  await perceptionPorts.setPerceptionModel(category, model);
-  return handled({
-    output:
-      model === 'auto'
-        ? `${category} perception model set to automatic selection.`
-        : `${category} perception model set to: ${formatModelIdentity(model)}`,
-  });
-}
-
-function formatMediaStatus(
-  currentModels: Partial<Record<TuiMediaCategory, string>>,
-  options: readonly ChatModelOption[],
-  config: CLIConfig,
-): string {
-  const lines = ['Media Model Selection:'];
-  for (const category of TUI_MEDIA_CATEGORIES) {
-    const current = currentModels[category];
-    const option = current ? resolveMediaOption(category, current, options) : undefined;
-    const label = option ? `${option.id} (${option.label})` : (current ?? '(none)');
-    const source = contextMediaSource(category, config.defaultMediaModels, currentModels);
-    lines.push(`  ${category}: ${label} [${source}]`);
-  }
-  if (options.length > 0) {
-    lines.push('', 'Available media models:');
-    for (const option of options) {
-      lines.push(`  ${option.category ?? 'media'} ${option.id}  ${option.label}`);
-    }
-  } else if (config.mediaModels.length > 0) {
-    lines.push('', 'Available media models:');
-    for (const model of config.mediaModels) {
-      lines.push(`  ${model}`);
-    }
-  }
-  lines.push('', 'Usage: /media <image|video|audio> <provider:model|provider/model|model-id|none>');
-  lines.push('       /media reset');
-  return lines.join('\n');
-}
-
-function contextMediaSource(
-  category: TuiMediaCategory,
-  defaults: SlashCommandContext['defaultMediaModels'],
-  currentModels: Partial<Record<TuiMediaCategory, string>>,
-): string {
-  if (currentModels[category] && currentModels[category] !== defaults?.[category]) {
-    return 'session override';
-  }
-  return defaults?.[category] ? 'config default' : 'not set';
-}
-
-function formatMediaCategoryList(
-  category: TuiMediaCategory,
-  current: string | undefined,
-  options: readonly ChatModelOption[],
-  configuredModels: readonly string[],
-): string {
-  const lines = [`${category} models (current: ${current ?? '(none)'}):`];
-  if (options.length > 0) {
-    for (const option of options) {
-      const marker =
-        option.id === current ||
-        option.modelId === current ||
-        `${option.providerId}/${option.modelId}` === current
-          ? '* '
-          : '  ';
-      lines.push(`  ${marker}${option.id}  ${option.label}`);
-    }
-  } else {
-    const modelsForCategory = configuredModels.filter(
-      (id) => id.toLowerCase().includes(category) || configuredModels.length <= 5,
-    );
-    if (modelsForCategory.length === 0) {
-      lines.push('  (no models available for this category)');
-    } else {
-      for (const model of modelsForCategory) {
-        const marker = model === current ? '* ' : '  ';
-        lines.push(`  ${marker}${model}`);
-      }
-    }
-  }
-  lines.push('', `Use "/media ${category} none" to disable this category.`);
-  return lines.join('\n');
+function externalErrorDetail(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 function resolveMediaModelIdentity(
@@ -1278,50 +1631,74 @@ async function handleParam(
 ): Promise<TuiCommandRouterResult> {
   const parameterPorts = context.ports.parameters;
   if (!parameterPorts) {
-    return handled({ error: 'Parameter control is not available for this session.' });
+    return projectParameterResult(
+      { kind: 'diagnostic', diagnostic: { code: 'unavailable' } },
+      context,
+    );
   }
 
   const args = input.slice('/param'.length).trim().split(/\s+/).filter(Boolean);
   const currentConfig = parameterPorts.getConfig?.() ?? {};
 
   if (args.length === 0 || args[0] === 'status' || args[0] === 'list') {
-    return handled({ output: formatLlmParameterStatus(currentConfig) });
+    return projectParameterResult({ kind: 'status', config: currentConfig }, context);
   }
 
   const subcommand = args[0]?.toLowerCase();
   if (subcommand === 'clear' || subcommand === 'reset') {
     const result = validateLlmParameters({}, parameterPorts);
     if (result.diagnostics?.length) {
-      return handled({ error: formatParameterDiagnostics(result.diagnostics) });
+      return projectParameterResult(validationDiagnostic(result.diagnostics), context);
     }
     await parameterPorts.apply?.(result);
-    return handled({ output: 'LLM parameters reset.' });
+    return projectParameterResult({ kind: 'reset' }, context);
   }
 
   if (subcommand !== 'set') {
-    return handled({ error: 'Usage: /param set <name> <value> | /param status | /param reset' });
+    return projectParameterResult({ kind: 'diagnostic', diagnostic: { code: 'usage' } }, context);
   }
 
   const key = args[1];
   const value = args[2];
   if (!key || value === undefined) {
-    return handled({ error: 'Usage: /param set <name> <value>' });
+    return projectParameterResult(
+      { kind: 'diagnostic', diagnostic: { code: 'set-usage' } },
+      context,
+    );
   }
 
   const nextConfigResult = buildUpdatedLlmParameterConfig(currentConfig, key, value);
   if (!nextConfigResult.ok) {
-    return handled({ error: nextConfigResult.error });
+    return projectParameterResult(
+      { kind: 'diagnostic', diagnostic: nextConfigResult.diagnostic },
+      context,
+    );
   }
 
   const result = validateLlmParameters(nextConfigResult.config, parameterPorts);
   if (result.diagnostics?.length) {
-    return handled({ error: formatParameterDiagnostics(result.diagnostics) });
+    return projectParameterResult(validationDiagnostic(result.diagnostics), context);
   }
 
   await parameterPorts.apply?.(result);
-  return handled({
-    output: `Parameter updated: ${key} = ${value}${result.summary ? `\n${result.summary}` : ''}`,
-  });
+  return projectParameterResult(
+    {
+      kind: 'updated',
+      name: key,
+      value,
+      application: projectParameterApplication(result),
+    },
+    context,
+  );
+}
+
+function validationDiagnostic(
+  diagnostics: readonly ParameterValidationDiagnostic[],
+): ParameterSemanticResult {
+  return {
+    kind: 'diagnostic',
+    diagnostic: { code: 'validation-failed', causes: diagnostics },
+  };
 }
 
 function validateLlmParameters(
@@ -1331,11 +1708,28 @@ function validateLlmParameters(
   return parameterPorts.validate?.(config) ?? { config };
 }
 
+function projectParameterApplication(
+  result: TuiParameterValidationResult,
+): ParameterApplicationProjection {
+  const chatOptions = result.chatOptions ?? {};
+  const rows: Array<Readonly<{ name: string; value: string | number }>> = [];
+  for (const name of ['temperature', 'topP', 'maxTokens', 'thinkingBudget'] as const) {
+    const value = chatOptions[name];
+    if (value !== undefined) {
+      rows.push({ name, value });
+    }
+  }
+  return {
+    rows,
+    providerOptionNames: Object.keys(result.providerOptions ?? {}),
+  };
+}
+
 function buildUpdatedLlmParameterConfig(
   config: AgentLlmConfig,
   key: string,
   value: string,
-): { ok: true; config: AgentLlmConfig } | { ok: false; error: string } {
+): { ok: true; config: AgentLlmConfig } | { ok: false; diagnostic: ParameterDiagnostic } {
   if (isTuiParamPresetKey(key)) {
     return updatePresetParameter(config, key, value);
   }
@@ -1343,10 +1737,7 @@ function buildUpdatedLlmParameterConfig(
   if (!isTuiParamAdvancedKey(key)) {
     return {
       ok: false,
-      error: `Unsupported parameter: ${key}. Valid: ${[
-        ...TUI_PARAM_PRESET_KEYS,
-        ...TUI_PARAM_ADVANCED_KEYS,
-      ].join(', ')}`,
+      diagnostic: { code: 'unsupported', name: key },
     };
   }
 
@@ -1371,21 +1762,21 @@ function updatePresetParameter(
   config: AgentLlmConfig,
   key: TuiParamPresetKey,
   value: string,
-): { ok: true; config: AgentLlmConfig } | { ok: false; error: string } {
+): { ok: true; config: AgentLlmConfig } | { ok: false; diagnostic: ParameterDiagnostic } {
   if (key === 'reasoning') {
     if (!isReasoningPreset(value)) {
-      return { ok: false, error: 'Invalid reasoning preset. Valid: fast, balanced, deep' };
+      return { ok: false, diagnostic: { code: 'invalid-reasoning' } };
     }
     return { ok: true, config: { ...config, reasoningPreset: value } };
   }
   if (key === 'verbosity') {
     if (!isVerbosityPreset(value)) {
-      return { ok: false, error: 'Invalid verbosity preset. Valid: brief, standard, detailed' };
+      return { ok: false, diagnostic: { code: 'invalid-verbosity-preset' } };
     }
     return { ok: true, config: { ...config, verbosityPreset: value } };
   }
   if (!isCreativityPreset(value)) {
-    return { ok: false, error: 'Invalid creativity preset. Valid: stable, creative, wild' };
+    return { ok: false, diagnostic: { code: 'invalid-creativity' } };
   }
   return { ok: true, config: { ...config, creativityPreset: value } };
 }
@@ -1393,13 +1784,13 @@ function updatePresetParameter(
 function parseAdvancedParameterValue(
   key: keyof AgentLlmAdvancedParams,
   rawValue: string,
-): { ok: true; value: string | number } | { ok: false; error: string } {
+): { ok: true; value: string | number } | { ok: false; diagnostic: ParameterDiagnostic } {
   switch (key) {
     case 'temperature':
     case 'topP': {
       const value = Number(rawValue);
       if (!Number.isFinite(value) || value < 0 || value > 2) {
-        return { ok: false, error: `${key} must be a number between 0 and 2` };
+        return { ok: false, diagnostic: { code: 'number-range', name: key } };
       }
       return { ok: true, value };
     }
@@ -1407,7 +1798,7 @@ function parseAdvancedParameterValue(
     case 'thinkingBudget': {
       const value = Number(rawValue);
       if (!Number.isInteger(value) || value <= 0) {
-        return { ok: false, error: `${key} must be a positive integer` };
+        return { ok: false, diagnostic: { code: 'positive-integer', name: key } };
       }
       return { ok: true, value };
     }
@@ -1415,50 +1806,24 @@ function parseAdvancedParameterValue(
       if (!isReasoningEffort(rawValue)) {
         return {
           ok: false,
-          error: 'Invalid reasoningEffort. Valid: none, minimal, low, medium, high, xhigh',
+          diagnostic: { code: 'invalid-reasoning-effort' },
         };
       }
       return { ok: true, value: rawValue };
     case 'verbosity':
       if (!isTextVerbosity(rawValue)) {
-        return { ok: false, error: 'Invalid verbosity. Valid: low, medium, high' };
+        return { ok: false, diagnostic: { code: 'invalid-text-verbosity' } };
       }
       return { ok: true, value: rawValue };
     case 'serviceTier':
       if (!isServiceTier(rawValue)) {
         return {
           ok: false,
-          error: 'Invalid serviceTier. Valid: auto, default, fast, flex, priority',
+          diagnostic: { code: 'invalid-service-tier' },
         };
       }
       return { ok: true, value: rawValue };
   }
-}
-
-function formatLlmParameterStatus(config: AgentLlmConfig): string {
-  const lines = ['LLM Parameters:'];
-  lines.push(`  reasoning: ${config.reasoningPreset ?? '(default)'}`);
-  lines.push(`  verbosity: ${config.verbosityPreset ?? '(default)'}`);
-  lines.push(`  creativity: ${config.creativityPreset ?? '(default)'}`);
-  const advanced = config.advanced ?? {};
-  if (Object.keys(advanced).length > 0) {
-    lines.push('  advanced:');
-    for (const key of TUI_PARAM_ADVANCED_KEYS) {
-      const value = advanced[key];
-      if (value !== undefined) {
-        lines.push(`    ${key}: ${value}`);
-      }
-    }
-  }
-  lines.push(
-    '',
-    'Usage: /param set <reasoning|verbosity|creativity|temperature|topP|maxOutputTokens|reasoningEffort|thinkingBudget|serviceTier> <value>',
-  );
-  return lines.join('\n');
-}
-
-function formatParameterDiagnostics(diagnostics: readonly string[]): string {
-  return diagnostics.join('\n');
 }
 
 function isTuiParamPresetKey(value: string): value is TuiParamPresetKey {
@@ -1466,7 +1831,7 @@ function isTuiParamPresetKey(value: string): value is TuiParamPresetKey {
 }
 
 function isTuiParamAdvancedKey(value: string): value is keyof AgentLlmAdvancedParams {
-  return TUI_PARAM_ADVANCED_KEYS.includes(value as keyof AgentLlmAdvancedParams);
+  return TERMINAL_ADVANCED_PARAMETER_KEYS.includes(value as keyof AgentLlmAdvancedParams);
 }
 
 function isReasoningPreset(value: string): value is NonNullable<AgentLlmConfig['reasoningPreset']> {
@@ -1518,41 +1883,43 @@ async function handleSkill(
   const skillPorts = context.ports.skill;
 
   if (!skillPorts) {
-    return handled({ output: 'No skills loaded from the standard Neko Skill catalog.' });
+    return projectSkillResult({ kind: 'catalog-unavailable' }, context);
   }
 
   const skills = skillPorts.listEnabled?.() ?? [];
   if (skills.length === 0) {
-    return handled({ output: 'No skills available in the standard Neko Skill catalog.' });
+    return projectSkillResult({ kind: 'catalog-empty' }, context);
   }
 
   if (skillArg === 'off' || skillArg.startsWith('off ')) {
     const clearTarget = skillArg.slice(3).trim();
     const records = skillPorts.getActiveRecords?.() ?? [];
     if (!clearTarget && records.length > 1) {
-      return handled({
-        output: `Multiple active Skill lifecycle records. Use /skill off <recordId|slot|skillName>. Active: ${records
-          .map((record) => `${record.id} ${record.skillName}[${record.slot}]`)
-          .join(', ')}`,
-      });
+      return projectSkillResult(
+        {
+          kind: 'ambiguous-deactivation',
+          records: records.map((record) => `${record.id} ${record.skillName}[${record.slot}]`),
+        },
+        context,
+      );
     }
     const scopedTarget = parseSkillClearTarget(clearTarget, records);
     const ok = (await skillPorts.deactivate?.(scopedTarget)) ?? false;
-    return handled({ ...(ok ? { output: 'Skill lifecycle record deactivated.' } : {}) });
+    return ok ? projectSkillResult({ kind: 'deactivated' }, context) : handled();
   }
 
   if (skillArg) {
     const ok = (await skillPorts.activate?.(skillArg)) ?? false;
-    return handled({
-      output: ok
-        ? `Skill activated: ${skillArg}`
-        : `Skill not found: "${skillArg}". Use /skill to browse.`,
-    });
+    return projectSkillResult(
+      ok ? { kind: 'activated', skillName: skillArg } : { kind: 'not-found', skillName: skillArg },
+      context,
+    );
   }
 
   const activeSkillName = skillPorts.getActiveSkillName?.() ?? null;
+  const menu = presentSkillMenu(context.presentation);
   const selectedId = await skillPorts.selectSkillFromMenu?.({
-    title: 'Select Skill',
+    title: menu.title,
     items: [
       ...skills.map((skill) => ({
         id: skill.name,
@@ -1560,26 +1927,28 @@ async function handleSkill(
         description: skill.description,
         active: skill.name === activeSkillName,
       })),
-      { id: '__off__', label: 'Deactivate', description: 'Clear active skill' },
+      {
+        id: '__off__',
+        label: menu.deactivateLabel,
+        description: menu.deactivateDescription,
+      },
     ],
   });
-  if (!selectedId) {
-    return handled();
-  }
+  if (!selectedId) return handled();
 
   if (selectedId === '__off__') {
     const ok = (await skillPorts.deactivate?.()) ?? false;
-    return handled({ ...(ok ? { output: 'Skill lifecycle record deactivated.' } : {}) });
+    return ok ? projectSkillResult({ kind: 'deactivated' }, context) : handled();
   }
 
   const ok = (await skillPorts.activate?.(selectedId)) ?? false;
-  return handled({ ...(ok ? { output: `Skill activated: ${selectedId}` } : {}) });
+  return ok ? projectSkillResult({ kind: 'activated', skillName: selectedId }, context) : handled();
 }
 
 function handleQueue(input: string, context: TuiCommandRouterContext): TuiCommandRouterResult {
   const queuePorts = context.ports.queue;
   if (!queuePorts) {
-    return handled({ error: 'Message queue controls are not available for this session.' });
+    return projectQueueResult({ kind: 'diagnostic', code: 'unavailable' }, context);
   }
 
   const args = input.slice('/queue'.length).trim().split(/\s+/).filter(Boolean);
@@ -1587,45 +1956,51 @@ function handleQueue(input: string, context: TuiCommandRouterContext): TuiComman
 
   try {
     if (subcommand === 'list' || subcommand === 'status') {
-      return handled({ output: formatTuiQueueSnapshot(queuePorts.getSnapshot()) });
+      const snapshot = queuePorts.getSnapshot();
+      return snapshot === null
+        ? projectQueueResult({ kind: 'diagnostic', code: 'unavailable' }, context)
+        : projectQueueResult({ kind: 'status', snapshot }, context);
     }
 
     const queueItemId = args[1];
     if (!queueItemId) {
-      return handled({
-        error:
-          'Usage: /queue list | /queue promote <id> | /queue send-next <id> | /queue cancel <id> | /queue discard <id> | /queue edit <id> <text>',
-      });
+      return projectQueueResult({ kind: 'diagnostic', code: 'usage' }, context);
     }
 
     if (subcommand === 'send-now') {
-      return handled({
-        error:
-          'The send-now command cannot interrupt the active turn. Use /queue send-next <id> or /queue promote <id>.',
-      });
+      return projectQueueResult({ kind: 'diagnostic', code: 'send-now-unsupported' }, context);
     }
 
     if (subcommand === 'promote' || subcommand === 'send-next') {
+      if (!queuePorts.promote) {
+        return projectQueueResult(
+          { kind: 'diagnostic', code: 'operation-unavailable', operation: 'promote' },
+          context,
+        );
+      }
       const item = queuePorts.promote(queueItemId);
-      const isUserMessage = item.source === 'user' || item.source === 'composer';
-      return handled({
-        output: isUserMessage
-          ? `Queued message scheduled as next eligible user message: ${item.id}`
-          : `Queued continuation promoted within continuation priority: ${item.id}`,
-      });
+      const target =
+        item.source === 'user' || item.source === 'composer' ? 'user-message' : 'continuation';
+      return projectQueueResult({ kind: 'promoted', item, target }, context);
     }
 
     if (subcommand === 'cancel') {
+      if (!queuePorts.cancel) {
+        return projectQueueResult(
+          { kind: 'diagnostic', code: 'operation-unavailable', operation: 'cancel' },
+          context,
+        );
+      }
       const item = queuePorts.cancel(queueItemId);
-      return handled({ output: `Queued message cancelled: ${item.id}` });
+      return projectQueueResult({ kind: 'cancelled', itemId: item.id }, context);
     }
 
     if (subcommand === 'discard') {
       if (!queuePorts.discardContinuation) {
-        throw new Error('Queue continuation discard is not available for this session.');
+        return projectQueueResult({ kind: 'diagnostic', code: 'discard-unavailable' }, context);
       }
       const item = queuePorts.discardContinuation(queueItemId);
-      return handled({ output: `Queued continuation discarded: ${item.id}` });
+      return projectQueueResult({ kind: 'discarded', itemId: item.id }, context);
     }
 
     if (subcommand === 'edit') {
@@ -1635,18 +2010,25 @@ function handleQueue(input: string, context: TuiCommandRouterContext): TuiComman
         .replace(/^edit\s+\S+\s*/i, '')
         .trim();
       if (!content) {
-        return handled({ error: 'Usage: /queue edit <id> <text>' });
+        return projectQueueResult({ kind: 'diagnostic', code: 'edit-usage' }, context);
+      }
+      if (!queuePorts.edit) {
+        return projectQueueResult(
+          { kind: 'diagnostic', code: 'operation-unavailable', operation: 'edit' },
+          context,
+        );
       }
       const item = queuePorts.edit(queueItemId, content);
-      return handled({ output: `Queued message edited: ${item.id}` });
+      return projectQueueResult({ kind: 'edited', itemId: item.id }, context);
     }
   } catch (error) {
-    return handled({ error: formatTuiQueueError(error) });
+    return projectQueueResult(toQueueOperationDiagnostic(error), context);
   }
 
-  return handled({
-    error: `Unknown queue command: ${subcommand}. Usage: /queue list | /queue promote <id> | /queue send-next <id> | /queue cancel <id> | /queue discard <id> | /queue edit <id> <text>`,
-  });
+  return projectQueueResult(
+    { kind: 'diagnostic', code: 'unknown-command', command: subcommand },
+    context,
+  );
 }
 
 async function handleTasks(
@@ -1655,7 +2037,7 @@ async function handleTasks(
 ): Promise<TuiCommandRouterResult> {
   const taskPorts = context.ports.task;
   if (!taskPorts) {
-    return handled({ error: 'Task status is not available for this session.' });
+    return projectTaskResult({ kind: 'diagnostic', code: 'unavailable' }, context);
   }
 
   const args = input.trim().split(/\s+/).slice(1);
@@ -1664,50 +2046,36 @@ async function handleTasks(
     subcommand === 'list' || subcommand === 'status' ? args[1]?.toLowerCase() : subcommand;
 
   if (statusArg && statusArg !== 'all' && !isTuiTaskStatus(statusArg)) {
-    return handled({
-      error:
-        'Usage: /tasks [pending|running|completed|failed|cancelled|all] or /tasks status [status]',
-    });
+    return projectTaskResult({ kind: 'diagnostic', code: 'usage' }, context);
   }
 
   const status = isTuiTaskStatus(statusArg) ? statusArg : undefined;
   const tasks = await taskPorts.list(status);
-  return handled({ output: formatTaskList(tasks, status) });
+  return projectTaskResult(
+    {
+      kind: 'list',
+      status,
+      rows: tasks.map(toTaskCommandRow),
+    },
+    context,
+  );
 }
 
 function isTuiTaskStatus(value: string | undefined): value is TaskStatus {
   return TUI_TASK_STATUSES.includes(value as TaskStatus);
 }
 
-function formatTaskList(tasks: readonly Task[], status?: TaskStatus): string {
-  if (tasks.length === 0) {
-    return status ? `No ${status} tasks.` : 'No tasks.';
-  }
-
-  const sortedTasks = [...tasks].sort((left, right) => right.updatedAt - left.updatedAt);
-  return [
-    status ? `Tasks (${status}):` : 'Tasks:',
-    ...sortedTasks.map(formatTaskLine),
-    '',
-    'Usage: /tasks [pending|running|completed|failed|cancelled|all]',
-  ].join('\n');
-}
-
-function formatTaskLine(task: Task): string {
+function toTaskCommandRow(task: Task): TaskCommandRow {
   const progress = Number.isFinite(task.progress) ? Math.round(task.progress) : 0;
-  const runMode = task.lifecycle?.runMode ?? task.input.lifecycle?.runMode ?? 'foreground';
-  const title = readTaskTitle(task);
-  const error = task.error ?? task.output?.error;
-  return [
-    `  ${task.id}`,
-    task.status,
-    `${progress}%`,
-    runMode,
-    title,
-    error ? `error=${error}` : undefined,
-  ]
-    .filter((part): part is string => Boolean(part))
-    .join('  ');
+  return {
+    id: task.id,
+    status: task.status,
+    progress,
+    runMode: task.lifecycle?.runMode ?? task.input.lifecycle?.runMode ?? 'foreground',
+    title: readTaskTitle(task),
+    error: task.error ?? task.output?.error,
+    updatedAt: task.updatedAt,
+  };
 }
 
 function readTaskTitle(task: Task): string {
@@ -1731,84 +2099,97 @@ async function handleMcp(
 ): Promise<TuiCommandRouterResult> {
   const mcpPorts = context.ports.mcp;
   if (!mcpPorts) {
-    return handled({ error: 'MCP controls are not available for this session.' });
+    return projectMcpResult({ kind: 'diagnostic', code: 'unavailable' }, context);
   }
 
   const args = input.slice('/mcp'.length).trim().split(/\s+/).filter(Boolean);
   const subcommand = args[0]?.toLowerCase() ?? 'status';
 
   if (subcommand === 'status' || subcommand === 'list') {
-    return handled({ output: formatMcpServerStatus(mcpPorts.listServers()) });
+    return projectMcpResult({ kind: 'servers', servers: mcpPorts.listServers() }, context);
   }
 
   if (subcommand === 'tools') {
     const serverId = args[1];
     if (serverId && !findMcpServer(mcpPorts.listServers(), serverId)) {
-      return handled({ error: `Unknown MCP server: ${serverId}` });
+      return projectMcpResult({ kind: 'diagnostic', code: 'unknown-server', serverId }, context);
     }
     const listTools = mcpPorts.listTools;
     if (!listTools) {
-      return handled({ error: 'MCP tool listing is not available for this session.' });
+      return projectMcpResult({ kind: 'diagnostic', code: 'tools-unavailable' }, context);
     }
-    const tools = await listTools(serverId);
-    return handled({ output: formatMcpTools(tools, serverId) });
+    return projectMcpResult({ kind: 'tools', serverId, tools: await listTools(serverId) }, context);
   }
 
   const serverId = args[1];
   if (!serverId) {
-    return handled({
-      error:
-        'Usage: /mcp status | /mcp tools [serverId] | /mcp connect <serverId> | /mcp disconnect <serverId> | /mcp reconnect <serverId>',
-    });
+    return projectMcpResult({ kind: 'diagnostic', code: 'usage' }, context);
   }
 
   const server = findMcpServer(mcpPorts.listServers(), serverId);
   if (!server) {
-    return handled({ error: `Unknown MCP server: ${serverId}` });
+    return projectMcpResult({ kind: 'diagnostic', code: 'unknown-server', serverId }, context);
   }
 
   try {
     if (subcommand === 'connect') {
       if (!server.enabled) {
-        return handled({ error: `MCP server is disabled: ${serverId}` });
+        return projectMcpResult({ kind: 'diagnostic', code: 'server-disabled', serverId }, context);
       }
       if (!mcpPorts.connect) {
-        return handled({ error: 'MCP connect is not available for this session.' });
+        return projectMcpResult({ kind: 'diagnostic', code: 'connect-unavailable' }, context);
       }
       await mcpPorts.connect(serverId);
-      return handled({ output: `MCP server connected: ${serverId}` });
+      return projectMcpResult(
+        { kind: 'operation-complete', operation: 'connected', serverId },
+        context,
+      );
     }
 
     if (subcommand === 'disconnect') {
       if (!mcpPorts.disconnect) {
-        return handled({ error: 'MCP disconnect is not available for this session.' });
+        return projectMcpResult({ kind: 'diagnostic', code: 'disconnect-unavailable' }, context);
       }
       await mcpPorts.disconnect(serverId);
-      return handled({ output: `MCP server disconnected: ${serverId}` });
+      return projectMcpResult(
+        { kind: 'operation-complete', operation: 'disconnected', serverId },
+        context,
+      );
     }
 
     if (subcommand === 'reconnect') {
       if (!server.enabled) {
-        return handled({ error: `MCP server is disabled: ${serverId}` });
+        return projectMcpResult({ kind: 'diagnostic', code: 'server-disabled', serverId }, context);
       }
       if (mcpPorts.reconnect) {
         await mcpPorts.reconnect(serverId);
       } else {
         if (!mcpPorts.disconnect || !mcpPorts.connect) {
-          return handled({ error: 'MCP reconnect is not available for this session.' });
+          return projectMcpResult({ kind: 'diagnostic', code: 'reconnect-unavailable' }, context);
         }
         await mcpPorts.disconnect(serverId);
         await mcpPorts.connect(serverId);
       }
-      return handled({ output: `MCP server reconnected: ${serverId}` });
+      return projectMcpResult(
+        { kind: 'operation-complete', operation: 'reconnected', serverId },
+        context,
+      );
     }
   } catch (error) {
-    return handled({ error: error instanceof Error ? error.message : String(error) });
+    return projectMcpResult(
+      {
+        kind: 'diagnostic',
+        code: 'operation-failed',
+        detail: error instanceof Error ? error.message : String(error),
+      },
+      context,
+    );
   }
 
-  return handled({
-    error: `Unknown MCP command: ${subcommand}. Usage: /mcp status | /mcp tools [serverId] | /mcp connect <serverId> | /mcp disconnect <serverId> | /mcp reconnect <serverId>`,
-  });
+  return projectMcpResult(
+    { kind: 'diagnostic', code: 'unknown-command', command: subcommand },
+    context,
+  );
 }
 
 function findMcpServer(
@@ -1818,80 +2199,61 @@ function findMcpServer(
   return servers.find((server) => server.id === serverId);
 }
 
-function formatMcpServerStatus(servers: readonly TuiMcpServerSnapshot[]): string {
-  if (servers.length === 0) {
-    return 'No MCP servers configured.';
-  }
-  const lines = ['MCP Servers:'];
-  for (const server of servers) {
-    const status = !server.enabled ? 'disabled' : server.connected ? 'connected' : 'disconnected';
-    const details = [
-      `transport=${server.transport ?? 'unknown'}`,
-      server.toolCount !== undefined ? `tools=${server.toolCount}` : undefined,
-      server.name !== server.id ? server.name : undefined,
-    ].filter((value): value is string => Boolean(value));
-    lines.push(`  ${server.id}  ${status}${details.length > 0 ? `  ${details.join('  ')}` : ''}`);
-  }
-  lines.push(
-    '',
-    'Usage: /mcp tools [serverId] | /mcp connect <serverId> | /mcp disconnect <serverId> | /mcp reconnect <serverId>',
-  );
-  return lines.join('\n');
-}
-
-function formatMcpTools(tools: readonly string[], serverId: string | undefined): string {
-  const scope = serverId ? ` for ${serverId}` : '';
-  if (tools.length === 0) {
-    return `No MCP tools${scope}.`;
-  }
-  return [`MCP Tools${scope}:`, ...tools.map((tool) => `  ${tool}`)].join('\n');
-}
-
 function handleCapability(input: string, context: TuiCommandRouterContext): TuiCommandRouterResult {
   const capabilityPorts = context.ports.capability;
   if (!capabilityPorts) {
-    return handled({ error: 'Capability diagnostics are not available for this session.' });
+    return projectCapabilityResult({ kind: 'diagnostic', code: 'unavailable' }, context);
   }
 
   const args = input.slice('/capability'.length).trim().split(/\s+/).filter(Boolean);
   const subcommand = args[0]?.toLowerCase() ?? 'list';
 
   if (subcommand === 'list' || subcommand === 'status') {
-    return handled({
-      output: formatCapabilityProviderList(
-        capabilityPorts.getProviderSummaries(),
-        capabilityPorts.getDiagnostics(),
-      ),
-    });
+    return projectCapabilityResult(
+      {
+        kind: 'providers',
+        providers: capabilityPorts.getProviderSummaries(),
+        diagnostics: capabilityPorts.getDiagnostics(),
+      },
+      context,
+    );
   }
 
   if (subcommand === 'show') {
     const providerId = args[1];
     if (!providerId) {
-      return handled({ error: 'Usage: /capability show <providerId>' });
+      return projectCapabilityResult({ kind: 'diagnostic', code: 'show-usage' }, context);
     }
-    const summary = capabilityPorts
+    const provider = capabilityPorts
       .getProviderSummaries()
-      .find((provider) => provider.providerId === providerId);
-    if (!summary) {
-      return handled({ error: `Unknown capability provider: ${providerId}` });
+      .find((candidate) => candidate.providerId === providerId);
+    if (!provider) {
+      return projectCapabilityResult(
+        { kind: 'diagnostic', code: 'unknown-provider', providerId },
+        context,
+      );
     }
-    return handled({ output: formatCapabilityProviderSummary(summary) });
+    return projectCapabilityResult({ kind: 'provider', provider }, context);
   }
 
   if (subcommand === 'tools') {
     const providerId = args[1];
     if (providerId && !hasCapabilityProvider(capabilityPorts.getProviderSummaries(), providerId)) {
-      return handled({ error: `Unknown capability provider: ${providerId}` });
+      return projectCapabilityResult(
+        { kind: 'diagnostic', code: 'unknown-provider', providerId },
+        context,
+      );
     }
-    return handled({
-      output: formatCapabilityTools(capabilityPorts.listTools(providerId), providerId),
-    });
+    return projectCapabilityResult(
+      { kind: 'tools', providerId, tools: capabilityPorts.listTools(providerId) },
+      context,
+    );
   }
 
-  return handled({
-    error: `Unknown capability command: ${subcommand}. Usage: /capability list | /capability show <providerId> | /capability tools [providerId]`,
-  });
+  return projectCapabilityResult(
+    { kind: 'diagnostic', code: 'unknown-command', command: subcommand },
+    context,
+  );
 }
 
 function hasCapabilityProvider(
@@ -1901,194 +2263,67 @@ function hasCapabilityProvider(
   return providers.some((provider) => provider.providerId === providerId);
 }
 
-function formatCapabilityProviderList(
-  providers: readonly AgentCapabilityProviderAvailabilitySummary[],
-  diagnostics: readonly AgentCapabilityAvailabilityDiagnostic[],
-): string {
-  if (providers.length === 0) {
-    return diagnostics.length === 0
-      ? 'No TUI capability providers registered.'
-      : formatCapabilityDiagnostics(diagnostics);
-  }
-
-  const lines = ['TUI Capability Providers:'];
-  for (const provider of providers) {
-    const loadedCount = provider.loaded.length;
-    const skippedCount = provider.skipped.length;
-    const state = loadedCount > 0 ? 'loaded' : skippedCount > 0 ? 'skipped' : 'empty';
-    lines.push(`  ${provider.providerId}  ${state}  loaded=${loadedCount} skipped=${skippedCount}`);
-  }
-  if (diagnostics.length > 0) {
-    lines.push('', ...formatCapabilityDiagnostics(diagnostics).split('\n'));
-  }
-  lines.push('', 'Usage: /capability show <providerId> | /capability tools [providerId]');
-  return lines.join('\n');
-}
-
-function formatCapabilityProviderSummary(
-  provider: AgentCapabilityProviderAvailabilitySummary,
-): string {
-  const lines = [`Capability Provider: ${provider.providerId}`];
-  if (provider.version) {
-    lines.push(`Version: ${provider.version}`);
-  }
-  lines.push('Loaded:');
-  if (provider.loaded.length === 0) {
-    lines.push('  (none)');
-  } else {
-    for (const contribution of provider.loaded) {
-      lines.push(`  ${contribution.kind}  ${contribution.name}`);
-    }
-  }
-  lines.push('Skipped:');
-  if (provider.skipped.length === 0) {
-    lines.push('  (none)');
-  } else {
-    for (const diagnostic of provider.skipped) {
-      lines.push(`  ${formatCapabilityDiagnosticLine(diagnostic)}`);
-    }
-  }
-  return lines.join('\n');
-}
-
-function formatCapabilityTools(tools: readonly string[], providerId: string | undefined): string {
-  const scope = providerId ? ` for ${providerId}` : '';
-  if (tools.length === 0) {
-    return `No capability tools${scope}.`;
-  }
-  return [`Capability Tools${scope}:`, ...tools.map((tool) => `  ${tool}`)].join('\n');
-}
-
-function formatCapabilityDiagnostics(
-  diagnostics: readonly AgentCapabilityAvailabilityDiagnostic[],
-): string {
-  if (diagnostics.length === 0) {
-    return 'No capability diagnostics.';
-  }
-  return ['Capability Diagnostics:', ...diagnostics.map(formatCapabilityDiagnosticLine)].join('\n');
-}
-
-function formatCapabilityDiagnosticLine(diagnostic: AgentCapabilityAvailabilityDiagnostic): string {
-  const name = diagnostic.contributionName ? ` ${diagnostic.contributionName}` : '';
-  const requirement = diagnostic.requirement ? ` requirement=${diagnostic.requirement}` : '';
-  return `${diagnostic.level} ${diagnostic.providerId} ${diagnostic.contributionKind}${name}: ${diagnostic.reason}${requirement}`;
-}
-
 async function handleArtifact(
   input: string,
   context: TuiCommandRouterContext,
 ): Promise<TuiCommandRouterResult> {
   const artifactPorts = context.ports.artifact;
-  if (!artifactPorts) {
-    return handled({ error: 'Artifact controls are not available for this session.' });
-  }
+  if (!artifactPorts)
+    return projectArtifactResult({ kind: 'diagnostic', code: 'unavailable' }, context);
 
   const args = input.slice('/artifact'.length).trim().split(/\s+/).filter(Boolean);
   const subcommand = args[0]?.toLowerCase() ?? 'list';
-
   if (subcommand === 'list') {
-    const list = artifactPorts.list;
-    if (!list) {
-      return handled({ error: 'Artifact listing is not available for this session.' });
-    }
-    const references = list();
-    return handled({ output: formatArtifactList(references) });
+    if (!artifactPorts.list)
+      return projectArtifactResult({ kind: 'diagnostic', code: 'list-unavailable' }, context);
+    return projectArtifactResult({ kind: 'list', references: artifactPorts.list() }, context);
   }
-
   if (subcommand === 'show') {
     const artifactId = args[1];
-    if (!artifactId) {
-      return handled({ error: 'Usage: /artifact show <id>' });
-    }
-    const show = artifactPorts.show;
-    if (!show) {
-      return handled({ error: 'Artifact details are not available for this session.' });
-    }
-    const reference = show(artifactId);
-    if (!reference) {
-      return handled({ error: `Unknown artifact reference: ${artifactId}` });
-    }
-    return handled({ output: formatTuiArtifactReference(reference) });
+    if (!artifactId)
+      return projectArtifactResult({ kind: 'diagnostic', code: 'show-usage' }, context);
+    if (!artifactPorts.show)
+      return projectArtifactResult({ kind: 'diagnostic', code: 'show-unavailable' }, context);
+    const reference = artifactPorts.show(artifactId);
+    return reference
+      ? projectArtifactResult({ kind: 'reference', reference }, context)
+      : projectArtifactResult(
+          { kind: 'diagnostic', code: 'unknown-reference', artifactId },
+          context,
+        );
   }
-
   if (subcommand === 'open') {
     const artifactId = args[1];
-    if (!artifactId) {
-      return handled({ error: 'Usage: /artifact open <id>' });
-    }
-    const open = artifactPorts.open;
-    if (!open) {
-      return handled({ error: 'Artifact open is not available for this session.' });
-    }
-    const output = await open(artifactId);
-    return handled({ output: output ?? `Artifact open requested: ${artifactId}` });
+    if (!artifactId)
+      return projectArtifactResult({ kind: 'diagnostic', code: 'open-usage' }, context);
+    if (!artifactPorts.open)
+      return projectArtifactResult({ kind: 'diagnostic', code: 'open-unavailable' }, context);
+    await artifactPorts.open(artifactId);
+    return projectArtifactResult({ kind: 'opened', artifactId }, context);
   }
-
   if (subcommand === 'send') {
     const target = args[1];
     const artifactId = args[2];
-    if (!target || !artifactId) {
-      return handled({ error: 'Usage: /artifact send <target> <id>' });
-    }
-    const send = artifactPorts.send;
-    if (!send) {
-      return handled({ error: 'Artifact send is not available for this session.' });
-    }
-    const output = await send(target, artifactId);
-    return handled({ output: output ?? `Artifact ${artifactId} sent to ${target}` });
+    if (!target || !artifactId)
+      return projectArtifactResult({ kind: 'diagnostic', code: 'send-usage' }, context);
+    if (!artifactPorts.send)
+      return projectArtifactResult({ kind: 'diagnostic', code: 'send-unavailable' }, context);
+    await artifactPorts.send(target, artifactId);
+    return projectArtifactResult({ kind: 'sent', artifactId, target }, context);
   }
-
-  return handled({
-    error: `Unknown artifact command: ${subcommand}. Usage: /artifact list | /artifact show <id> | /artifact open <id> | /artifact send <target> <id>`,
-  });
-}
-
-function formatArtifactList(references: readonly TuiArtifactReference[]): string {
-  if (references.length === 0) {
-    return 'No artifact references.';
-  }
-  return references
-    .map((reference) => {
-      const id = reference.assetId ?? reference.artifactId ?? reference.ref ?? reference.id;
-      const details = [
-        reference.path,
-        reference.dimensions,
-        reference.duration,
-        reference.probe,
-      ].filter(Boolean);
-      return `${id}  ${reference.kind}${details.length > 0 ? `  ${details.join('  ')}` : ''}`;
-    })
-    .join('\n');
+  return projectArtifactResult(
+    { kind: 'diagnostic', code: 'unknown-command', command: subcommand },
+    context,
+  );
 }
 
 function handleStatus(context: TuiCommandRouterContext): TuiCommandRouterResult {
-  const snapshot = context.ports.status?.getSnapshot();
-  const contextLines = formatContextStatus(context.ports.context?.getTokenCount);
-
-  if (!snapshot) {
-    return handled({
-      output: [`Model: ${context.slash.config.model}`, ...contextLines].join('\n'),
-    });
+  const statusPorts = context.ports.status;
+  if (statusPorts === undefined) {
+    throw new Error('TUI status snapshot provider is required by the canonical status path.');
   }
-
   return handled({
-    output: [
-      `Model: ${context.slash.config.model}`,
-      ...(snapshot.chatModelIdentity ? [`Model Identity: ${snapshot.chatModelIdentity}`] : []),
-      ...(snapshot.sessionMode ? [`Session: ${snapshot.sessionMode}`] : []),
-      `Mode: ${snapshot.executionMode}`,
-      `Status: ${snapshot.agentStatus}`,
-      ...(snapshot.mediaModelSummary ? [`Media: ${snapshot.mediaModelSummary}`] : []),
-      ...(snapshot.perceptionModelSummary
-        ? [`Perception: ${snapshot.perceptionModelSummary}`]
-        : []),
-      ...(snapshot.llmParameterSummary ? [`Params: ${snapshot.llmParameterSummary}`] : []),
-      ...(typeof snapshot.tokensTotal === 'number' ? [`Tokens: ${snapshot.tokensTotal}`] : []),
-      ...contextLines,
-      ...(snapshot.activeSkillSummary ? [`Skills: ${snapshot.activeSkillSummary}`] : []),
-      ...(typeof snapshot.queueCount === 'number' ? [`Queue: ${snapshot.queueCount}`] : []),
-      ...(snapshot.runningTaskSummary ? [`Task: ${snapshot.runningTaskSummary}`] : []),
-    ].join('\n'),
+    output: presentTuiStatus(statusPorts.getSnapshot(), context.presentation),
   });
 }
 
@@ -2100,70 +2335,81 @@ async function handleSessionMode(
   const modePorts = context.ports.mode;
 
   if (!modeArg) {
-    const current = modePorts?.getSessionMode?.() ?? 'agent';
-    return handled({
-      output: [
-        `Session mode: ${current}`,
-        `Available: ${TUI_SESSION_MODES.join(', ')}`,
-        'Usage: /mode agent|image|video|audio',
-      ].join('\n'),
-    });
+    return projectSessionControlResult(
+      {
+        kind: 'session-mode-status',
+        current: modePorts?.getSessionMode?.() ?? 'agent',
+        available: TUI_SESSION_MODES,
+      },
+      context,
+    );
   }
 
   if (!isTuiSessionMode(modeArg)) {
-    return handled({
-      error: `Unsupported session mode: ${modeArg}. Valid: ${TUI_SESSION_MODES.join(', ')}`,
-    });
+    return projectSessionControlResult(
+      {
+        kind: 'diagnostic',
+        code: 'session-mode-unsupported',
+        value: modeArg,
+        available: TUI_SESSION_MODES,
+      },
+      context,
+    );
   }
 
   const setSessionMode = modePorts?.setSessionMode;
   if (!setSessionMode) {
-    return handled({ error: 'Session mode switching is not available for this session.' });
+    return projectSessionControlResult(
+      { kind: 'diagnostic', code: 'session-mode-unavailable' },
+      context,
+    );
   }
 
-  const output = await setSessionMode(modeArg);
-  return handled({ output: output ?? `Session mode set to: ${modeArg}` });
+  await setSessionMode(modeArg);
+  return projectSessionControlResult({ kind: 'session-mode-selected', mode: modeArg }, context);
 }
 
 function isTuiSessionMode(value: string): value is TuiSessionMode {
   return TUI_SESSION_MODES.includes(value as TuiSessionMode);
 }
 
-function formatContextStatus(getTokenCount: (() => number) | undefined): string[] {
-  if (!getTokenCount) {
-    return ['Context: token estimate unavailable'];
-  }
-  try {
-    return [`Context Tokens: ${getTokenCount()}`];
-  } catch (error) {
-    const reason = error instanceof Error ? error.message : String(error);
-    return [`Context: token estimate unavailable (${reason})`];
-  }
-}
-
 async function handleCompact(context: TuiCommandRouterContext): Promise<TuiCommandRouterResult> {
   const compact = context.ports.context?.compact;
   if (!compact) {
-    return handled({ error: 'Context compaction is not available for this session.' });
+    return projectSessionControlResult(
+      { kind: 'diagnostic', code: 'context-compaction-unavailable' },
+      context,
+    );
   }
 
   const result = await compact();
-  return handled({
-    output: `Context compressed: ${result.originalTokens} -> ${result.compressedTokens} tokens (${(result.ratio * 100).toFixed(1)}%)`,
-  });
+  return projectSessionControlResult({ kind: 'context-compacted', ...result }, context);
 }
 
 async function setMode(
   mode: TuiExecutionMode,
-  message: string,
   context: TuiCommandRouterContext,
 ): Promise<TuiCommandRouterResult> {
   const setExecutionMode = context.ports.mode?.setExecutionMode;
   if (!setExecutionMode) {
-    return handled({ error: `Execution mode switching is not available for this session.` });
+    return projectSessionControlResult(
+      { kind: 'diagnostic', code: 'execution-mode-unavailable' },
+      context,
+    );
   }
-  const output = await setExecutionMode(mode);
-  return handled({ output: output ?? message });
+  await setExecutionMode(mode);
+  return projectSessionControlResult({ kind: 'execution-mode-selected', mode }, context);
+}
+
+function assertResetState(
+  family: 'media' | 'perception',
+  state: Readonly<Partial<Record<TuiMediaCategory, string>>>,
+): void {
+  if (Object.keys(state).length > 0) {
+    throw new Error(
+      `TUI ${family} reset port returned a non-empty canonical post-operation state.`,
+    );
+  }
 }
 
 function parseSkillClearTarget(
@@ -2194,20 +2440,4 @@ function parseLifecycleSlot(value: string): SkillLifecycleSlot | null {
     default:
       return null;
   }
-}
-
-export function createSlashContextWithMedia(
-  base: SlashCommandContext,
-  input: {
-    readonly currentMediaOverrides?: MediaModelOverrides;
-    readonly availableMediaModels?: readonly string[];
-    readonly defaultMediaModels?: SlashCommandContext['defaultMediaModels'];
-  },
-): SlashCommandContext {
-  return {
-    ...base,
-    currentMediaOverrides: input.currentMediaOverrides,
-    availableMediaModels: input.availableMediaModels ? [...input.availableMediaModels] : undefined,
-    defaultMediaModels: input.defaultMediaModels,
-  };
 }

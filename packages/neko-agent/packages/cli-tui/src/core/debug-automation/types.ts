@@ -15,6 +15,7 @@ export type TuiDebugAutomationMethod =
   | 'session.create'
   | 'session.resume'
   | 'message.submit'
+  | 'message.cancel'
   | 'terminal.resize'
   | 'session.waitForIdle'
   | 'session.facts'
@@ -79,6 +80,14 @@ export interface TuiDebugAutomationMessageSubmitParams extends TuiDebugAutomatio
   readonly prompt: string;
 }
 
+export type TuiDebugAutomationMessageCancelParams = TuiDebugAutomationSessionRefParams;
+
+export interface TuiDebugAutomationMessageCancelled {
+  readonly sessionId: string;
+  readonly conversationId: string;
+  readonly accepted: boolean;
+}
+
 export interface TuiDebugAutomationTerminalResizeParams extends TuiDebugAutomationSessionRefParams {
   readonly columns: number;
   readonly rows: number;
@@ -135,6 +144,16 @@ export interface TuiDebugAutomationModelIdentity {
   readonly providerExpressionProfileId?: string;
 }
 
+export interface TuiDebugAutomationTimelineRowSummary {
+  readonly id: string;
+  readonly sequence: number;
+  readonly kind: import('../../types/state').TerminalTimelineRowKind;
+  readonly status: import('../../types/state').TerminalTimelineRowStatus;
+  readonly content?: string;
+  readonly toolCallId?: string;
+  readonly toolName?: string;
+}
+
 export interface TuiDebugAutomationTurnSummary {
   readonly id: string;
   readonly role: Message['role'];
@@ -144,6 +163,7 @@ export interface TuiDebugAutomationTurnSummary {
   readonly content: string;
   readonly isError?: boolean;
   readonly toolCalls: readonly TuiDebugAutomationToolCallSummary[];
+  readonly timeline: readonly TuiDebugAutomationTimelineRowSummary[];
   readonly timestamp: number;
 }
 
@@ -198,6 +218,7 @@ export interface TuiDebugAutomationAppPort {
   isReady(): boolean;
   getConversationId(): string;
   submitMessage(input: { readonly prompt: string }): Promise<void>;
+  cancelActiveMessage(): boolean;
   resizeTerminal(input: { readonly columns: number; readonly rows: number }): void;
   waitForIdle(input: {
     readonly timeoutMs: number;

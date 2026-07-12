@@ -34,31 +34,6 @@ export interface TuiArtifactReferenceFormatOptions {
   readonly workspaceRoot?: string;
 }
 
-export function formatTuiArtifactReference(reference: TuiArtifactReference): string {
-  const title = `${capitalize(reference.kind)} reference`;
-  const lines = [title];
-  const fields = [
-    reference.ref ? `ref: ${reference.ref}` : undefined,
-    reference.assetId ? `asset: ${reference.assetId}` : undefined,
-    reference.artifactId ? `artifact: ${reference.artifactId}` : undefined,
-    reference.taskId ? `task: ${reference.taskId}` : undefined,
-    reference.toolCallId ? `tool: ${reference.toolCallId}` : undefined,
-    reference.path ? `file: ${reference.path}` : undefined,
-    reference.dimensions ? `size: ${reference.dimensions}` : undefined,
-    reference.duration ? `duration: ${reference.duration}` : undefined,
-    reference.probe ? `probe: ${reference.probe}` : undefined,
-  ].filter((field): field is string => Boolean(field));
-
-  lines.push(...fields.map((field) => `- ${field}`));
-  if (reference.diagnostics.length > 0) {
-    lines.push(...reference.diagnostics.map((diagnostic) => `! ${diagnostic}`));
-  }
-  if (reference.commands.length > 0) {
-    lines.push('Commands:', ...reference.commands.map((command) => `  ${command}`));
-  }
-  return lines.join('\n');
-}
-
 export function collectTuiArtifactReferences(
   input: {
     readonly attachments?: readonly ToolResultAttachment[];

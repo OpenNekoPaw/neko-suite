@@ -90,13 +90,13 @@ export function wireCliSkillLifecycleSession(input: {
       if (!result.ok) {
         return {
           success: false,
-          message: diagnostics[0]?.message ?? `Skill "${request.name}" was not activated`,
+          code: 'activation-rejected',
           diagnostics,
         };
       }
       return {
         success: true,
-        message: `Activated skill "${result.record?.skillName ?? request.name}"`,
+        skillName: result.record?.skillName ?? request.name,
         ...(result.record?.injection.allowedTools
           ? { allowedTools: result.record.injection.allowedTools }
           : {}),
@@ -123,13 +123,12 @@ export function wireCliSkillLifecycleSession(input: {
       if (!result.ok) {
         return {
           success: false,
-          message: result.diagnostics[0]?.message ?? 'Skill lifecycle deactivation rejected',
+          code: 'deactivation-rejected',
           diagnostics: result.diagnostics,
         };
       }
       return {
         success: true,
-        message: 'Skill deactivated',
         removedRecordIds: result.removedRecordIds,
         diagnostics: result.diagnostics,
       };
@@ -151,7 +150,7 @@ export async function activateCliDomainSkill(input: {
   readonly syncProjection: () => SkillLifecycleProjection;
 }): Promise<{
   readonly ok: boolean;
-  readonly message?: string;
+  readonly diagnostic?: SkillLifecycleDiagnostic;
 }> {
   const result = await input.lifecycleRuntime.activate(
     defaultSkillLifecycleRequest({
@@ -166,7 +165,7 @@ export async function activateCliDomainSkill(input: {
   if (!result.ok) {
     return {
       ok: false,
-      message: result.diagnostics[0]?.message ?? `Skill "${input.skillName}" was not activated`,
+      ...(result.diagnostics[0] ? { diagnostic: result.diagnostics[0] } : {}),
     };
   }
   return { ok: true };
@@ -184,7 +183,7 @@ export function deactivateCliSkillLifecycle(input: {
   };
 }): {
   readonly ok: boolean;
-  readonly message?: string;
+  readonly diagnostic?: SkillLifecycleDiagnostic;
 } {
   const defaultSlot =
     !input.target?.recordId && !input.target?.slot && !input.target?.skillName
@@ -203,7 +202,7 @@ export function deactivateCliSkillLifecycle(input: {
   if (!result.ok) {
     return {
       ok: false,
-      message: result.diagnostics[0]?.message ?? 'Skill lifecycle clear rejected',
+      ...(result.diagnostics[0] ? { diagnostic: result.diagnostics[0] } : {}),
     };
   }
   return { ok: true };

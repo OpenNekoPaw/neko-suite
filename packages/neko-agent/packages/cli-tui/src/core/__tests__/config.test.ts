@@ -41,12 +41,14 @@ vi.mock('@neko/platform', () => ({
   ConfigManager: class ConfigManager {
     private providerOverrides = new Map<string, Partial<MockProvider>>();
 
-    getEffectiveAgentWorkspaceConfigSnapshot(runtimeOverrides: {
-      selectedProviderId?: string;
-      selectedModelId?: string;
-      temperature?: number;
-      maxTokens?: number;
-    } = {}) {
+    getEffectiveAgentWorkspaceConfigSnapshot(
+      runtimeOverrides: {
+        selectedProviderId?: string;
+        selectedModelId?: string;
+        temperature?: number;
+        maxTokens?: number;
+      } = {},
+    ) {
       const providerId =
         runtimeOverrides.selectedProviderId ??
         state.workspaceConfig.defaultModels?.llm?.providerId ??
@@ -139,6 +141,15 @@ vi.mock('@neko/platform', () => ({
       return state.mcpServers.filter((server) => server.enabled !== false);
     }
 
+    getDefaultModelPurposeRef(
+      purpose: string,
+    ): { providerId: string; modelId: string } | undefined {
+      return (
+        state.workspaceConfig.defaultModelPurposes?.[purpose] ??
+        state.userConfig.defaultModelPurposes?.[purpose]
+      );
+    }
+
     dispose(): void {}
   },
 }));
@@ -169,7 +180,7 @@ vi.mock('@neko/shared/config/config-reader.ts', () => ({
   writeUserConfig: vi.fn(),
 }));
 
-import { loadConfig } from '../config';
+import { CliConfigLoadError, loadConfig } from '../config';
 
 describe('loadConfig', () => {
   beforeEach(() => {
@@ -264,9 +275,16 @@ describe('loadConfig', () => {
       },
     };
 
-    expect(() => loadConfig('/tmp/project', { provider: 'gateway' })).toThrow(
-      'No model is configured for provider "gateway".',
-    );
+    try {
+      loadConfig('/tmp/project', { provider: 'gateway' });
+      expect.fail('Expected configuration loading to fail.');
+    } catch (error) {
+      expect(error).toBeInstanceOf(CliConfigLoadError);
+      expect((error as CliConfigLoadError).diagnostic).toEqual({
+        code: 'missing-provider-model',
+        providerId: 'gateway',
+      });
+    }
   });
 
   it('uses effective workspace scalar and media defaults from ConfigManager', () => {
@@ -296,6 +314,12 @@ describe('loadConfig', () => {
           modelId: 'local-image',
         },
       },
+      defaultModelPurposes: {
+        'image.understand': {
+          providerId: 'gateway',
+          modelId: 'gateway-chat',
+        },
+      },
       temperature: 0.55,
       maxTokens: 1024,
       thinkingBudget: 512,
@@ -312,6 +336,9 @@ describe('loadConfig', () => {
       image: 'local:local-image',
       video: undefined,
       audio: undefined,
+    });
+    expect(config.perceptionModels).toEqual({
+      image: 'gateway:gateway-chat',
     });
   });
 

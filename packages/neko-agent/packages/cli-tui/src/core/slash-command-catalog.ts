@@ -1,5 +1,10 @@
-import { listSlashCommandCatalog } from '@neko/agent';
-import { detectTuiLocale, type TuiLocale } from './tui-locale';
+import { listSlashCommandCatalog, type SlashCommandCatalogEntry } from '@neko/agent';
+import { getBuiltinCommandDescriptionKey } from '@neko/agent/commands/terminal-messages';
+import type { AgentTerminalPresentationContext } from '../presentation/context';
+import type {
+  AgentTerminalMessageKey,
+  CliTerminalMessageKey,
+} from '../presentation/terminal-messages';
 
 export interface TuiSlashCommandOption {
   readonly name: string;
@@ -11,162 +16,78 @@ export interface TuiSkillInvocationOption {
   readonly description: string;
 }
 
-export interface TuiLocalCommandEffect extends TuiSlashCommandOption {
+type TuiLocalCommandName =
+  | 'mode'
+  | 'model'
+  | 'media'
+  | 'param'
+  | 'queue'
+  | 'mcp'
+  | 'capability'
+  | 'artifact'
+  | 'compact'
+  | 'status'
+  | 'auto'
+  | 'ask'
+  | 'skill';
+
+export interface TuiLocalCommandEffect {
+  readonly name: TuiLocalCommandName;
   readonly surface: 'tui';
-  readonly descriptions: Readonly<Record<TuiLocale, string>>;
+  readonly descriptionKey: Extract<
+    CliTerminalMessageKey,
+    `agent.terminal.suggestion.command.${string}`
+  >;
 }
 
 const TUI_LOCAL_COMMANDS: readonly TuiLocalCommandEffect[] = [
-  {
-    name: 'mode',
-    surface: 'tui',
-    description: 'Show or switch session mode',
-    descriptions: {
-      en: 'Show or switch session mode',
-      zh: '显示或切换会话模式',
-    },
-  },
-  {
-    name: 'model',
-    surface: 'tui',
-    description: 'List or switch the current chat model',
-    descriptions: {
-      en: 'List or switch the current chat model',
-      zh: '列出或切换当前对话模型',
-    },
-  },
-  {
-    name: 'media',
-    surface: 'tui',
-    description: 'List or switch image/video/audio models',
-    descriptions: {
-      en: 'List or switch image/video/audio models',
-      zh: '列出或切换图像、视频、音频模型',
-    },
-  },
-  {
-    name: 'param',
-    surface: 'tui',
-    description: 'Show or set LLM and media parameters',
-    descriptions: {
-      en: 'Show or set LLM and media parameters',
-      zh: '显示或设置 LLM 与媒体参数',
-    },
-  },
-  {
-    name: 'queue',
-    surface: 'tui',
-    description: 'List, send next, cancel, or edit queued prompts',
-    descriptions: {
-      en: 'List, send next, cancel, or edit queued prompts',
-      zh: '列出、提升、取消或编辑队列中的提示',
-    },
-  },
-  {
-    name: 'mcp',
-    surface: 'tui',
-    description: 'Show MCP server status, tools, and connection controls',
-    descriptions: {
-      en: 'Show MCP server status, tools, and connection controls',
-      zh: '显示 MCP 服务状态、工具和连接控制',
-    },
-  },
-  {
-    name: 'capability',
-    surface: 'tui',
-    description: 'Show TUI capability providers, diagnostics, and tools',
-    descriptions: {
-      en: 'Show TUI capability providers, diagnostics, and tools',
-      zh: '显示 TUI 能力提供者、诊断和工具',
-    },
-  },
-  {
-    name: 'artifact',
-    surface: 'tui',
-    description: 'List, show, open, or send terminal artifact references',
-    descriptions: {
-      en: 'List, show, open, or send terminal artifact references',
-      zh: '列出、显示、打开或发送终端工件引用',
-    },
-  },
-  {
-    name: 'compact',
-    surface: 'tui',
-    description: 'Compact the current Agent context',
-    descriptions: {
-      en: 'Compact the current Agent context',
-      zh: '压缩当前 Agent 上下文',
-    },
-  },
-  {
-    name: 'status',
-    surface: 'tui',
-    description: 'Show mode, model, queue, Skill, task, and context state',
-    descriptions: {
-      en: 'Show mode, model, queue, Skill, task, and context state',
-      zh: '显示模式、模型、队列、技能、任务和上下文状态',
-    },
-  },
-  {
-    name: 'auto',
-    surface: 'tui',
-    description: 'Switch to auto execution mode',
-    descriptions: {
-      en: 'Switch to auto execution mode',
-      zh: '切换到自动执行模式',
-    },
-  },
-  {
-    name: 'ask',
-    surface: 'tui',
-    description: 'Switch to ask-before-action execution mode',
-    descriptions: {
-      en: 'Switch to ask-before-action execution mode',
-      zh: '切换到执行前询问模式',
-    },
-  },
-  {
-    name: 'skill',
-    surface: 'tui',
-    description: 'Activate or deactivate a Skill lifecycle record',
-    descriptions: {
-      en: 'Activate or deactivate a Skill lifecycle record',
-      zh: '激活或停用技能生命周期记录',
-    },
-  },
+  localCommand('mode'),
+  localCommand('model'),
+  localCommand('media'),
+  localCommand('param'),
+  localCommand('queue'),
+  localCommand('mcp'),
+  localCommand('capability'),
+  localCommand('artifact'),
+  localCommand('compact'),
+  localCommand('status'),
+  localCommand('auto'),
+  localCommand('ask'),
+  localCommand('skill'),
 ];
 
 export function listTuiLocalCommandEffects(
-  locale: TuiLocale = detectTuiLocale(),
+  context: AgentTerminalPresentationContext<AgentTerminalMessageKey>,
 ): readonly (TuiSlashCommandOption & { readonly surface: 'tui' })[] {
   return TUI_LOCAL_COMMANDS.map((command) => ({
     name: command.name,
-    description: command.descriptions[locale],
+    description: context.t(command.descriptionKey),
     surface: command.surface,
   }));
 }
 
 export function createTuiSlashCommandCatalog(
-  skills?: ReadonlyArray<{
-    entryPointKind?: 'skill' | 'command-artifact';
-    command?: string;
-    description?: string;
-    enabled?: boolean;
-    supportsArguments?: boolean;
-    argumentHint?: string;
-  }>,
-  locale: TuiLocale = detectTuiLocale(),
+  skills:
+    | ReadonlyArray<{
+        entryPointKind?: 'skill' | 'command-artifact';
+        command?: string;
+        description?: string;
+        enabled?: boolean;
+        supportsArguments?: boolean;
+        argumentHint?: string;
+      }>
+    | undefined,
+  context: AgentTerminalPresentationContext<AgentTerminalMessageKey>,
 ): TuiSlashCommandOption[] {
   const commands = listSlashCommandCatalog({
     surface: 'tui',
     skills,
-    locale,
   }).map((command) => ({
     name: command.name,
-    description: command.description,
+    description: describeSlashCommand(command, context),
   }));
   const names = new Set(commands.map((command) => command.name));
-  for (const command of listTuiLocalCommandEffects(locale)) {
+  for (const command of listTuiLocalCommandEffects(context)) {
     if (!names.has(command.name)) {
       commands.push({
         name: command.name,
@@ -178,29 +99,46 @@ export function createTuiSlashCommandCatalog(
 }
 
 export function createTuiSkillInvocationCatalog(
-  skills?: ReadonlyArray<{
-    name: string;
-    description?: string;
-    enabled?: boolean;
-  }>,
-  locale: TuiLocale = detectTuiLocale(),
+  skills:
+    | ReadonlyArray<{
+        name: string;
+        description?: string;
+        enabled?: boolean;
+      }>
+    | undefined,
+  context: AgentTerminalPresentationContext<AgentTerminalMessageKey>,
 ): TuiSkillInvocationOption[] {
   return (skills ?? [])
     .filter((skill) => skill.enabled !== false)
     .map((skill) => ({
       name: `$${skill.name}`,
-      description: readSkillDescription(skill.description, skill.name, locale),
+      description:
+        readNonEmptyDescription(skill.description) ??
+        context.t('agent.command.catalog.skill.defaultDescription', { skillName: skill.name }),
     }));
 }
 
-function readSkillDescription(
-  description: string | undefined,
-  skillName: string,
-  locale: TuiLocale,
+function describeSlashCommand(
+  command: SlashCommandCatalogEntry,
+  context: AgentTerminalPresentationContext<AgentTerminalMessageKey>,
 ): string {
-  const trimmed = description?.trim();
-  if (trimmed && trimmed.length > 0) {
-    return trimmed;
+  if (command.source === 'builtin') {
+    return context.t(getBuiltinCommandDescriptionKey(command.name));
   }
-  return locale === 'zh' ? `激活技能 ${skillName}` : `Activate skill ${skillName}`;
+  return (
+    command.description ??
+    context.t('agent.command.catalog.commandArtifact.defaultDescription', {
+      commandName: command.name,
+    })
+  );
+}
+
+function localCommand(name: TuiLocalCommandName): TuiLocalCommandEffect {
+  const descriptionKey: TuiLocalCommandEffect['descriptionKey'] = `agent.terminal.suggestion.command.${name}`;
+  return { name, surface: 'tui', descriptionKey };
+}
+
+function readNonEmptyDescription(description: string | undefined): string | undefined {
+  const trimmed = description?.trim();
+  return trimmed && trimmed.length > 0 ? description : undefined;
 }

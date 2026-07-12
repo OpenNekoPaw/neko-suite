@@ -1,17 +1,83 @@
 import { describe, expect, it, vi } from 'vitest';
+import { AGENT_COMMAND_MESSAGE_SOURCE } from '@neko/agent/commands/terminal-messages';
+import { FileConversationStorage, type ConversationRecord } from '@neko/agent';
 import type { ActiveSkillLifecycleRecordProjection, ChatModelOption, Task } from '@neko/shared';
 import {
   handleTuiControlCommand,
   type TuiCommandRouterContext,
   type TuiExecutionMode,
+  type TuiParameterValidationResult,
   type TuiSessionMode,
   type TuiArtifactPorts,
   type TuiCapabilityPorts,
 } from '../tui-command-router';
 import { DEFAULT_CLI_CONFIG } from '../types';
+import { createStrictTranslator } from '@neko/shared/i18n';
+import { createAgentTerminalPresentationContext } from '../../presentation/context';
+import { CLI_TERMINAL_MESSAGE_SOURCE } from '../../presentation/terminal-messages';
 import { createAgentConversationMessageQueue } from '@neko/agent/runtime';
 
 describe('handleTuiControlCommand', () => {
+  it('routes shared resource commands through canonical Presenters instead of slash-core prose', async () => {
+    const context = createContext({ uiLocale: 'zh-cn' });
+
+    const help = await handleTuiControlCommand('/help', context);
+    const commands = await handleTuiControlCommand('/cmds', context);
+    const skills = await handleTuiControlCommand('/skills', context);
+    const tools = await handleTuiControlCommand('/tools', context);
+
+    expect(help.source).toBe('tui-router');
+    expect(help.output).toContain('可用命令：');
+    expect(help.output).toContain('/help, /h, /?');
+    expect(commands.source).toBe('tui-router');
+    expect(commands.output).toContain('可用斜杠命令：');
+    expect(skills.source).toBe('tui-router');
+    expect(skills.output).toContain('可用技能：');
+    expect(tools).toEqual(
+      expect.objectContaining({
+        source: 'tui-router',
+        diagnosticCode: 'tools.registry-unavailable',
+        error: '工具注册表不可用',
+      }),
+    );
+  });
+
+  it('routes the stable /? alias through the same localized help Presenter', async () => {
+    const result = await handleTuiControlCommand('/?', createContext({ uiLocale: 'zh-cn' }));
+
+    expect(result.source).toBe('tui-router');
+    expect(result.output).toContain('可用命令：');
+    expect(result.output).toContain('/help, /h, /?');
+  });
+
+  it('localizes unknown-command chrome without changing the original input', async () => {
+    const input = '/missing-command --原始-flag';
+    const result = await handleTuiControlCommand(input, createContext({ uiLocale: 'zh-cn' }));
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        handled: true,
+        source: 'tui-router',
+        diagnosticCode: 'command.unknown',
+        error: `未知命令：${input}。输入 /help 查看可用命令。`,
+      }),
+    );
+  });
+
+  it('localizes model, media and perception output through one zh-cn presentation context', async () => {
+    const context = createContext({ uiLocale: 'zh-cn' });
+
+    const model = await handleTuiControlCommand('/model gpt-5.3-codex', context);
+    const media = await handleTuiControlCommand('/media image openai:gpt-image-1', context);
+    const perception = await handleTuiControlCommand('/perception image auto', context);
+
+    expect(model.output).toBe(
+      '对话模型已切换为：anthropic:gpt-5.3-codex (Anthropic / GPT 5.3 Codex)',
+    );
+    expect(media.output).toBe('图像模型已设为：openai:gpt-image-1 (OpenAI / GPT Image)');
+    expect(perception.output).toBe('图像感知模型已设为自动选择。');
+  });
+
   it('routes execution mode commands through the mode port', async () => {
     const context = createContext();
 
@@ -58,11 +124,12 @@ describe('handleTuiControlCommand', () => {
     const result = await handleTuiControlCommand('/model list', context);
 
     expect(result.output).toContain('Model Selection:');
-    expect(result.output).toContain('chat: anthropic:claude-sonnet-4-20250514');
+    expect(result.output).toContain('Current chat model: anthropic:claude-sonnet-4-20250514');
     expect(result.output).toContain('Available chat models:');
     expect(result.output).toContain('anthropic:gpt-5.3-codex  Anthropic / GPT 5.3 Codex');
-    expect(result.output).toContain('Available media models:');
-    expect(result.output).toContain('image openai:gpt-image-1  OpenAI / GPT Image');
+    expect(result.output).toContain('Media Model Selection:');
+    expect(result.output).toContain('Available image models:');
+    expect(result.output).toContain('openai:gpt-image-1  OpenAI / GPT Image');
     expect(result.output).toContain('Perception Models:');
     expect(result.output).toContain('image: google:gemini-flash (Google / Gemini Flash)');
     expect(result.output).toContain(
@@ -181,7 +248,7 @@ describe('handleTuiControlCommand', () => {
     const result = await handleTuiControlCommand('/model video openai:gpt-image-1', context);
 
     expect(result.error).toBe(
-      'Unknown video model identity: openai:gpt-image-1. Use /model video to list available models.',
+      'Unknown video media model identity: openai:gpt-image-1. Use /media video to list available models.',
     );
     expect(context.ports.media?.setMediaModel).not.toHaveBeenCalled();
   });
@@ -195,7 +262,7 @@ describe('handleTuiControlCommand', () => {
       context,
     );
 
-    expect(listed.output).toContain('Image perception model: google:gemini-flash');
+    expect(listed.output).toContain('image: google:gemini-flash');
     expect(listed.output).toContain('google:gemini-flash  Google / Gemini Flash');
     expect(selected.output).toBe(
       'image perception model set to: google:gemini-flash (Google / Gemini Flash)',
@@ -234,7 +301,7 @@ describe('handleTuiControlCommand', () => {
   it('lists and selects explicit media model identities', async () => {
     const context = createContext();
 
-    const listed = await handleTuiControlCommand('/media image', context);
+    const listed = await handleTuiControlCommand('/media image status', context);
     const selected = await handleTuiControlCommand('/media image openai:gpt-image-1', context);
 
     expect(listed.output).toContain('openai:gpt-image-1  OpenAI / GPT Image');
@@ -260,18 +327,157 @@ describe('handleTuiControlCommand', () => {
     expect(context.ports.media?.setMediaModel).not.toHaveBeenCalled();
   });
 
+  it('uses the canonical post-operation model state returned by the owning port', async () => {
+    const context = createContext({
+      setMediaModel: () => ({
+        providerId: 'canonical-provider',
+        modelId: 'canonical-model',
+        optionId: 'canonical-provider:canonical-model',
+        label: 'Canonical Provider Label',
+        category: 'image',
+      }),
+    });
+
+    const result = await handleTuiControlCommand('/media image openai:gpt-image-1', context);
+
+    expect(result.output).toBe(
+      'image model set to: canonical-provider:canonical-model (Canonical Provider Label)',
+    );
+  });
+
+  it('uses canonical post-operation state for chat and perception selections', async () => {
+    const context = createContext({
+      selectChatModel: () => ({
+        providerId: 'canonical-chat',
+        modelId: 'selected-model',
+        label: 'Canonical Chat',
+      }),
+      setPerceptionModel: () => ({
+        providerId: 'canonical-perception',
+        modelId: 'vision-model',
+        label: 'Canonical Perception',
+      }),
+    });
+
+    const chat = await handleTuiControlCommand('/model gpt-5.3-codex', context);
+    const perception = await handleTuiControlCommand(
+      '/perception image google:gemini-flash',
+      context,
+    );
+
+    expect(chat.output).toBe(
+      'Chat model switched to: canonical-chat:selected-model (Canonical Chat)',
+    );
+    expect(perception.output).toBe(
+      'image perception model set to: canonical-perception:vision-model (Canonical Perception)',
+    );
+  });
+
+  it('fails visibly when a migrated side-effect port violates the post-state contract', async () => {
+    const context = createContext({
+      selectChatModel: (() => undefined) as never,
+      setMediaModel: (() => undefined) as never,
+      setPerceptionModel: (() => undefined) as never,
+    });
+
+    await expect(handleTuiControlCommand('/model gpt-5.3-codex', context)).rejects.toThrow();
+    await expect(
+      handleTuiControlCommand('/media image openai:gpt-image-1', context),
+    ).rejects.toThrow();
+    await expect(
+      handleTuiControlCommand('/perception image google:gemini-flash', context),
+    ).rejects.toThrow();
+  });
+
+  it('does not retain a second media mutation success path without canonical ports', async () => {
+    const context = createContext();
+    const withoutCanonicalMediaPorts: TuiCommandRouterContext = {
+      ...context,
+      ports: { ...context.ports, media: undefined },
+    };
+
+    const selected = await handleTuiControlCommand(
+      '/media image openai:gpt-image-1',
+      withoutCanonicalMediaPorts,
+    );
+    const reset = await handleTuiControlCommand('/media reset', withoutCanonicalMediaPorts);
+
+    expect(selected.error).toBe('Media model selection is not available for this session.');
+    expect(reset.error).toBe('Media model reset is not available for this session.');
+  });
+
+  it('rejects a non-empty reset post-state as a canonical contract violation', async () => {
+    const context = createContext({
+      resetMediaModels: () => ({ image: 'still-configured' }),
+      resetPerceptionModels: () => ({ video: 'still-configured' }),
+    });
+
+    await expect(handleTuiControlCommand('/media reset', context)).rejects.toThrow(
+      'media reset port returned a non-empty canonical post-operation state',
+    );
+    await expect(handleTuiControlCommand('/perception reset', context)).rejects.toThrow(
+      'perception reset port returned a non-empty canonical post-operation state',
+    );
+  });
+
+  it('wraps provider failures in localized owned diagnostics without translating external detail', async () => {
+    const context = createContext({
+      uiLocale: 'zh-cn',
+      setMediaModel: () => {
+        throw new Error('PROVIDER_DETAIL_NO_TRANSLATE');
+      },
+    });
+
+    const result = await handleTuiControlCommand('/media image openai:gpt-image-1', context);
+
+    expect(result.error).toBe('更新图像媒体模型失败。: PROVIDER_DETAIL_NO_TRANSLATE');
+  });
+
+  it('uses reset-specific diagnostics without fabricating a media category', async () => {
+    const mediaContext = createContext({
+      uiLocale: 'zh-cn',
+      resetMediaModels: () => {
+        throw new Error('MEDIA_RESET_DETAIL');
+      },
+    });
+    const perceptionContext = createContext({
+      uiLocale: 'zh-cn',
+      resetPerceptionModels: () => {
+        throw new Error('PERCEPTION_RESET_DETAIL');
+      },
+    });
+
+    const media = await handleTuiControlCommand('/media reset', mediaContext);
+    const perception = await handleTuiControlCommand('/perception reset', perceptionContext);
+
+    expect(media.error).toBe('重置媒体模型失败。: MEDIA_RESET_DETAIL');
+    expect(perception.error).toBe('重置感知模型失败。: PERCEPTION_RESET_DETAIL');
+  });
+
+  it('fails visibly when canonical presentation wiring is missing', async () => {
+    const context = createContext();
+
+    await expect(
+      handleTuiControlCommand('/model status', {
+        ...context,
+        presentation: undefined as never,
+      }),
+    ).rejects.toThrow('AgentTerminalPresentationContext is required by the TUI command router.');
+  });
+
   it('validates and applies LLM parameters through the parameter port', async () => {
     const context = createContext();
 
     const result = await handleTuiControlCommand('/param set reasoning deep', context);
 
-    expect(result.output).toContain('Parameter updated: reasoning = deep');
+    expect(result.output).toBe(
+      'Parameter updated: reasoning = deep\nApplied parameters:\n  thinkingBudget = 12000',
+    );
     expect(context.ports.parameters?.validate).toHaveBeenCalledWith({ reasoningPreset: 'deep' });
     expect(context.ports.parameters?.apply).toHaveBeenCalledWith({
       config: { reasoningPreset: 'deep' },
       chatOptions: { thinkingBudget: 12000 },
       providerOptions: {},
-      summary: 'Applied: thinkingBudget=12000',
     });
   });
 
@@ -282,6 +488,30 @@ describe('handleTuiControlCommand', () => {
 
     expect(result.error).toContain('Unsupported parameter: imaginary');
     expect(context.ports.parameters?.validate).not.toHaveBeenCalled();
+  });
+
+  it('localizes typed LLM projection diagnostics without using platform prose', async () => {
+    const context = createContext({
+      uiLocale: 'zh-cn',
+      parameterValidate: vi.fn((config): TuiParameterValidationResult => ({
+        config,
+        diagnostics: [
+          { code: 'unsupported-thinking-budget', field: 'thinkingBudget' },
+          { code: 'provider-not-configured', providerId: 'provider-原文' },
+        ],
+      })),
+    });
+
+    const result = await handleTuiControlCommand('/param set reasoning deep', context);
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        diagnosticCode: 'parameter.validation-failed',
+        error:
+          '参数校验失败\n所选模型或提供商不支持 thinking budget 参数：thinkingBudget\n提供商 "provider-原文" 未配置。',
+      }),
+    );
+    expect(result.error).not.toContain('Selected model');
   });
 
   it('shows and changes session mode through the mode port', async () => {
@@ -305,7 +535,18 @@ describe('handleTuiControlCommand', () => {
     expect(context.ports.mode?.setSessionMode).not.toHaveBeenCalled();
   });
 
-  it('routes status through host state and context token ports', async () => {
+  it('fails visibly when the canonical status snapshot provider is missing', async () => {
+    const context = createContext();
+
+    await expect(
+      handleTuiControlCommand('/status', {
+        ...context,
+        ports: { ...context.ports, status: undefined },
+      }),
+    ).rejects.toThrow('TUI status snapshot provider is required by the canonical status path.');
+  });
+
+  it('delegates status rendering to the canonical semantic snapshot Presenter', async () => {
     const context = createContext({
       getTokenCount: vi.fn(() => 321),
     });
@@ -313,13 +554,13 @@ describe('handleTuiControlCommand', () => {
     const result = await handleTuiControlCommand('/status', context);
 
     expect(result.source).toBe('tui-router');
-    expect(result.output).toContain('Model: claude-sonnet-4-20250514');
-    expect(result.output).toContain('Model Identity: anthropic:claude-sonnet-4-20250514');
+    expect(result.output).toContain('Model: anthropic:claude-sonnet-4-20250514');
     expect(result.output).toContain('Session: agent');
     expect(result.output).toContain('Mode: auto');
-    expect(result.output).toContain('Media: image=openai:gpt-image-1');
-    expect(result.output).toContain('Params: reasoning=deep');
-    expect(result.output).toContain('Context Tokens: 321');
+    expect(result.output).toContain('Media (image): openai:gpt-image-1');
+    expect(result.output).toContain('Parameter (reasoning): deep');
+    expect(result.output).toContain('Context tokens: 321');
+    expect(result.output).toContain('User config: /Users/neko/.neko/config.toml');
   });
 
   it('lists background tasks through the task port', async () => {
@@ -351,13 +592,35 @@ describe('handleTuiControlCommand', () => {
     expect(result.output).toContain('猫咪玩耍');
   });
 
-  it('reports missing context token estimate visibly in status', async () => {
+  it('omits an unavailable optional context token row without fallback prose', async () => {
     const context = createContext({ getTokenCount: undefined });
 
     const result = await handleTuiControlCommand('/status', context);
 
     expect(result.source).toBe('tui-router');
-    expect(result.output).toContain('Context: token estimate unavailable');
+    expect(result.output).not.toContain('Context tokens:');
+    expect(result.output).not.toContain('unavailable');
+  });
+
+  it('returns a localized semantic diagnostic when a queue operation port is absent', async () => {
+    const queue = createAgentConversationMessageQueue({ conversationId: 'conv-queue-port' });
+    queue.enqueue({ content: '排队内容', source: 'user' });
+    const context = createContext({ queue, uiLocale: 'zh-cn' });
+
+    const result = await handleTuiControlCommand('/queue promote queue-1', {
+      ...context,
+      ports: {
+        ...context.ports,
+        queue: { getSnapshot: () => queue.snapshot() },
+      },
+    });
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        diagnosticCode: 'queue.operation-unavailable',
+        error: '当前会话不支持队列操作：promote',
+      }),
+    );
   });
 
   it('runs compact through the context compaction port', async () => {
@@ -423,7 +686,9 @@ describe('handleTuiControlCommand', () => {
 
     const result = await handleTuiControlCommand('/queue cancel missing', context);
 
-    expect(result.error).toBe('stale-item: Queued message is no longer pending: missing');
+    expect(result.error).toBe(
+      'Queue operation failed (stale-item): Queued message is no longer pending: missing',
+    );
   });
 
   it('lists MCP server connection status', async () => {
@@ -530,8 +795,8 @@ describe('handleTuiControlCommand', () => {
     const ports: TuiArtifactPorts = {
       list: vi.fn(() => [artifact]),
       show: vi.fn((id) => (id === artifact.assetId ? artifact : null)),
-      open: vi.fn((id) => `Opened ${id}`),
-      send: vi.fn((target, id) => `Sent ${id} to ${target}`),
+      open: vi.fn(),
+      send: vi.fn(),
     };
     const context = createContext({ artifact: ports });
 
@@ -542,8 +807,8 @@ describe('handleTuiControlCommand', () => {
 
     expect(listed.output).toContain('asset-img-1  image  neko/generated/shot-01.png  1024x1024');
     expect(shown.output).toContain('Image reference');
-    expect(opened.output).toBe('Opened asset-img-1');
-    expect(sent.output).toBe('Sent asset-img-1 to canvas');
+    expect(opened.output).toBe('Artifact open requested: asset-img-1');
+    expect(sent.output).toBe('Artifact asset-img-1 sent to canvas');
     expect(ports.open).toHaveBeenCalledWith('asset-img-1');
     expect(ports.send).toHaveBeenCalledWith('canvas', 'asset-img-1');
   });
@@ -591,7 +856,7 @@ describe('handleTuiControlCommand', () => {
     expect(result.output).toContain('Multiple active Skill lifecycle records');
   });
 
-  it('delegates command artifacts to slash core after TUI controls', async () => {
+  it('projects command-artifact activation through the canonical Skill Presenter', async () => {
     const commandSkill = {
       name: 'commit-skill',
       description: 'Commit helper',
@@ -600,15 +865,151 @@ describe('handleTuiControlCommand', () => {
       entryPointKind: 'command-artifact',
       command: 'commit',
     };
-    const context = createContext({ skills: [commandSkill] });
 
-    const result = await handleTuiControlCommand('/commit fix bug', context);
+    const en = await handleTuiControlCommand(
+      '/commit fix bug',
+      createContext({ skills: [commandSkill] }),
+    );
+    const zh = await handleTuiControlCommand(
+      '/commit fix bug',
+      createContext({ skills: [commandSkill], uiLocale: 'zh-cn' }),
+    );
 
-    expect(result.source).toBe('slash-core');
-    expect(result.lifecycleActivation).toEqual({ skillName: 'commit-skill', args: 'fix bug' });
-    expect(result.agentPrompt).toBe('fix bug');
+    expect(en.source).toBe('tui-router');
+    expect(en.output).toBe('Skill activated: /commit');
+    expect(zh.output).toBe('Skill 已激活：/commit');
+    expect(en.lifecycleActivation).toEqual({ skillName: 'commit-skill', args: 'fix bug' });
+    expect(zh.lifecycleActivation).toEqual(en.lifecycleActivation);
+    expect(en.agentPrompt).toBe('fix bug');
+    expect(zh.agentPrompt).toBe('fix bug');
+    expect(en.executionOverrides).toEqual(zh.executionOverrides);
+  });
+
+  it('routes marketplace help through the localized canonical presenter', async () => {
+    const result = await handleTuiControlCommand('/market', createContext({ uiLocale: 'zh-cn' }));
+
+    expect(result.source).toBe('tui-router');
+    expect(result.output).toContain('Neko 市场 — CLI 命令：');
+    expect(result.output).toContain('/market search <query>');
+    expect(result.output).not.toContain('Search for packages');
+  });
+
+  it('routes config updates through the canonical callback and localized presenter', async () => {
+    const onConfigUpdate = vi.fn();
+    const base = createContext({ uiLocale: 'zh-cn' });
+    const context: TuiCommandRouterContext = {
+      ...base,
+      slash: { ...base.slash, onConfigUpdate },
+    };
+
+    const result = await handleTuiControlCommand('/config set maxTokens 2048', context);
+
+    expect(result.source).toBe('tui-router');
+    expect(result.output).toBe('已设置 maxTokens = 2048');
+    expect(onConfigUpdate).toHaveBeenCalledWith({ maxTokens: 2048 });
+  });
+
+  it('fails visibly instead of reporting a config update when the callback is unavailable', async () => {
+    const result = await handleTuiControlCommand(
+      '/config set model external-model',
+      createContext(),
+    );
+
+    expect(result.source).toBe('tui-router');
+    expect(result.diagnosticCode).toBe('config.update-unavailable');
+    expect(result.output).toBeUndefined();
+  });
+
+  it('resumes a full conversation through the canonical router without rewriting history', async () => {
+    const storage = createMemoryConversationStorage('/workspace/demo');
+    const record: ConversationRecord = {
+      id: 'conv-原文',
+      version: 1,
+      title: 'Storyboard 原标题',
+      workDir: '/workspace/demo',
+      messages: [
+        { role: 'system', content: 'system' },
+        { role: 'user', content: '用户内容' },
+      ],
+      createdAt: 1,
+      updatedAt: Date.UTC(2026, 6, 11, 4, 5, 6),
+      source: 'tui',
+    };
+    vi.spyOn(storage, 'load').mockResolvedValue(record);
+    const onResumeConversation = vi.fn();
+    const onLoadHistory = vi.fn();
+    const base = createContext({ uiLocale: 'zh-cn' });
+    const context: TuiCommandRouterContext = {
+      ...base,
+      slash: {
+        ...base.slash,
+        conversationStorage: storage,
+        onResumeConversation,
+        onLoadHistory,
+      },
+    };
+
+    const result = await handleTuiControlCommand('/resume conv-原文', context);
+
+    expect(result.source).toBe('tui-router');
+    expect(result.output).toContain('已恢复：“Storyboard 原标题”');
+    expect(onResumeConversation).toHaveBeenCalledWith(record);
+    expect(onLoadHistory).not.toHaveBeenCalled();
+  });
+
+  it('wraps conversation storage failures without translating external detail', async () => {
+    const storage = createMemoryConversationStorage('/workspace/demo');
+    vi.spyOn(storage, 'list').mockRejectedValue(new Error('EACCES external-detail 原文'));
+    const base = createContext({ uiLocale: 'zh-cn' });
+    const context: TuiCommandRouterContext = {
+      ...base,
+      slash: { ...base.slash, conversationStorage: storage },
+    };
+
+    const result = await handleTuiControlCommand('/resume', context);
+
+    expect(result.source).toBe('tui-router');
+    expect(result.diagnosticCode).toBe('resume.storage-failed');
+    expect(result.error).toBe('读取对话存储失败：EACCES external-detail 原文');
+  });
+
+  it('localizes history roles while preserving custom message previews', async () => {
+    const base = createContext({ uiLocale: 'zh-cn' });
+    const context: TuiCommandRouterContext = {
+      ...base,
+      slash: {
+        ...base.slash,
+        getHistory: () => [
+          { role: 'user', content: 'custom-content 原文' },
+          { role: 'tool', content: [{ type: 'text', text: 'structured' }] },
+        ],
+      },
+    };
+
+    const result = await handleTuiControlCommand('/history', context);
+
+    expect(result.source).toBe('tui-router');
+    expect(result.output).toContain('你：custom-content 原文');
+    expect(result.output).toContain('工具：[工具/结构化内容]');
   });
 });
+
+function createMemoryConversationStorage(workDir: string): FileConversationStorage {
+  const files = new Map<string, string>();
+  return new FileConversationStorage({
+    indexFilePath: '/tmp/conversations-index.json',
+    workDir,
+    readFile: async (filePath) => {
+      const content = files.get(filePath);
+      if (content === undefined) throw new Error(`File not found: ${filePath}`);
+      return content;
+    },
+    writeFile: async (filePath, content) => {
+      files.set(filePath, content);
+    },
+    exists: async (filePath) => files.has(filePath),
+  });
+}
 
 function createContext(
   overrides: {
@@ -630,6 +1031,35 @@ function createContext(
     readonly mcp?: TuiCommandRouterContext['ports']['mcp'];
     readonly capability?: TuiCapabilityPorts;
     readonly artifact?: TuiArtifactPorts;
+    readonly uiLocale?: 'en' | 'zh-cn';
+    readonly parameterValidate?: NonNullable<
+      TuiCommandRouterContext['ports']['parameters']
+    >['validate'];
+    readonly selectChatModel?: TuiCommandRouterContext['ports']['model'] extends infer Ports
+      ? Ports extends { selectChatModel?: infer Select }
+        ? Select
+        : never
+      : never;
+    readonly setMediaModel?: TuiCommandRouterContext['ports']['media'] extends infer Ports
+      ? Ports extends { setMediaModel?: infer SetModel }
+        ? SetModel
+        : never
+      : never;
+    readonly resetMediaModels?: TuiCommandRouterContext['ports']['media'] extends infer Ports
+      ? Ports extends { resetMediaModels?: infer Reset }
+        ? Reset
+        : never
+      : never;
+    readonly setPerceptionModel?: TuiCommandRouterContext['ports']['perception'] extends infer Ports
+      ? Ports extends { setPerceptionModel?: infer SetModel }
+        ? SetModel
+        : never
+      : never;
+    readonly resetPerceptionModels?: TuiCommandRouterContext['ports']['perception'] extends infer Ports
+      ? Ports extends { resetPerceptionModels?: infer Reset }
+        ? Reset
+        : never
+      : never;
   } = {},
 ): TuiCommandRouterContext {
   const skills = overrides.skills ?? [
@@ -684,8 +1114,17 @@ function createContext(
       category: 'video',
     },
   ];
+  const uiLocale = overrides.uiLocale ?? 'en';
   return {
+    presentation: createAgentTerminalPresentationContext({
+      translator: createStrictTranslator(uiLocale, [
+        AGENT_COMMAND_MESSAGE_SOURCE,
+        CLI_TERMINAL_MESSAGE_SOURCE,
+      ] as const),
+      formatters: { count: String, dateTime: String, duration: String, bytes: String },
+    }),
     slash: {
+      locale: uiLocale,
       config: {
         ...DEFAULT_CLI_CONFIG,
         defaultMediaModels: {
@@ -728,10 +1167,16 @@ function createContext(
       mode: {
         setExecutionMode: vi.fn(),
         getSessionMode: vi.fn((): TuiSessionMode => 'agent'),
-        setSessionMode: vi.fn((mode: string) => `Session mode set to: ${mode}`),
+        setSessionMode: vi.fn(),
       },
       model: {
-        selectChatModel: vi.fn(),
+        selectChatModel: vi.fn(
+          overrides.selectChatModel ??
+            ((model) =>
+              typeof model === 'string'
+                ? { providerId: 'anthropic', modelId: model, optionId: `anthropic:${model}` }
+                : model),
+        ),
         listChatModels: vi.fn(() => ['gpt-5.3-codex']),
         listChatModelOptions: vi.fn(() => chatModelOptions),
         selectMenuItem: vi.fn(async () => overrides.selectedMenuItem ?? null),
@@ -739,26 +1184,25 @@ function createContext(
       media: {
         listMediaModelOptions: vi.fn(() => mediaModelOptions),
         getCurrentMediaModels: vi.fn(() => ({ image: 'openai:gpt-image-1' })),
-        setMediaModel: vi.fn(),
-        resetMediaModels: vi.fn(),
+        setMediaModel: vi.fn(overrides.setMediaModel ?? ((_category, model) => model)),
+        resetMediaModels: vi.fn(overrides.resetMediaModels ?? (() => ({}))),
       },
       perception: {
         listPerceptionModelOptions: vi.fn(() => chatModelOptions),
         getCurrentPerceptionModels: vi.fn(() => ({ image: 'google:gemini-flash' })),
-        setPerceptionModel: vi.fn(),
-        resetPerceptionModels: vi.fn(),
+        setPerceptionModel: vi.fn(overrides.setPerceptionModel ?? ((_category, model) => model)),
+        resetPerceptionModels: vi.fn(overrides.resetPerceptionModels ?? (() => ({}))),
       },
       parameters: {
         getConfig: vi.fn(() => ({ reasoningPreset: 'deep' as const })),
-        validate: vi.fn((config) => ({
-          config,
-          chatOptions: config.reasoningPreset === 'deep' ? { thinkingBudget: 12000 } : {},
-          providerOptions: {},
-          summary:
-            config.reasoningPreset === 'deep'
-              ? 'Applied: thinkingBudget=12000'
-              : 'Applied: provider defaults',
-        })),
+        validate: vi.fn(
+          overrides.parameterValidate ??
+            ((config) => ({
+              config,
+              chatOptions: config.reasoningPreset === 'deep' ? { thinkingBudget: 12000 } : {},
+              providerOptions: {},
+            })),
+        ),
         apply: vi.fn(),
       },
       skill: {
@@ -775,7 +1219,6 @@ function createContext(
         deactivate: vi.fn(() => true),
       },
       context: {
-        getTokenCount: overrides.getTokenCount,
         compact: overrides.compact,
       },
       queue: overrides.queue
@@ -884,19 +1327,29 @@ function createContext(
       artifact: overrides.artifact,
       status: {
         getSnapshot: vi.fn(() => ({
-          sessionMode: 'agent' as TuiSessionMode,
-          executionMode: 'auto' as TuiExecutionMode,
-          agentStatus: 'idle',
-          tokensTotal: 42,
-          chatModelIdentity: 'anthropic:claude-sonnet-4-20250514',
-          mediaModelSummary: 'image=openai:gpt-image-1',
-          perceptionModelSummary: 'image=google:gemini-flash',
-          llmParameterSummary: 'reasoning=deep',
-          queueCount: overrides.queue?.snapshot().pendingCount ?? 0,
-          runningTaskSummary: overrides.tasks
-            ?.filter((task) => task.status === 'pending' || task.status === 'running')
-            .map((task) => `${task.status}:${task.id}`)
-            .join(', '),
+          config: {
+            ...DEFAULT_CLI_CONFIG,
+            chatModel: {
+              providerId: 'anthropic',
+              modelId: 'claude-sonnet-4-20250514',
+            },
+            defaultMediaModels: { image: 'openai:gpt-image-1' },
+            perceptionModels: { image: 'google:gemini-flash' },
+            llmConfig: { reasoningPreset: 'deep' as const },
+          },
+          execution: {
+            sessionMode: 'agent' as TuiSessionMode,
+            executionMode: 'auto' as TuiExecutionMode,
+            status: 'idle' as const,
+          },
+          usage: { input: 20, output: 22, total: 42 },
+          ...(overrides.getTokenCount === undefined
+            ? {}
+            : { contextTokenCount: overrides.getTokenCount() }),
+          activeSkills: overrides.activeRecords ?? [],
+          ...(overrides.queue === undefined ? {} : { messageQueue: overrides.queue.snapshot() }),
+          ...(overrides.tasks?.[0] === undefined ? {} : { runningTask: overrides.tasks[0] }),
+          userConfigPath: '/Users/neko/.neko/config.toml',
         })),
       },
     },

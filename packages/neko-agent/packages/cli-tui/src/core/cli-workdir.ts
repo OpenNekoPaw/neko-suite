@@ -2,6 +2,31 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
+export type CliWorkDirDiagnostic =
+  | Readonly<{ readonly code: 'invalid-option-value'; readonly option: string }>
+  | Readonly<{
+      readonly code: 'conflicting-positional-option';
+      readonly positionalPath: string;
+      readonly optionPath: string;
+    }>
+  | Readonly<{
+      readonly code: 'conflicting-options';
+      readonly firstOption: string;
+      readonly firstPath: string;
+      readonly secondOption: string;
+      readonly secondPath: string;
+    }>
+  | Readonly<{ readonly code: 'missing-directory'; readonly path: string }>
+  | Readonly<{ readonly code: 'not-directory'; readonly path: string }>;
+
+export class CliWorkDirError extends Error {
+  public override readonly name = 'CliWorkDirError';
+
+  public constructor(public readonly diagnostic: CliWorkDirDiagnostic) {
+    super(diagnostic.code);
+  }
+}
+
 export interface CliWorkDirOptions {
   readonly positionalWorkDir?: unknown;
   readonly cd?: unknown;
@@ -27,9 +52,11 @@ export function resolveCliWorkDir(options: CliWorkDirOptions = {}): string {
     const positionalResolved = path.resolve(expandHomeDir(positionalValue));
     const optionResolved = path.resolve(expandHomeDir(optionValue));
     if (positionalResolved !== optionResolved) {
-      throw new Error(
-        `Conflicting working directories: positional ${positionalResolved} differs from option ${optionResolved}`,
-      );
+      throw new CliWorkDirError({
+        code: 'conflicting-positional-option',
+        positionalPath: positionalResolved,
+        optionPath: optionResolved,
+      });
     }
   }
 
@@ -42,7 +69,7 @@ export function resolveCliWorkDir(options: CliWorkDirOptions = {}): string {
 
 function readWorkDirOption(value: unknown, label: string): string | undefined {
   if (value !== undefined && typeof value !== 'string') {
-    throw new Error(`${label} must be a string.`);
+    throw new CliWorkDirError({ code: 'invalid-option-value', option: label });
   }
   return value;
 }
@@ -67,9 +94,13 @@ function resolveOptionWorkDir(
   for (const next of provided.slice(1)) {
     const nextResolved = path.resolve(expandHomeDir(next.value));
     if (firstResolved !== nextResolved) {
-      throw new Error(
-        `Conflicting working directories: ${first.label} ${firstResolved} differs from ${next.label} ${nextResolved}`,
-      );
+      throw new CliWorkDirError({
+        code: 'conflicting-options',
+        firstOption: first.label,
+        firstPath: firstResolved,
+        secondOption: next.label,
+        secondPath: nextResolved,
+      });
     }
   }
   return first.value;
@@ -81,12 +112,12 @@ function assertExistingDirectory(resolved: string): void {
     stat = fs.statSync(resolved);
   } catch (error) {
     if (isNodeFileSystemError(error) && error.code === 'ENOENT') {
-      throw new Error(`Working directory does not exist: ${resolved}`);
+      throw new CliWorkDirError({ code: 'missing-directory', path: resolved });
     }
     throw error;
   }
   if (!stat.isDirectory()) {
-    throw new Error(`Working directory is not a directory: ${resolved}`);
+    throw new CliWorkDirError({ code: 'not-directory', path: resolved });
   }
 }
 

@@ -4,6 +4,7 @@ import {
   createTuiConversationId,
   isCanonicalTuiConversationId,
   isPathSafeCliConversationId,
+  TuiConversationIdError,
 } from '../tui-conversation-id';
 
 describe('tui conversation id', () => {
@@ -25,7 +26,17 @@ describe('tui conversation id', () => {
   it('rejects old cli conversation ids instead of keeping resume compatibility', () => {
     expect(isCanonicalTuiConversationId('cli-kf12oi-4fzzzxjyl')).toBe(false);
     expect(() => assertCanonicalTuiConversationId('cli-kf12oi-4fzzzxjyl')).toThrow(
-      'TUI resume conversation id must be canonical',
+      TuiConversationIdError,
     );
+    try {
+      assertCanonicalTuiConversationId('cli-kf12oi-4fzzzxjyl');
+    } catch (error) {
+      expect(error).toBeInstanceOf(TuiConversationIdError);
+      if (!(error instanceof TuiConversationIdError)) throw error;
+      expect(error.diagnostic).toEqual({
+        code: 'non-canonical',
+        value: 'cli-kf12oi-4fzzzxjyl',
+      });
+    }
   });
 });

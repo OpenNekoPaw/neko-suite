@@ -1,8 +1,13 @@
 import type { AgentEvent } from '@neko/agent';
-import { applyToolResultBackfillToResult, type BackfillableToolResult } from '@neko/agent/runtime';
+import {
+  applyToolResultBackfillToResult,
+  type AgentTurnTimelineAccumulatorUpdate,
+  type BackfillableToolResult,
+} from '@neko/agent/runtime';
 import type {
   AgentTurnTimelineItem,
   AgentTurnTimelineMessage,
+  AgentTurnTimelineOperation,
   AgentWorkItem,
   MediaTaskCreatedMessage,
   MediaTaskProgressMessage,
@@ -11,10 +16,10 @@ import type {
   ToolCall,
 } from '@neko-agent/types';
 import { getToolSummary } from '@neko-agent/types';
-import {
-  collectTuiArtifactReferences,
-  formatTuiArtifactReference,
-} from './artifact-reference-formatter';
+import { collectTuiArtifactReferences } from './artifact-reference-formatter';
+import type { AgentTerminalPresentationContext } from '../presentation/context';
+import { presentArtifactReference } from '../presentation/artifact-presentation';
+import type { AgentTerminalMessageKey } from '../presentation/terminal-messages';
 import type {
   TerminalTimelineParentAnchor,
   TerminalTimelineRow,
@@ -23,6 +28,7 @@ import type {
 
 export type TerminalTimelineMessage =
   | AgentTurnTimelineMessage
+  | AgentTurnTimelineAccumulatorUpdate
   | MediaTaskCreatedMessage
   | MediaTaskProgressMessage
   | TaskCreatedMessage
@@ -35,6 +41,7 @@ export interface TerminalTimelineProjector {
 }
 
 export interface TerminalTimelineProjectorOptions {
+  readonly presentation: AgentTerminalPresentationContext<AgentTerminalMessageKey>;
   readonly now?: () => number;
 }
 
@@ -53,14 +60,19 @@ interface ActiveTextProjectionState {
   readonly content: string;
 }
 
+interface TimelineItemProjectionState {
+  readonly item: AgentTurnTimelineItem;
+}
+
 export function createTerminalTimelineProjector(
-  options: TerminalTimelineProjectorOptions = {},
+  options: TerminalTimelineProjectorOptions,
 ): TerminalTimelineProjector {
   let sequence = 0;
   let activeText: ActiveTextProjectionState | null = null;
   let activeThinking: ActiveTextProjectionState | null = null;
   const toolsById = new Map<string, ToolProjectionState>();
   const rowsByItemId = new Set<string>();
+  const timelineItemsById = new Map<string, TimelineItemProjectionState>();
 
   const nextSequence = (): number => {
     sequence += 1;
@@ -81,8 +93,7 @@ export function createTerminalTimelineProjector(
   });
 
   const diagnostic = (
-    code: string,
-    content: string,
+    code: OwnedTimelineDiagnosticCode,
     parent?: TerminalTimelineParentAnchor,
   ): TerminalTimelineRow => {
     const rowSequence = nextSequence();
@@ -91,7 +102,6 @@ export function createTerminalTimelineProjector(
       sequence: rowSequence,
       kind: 'diagnostic',
       status: 'error',
-      content,
       diagnosticCode: code,
       ...(parent ? { parent } : {}),
       timestamp: now(),
@@ -233,13 +243,7 @@ export function createTerminalTimelineProjector(
           const rows = closeActiveText();
           const toolCall = event.toolCall;
           if (!toolCall) {
-            return [
-              ...rows,
-              diagnostic(
-                'missing-tool-call',
-                'Timeline diagnostic: tool_call event did not include toolCall payload.',
-              ),
-            ];
+            return [...rows, diagnostic('missing-tool-call')];
           }
           const rowId = `tool-${toolCall.id}`;
           toolsById.set(toolCall.id, {
@@ -265,21 +269,12 @@ export function createTerminalTimelineProjector(
         case 'tool_progress': {
           const progress = event.toolProgress;
           if (!progress?.toolCallId) {
-            return [
-              diagnostic(
-                'missing-tool-progress-anchor',
-                'Timeline diagnostic: tool_progress event is missing toolCallId.',
-              ),
-            ];
+            return [diagnostic('missing-tool-progress-anchor')];
           }
           const tool = toolsById.get(progress.toolCallId);
           if (!tool) {
             return [
-              diagnostic(
-                'unknown-tool-progress-anchor',
-                `Timeline diagnostic: tool_progress references unknown tool id ${progress.toolCallId}.`,
-                { kind: 'tool', id: progress.toolCallId },
-              ),
+              diagnostic('unknown-tool-progress-anchor', { kind: 'tool', id: progress.toolCallId }),
             ];
           }
           return [
@@ -301,21 +296,12 @@ export function createTerminalTimelineProjector(
           const confirmation = event.toolConfirmation;
           const toolCallId = confirmation?.toolCall.id;
           if (!toolCallId) {
-            return [
-              diagnostic(
-                'missing-tool-confirmation-anchor',
-                'Timeline diagnostic: tool_confirmation event is missing toolCall.id.',
-              ),
-            ];
+            return [diagnostic('missing-tool-confirmation-anchor')];
           }
           const tool = toolsById.get(toolCallId);
           if (!tool) {
             return [
-              diagnostic(
-                'unknown-tool-confirmation-anchor',
-                `Timeline diagnostic: tool_confirmation references unknown tool id ${toolCallId}.`,
-                { kind: 'tool', id: toolCallId },
-              ),
+              diagnostic('unknown-tool-confirmation-anchor', { kind: 'tool', id: toolCallId }),
             ];
           }
           return [
@@ -336,23 +322,13 @@ export function createTerminalTimelineProjector(
           const rows = closeActiveText();
           const result = event.toolResult;
           if (!result?.toolCallId) {
-            return [
-              ...rows,
-              diagnostic(
-                'missing-tool-result-anchor',
-                'Timeline diagnostic: tool_result event is missing toolCallId.',
-              ),
-            ];
+            return [...rows, diagnostic('missing-tool-result-anchor')];
           }
           const tool = toolsById.get(result.toolCallId);
           if (!tool) {
             return [
               ...rows,
-              diagnostic(
-                'unknown-tool-result-anchor',
-                `Timeline diagnostic: tool_result references unknown tool id ${result.toolCallId}.`,
-                { kind: 'tool', id: result.toolCallId },
-              ),
+              diagnostic('unknown-tool-result-anchor', { kind: 'tool', id: result.toolCallId }),
             ];
           }
           const projectedResult = toBackfillableToolResult(result);
@@ -368,7 +344,7 @@ export function createTerminalTimelineProjector(
               toolArguments: tool.arguments,
               toolResult: projectedResult.data,
               ...(projectedResult.error ? { toolError: projectedResult.error } : {}),
-              resultSummary: summarizeToolResult(result),
+              resultSummary: summarizeToolResult(result, options.presentation),
             }),
           );
           return rows;
@@ -377,21 +353,12 @@ export function createTerminalTimelineProjector(
         case 'tool_result_backfill': {
           const backfill = event.toolResultBackfill;
           if (!backfill?.toolCallId) {
-            return [
-              diagnostic(
-                'missing-tool-backfill-anchor',
-                'Timeline diagnostic: tool_result_backfill event is missing toolCallId.',
-              ),
-            ];
+            return [diagnostic('missing-tool-backfill-anchor')];
           }
           const tool = toolsById.get(backfill.toolCallId);
           if (!tool) {
             return [
-              diagnostic(
-                'unknown-tool-backfill-anchor',
-                `Timeline diagnostic: tool_result_backfill references unknown tool id ${backfill.toolCallId}.`,
-                { kind: 'tool', id: backfill.toolCallId },
-              ),
+              diagnostic('unknown-tool-backfill-anchor', { kind: 'tool', id: backfill.toolCallId }),
             ];
           }
           const mergedResult = applyToolResultBackfillToResult(tool.result, backfill).result;
@@ -407,7 +374,7 @@ export function createTerminalTimelineProjector(
               toolArguments: tool.arguments,
               toolResult: mergedResult.data,
               ...(mergedResult.error ? { toolError: mergedResult.error } : {}),
-              backfillSummary: summarizeBackfill(backfill.dataPatch),
+              backfillSummary: summarizeBackfill(backfill.dataPatch, options.presentation),
             }),
           ];
         }
@@ -422,7 +389,7 @@ export function createTerminalTimelineProjector(
               sequence: rowSequence,
               kind: 'error',
               status: 'error',
-              content: event.error?.message ?? 'An error occurred',
+              ...(event.error?.message?.trim() ? { content: event.error.message } : {}),
               timestamp: now(),
             },
           ];
@@ -439,18 +406,19 @@ export function createTerminalTimelineProjector(
     projectMessage(message) {
       switch (message.type) {
         case 'agentTurnTimeline':
-          return message.events.flatMap((item) => {
-            if (item.kind === 'tool_call') {
-              const toolCall = item.payload.toolCall;
-              toolsById.set(toolCall.id, {
-                id: toolCall.id,
-                name: toolCall.name,
-                arguments: toolCall.arguments,
-                rowId: item.itemId,
-                ...(toolCall.result ? { result: toBackfillableToolResult(toolCall.result) } : {}),
-              });
-            }
-            return projectTimelineItem(item, rowsByItemId, buildRow, now);
+        case 'agentTurnTimelineUpdate':
+          return projectTimelineOperations({
+            operations: message.operations,
+            timelineItemsById,
+            rowsByItemId,
+            toolsById,
+            presentation: options.presentation,
+            buildRow,
+            diagnostic,
+            now,
+            observeSequence: (itemSequence) => {
+              sequence = Math.max(sequence, itemSequence);
+            },
           });
         case 'mediaTaskCreated':
         case 'mediaTaskProgress':
@@ -466,8 +434,211 @@ export function createTerminalTimelineProjector(
       activeThinking = null;
       toolsById.clear();
       rowsByItemId.clear();
+      timelineItemsById.clear();
     },
   };
+}
+
+interface ProjectTimelineOperationsInput {
+  readonly operations: readonly AgentTurnTimelineOperation[];
+  readonly timelineItemsById: Map<string, TimelineItemProjectionState>;
+  readonly rowsByItemId: Set<string>;
+  readonly toolsById: Map<string, ToolProjectionState>;
+  readonly presentation: AgentTerminalPresentationContext<AgentTerminalMessageKey>;
+  readonly buildRow: (
+    row: Omit<TerminalTimelineRow, 'sequence' | 'timestamp'> & {
+      readonly sequence?: number;
+      readonly timestamp?: number;
+    },
+  ) => TerminalTimelineRow;
+  readonly diagnostic: (
+    code: OwnedTimelineDiagnosticCode,
+    parent?: TerminalTimelineParentAnchor,
+  ) => TerminalTimelineRow;
+  readonly now: () => number;
+  readonly observeSequence: (sequence: number) => void;
+}
+
+function projectTimelineOperations(input: ProjectTimelineOperationsInput): TerminalTimelineRow[] {
+  const rows: TerminalTimelineRow[] = [];
+  for (const operation of input.operations) {
+    const applied = applyTimelineOperation(operation, input.timelineItemsById);
+    if ('diagnostic' in applied) {
+      rows.push(input.diagnostic(applied.diagnostic.code, applied.diagnostic.parent));
+      continue;
+    }
+
+    const item = applied.item;
+    input.observeSequence(item.sequence);
+    if (item.kind === 'tool_call') {
+      const toolCall = item.payload.toolCall;
+      input.toolsById.set(toolCall.id, {
+        id: toolCall.id,
+        name: toolCall.name,
+        arguments: toolCall.arguments,
+        rowId: item.itemId,
+        ...(toolCall.result ? { result: toBackfillableToolResult(toolCall.result) } : {}),
+      });
+    }
+    rows.push(
+      ...projectTimelineItem(
+        item,
+        input.rowsByItemId,
+        input.buildRow,
+        input.presentation,
+        input.now,
+      ),
+    );
+  }
+  return rows;
+}
+
+type OwnedTimelineDiagnosticCode =
+  | 'missing-tool-call'
+  | 'missing-tool-progress-anchor'
+  | 'unknown-tool-progress-anchor'
+  | 'missing-tool-confirmation-anchor'
+  | 'unknown-tool-confirmation-anchor'
+  | 'missing-tool-result-anchor'
+  | 'unknown-tool-result-anchor'
+  | 'missing-tool-backfill-anchor'
+  | 'unknown-tool-backfill-anchor'
+  | 'timeline-item-kind-mismatch'
+  | 'timeline-append-non-text-item'
+  | 'timeline-source-generation-mismatch'
+  | 'timeline-complete-missing-item'
+  | 'timeline-complete-identity-mismatch'
+  | 'timeline-duplicate-item-revision'
+  | 'timeline-stale-item-revision'
+  | 'unknown-parent-item-anchor';
+
+type TimelineOperationApplyResult =
+  | { readonly item: AgentTurnTimelineItem }
+  | {
+      readonly diagnostic: {
+        readonly code: OwnedTimelineDiagnosticCode;
+        readonly parent?: TerminalTimelineParentAnchor;
+      };
+    };
+
+function applyTimelineOperation(
+  operation: AgentTurnTimelineOperation,
+  itemsById: Map<string, TimelineItemProjectionState>,
+): TimelineOperationApplyResult {
+  switch (operation.operation) {
+    case 'append': {
+      const incoming = operation.item;
+      const existing = itemsById.get(incoming.itemId)?.item;
+      const revisionError = validateNextItemRevision(existing, incoming);
+      if (revisionError) return revisionError;
+      if (existing && existing.kind !== incoming.kind) {
+        return invalidTimelineOperation('timeline-item-kind-mismatch', incoming.itemId);
+      }
+      if (existing && !isTimelineTextItem(existing)) {
+        return invalidTimelineOperation('timeline-append-non-text-item', incoming.itemId);
+      }
+      if (
+        existing &&
+        isTimelineTextItem(existing) &&
+        existing.payload.sourceGeneration !== incoming.payload.sourceGeneration
+      ) {
+        return invalidTimelineOperation('timeline-source-generation-mismatch', incoming.itemId);
+      }
+      const item: typeof incoming = existing
+        ? {
+            ...incoming,
+            payload: {
+              ...incoming.payload,
+              content: `${existing.payload.content}${incoming.payload.content}`,
+            },
+          }
+        : incoming;
+      itemsById.set(item.itemId, { item });
+      return { item };
+    }
+    case 'replace':
+    case 'upsert': {
+      const item = operation.item;
+      const revisionError = validateNextItemRevision(itemsById.get(item.itemId)?.item, item);
+      if (revisionError) return revisionError;
+      itemsById.set(item.itemId, { item });
+      return { item };
+    }
+    case 'snapshot': {
+      const item = operation.item;
+      itemsById.set(item.itemId, { item });
+      return { item };
+    }
+    case 'complete': {
+      const existing = itemsById.get(operation.itemId)?.item;
+      if (!existing || !isTimelineTextItem(existing)) {
+        return invalidTimelineOperation('timeline-complete-missing-item', operation.itemId);
+      }
+      const revisionError = validateMonotonicItemRevision(
+        existing.itemRevision,
+        operation.itemRevision,
+        operation.itemId,
+      );
+      if (revisionError) return revisionError;
+      if (
+        operation.kind !== existing.kind ||
+        operation.sourceGeneration !== existing.payload.sourceGeneration
+      ) {
+        return invalidTimelineOperation('timeline-complete-identity-mismatch', operation.itemId);
+      }
+      const item: typeof existing = {
+        ...existing,
+        itemRevision: operation.itemRevision,
+        status: operation.status,
+        updatedAt: operation.updatedAt,
+      };
+      itemsById.set(item.itemId, { item });
+      return { item };
+    }
+  }
+}
+
+function validateNextItemRevision(
+  existing: AgentTurnTimelineItem | undefined,
+  incoming: AgentTurnTimelineItem,
+): TimelineOperationApplyResult | null {
+  if (!existing) return null;
+  return validateMonotonicItemRevision(
+    existing.itemRevision,
+    incoming.itemRevision,
+    incoming.itemId,
+  );
+}
+
+function validateMonotonicItemRevision(
+  previousRevision: number,
+  incomingRevision: number,
+  itemId: string,
+): TimelineOperationApplyResult | null {
+  if (incomingRevision > previousRevision) return null;
+  const duplicate = incomingRevision === previousRevision;
+  return invalidTimelineOperation(
+    duplicate ? 'timeline-duplicate-item-revision' : 'timeline-stale-item-revision',
+    itemId,
+  );
+}
+
+function invalidTimelineOperation(
+  code: Extract<OwnedTimelineDiagnosticCode, `timeline-${string}`>,
+  itemId: string,
+): TimelineOperationApplyResult {
+  return {
+    diagnostic: {
+      code,
+      parent: { kind: 'item', id: itemId },
+    },
+  };
+}
+
+function isTimelineTextItem(
+  item: AgentTurnTimelineItem,
+): item is Extract<AgentTurnTimelineItem, { readonly kind: 'assistant_text' | 'thinking' }> {
+  return item.kind === 'assistant_text' || item.kind === 'thinking';
 }
 
 function toBackfillableToolResult(result: {
@@ -491,6 +662,7 @@ function projectTimelineItem(
       readonly timestamp?: number;
     },
   ) => TerminalTimelineRow,
+  presentation: AgentTerminalPresentationContext<AgentTerminalMessageKey>,
   now: () => number,
 ): TerminalTimelineRow[] {
   const parent = toParentAnchor(item);
@@ -502,7 +674,6 @@ function projectTimelineItem(
         kind: 'diagnostic',
         status: 'error',
         parent,
-        content: `Timeline diagnostic: ${item.kind} references unknown parent item ${parent.id}.`,
         diagnosticCode: 'unknown-parent-item-anchor',
         timestamp: now(),
       },
@@ -515,6 +686,7 @@ function projectTimelineItem(
       return [
         buildRow({
           id: item.itemId,
+          sequence: item.sequence,
           kind: 'assistant_text',
           status: item.status === 'streaming' ? 'streaming' : 'complete',
           content: item.payload.content,
@@ -526,6 +698,7 @@ function projectTimelineItem(
       return [
         buildRow({
           id: item.itemId,
+          sequence: item.sequence,
           kind: 'thinking',
           status: item.status === 'streaming' ? 'streaming' : 'complete',
           content: item.payload.content,
@@ -538,6 +711,7 @@ function projectTimelineItem(
       return [
         buildRow({
           id: item.itemId,
+          sequence: item.sequence,
           kind: 'tool',
           status: toTerminalStatus(item.status),
           ...(parent ? { parent } : {}),
@@ -551,7 +725,9 @@ function projectTimelineItem(
               }
             : {}),
           argsSummary: summarizeArgs(toolCall.name, toolCall.arguments),
-          resultSummary: toolCall.result ? summarizeTimelineToolResult(toolCall) : undefined,
+          resultSummary: toolCall.result
+            ? summarizeTimelineToolResult(toolCall, presentation)
+            : undefined,
           timestamp: item.updatedAt,
         }),
       ];
@@ -561,6 +737,7 @@ function projectTimelineItem(
       return [
         buildRow({
           id: item.itemId,
+          sequence: item.sequence,
           kind: item.kind,
           status: toTerminalStatus(item.status),
           ...(parent ? { parent } : {}),
@@ -572,12 +749,13 @@ function projectTimelineItem(
       return [
         buildRow({
           id: item.itemId,
+          sequence: item.sequence,
           kind: 'error',
           status: 'error',
           ...(parent ? { parent } : {}),
-          content: item.payload.message,
-          diagnosticCode: item.payload.code,
-          details: item.payload.details ? summarizeUnknown(item.payload.details) : undefined,
+          ...(item.payload.message ? { content: item.payload.message } : {}),
+          ...(item.payload.code ? { diagnosticCode: item.payload.code } : {}),
+          ...(item.payload.details ? { details: summarizeUnknown(item.payload.details) } : {}),
           timestamp: item.updatedAt,
         }),
       ];
@@ -585,10 +763,11 @@ function projectTimelineItem(
       return [
         buildRow({
           id: item.itemId,
+          sequence: item.sequence,
           kind: 'diagnostic',
           status: 'complete',
           ...(parent ? { parent } : {}),
-          content: 'Composite content available as terminal reference.',
+          content: presentation.t('agent.terminal.timeline.compositeReference'),
           timestamp: item.updatedAt,
         }),
       ];
@@ -680,9 +859,12 @@ function summarizeArgs(name: string, args: Record<string, unknown>): string {
   return summary || summarizeUnknown(args);
 }
 
-function summarizeToolResult(result: NonNullable<AgentEvent['toolResult']>): string | undefined {
+function summarizeToolResult(
+  result: NonNullable<AgentEvent['toolResult']>,
+  presentation: AgentTerminalPresentationContext<AgentTerminalMessageKey>,
+): string | undefined {
   if (!result.success) {
-    return result.error ?? 'failed';
+    return result.error ?? presentation.t('agent.terminal.timeline.result.failed');
   }
   const references = collectTuiArtifactReferences({
     attachments: result.attachments,
@@ -691,12 +873,26 @@ function summarizeToolResult(result: NonNullable<AgentEvent['toolResult']>): str
     toolCallId: result.toolCallId,
   });
   if (references.length > 0) {
-    return references.map(formatTuiArtifactReference).join('\n');
+    return references
+      .map((reference) => presentArtifactReference(reference, presentation))
+      .join('\n');
   }
   const counts = [
-    result.attachments?.length ? `attachments=${result.attachments.length}` : '',
-    result.perceptionCards?.length ? `perception=${result.perceptionCards.length}` : '',
-    result.artifacts?.length ? `artifacts=${result.artifacts.length}` : '',
+    result.attachments?.length
+      ? presentation.t('agent.terminal.timeline.result.attachments', {
+          count: presentation.format.count(result.attachments.length),
+        })
+      : '',
+    result.perceptionCards?.length
+      ? presentation.t('agent.terminal.timeline.result.perceptionCards', {
+          count: presentation.format.count(result.perceptionCards.length),
+        })
+      : '',
+    result.artifacts?.length
+      ? presentation.t('agent.terminal.timeline.result.artifacts', {
+          count: presentation.format.count(result.artifacts.length),
+        })
+      : '',
   ].filter(Boolean);
   if (counts.length > 0) {
     return counts.join(' ');
@@ -704,16 +900,26 @@ function summarizeToolResult(result: NonNullable<AgentEvent['toolResult']>): str
   return summarizeUnknown(result.data);
 }
 
-function summarizeTimelineToolResult(toolCall: ToolCall): string | undefined {
+function summarizeTimelineToolResult(
+  toolCall: ToolCall,
+  presentation: AgentTerminalPresentationContext<AgentTerminalMessageKey>,
+): string | undefined {
   const result = toolCall.result;
   if (!result) return undefined;
-  if (!result.success) return result.error ?? 'failed';
+  if (!result.success) {
+    return result.error ?? presentation.t('agent.terminal.timeline.result.failed');
+  }
   return summarizeUnknown(result.data);
 }
 
-function summarizeBackfill(dataPatch: Record<string, unknown>): string {
+function summarizeBackfill(
+  dataPatch: Record<string, unknown>,
+  presentation: AgentTerminalPresentationContext<AgentTerminalMessageKey>,
+): string {
   const keys = Object.keys(dataPatch);
-  return keys.length > 0 ? `patched ${keys.join(', ')}` : 'patched result';
+  return keys.length > 0
+    ? presentation.t('agent.terminal.timeline.backfill.keys', { keys: keys.join(', ') })
+    : presentation.t('agent.terminal.timeline.backfill.empty');
 }
 
 function summarizeUnknown(value: unknown): string {

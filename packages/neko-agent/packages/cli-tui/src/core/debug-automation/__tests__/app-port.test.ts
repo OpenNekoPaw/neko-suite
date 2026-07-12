@@ -6,11 +6,13 @@ import {
   readMessageToolCallSummaries,
 } from '../app-port';
 import type { Message } from '../../../types/state';
+import { useAgentStore } from '../../../stores/agent-store';
 import { useConversationStore } from '../../../stores/conversation-store';
 import { useUIStore } from '../../../stores/ui-store';
 
 afterEach(() => {
   useConversationStore.getState().clearMessages();
+  useAgentStore.getState().setIdle();
 });
 
 describe('readMessageSummaryContent', () => {
@@ -171,6 +173,57 @@ describe('readContinuationFacts', () => {
 });
 
 describe('createTuiAutomationAppPort', () => {
+  it('accepts submission without waiting for completion and exposes active cancellation', async () => {
+    let resolveSubmit!: () => void;
+    const submitPromise = new Promise<void>((resolve) => {
+      resolveSubmit = resolve;
+    });
+    let cancelled = false;
+    const port = createTuiAutomationAppPort({
+      readHandle: () => ({
+        isReady: true,
+        submit: () => submitPromise,
+        cancel: () => {
+          cancelled = true;
+        },
+        listTasks: async () => [],
+        getCurrentConversationId: () => 'tui-2026-01-01T00-00-00-000Z-test',
+        getHistory: () => [],
+        getMessageQueueSnapshot: () => null,
+      }),
+      readMarkdownFacts: () => ({ pathEvents: [], droppedPathEventCount: 0 }),
+    });
+
+    useAgentStore.getState().setRunning();
+    const accepted = port.submitMessage({ prompt: 'long response' });
+    expect(port.cancelActiveMessage()).toBe(true);
+    expect(cancelled).toBe(true);
+    resolveSubmit();
+    await accepted;
+  });
+
+  it('fails the machine fact read visibly without injecting human transcript prose', async () => {
+    const port = createTuiAutomationAppPort({
+      readHandle: () => ({
+        isReady: true,
+        submit: async () => undefined,
+        cancel: () => undefined,
+        listTasks: async () => {
+          throw new Error('TASK_PROVIDER_DETAIL');
+        },
+        getCurrentConversationId: () => 'tui-2026-01-01T00-00-00-000Z-test',
+        getHistory: () => [],
+        getMessageQueueSnapshot: () => null,
+      }),
+      readMarkdownFacts: () => ({ pathEvents: [], droppedPathEventCount: 0 }),
+    });
+
+    await expect(
+      port.readFacts({ sessionId: 'debug-session-1', includeHistory: false }),
+    ).rejects.toThrow('TASK_PROVIDER_DETAIL');
+    expect(useConversationStore.getState().messages).toEqual([]);
+  });
+
   it('exposes bounded Markdown facts and applies generic terminal resize through the UI store', async () => {
     const markdown = {
       pathEvents: [{ type: 'session-created' as const, key: 'assistant-1' }],
@@ -180,6 +233,7 @@ describe('createTuiAutomationAppPort', () => {
       readHandle: () => ({
         isReady: true,
         submit: async () => undefined,
+        cancel: () => undefined,
         listTasks: async () => [],
         getCurrentConversationId: () => 'tui-2026-01-01T00-00-00-000Z-test',
         getHistory: () => [],

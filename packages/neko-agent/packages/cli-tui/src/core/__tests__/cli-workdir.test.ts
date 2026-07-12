@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { resolveCliWorkDir } from '../cli-workdir';
+import { CliWorkDirError, resolveCliWorkDir } from '../cli-workdir';
 
 const createdPaths: string[] = [];
 
@@ -46,10 +46,13 @@ describe('resolveCliWorkDir', () => {
     const optionDir = fs.mkdtempSync(path.join(os.tmpdir(), 'neko-cli-workdir-'));
     createdPaths.push(positionalDir, optionDir);
 
-    expect(() => resolveCliWorkDir({ positionalWorkDir: positionalDir, cwd: optionDir })).toThrow(
-      `Conflicting working directories: positional ${path.resolve(
-        positionalDir,
-      )} differs from option ${path.resolve(optionDir)}`,
+    expectWorkDirDiagnostic(
+      () => resolveCliWorkDir({ positionalWorkDir: positionalDir, cwd: optionDir }),
+      {
+        code: 'conflicting-positional-option',
+        positionalPath: path.resolve(positionalDir),
+        optionPath: path.resolve(optionDir),
+      },
     );
   });
 
@@ -58,11 +61,13 @@ describe('resolveCliWorkDir', () => {
     const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'neko-cli-workdir-'));
     createdPaths.push(cwdDir, workDir);
 
-    expect(() => resolveCliWorkDir({ cwd: cwdDir, workDir })).toThrow(
-      `Conflicting working directories: --cwd ${path.resolve(
-        cwdDir,
-      )} differs from --work-dir ${path.resolve(workDir)}`,
-    );
+    expectWorkDirDiagnostic(() => resolveCliWorkDir({ cwd: cwdDir, workDir }), {
+      code: 'conflicting-options',
+      firstOption: '--cwd',
+      firstPath: path.resolve(cwdDir),
+      secondOption: '--work-dir',
+      secondPath: path.resolve(workDir),
+    });
   });
 
   it('rejects conflicting --cd and --cwd options', () => {
@@ -70,11 +75,13 @@ describe('resolveCliWorkDir', () => {
     const cwdDir = fs.mkdtempSync(path.join(os.tmpdir(), 'neko-cli-workdir-'));
     createdPaths.push(cdDir, cwdDir);
 
-    expect(() => resolveCliWorkDir({ cd: cdDir, cwd: cwdDir })).toThrow(
-      `Conflicting working directories: --cd ${path.resolve(cdDir)} differs from --cwd ${path.resolve(
-        cwdDir,
-      )}`,
-    );
+    expectWorkDirDiagnostic(() => resolveCliWorkDir({ cd: cdDir, cwd: cwdDir }), {
+      code: 'conflicting-options',
+      firstOption: '--cd',
+      firstPath: path.resolve(cdDir),
+      secondOption: '--cwd',
+      secondPath: path.resolve(cwdDir),
+    });
   });
 
   it('expands a leading home directory marker', () => {
@@ -87,16 +94,31 @@ describe('resolveCliWorkDir', () => {
     fs.writeFileSync(filePath, 'x');
     createdPaths.push(dir);
 
-    expect(() => resolveCliWorkDir({ cwd: filePath })).toThrow(
-      `Working directory is not a directory: ${filePath}`,
-    );
+    expectWorkDirDiagnostic(() => resolveCliWorkDir({ cwd: filePath }), {
+      code: 'not-directory',
+      path: filePath,
+    });
   });
 
   it('fails visibly when the target does not exist', () => {
     const missingPath = path.join(os.tmpdir(), `neko-missing-${Date.now()}`);
 
-    expect(() => resolveCliWorkDir({ cwd: missingPath })).toThrow(
-      `Working directory does not exist: ${missingPath}`,
-    );
+    expectWorkDirDiagnostic(() => resolveCliWorkDir({ cwd: missingPath }), {
+      code: 'missing-directory',
+      path: missingPath,
+    });
   });
 });
+
+function expectWorkDirDiagnostic(
+  action: () => unknown,
+  diagnostic: CliWorkDirError['diagnostic'],
+): void {
+  try {
+    action();
+    throw new Error('Expected resolveCliWorkDir to throw.');
+  } catch (error) {
+    expect(error).toBeInstanceOf(CliWorkDirError);
+    expect((error as CliWorkDirError).diagnostic).toEqual(diagnostic);
+  }
+}

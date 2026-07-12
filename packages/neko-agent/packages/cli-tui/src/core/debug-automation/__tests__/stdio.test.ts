@@ -1,7 +1,10 @@
 import { PassThrough } from 'node:stream';
 import { describe, expect, it } from 'vitest';
 import { runTuiDebugAutomationJsonLineServer } from '../stdio';
-import { TUI_DEBUG_AUTOMATION_REQUEST_SCHEMA } from '../types';
+import {
+  TUI_DEBUG_AUTOMATION_REQUEST_SCHEMA,
+  TUI_DEBUG_AUTOMATION_RESPONSE_SCHEMA,
+} from '../types';
 
 describe('TUI debug automation stdio framing', () => {
   it('writes one JSON response per JSON line request without transitive console pollution', async () => {
@@ -20,7 +23,7 @@ describe('TUI debug automation stdio framing', () => {
       diagnosticOutput,
       handler: {
         async handle(request) {
-          console.log('transitive runtime diagnostic');
+          console.log('本地化终端横幅不得进入协议 stdout');
           return { method: request.method };
         },
       },
@@ -42,11 +45,22 @@ describe('TUI debug automation stdio framing', () => {
       .join('')
       .trim()
       .split('\n')
-      .map((line) => JSON.parse(line) as { readonly ok: boolean; readonly error?: unknown });
+      .map(
+        (line) =>
+          JSON.parse(line) as {
+            readonly schema: string;
+            readonly ok: boolean;
+            readonly error?: unknown;
+          },
+      );
     expect(responses).toHaveLength(2);
+    expect(
+      responses.every((response) => response.schema === TUI_DEBUG_AUTOMATION_RESPONSE_SCHEMA),
+    ).toBe(true);
+    expect(chunks.join('')).not.toContain('本地化终端横幅不得进入协议 stdout');
     expect(responses[0]).toMatchObject({ ok: true, result: { method: 'session.facts' } });
     expect(responses[1]).toMatchObject({ ok: false, error: { code: 'invalid-json' } });
-    expect(diagnosticChunks.join('')).toContain('transitive runtime diagnostic');
+    expect(diagnosticChunks.join('')).toContain('本地化终端横幅不得进入协议 stdout');
     expect(globalThis.console).toBe(originalConsole);
   });
 

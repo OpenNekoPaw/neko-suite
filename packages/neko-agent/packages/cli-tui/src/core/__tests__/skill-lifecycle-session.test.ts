@@ -52,7 +52,10 @@ describe('wireCliSkillLifecycleSession', () => {
     });
 
     expect(result.success).toBe(true);
-    expect(result.message).toBe('Activated skill "comic-to-storyboard"');
+    expect(result).toEqual(
+      expect.objectContaining({ success: true, skillName: 'comic-to-storyboard' }),
+    );
+    expect(result).not.toHaveProperty('message');
     expect(lifecycleRuntime.list('conversation-1')).toEqual([
       expect.objectContaining({
         skillName: 'comic-to-storyboard',

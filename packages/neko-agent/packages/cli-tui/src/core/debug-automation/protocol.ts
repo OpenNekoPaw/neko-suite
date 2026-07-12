@@ -231,6 +231,7 @@ function isTuiDebugAutomationMethod(value: unknown): value is TuiDebugAutomation
     value === 'session.create' ||
     value === 'session.resume' ||
     value === 'message.submit' ||
+    value === 'message.cancel' ||
     value === 'terminal.resize' ||
     value === 'session.waitForIdle' ||
     value === 'session.facts' ||
