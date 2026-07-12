@@ -1029,3 +1029,68 @@ pnpm check:legacy-debt
 ```
 
 本批继续完成任务 9.6/9.7 中“删除 legacy Quality schema/fixture/export”和“证明 removed path-only entry point 不再成功”的独立子集。任务暂不整体勾选：generated asset lifecycle、evaluation/locale/command metadata、到期 alias 与剩余 fallback 仍待处理。
+
+
+## 21. 生成资产 revision、后台回填与 promotion evidence 收敛（2026-07-12）
+
+任务 9.1–9.3 的实现边界收敛为共享生命周期契约与 Agent Media canonical builder，而不是把 Quality mutation、文件缓存或 Canvas/Cut 状态塞入生成资产 DTO：
+
+- `GeneratedAssetRevisionRef` 持有稳定 `assetId`、revision、content digest、媒体类型、MIME、`ResourceRef` 和 generation lineage；
+- generation lineage 记录 media task、Agent run、canonical operation、provider/model 与 workflow stage；
+- `GeneratedDraftRef` 必须携带与 `draftId`、media kind 一致的 revision-bound lifecycle，旧的 path/render-only draft projection 会被 validator 拒绝；
+- `QualityEvidence.evidenceLineage` 显式记录 content-identical promotion 的 source evidence 与 promotion identity。
+
+`createGeneratedAssetRevisionRef()` 只使用 asset identity 与内容摘要构造 durable `ResourceRef`：
+
+- `source.kind = generated-asset`，只记录 generated asset id、revision、digest 与 MIME；
+- locator 使用 generated asset id；
+- fingerprint 使用内容摘要；
+- 不写 host file path、cache path、Webview render URI、provider task URL 或 Engine/session handle。
+
+Agent Media 在 host 保存输出后以流式 SHA-256 计算实际文件摘要，再创建生成资产记录。摘要计算失败时不会补造 path-only generated asset；现有外部 provider/save 边界会返回可观察的 remote-only result。测试可注入 digest 计算器，但生产默认读取实际保存内容。
+
+后台 task observation 现在投影：
+
+- stable generated `assetRef` 与 lifecycle `resourceRef`；
+- revision 与 content digest；
+- generation task/run/operation/provider/model/workflow-stage lineage；
+- `localPath` 和 `hostOutputPaths` 仅保留为 host-local observation/side-effect 字段，不参与 durable identity。
+
+若调用方只提供本地路径而没有 revision-bound lifecycle，`toMediaTaskResultObservationTask()` 会抛出明确错误，不再通过 cache/file existence 或路径 hash 重建一个看似持久的 `ResourceRef`。
+
+Promotion evidence 行为由 `transferGeneratedAssetEvidenceOnPromotion()` 统一定义：
+
+- draft evidence 必须为 current，并且精确绑定 draft target/revision/digest；
+- promoted content digest 相同时，创建新的 promoted-target evidence，并保留 source evidence 与 promotion lineage；
+- digest 改变时，旧 evidence 只会变为 stale，不能转移、不能满足新 revision 的 Gate；
+- evidence 不会被改写到 cache path，也不会因目标文件存在而假定内容未变化。
+
+这批实现没有依赖 `neko-canvas`、`neko-cut` 或其他创作子包；共享契约位于 `@neko/shared`，文件摘要、provider/task 和后台回填由 owning Agent Media platform 负责。后续 Canvas/Cut/Project promotion 只需消费这一 canonical lifecycle，不应再建立 package-local revision 或 path-based evidence 体系。
+
+验证：
+
+```bash
+pnpm --filter @neko/shared test
+# 155 files, 1419 tests passed
+
+pnpm --dir packages/neko-agent exec vitest --run packages/platform/src/media/__tests__
+# 20 files, 144 tests passed
+
+pnpm --dir packages/neko-agent exec vitest --run \
+  packages/platform/src/media/__tests__/media-generated-asset.test.ts \
+  packages/platform/src/media/__tests__/media-task-result.test.ts \
+  packages/platform/src/media/__tests__/media-task-result-observation.test.ts \
+  packages/platform/src/media/__tests__/media-task-progress-plan.test.ts \
+  packages/platform/src/media/__tests__/media-task-progress-view.test.ts \
+  packages/agent/src/task/__tests__/task-view-projector.test.ts
+# 6 files, 34 tests passed
+
+pnpm exec eslint <本批 TypeScript 文件>
+# passed；media-task-progress-view.ts 仅保留该文件既有 no-non-null-assertion warning
+
+pnpm exec tsc --noEmit -p packages/neko-agent/packages/platform/tsconfig.json
+# 全量类型检查仍被并行工作区中的 Agent perception、command/config 与既有测试 fixture 错误阻塞；
+# 输出中已确认没有本批 generated-asset/media-task-result 路径错误
+```
+
+任务 9.1、9.2、9.3 已完成。生成资产质量目标现在可以从 background observation 直接取得稳定 revision/digest 和 workflow lineage；不存在从对话文本或 cache path 恢复 durable ownership 的默认成功路径。
