@@ -940,3 +940,35 @@ pnpm check:legacy-debt
 ```
 
 本批完成了任务 9.5/9.6/9.7 中 active Quality validation adapter、legacy fixture 和路径 poison 的独立子集。任务暂不整体勾选：evaluation manifest、locale/docs 全量迁移、到期 Skill alias、generated asset lifecycle 和其他 fallback/debt 仍需继续处理。
+
+## 19. Extension Skill catalog canonical identity 收敛（2026-07-12）
+
+Builtin definitions 已删除旧创作 stage Skill，但 Extension `skillCatalogProvider` 仍保留 `media-to-video`、`comic-to-storyboard`、`comic-to-animation`、`image-to-shot`、`storyboard-to-animation-plan`、`animation-plan-to-cut`、`generated-shot-assembly`、`export-video-package` 和 `ai-generate` 的硬编码 catalog override。即使当前 builtin 数组不再提供这些定义，这些分支仍会让旧 identity 在未来 fixture、插件投影或错误注册时重新获得 orchestrator/focused-skill 的 canonical 展示角色，属于“仅隐藏定义、运行时投影代码仍残留”的污染。
+
+本批删除上述旧 override 和 `media-to-video` group identity，并将 catalog 明确投影为：
+
+- `media-production`：唯一端到端媒体制作 orchestrator，primary visibility，group id 同 canonical Skill identity；
+- `storyboard`、`image`、`video`：独立且 primary 的 canonical 用户意图，不降为内部 focused stage；
+- `video-editing`、`media-quality-review`：继续作为 post-production primary quick action；
+- script workflow 和 scene-to-music 等非本变更领域保持原边界，不借本次清理扩大重构范围。
+
+测试改用六个 canonical creative media Skill，并增加 removed identity fixture，证明旧名称即使被错误注入也不会重新取得 orchestrator/focused group/parent 角色。该断言只验证 catalog 投影 fail-closed；旧名称的显式调用诊断和迁移期限仍由 Skill runtime migration contract 负责。
+
+验证：
+
+```bash
+pnpm --filter @neko-agent/extension exec vitest --run \
+  src/services/__tests__/skillCatalogProvider.test.ts
+# 1 file, 10 tests passed
+
+pnpm exec eslint \
+  packages/neko-agent/packages/extension/src/services/skillCatalogProvider.ts \
+  packages/neko-agent/packages/extension/src/services/__tests__/skillCatalogProvider.test.ts
+# passed
+
+pnpm exec tsc --noEmit -p packages/neko-agent/packages/extension/tsconfig.json
+# blocked by concurrent workspace changes in perception-pipeline.ts,
+# read-image-perception-backfill.ts, agentMessageTurnHandler.ts and skillContextRoutes.ts
+```
+
+本批继续推进任务 9.5/9.6/9.7，但仍不整体勾选。下一步应继续审计 evaluation manifests、locale、command metadata、`quality-evidence-normalizer` 的无调用方旧 schema，以及 migration alias 的到期/telemetry 条件；不能因为 catalog 已 canonical 就保留这些残留成功或解释路径。
