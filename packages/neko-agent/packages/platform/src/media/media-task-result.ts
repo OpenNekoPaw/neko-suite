@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+import { createReadStream } from 'node:fs';
 import type { GeneratedAsset } from '@neko/shared';
 import type { DownloadMediaOptions } from './media-file-downloader';
 import { buildGeneratedMediaAssets, type GeneratedMediaTaskType } from './media-generated-asset';
@@ -25,6 +27,7 @@ export interface FinalizeCompletedMediaTaskOutputsInput {
   transcodeFile?: DownloadMediaOptions['transcodeFile'];
   assetIndex?: GeneratedAssetSink;
   generateAssetId: () => string;
+  computeContentDigest?: (filePath: string) => Promise<string>;
   logger?: {
     info?(message: string, details?: unknown): void;
     warn?(message: string, details?: unknown): void;
@@ -66,8 +69,13 @@ export async function finalizeCompletedMediaTaskOutputs(
       return remoteOnlyResult;
     }
 
+    const computeContentDigest = input.computeContentDigest ?? computeFileContentDigest;
+    const contentDigests = await Promise.all(hostOutputPaths.map(computeContentDigest));
     const generatedAssets = buildGeneratedMediaAssets({
       hostOutputPaths,
+      contentDigests,
+      taskId: input.task.id,
+      providerId: input.task.providerId,
       outputs,
       taskType: input.taskType,
       prompt: input.task.request?.prompt,
@@ -95,4 +103,15 @@ export async function finalizeCompletedMediaTaskOutputs(
     input.logger?.warn?.('Failed to save generated media outputs', error);
     return remoteOnlyResult;
   }
+}
+
+async function computeFileContentDigest(filePath: string): Promise<string> {
+  const hash = createHash('sha256');
+  await new Promise<void>((resolve, reject) => {
+    const stream = createReadStream(filePath);
+    stream.on('data', (chunk) => hash.update(chunk));
+    stream.once('end', resolve);
+    stream.once('error', reject);
+  });
+  return `sha256:${hash.digest('hex')}`;
 }

@@ -6,15 +6,13 @@
 // =============================================================================
 
 import type { ShotScale, CameraMovement } from './canvas';
+import { isResourceRef } from './resource-cache';
 
 /**
  * Discriminator for generated asset types.
  */
 export type GeneratedAssetType =
-  | 'generated-image'
-  | 'generated-audio'
-  | 'generated-video'
-  | 'generated-storyboard';
+  'generated-image' | 'generated-audio' | 'generated-video' | 'generated-storyboard';
 
 /**
  * Base fields shared by all generated assets.
@@ -35,6 +33,8 @@ export interface BaseGeneratedAsset {
   path: string;
   /** Stable host-agnostic reference for persistence and tool backfill. */
   assetRef?: import('./perception-card').PerceptualAssetRef;
+  /** Revision/digest and generation lineage used by Quality and promotion flows. */
+  lifecycle?: import('./generated-asset-lifecycle').GeneratedAssetRevisionRef;
   /** MIME type of the stored file */
   mimeType: string;
   /** ISO 8601 timestamp of generation */
@@ -218,6 +218,8 @@ export interface GeneratedDraftRef {
   readonly mediaKind: GeneratedAssetMediaKind;
   readonly mimeType?: string;
   readonly createdAt?: string;
+  /** Stable draft identity; render/cache locations are not lifecycle identity. */
+  readonly lifecycle: import('./generated-asset-lifecycle').GeneratedAssetRevisionRef;
 }
 
 export type RenderableGeneratedDraft<T extends BaseGeneratedAsset = GeneratedAsset> =
@@ -234,7 +236,31 @@ export function isGeneratedDraftRef(value: unknown): value is GeneratedDraftRef 
     record['kind'] === 'generated-draft' &&
     typeof record['draftId'] === 'string' &&
     typeof record['mediaKind'] === 'string' &&
-    isGeneratedAssetMediaKind(record['mediaKind'])
+    isGeneratedAssetMediaKind(record['mediaKind']) &&
+    isGeneratedAssetRevisionRef(record['lifecycle'], record['draftId'], record['mediaKind'])
+  );
+}
+
+function isGeneratedAssetRevisionRef(
+  value: unknown,
+  assetId: unknown,
+  mediaKind: unknown,
+): boolean {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
+  const record = value as Record<string, unknown>;
+  return (
+    record['version'] === 1 &&
+    record['assetId'] === assetId &&
+    record['mediaKind'] === mediaKind &&
+    typeof record['revision'] === 'string' &&
+    record['revision'].length > 0 &&
+    typeof record['contentDigest'] === 'string' &&
+    record['contentDigest'].length > 0 &&
+    isResourceRef(record['resourceRef']) &&
+    typeof record['generation'] === 'object' &&
+    record['generation'] !== null &&
+    typeof (record['generation'] as Record<string, unknown>)['taskId'] === 'string' &&
+    ((record['generation'] as Record<string, unknown>)['taskId'] as string).length > 0
   );
 }
 

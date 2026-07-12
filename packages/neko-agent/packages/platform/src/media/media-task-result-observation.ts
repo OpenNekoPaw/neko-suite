@@ -9,20 +9,13 @@ import type {
   TaskStatus,
   TaskType,
 } from '@neko/shared';
-import {
-  createResourceFingerprint,
-  createResourceRef,
-  hashStableValue,
-  isResourceRef,
-} from '@neko/shared';
+import { isResourceRef } from '@neko/shared';
 import type { MediaTaskProgressDeliveryPlan } from './media-task-progress-plan';
 import type { MediaTask } from './types';
 
-const GENERATED_RESOURCE_CACHE_PROVIDER_ID = 'generated-asset';
-
 export type MediaTaskResultObservationAssetInput = Pick<
   GeneratedAsset,
-  'id' | 'mimeType' | 'assetRef'
+  'id' | 'mimeType' | 'assetRef' | 'lifecycle'
 > &
   Partial<Pick<GeneratedAsset, 'path'>> & {
     readonly label?: string;
@@ -34,7 +27,10 @@ export interface MediaTaskResultObservationAssetData {
   readonly mimeType?: string;
   readonly label?: string;
   readonly assetRef?: PerceptualAssetRef;
-  readonly resourceRef?: ResourceRef;
+  readonly resourceRef: ResourceRef;
+  readonly revision: string;
+  readonly contentDigest: string;
+  readonly generationLineage: NonNullable<GeneratedAsset['lifecycle']>['generation'];
   readonly localPath?: string;
 }
 
@@ -209,51 +205,32 @@ function projectMediaTaskResultObservationAssets(
       continue;
     }
     seen.add(key);
-    const resourceRef = readAssetResourceRef(asset) ?? createGeneratedResourceRef(asset, localPath);
+    const lifecycle = asset.lifecycle;
+    const resourceRef = readAssetResourceRef(asset) ?? lifecycle?.resourceRef;
+    if (!lifecycle || !resourceRef) {
+      throw new Error(
+        `Generated asset ${asset.id} is missing revision-bound lifecycle identity for task backfill.`,
+      );
+    }
+    if (lifecycle.assetId !== (assetRef?.assetId ?? asset.id)) {
+      throw new Error(
+        `Generated asset ${asset.id} lifecycle identity does not match its asset ref.`,
+      );
+    }
     projected.push({
       id: asset.id,
       ...(asset.mimeType ? { mimeType: asset.mimeType } : {}),
       label: asset.label ?? assetRef?.uri ?? asset.id,
       ...(assetRef ? { assetRef } : {}),
-      ...(resourceRef ? { resourceRef } : {}),
+      resourceRef,
+      revision: lifecycle.revision,
+      contentDigest: lifecycle.contentDigest,
+      generationLineage: lifecycle.generation,
       ...(localPath ? { localPath } : {}),
     });
   }
 
   return projected;
-}
-
-function createGeneratedResourceRef(
-  asset: MediaTaskResultObservationAssetInput,
-  localPath: string | undefined,
-): ResourceRef | undefined {
-  if (!localPath) {
-    return undefined;
-  }
-  const assetId = asset.assetRef?.assetId ?? asset.id;
-  return createResourceRef({
-    scope: 'project',
-    provider: GENERATED_RESOURCE_CACHE_PROVIDER_ID,
-    kind: 'generated',
-    source: {
-      kind: 'generated-asset',
-      generatedAssetId: assetId,
-      filePath: localPath,
-      metadata: {
-        path: localPath,
-        ...(asset.mimeType ? { mimeType: asset.mimeType } : {}),
-      },
-    },
-    locator: {
-      kind: 'generated-asset',
-      assetId,
-    },
-    fingerprint: createResourceFingerprint({
-      strategy: 'provider',
-      value: hashStableValue({ assetId, path: localPath }),
-      providerId: GENERATED_RESOURCE_CACHE_PROVIDER_ID,
-    }),
-  });
 }
 
 function readAssetLocalPath(asset: MediaTaskResultObservationAssetInput): string | undefined {

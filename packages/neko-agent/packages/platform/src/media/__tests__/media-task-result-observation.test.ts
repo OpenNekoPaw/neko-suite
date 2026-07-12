@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { GeneratedAsset } from '@neko/shared';
+import { createGeneratedAssetRevisionRef, type GeneratedAsset } from '@neko/shared';
 import type { MediaTask } from '../types';
 import { toMediaTaskResultObservationTask } from '../media-task-result-observation';
 
@@ -22,6 +22,19 @@ describe('media task result observation projection', () => {
         uri: 'generated-assets/asset-1.png',
         mimeType: 'image/png',
       },
+      lifecycle: createGeneratedAssetRevisionRef({
+        assetId: 'asset-1',
+        contentDigest: 'sha256:image',
+        mediaKind: 'image',
+        mimeType: 'image/png',
+        generation: {
+          taskId: 'task-1',
+          runId: 'run-1',
+          providerId: 'openai',
+          modelId: 'gpt-image-1',
+          workflowStage: { workflowId: 'workflow-1', stageId: 'shot-generation' },
+        },
+      }),
     };
 
     const task = toMediaTaskResultObservationTask({
@@ -41,7 +54,7 @@ describe('media task result observation projection', () => {
 
     const data = task.output?.data as {
       readonly hostOutputPaths?: readonly string[];
-      readonly assets?: readonly Array<Record<string, unknown>>;
+      readonly assets?: ReadonlyArray<Record<string, unknown>>;
     };
     const projectedAsset = data.assets?.[0];
 
@@ -56,6 +69,15 @@ describe('media task result observation projection', () => {
         uri: 'generated-assets/asset-1.png',
         mimeType: 'image/png',
       },
+      revision: expect.stringMatching(/^rev_/),
+      contentDigest: 'sha256:image',
+      generationLineage: {
+        taskId: 'task-1',
+        runId: 'run-1',
+        providerId: 'openai',
+        modelId: 'gpt-image-1',
+        workflowStage: { workflowId: 'workflow-1', stageId: 'shot-generation' },
+      },
       resourceRef: {
         scope: 'project',
         provider: 'generated-asset',
@@ -63,9 +85,8 @@ describe('media task result observation projection', () => {
         source: {
           kind: 'generated-asset',
           generatedAssetId: 'asset-1',
-          filePath: localPath,
           metadata: {
-            path: localPath,
+            contentDigest: 'sha256:image',
             mimeType: 'image/png',
           },
         },
@@ -75,6 +96,29 @@ describe('media task result observation projection', () => {
         },
       },
     });
+  });
+
+  it('rejects path-only generated assets instead of rebuilding durable identity from a host path', () => {
+    const pathOnlyAsset: GeneratedAsset = {
+      id: 'asset-path-only',
+      type: 'generated-image',
+      path: '/workspace/.neko/.cache/generated/image.png',
+      mimeType: 'image/png',
+      generatedAt: '2026-01-01T00:00:00.000Z',
+      width: 1024,
+      height: 1024,
+      ratio: '1:1',
+    };
+
+    expect(() =>
+      toMediaTaskResultObservationTask({
+        conversationId: 'conv-1',
+        taskId: 'task-1',
+        progress: 100,
+        mediaTask: createMediaTask(),
+        assets: [pathOnlyAsset],
+      }),
+    ).toThrow('missing revision-bound lifecycle identity');
   });
 });
 
@@ -96,6 +140,8 @@ function createMediaTask(): MediaTask {
         conversationId: 'conv-1',
         runId: 'run-1',
         runStartedAt: 101,
+        workflowId: 'workflow-1',
+        workflowStageId: 'shot-generation',
       },
     },
     outputs: [{ type: 'image', url: 'https://example.test/image.png', mimeType: 'image/png' }],

@@ -19,6 +19,7 @@ describe('buildMediaTaskProgressViewDelivery', () => {
       saveOutputs,
       assetIndex,
       generateAssetId: () => 'asset-1',
+      computeContentDigest: vi.fn().mockResolvedValue('sha256:video'),
       resolveResultUrl: (url) =>
         url.startsWith('generated-assets/')
           ? `webview://media/task-1/${url.split('/').pop()}`
@@ -103,6 +104,7 @@ describe('buildMediaTaskProgressViewDelivery', () => {
         workspaceRoot: '/repo',
         saveOutputs: vi.fn().mockResolvedValue(['/repo/.neko/.cache/generated/video.mp4']),
         generateAssetId: () => 'asset-1',
+        computeContentDigest: vi.fn().mockResolvedValue('sha256:video'),
         resolveResultUrl: (url) =>
           url.startsWith('generated-assets/')
             ? `webview://media/task-1/${url.split('/').pop()}`
@@ -156,6 +158,7 @@ describe('buildMediaTaskProgressViewDelivery', () => {
       workspaceRoot: '/repo',
       saveOutputs: vi.fn().mockResolvedValue(['/repo/.neko/.cache/generated/video.mp4']),
       generateAssetId: () => 'asset-1',
+      computeContentDigest: vi.fn().mockResolvedValue('sha256:video'),
       resolveResultUrl: () => undefined,
       toViewAsset: () => undefined,
     });

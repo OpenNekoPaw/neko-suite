@@ -24,6 +24,7 @@ describe('media-task-result', () => {
       outputDir: '/repo/.neko/.cache/generated',
       saveOutputs: vi.fn(),
       generateAssetId: () => 'asset-1',
+      computeContentDigest: vi.fn().mockResolvedValue('sha256:image'),
     });
 
     expect(result.resultUrls).toEqual(['https://example.com/image.png']);
@@ -43,6 +44,7 @@ describe('media-task-result', () => {
       saveOutputs,
       assetIndex,
       generateAssetId: () => 'asset-1',
+      computeContentDigest: vi.fn().mockResolvedValue('sha256:image'),
     });
 
     expect(saveOutputs).toHaveBeenCalledWith('task-1', '/repo/.neko/.cache/generated', {
@@ -62,6 +64,11 @@ describe('media-task-result', () => {
         id: 'asset-1',
         path: '/repo/.neko/.cache/generated/image.png',
         type: 'generated-image',
+        lifecycle: expect.objectContaining({
+          assetId: 'asset-1',
+          contentDigest: 'sha256:image',
+          generation: expect.objectContaining({ taskId: 'task-1', providerId: 'openai' }),
+        }),
       }),
     );
   });

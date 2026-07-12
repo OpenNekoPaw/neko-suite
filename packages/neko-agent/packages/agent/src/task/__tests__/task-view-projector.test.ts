@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { Task } from '@neko/shared';
+import { createGeneratedAssetRevisionRef, type Task } from '@neko/shared';
 import {
   buildBackgroundTaskFailureUpdateView,
   createBackgroundTaskViewFromToolResultData,
@@ -167,6 +167,13 @@ describe('task view projector', () => {
                 draftId: 'draft-1',
                 mediaKind: 'image',
                 mimeType: 'image/png',
+                lifecycle: createGeneratedAssetRevisionRef({
+                  assetId: 'draft-1',
+                  contentDigest: 'sha256:draft',
+                  mediaKind: 'image',
+                  mimeType: 'image/png',
+                  generation: { taskId: 'task-1' },
+                }),
               },
               renderUri: 'webview-resource://draft-1',
               mimeType: 'image/png',

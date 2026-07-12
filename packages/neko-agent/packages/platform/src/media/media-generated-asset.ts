@@ -1,5 +1,12 @@
 import * as path from 'path';
-import type { GeneratedAsset, GeneratedAudio, GeneratedImage, GeneratedVideo } from '@neko/shared';
+import {
+  createGeneratedAssetRevisionRef,
+  type GeneratedAsset,
+  type GeneratedAssetGenerationLineage,
+  type GeneratedAudio,
+  type GeneratedImage,
+  type GeneratedVideo,
+} from '@neko/shared';
 import type { MediaGenerationRequestBase, MediaOutput } from './types';
 
 export type GeneratedMediaTaskType = 'image' | 'video' | 'audio';
@@ -7,10 +14,13 @@ export type GeneratedMediaTaskType = 'image' | 'video' | 'audio';
 export interface BuildGeneratedMediaAssetsInput {
   hostOutputPaths: readonly string[];
   outputs: readonly MediaOutput[];
+  contentDigests: readonly string[];
+  taskId: string;
+  providerId?: string;
   taskType: GeneratedMediaTaskType;
   prompt?: string;
   model?: string;
-  request?: Pick<MediaGenerationRequestBase, 'metadata'>;
+  request?: Pick<MediaGenerationRequestBase, 'metadata'> & { readonly operation?: string };
   generateAssetId: () => string;
   now?: () => string;
 }
@@ -19,19 +29,34 @@ export function buildGeneratedMediaAssets(input: BuildGeneratedMediaAssetsInput)
   const generatedAt = input.now?.() ?? new Date().toISOString();
   const assets: GeneratedAsset[] = [];
   const lineage = extractGeneratedAssetLineage(input.request?.metadata);
+  const generation = extractGeneratedAssetGenerationLineage(input);
 
   for (let i = 0; i < input.hostOutputPaths.length; i++) {
     const hostOutputPath = input.hostOutputPaths[i];
     if (!hostOutputPath) continue;
 
     const output = input.outputs[i];
+    const contentDigest = input.contentDigests[i];
+    if (!contentDigest) {
+      throw new Error(`Generated output ${i} is missing a content digest.`);
+    }
+    const assetId = input.generateAssetId();
+    const mimeType = output?.mimeType ?? inferGeneratedMediaMimeType(hostOutputPath);
+    const lifecycle = createGeneratedAssetRevisionRef({
+      assetId,
+      contentDigest,
+      mediaKind: input.taskType,
+      mimeType,
+      generation,
+    });
     const base = {
-      id: input.generateAssetId(),
+      id: assetId,
       path: hostOutputPath,
-      mimeType: output?.mimeType ?? inferGeneratedMediaMimeType(hostOutputPath),
+      mimeType,
       generatedAt,
       prompt: input.prompt,
       model: input.model,
+      lifecycle,
       ...lineage,
     };
     const assetRef = {
@@ -145,6 +170,48 @@ function extractGeneratedAssetLineage(
     voiceAssetId,
     characterIds: characterIds && characterIds.length > 0 ? characterIds : undefined,
   };
+}
+
+function extractGeneratedAssetGenerationLineage(
+  input: Pick<BuildGeneratedMediaAssetsInput, 'taskId' | 'providerId' | 'model' | 'request'>,
+): GeneratedAssetGenerationLineage {
+  const metadata = input.request?.metadata;
+  const workflowStage = readWorkflowStage(metadata);
+  return {
+    taskId: input.taskId,
+    ...(readMetadataString(metadata, 'runId')
+      ? { runId: readMetadataString(metadata, 'runId') }
+      : {}),
+    ...(input.request?.operation ? { operationId: input.request.operation } : {}),
+    ...(input.providerId ? { providerId: input.providerId } : {}),
+    ...(input.model ? { modelId: input.model } : {}),
+    ...(workflowStage ? { workflowStage } : {}),
+  };
+}
+
+function readWorkflowStage(
+  metadata: Record<string, unknown> | undefined,
+): GeneratedAssetGenerationLineage['workflowStage'] | undefined {
+  const stageId =
+    readMetadataString(metadata, 'workflowStageId') ?? readMetadataString(metadata, 'stageId');
+  if (!stageId) return undefined;
+  const workflowId = readMetadataString(metadata, 'workflowId');
+  const stageRevision =
+    readMetadataString(metadata, 'workflowStageRevision') ??
+    readMetadataString(metadata, 'stageRevision');
+  return {
+    stageId,
+    ...(workflowId ? { workflowId } : {}),
+    ...(stageRevision ? { stageRevision } : {}),
+  };
+}
+
+function readMetadataString(
+  metadata: Record<string, unknown> | undefined,
+  key: string,
+): string | undefined {
+  const value = metadata?.[key];
+  return typeof value === 'string' && value.trim() ? value : undefined;
 }
 
 function gcd(a: number, b: number): number {

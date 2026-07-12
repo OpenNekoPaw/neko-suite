@@ -369,6 +369,7 @@ export * from './loading-tier';
 
 // Generated asset types (cross-plugin asset reference schema, ADR-4)
 export * from './generated-asset';
+export * from './generated-asset-lifecycle';
 
 // Character registry types (git-tracked project identity source)
 export * from './character-registry';

@@ -22,6 +22,9 @@ describe('media generated asset helpers', () => {
     expect(
       buildGeneratedMediaAssets({
         hostOutputPaths: ['/tmp/image.png'],
+        contentDigests: ['sha256:image'],
+        taskId: 'task-1',
+        providerId: 'openai',
         outputs: [
           { type: 'image', url: 'https://example.test/image.png', width: 768, height: 512 },
         ],
@@ -29,7 +32,11 @@ describe('media generated asset helpers', () => {
         prompt: 'A cat',
         model: 'flux',
         request: {
+          operation: 'generate',
           metadata: {
+            runId: 'run-1',
+            workflowId: 'workflow-1',
+            workflowStageId: 'shot-generation',
             sourceNodeId: 'node-1',
             characterIds: ['char-1', ''],
           },
@@ -47,6 +54,19 @@ describe('media generated asset helpers', () => {
         model: 'flux',
         sourceNodeId: 'node-1',
         characterIds: ['char-1'],
+        lifecycle: expect.objectContaining({
+          assetId: 'asset-1',
+          contentDigest: 'sha256:image',
+          mediaKind: 'image',
+          generation: {
+            taskId: 'task-1',
+            runId: 'run-1',
+            operationId: 'generate',
+            providerId: 'openai',
+            modelId: 'flux',
+            workflowStage: { workflowId: 'workflow-1', stageId: 'shot-generation' },
+          },
+        }),
         assetRef: {
           assetId: 'asset-1',
           uri: 'generated-assets/asset-1.png',
@@ -64,6 +84,8 @@ describe('media generated asset helpers', () => {
     expect(
       buildGeneratedMediaAssets({
         hostOutputPaths: ['/tmp/video.mp4'],
+        contentDigests: ['sha256:video'],
+        taskId: 'task-video',
         outputs: [{ type: 'video', url: 'https://example.test/video.mp4' }],
         taskType: 'video',
         generateAssetId: () => 'video-1',
@@ -82,6 +104,8 @@ describe('media generated asset helpers', () => {
     expect(
       buildGeneratedMediaAssets({
         hostOutputPaths: ['/tmp/audio.mp3'],
+        contentDigests: ['sha256:audio'],
+        taskId: 'task-audio',
         outputs: [{ type: 'audio', url: 'https://example.test/audio.mp3' }],
         taskType: 'audio',
         generateAssetId: () => 'audio-1',

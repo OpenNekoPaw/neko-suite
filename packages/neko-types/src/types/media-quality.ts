@@ -116,6 +116,12 @@ export interface QualityEvaluatorIdentity {
   readonly modelId?: string;
 }
 
+export interface QualityEvidenceLineage {
+  readonly relation: 'content-identical-promotion';
+  readonly sourceEvidenceId: string;
+  readonly promotionId: string;
+}
+
 export interface QualityEvidence {
   readonly version: typeof MEDIA_QUALITY_CONTRACT_VERSION;
   readonly evidenceId: string;
@@ -128,6 +134,7 @@ export interface QualityEvidence {
   readonly confidence?: number;
   readonly createdAt: string;
   readonly sourceEvidenceRefs: readonly ResourceRef[];
+  readonly evidenceLineage?: QualityEvidenceLineage;
 }
 
 export interface QualityGatePolicy {
@@ -304,6 +311,18 @@ export function validateQualityEvidence(
       'mediaRange',
     ]);
   });
+  if (
+    evidence.evidenceLineage &&
+    (!evidence.evidenceLineage.sourceEvidenceId.trim() ||
+      !evidence.evidenceLineage.promotionId.trim())
+  ) {
+    diagnostics.push({
+      code: 'invalid-quality-evidence',
+      severity: 'error',
+      message: 'Transferred QualityEvidence requires source evidence and promotion identity.',
+      path: ['evidenceLineage'],
+    });
+  }
   evidence.sourceEvidenceRefs.forEach((ref, index) => {
     diagnostics.push(...validateDurableResourceRef(ref, ['sourceEvidenceRefs', index]).diagnostics);
   });

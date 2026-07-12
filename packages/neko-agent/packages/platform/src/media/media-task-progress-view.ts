@@ -97,6 +97,7 @@ async function buildMediaTaskDeliveryPlan(
     transcodeFile: input.transcodeFile,
     assetIndex: input.assetIndex,
     generateAssetId: input.generateAssetId,
+    computeContentDigest: input.computeContentDigest,
     logger: input.logger,
   });
 
