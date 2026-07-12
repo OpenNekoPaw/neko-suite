@@ -64,9 +64,9 @@
 - [x] 7.1 Remove legacy Timeline delivery revision/snapshot-request recovery messages, handlers, scheduler state, foreground flush/discard hooks, and persisted connection-epoch recovery descriptors.
 - [x] 7.2 Remove obsolete global settings projections, shared input/session caches, bare child-run adapters, compatibility branches, tests, exports, and dependencies.
 - [x] 7.3 Update Agent domain/runtime/Webview/TUI architecture documentation and mark prior session/stream isolation claims as superseded where necessary.
-- [ ] 7.4 Run focused contract, Agent runtime, SubAgent, Task, Extension, Webview, Markdown, and TUI tests after each implementation batch.
+- [x] 7.4 Run focused contract, Agent runtime, SubAgent, Task, Extension, Webview, Markdown, and TUI tests after each implementation batch.
 - [ ] 7.5 Run affected package typecheck/build plus `pnpm build`, `pnpm test`, and `pnpm check` for the cross-package contract migration.
 - [ ] 7.6 Run `pnpm check:legacy-debt`, `pnpm check:unused`, and `git diff --check`; resolve new debt without modifying unrelated workspace changes.
-- [ ] 7.7 Plan and run focused script-driven Agent evaluation for session/run/config/projection behavior and record evidence.
+- [x] 7.7 Plan and run focused script-driven Agent evaluation for session/run/config/projection behavior and record evidence.
 - [ ] 7.8 Run Extension Development Host Webview acceptance with `pnpm smoke:webview:runtime` or `vscode-extension-debugger`, including concurrent background Tabs, switching, reload, and continued input/config isolation.
-- [ ] 7.9 Record executed commands, path assertions, runtime evidence, remaining risks, and any blocked validation in the OpenSpec verification artifact/report.
+- [x] 7.9 Record executed commands, path assertions, runtime evidence, remaining risks, and any blocked validation in the OpenSpec verification artifact/report.
