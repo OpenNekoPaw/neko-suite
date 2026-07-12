@@ -165,12 +165,6 @@ const handleActiveConversation: MessageHandler<'activeConversation'> = (
   const conversationId = message.conversation?.id;
   const projection = projectActiveConversation({
     conversation: message.conversation,
-    cachedMessages: conversationId
-      ? context.conversationMessagesRef.current.get(conversationId)
-      : undefined,
-    cachedStreaming: conversationId
-      ? context.conversationStreamingRef.current.get(conversationId)
-      : undefined,
     openTabs: context.openTabs,
   });
   const pendingForegroundActivation =

@@ -4,7 +4,6 @@ import type {
   ConversationErrorProjectionInput,
   ConversationMessagesProjection,
   ConversationStreamingState,
-  Message,
   OpenTab,
 } from '@neko-agent/types';
 import { projectConversationWorkItemsFromMessages } from './work-item-message-presenter';
@@ -51,18 +50,13 @@ export function projectActiveConversation(
       activeTabId: null,
       activeTab: 'chat',
       workItems: [],
-      restoredFromCache: false,
     };
   }
 
-  const messageProjection = projectActiveConversationMessages({
-    persistedMessages: conversation.messages,
-    cachedMessages: input.cachedMessages,
-    cachedStreaming: input.cachedStreaming,
-  });
+  const messages = conversation.messages ?? [];
   const projection = projectConversationWorkItemsFromMessages({
     conversationId: conversation.id,
-    messages: messageProjection.messages,
+    messages,
     now: input.now,
   });
 
@@ -77,83 +71,12 @@ export function projectActiveConversation(
   return {
     activeConversationId: conversation.id,
     messages: projection.messages,
-    streaming: messageProjection.restoredFromCache
-      ? (input.cachedStreaming ?? idleStreamingState())
-      : projectPersistedStreamingState(projection.messages),
+    streaming: projectPersistedStreamingState(projection.messages),
     openTabs: tabProjection.openTabs,
     activeTabId: tabProjection.activeTabId,
     activeTab: 'chat',
     workItems: projection.workItems,
-    restoredFromCache: messageProjection.restoredFromCache,
   };
-}
-
-function projectActiveConversationMessages(input: {
-  persistedMessages?: readonly Message[];
-  cachedMessages?: readonly Message[];
-  cachedStreaming?: ConversationStreamingState;
-}): { messages: readonly Message[]; restoredFromCache: boolean } {
-  const cachedMessages = input.cachedMessages;
-  const persistedMessages = input.persistedMessages;
-  if (!cachedMessages || cachedMessages.length === 0) {
-    return { messages: persistedMessages ?? [], restoredFromCache: false };
-  }
-
-  if (persistedMessages && areMessageListsEquivalent(cachedMessages, persistedMessages)) {
-    return { messages: cachedMessages, restoredFromCache: true };
-  }
-
-  if (!persistedMessages || persistedMessages.length === 0) {
-    return { messages: cachedMessages, restoredFromCache: true };
-  }
-
-  if (
-    hasRecoverableLocalActivity(cachedMessages, input.cachedStreaming) &&
-    arePersistedMessagesPrefixOfCache(persistedMessages, cachedMessages)
-  ) {
-    return { messages: cachedMessages, restoredFromCache: true };
-  }
-
-  return { messages: persistedMessages, restoredFromCache: false };
-}
-
-function hasRecoverableLocalActivity(
-  messages: readonly Message[],
-  streaming?: ConversationStreamingState,
-): boolean {
-  const streamingMessageId = streaming?.streamingMessageId;
-  return messages.some(
-    (message) => message.isStreaming === true || message.id === streamingMessageId,
-  );
-}
-
-function areMessageListsEquivalent(left: readonly Message[], right: readonly Message[]): boolean {
-  if (left.length !== right.length) {
-    return false;
-  }
-
-  return left.every((message, index) => {
-    const other = right[index];
-    return other !== undefined && areMessagesEquivalent(message, other);
-  });
-}
-
-function arePersistedMessagesPrefixOfCache(
-  persistedMessages: readonly Message[],
-  cachedMessages: readonly Message[],
-): boolean {
-  if (persistedMessages.length > cachedMessages.length) {
-    return false;
-  }
-
-  return persistedMessages.every((message, index) => {
-    const cachedMessage = cachedMessages[index];
-    return cachedMessage !== undefined && areMessagesEquivalent(message, cachedMessage);
-  });
-}
-
-function areMessagesEquivalent(left: Message, right: Message): boolean {
-  return JSON.stringify(left) === JSON.stringify(right);
 }
 
 function projectConversationTab(input: {

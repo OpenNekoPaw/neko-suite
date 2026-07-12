@@ -81,28 +81,6 @@ export function discardConversationSnapshotProjection(input: {
   input.conversationStreamingRef.current.delete(input.conversationId);
 }
 
-export function createRetainedConversationRenderActivation(input: {
-  readonly conversationId: string;
-  readonly cachedMessages?: readonly Message[];
-  readonly cachedStreaming?: ConversationRenderStreamingState;
-}): ConversationRenderActivationInput {
-  const streaming = input.cachedStreaming ?? {
-    streamingMessageId: null,
-    isThinking: false,
-    queuedMessageCount: 0,
-    queuedMessages: [],
-  };
-  return {
-    conversationId: input.conversationId,
-    messages: projectActivationMessages({
-      conversationId: input.conversationId,
-      messages: input.cachedMessages ?? [],
-      streaming,
-    }),
-    streaming: projectActivationStreaming(streaming),
-  };
-}
-
 export function commitConversationRenderActivation(input: {
   readonly coordinator: ConversationRenderCoordinator;
   readonly source: ConversationActivationSource;
@@ -124,43 +102,6 @@ export function commitConversationRenderActivation(input: {
   });
   transaction.commit({ visibleState: input.visibleState });
   return transaction.snapshot;
-}
-
-function projectActivationMessages(input: ConversationRenderActivationInput): Message[] {
-  return input.messages.map(finalizeOrphanedStreamingMessage);
-}
-
-function projectActivationStreaming(
-  streaming: ConversationRenderStreamingState,
-): ConversationRenderStreamingState {
-  return {
-    ...streaming,
-    streamingMessageId: null,
-    isThinking: false,
-  };
-}
-
-function finalizeOrphanedStreamingMessage(message: Message): Message {
-  const contentBlocks = message.contentBlocks;
-  let blocksChanged = false;
-  const finalizedBlocks = contentBlocks?.map((block) => {
-    if (block.type === 'text' && block.isStreaming === true) {
-      blocksChanged = true;
-      return { ...block, isStreaming: false };
-    }
-    if (block.type === 'thinking' && block.isThinkingComplete === false) {
-      blocksChanged = true;
-      return { ...block, isThinkingComplete: true };
-    }
-    return block;
-  });
-
-  if (message.isStreaming !== true && !blocksChanged) return message;
-  return {
-    ...message,
-    isStreaming: false,
-    ...(finalizedBlocks ? { contentBlocks: finalizedBlocks } : {}),
-  };
 }
 
 export function createConversationVisibleStatePort(

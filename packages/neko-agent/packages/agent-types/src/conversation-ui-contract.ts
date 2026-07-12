@@ -31,8 +31,6 @@ export interface ConversationMessagesProjection {
 
 export interface ActiveConversationProjectionInput {
   conversation?: ActiveConversationPayload;
-  cachedMessages?: readonly Message[];
-  cachedStreaming?: ConversationStreamingState;
   openTabs: readonly OpenTab[];
   now?: () => number;
   generateTabId?: () => string;
@@ -46,5 +44,4 @@ export interface ActiveConversationProjection {
   activeTabId: string | null;
   activeTab: TabType;
   workItems: AgentWorkItem[];
-  restoredFromCache: boolean;
 }
