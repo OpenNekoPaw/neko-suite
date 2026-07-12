@@ -1,4 +1,8 @@
 import {
+  createConversationProjectionStore,
+  type ConversationProjectionStore,
+} from '../projection/conversation-projection-store';
+import {
   createConversationRunRegistry,
   type ConversationRunRegistry,
 } from './conversation-run-registry';
@@ -16,6 +20,7 @@ export interface ConversationRuntimeContext<
   readonly conversationId: string;
   readonly session: TSession;
   readonly runs: ConversationRunRegistry;
+  readonly projection: ConversationProjectionStore;
   readonly lifecycle: ConversationRuntimeLifecycle;
   markReady(): void;
   cancel(): void;
@@ -36,6 +41,7 @@ class DefaultConversationRuntimeContext<
 > implements ConversationRuntimeContext<TSession> {
   private _lifecycle: ConversationRuntimeLifecycle = 'restoring';
   readonly runs: ConversationRunRegistry;
+  readonly projection: ConversationProjectionStore;
 
   constructor(
     readonly conversationId: string,
@@ -43,6 +49,7 @@ class DefaultConversationRuntimeContext<
   ) {
     assertConversationId(conversationId);
     this.runs = createConversationRunRegistry(conversationId);
+    this.projection = createConversationProjectionStore(conversationId);
   }
 
   get lifecycle(): ConversationRuntimeLifecycle {
@@ -75,6 +82,11 @@ class DefaultConversationRuntimeContext<
     const errors: unknown[] = [];
     try {
       this.runs.dispose(new Error(`Conversation runtime ${this.conversationId} is disposing.`));
+    } catch (error) {
+      errors.push(error);
+    }
+    try {
+      this.projection.dispose();
     } catch (error) {
       errors.push(error);
     }

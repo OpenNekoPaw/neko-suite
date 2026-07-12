@@ -21,6 +21,9 @@ projectors, stores, or concrete domain adapters.
   providers stay in the contributing domain packages.
 - `stream/`: Agent event stream projection, stream state, and background task
   observation.
+- `projection/`: conversation-owned authoritative turn projection state and
+  immutable versioned patches. It has no Webview, Extension, React, Markdown, or
+  transport delivery ownership.
 
 The runtime root should contain only package-level exports, shared runtime
 types, and small host-neutral collaborators that do not yet justify a narrower
@@ -31,19 +34,19 @@ boundary guard to be updated.
 
 Prefer existing owner directories before adding runtime files:
 
-| Concern | Owner |
-| --- | --- |
-| Agent session execution object, journal/history projection, session facades | `session/` |
-| Context window, token budgets, compression, summarization | `context/` |
-| Project facts, memory file, recall, scratch/shared memory | `memory/` |
-| Draft/plan/task artifact persistence and validation | `artifact/` |
-| Workspace paths, preferences, markdown artifact codecs | `workspace/` |
-| Prompt modules, prompt files, AGENTS.md overlays, PromptLayer ordering | `prompt/` |
-| Skill lifecycle, Skill injection, ToolSet projection, stage persona binding | `skill/` |
-| Permission decisions, approval strategies, tool traits | `permission/`, `approval/` |
-| Plan/task view and result projection | `plan/`, `task/` |
-| Commands and slash-command host projection | `commands/` |
-| Message attachments, file mentions, resource projection for message display | `input/` |
+| Concern                                                                     | Owner                      |
+| --------------------------------------------------------------------------- | -------------------------- |
+| Agent session execution object, journal/history projection, session facades | `session/`                 |
+| Context window, token budgets, compression, summarization                   | `context/`                 |
+| Project facts, memory file, recall, scratch/shared memory                   | `memory/`                  |
+| Draft/plan/task artifact persistence and validation                         | `artifact/`                |
+| Workspace paths, preferences, markdown artifact codecs                      | `workspace/`               |
+| Prompt modules, prompt files, AGENTS.md overlays, PromptLayer ordering      | `prompt/`                  |
+| Skill lifecycle, Skill injection, ToolSet projection, stage persona binding | `skill/`                   |
+| Permission decisions, approval strategies, tool traits                      | `permission/`, `approval/` |
+| Plan/task view and result projection                                        | `plan/`, `task/`           |
+| Commands and slash-command host projection                                  | `commands/`                |
+| Message attachments, file mentions, resource projection for message display | `input/`                   |
 
 ## Concept Boundaries
 
@@ -85,14 +88,15 @@ Ownership remains specific:
 
 ## Current Audit
 
-| Category | Canonical files |
-| --- | --- |
-| Session runtime | `session/agent-runtime-manager.ts`, `session/agent-runtime-pool.ts`, `session/agent-runtime-session-controller.ts`, `session/agent-session-factory.ts`, `session/runtime-host-bindings.ts`, `session/session-config-projection.ts` |
-| Runner | `runner/agent-runner-port.ts`, `runner/agent-session-runner.ts` |
-| Turn | `turn/agent-turn-runtime.ts`, `turn/agent-turn-assembly.ts`, `turn/message-runtime.ts`, `turn/agent-turn-context.ts`, `turn/multimodal-context-packet.ts`, `turn/media-turn-runtime.ts`, `turn/timeline-context-runtime.ts`, `turn/canvas-ambient-context-runtime.ts`, `turn/context-control-runtime.ts`, `turn/workspace-input-processor-runtime.ts` |
+| Category               | Canonical files                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Session runtime        | `session/agent-runtime-manager.ts`, `session/agent-runtime-pool.ts`, `session/agent-runtime-session-controller.ts`, `session/agent-session-factory.ts`, `session/runtime-host-bindings.ts`, `session/session-config-projection.ts`                                                                                                                                                                                                   |
+| Runner                 | `runner/agent-runner-port.ts`, `runner/agent-session-runner.ts`                                                                                                                                                                                                                                                                                                                                                                      |
+| Turn                   | `turn/agent-turn-runtime.ts`, `turn/agent-turn-assembly.ts`, `turn/message-runtime.ts`, `turn/agent-turn-context.ts`, `turn/multimodal-context-packet.ts`, `turn/media-turn-runtime.ts`, `turn/timeline-context-runtime.ts`, `turn/canvas-ambient-context-runtime.ts`, `turn/context-control-runtime.ts`, `turn/workspace-input-processor-runtime.ts`                                                                                |
 | Capability consumption | `capability/capability-registry-runtime.ts`, `capability/capability-runtime-bindings.ts`, `capability/capability-runtime-refresh.ts`, `capability/capability-runtime-registries.ts`, `capability/agent-capability-injection-runtime.ts`, `capability/agent-capability-lifecycle-runtime.ts`, `capability/agent-content-access-runtime.ts`, `capability/external-processor-runtime.ts`, `capability/agent-prompt-schema-generator.ts` |
-| Stream | `stream/agent-event-stream-runtime.ts`, `stream/agent-stream-background-task.ts`, `stream/agent-stream-state.ts`, `stream/agent-stream-task-observer.ts` |
-| Existing owner moves | `artifact/artifact-service.ts`, `artifact/node-artifact-store.ts`, `input/attachment-projection.ts`, `input/message-resource-projector.ts`, `session/context-host-message.ts`, `session/conversation-host-message.ts` |
+| Stream                 | `stream/agent-event-stream-runtime.ts`, `stream/agent-stream-background-task.ts`, `stream/agent-stream-state.ts`, `stream/agent-stream-task-observer.ts`                                                                                                                                                                                                                                                                             |
+| Projection             | `projection/conversation-projection-store.ts`, `projection/agent-turn-projection.ts`                                                                                                                                                                                                                                                                                                                                                 |
+| Existing owner moves   | `artifact/artifact-service.ts`, `artifact/node-artifact-store.ts`, `input/attachment-projection.ts`, `input/message-resource-projector.ts`, `session/context-host-message.ts`, `session/conversation-host-message.ts`                                                                                                                                                                                                                |
 
 `runtime/index.ts` intentionally preserves the package public export surface.
 Internal imports should prefer canonical owner paths. Any future transitional
@@ -103,12 +107,12 @@ implementation note that introduced it.
 
 Agent chat isolation uses layered local identities:
 
-| Identity | Owner | Scope |
-| --- | --- | --- |
-| `tabId` | Webview / Extension UI | View binding only. It restores which conversation a tab shows, but it does not own runtime state. |
-| `conversationId` | Agent session | Complete session owner for transcript, prompt mode, Skill projection, context, queues, tasks, logs, and UI actions. |
-| `turnId` | Agent turn runtime | One chat turn. Model calls, ordinary tool calls, and turn timeline logs use `{ conversationId, turnId, requestId }`. |
-| `runId` | Durable work lease | Long-lived workflows, artifacts, media/background tasks, terminal/process handles, and cancellable task observers use `{ conversationId, runId }`. |
+| Identity         | Owner                  | Scope                                                                                                                                              |
+| ---------------- | ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `tabId`          | Webview / Extension UI | View binding only. It restores which conversation a tab shows, but it does not own runtime state.                                                  |
+| `conversationId` | Agent session          | Complete session owner for transcript, prompt mode, Skill projection, context, queues, tasks, logs, and UI actions.                                |
+| `turnId`         | Agent turn runtime     | One chat turn. Model calls, ordinary tool calls, and turn timeline logs use `{ conversationId, turnId, requestId }`.                               |
+| `runId`          | Durable work lease     | Long-lived workflows, artifacts, media/background tasks, terminal/process handles, and cancellable task observers use `{ conversationId, runId }`. |
 
 `runId` is not a generic alias for `turnId`. Ordinary LLM/tool logs omit
 `runId` when it would duplicate the turn identity. Durable work may include the

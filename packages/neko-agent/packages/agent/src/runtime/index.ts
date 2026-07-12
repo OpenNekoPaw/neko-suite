@@ -118,6 +118,16 @@ export {
 } from './session/agent-runtime-pool';
 
 export {
+  createConversationProjectionStore,
+  type ConversationProjectionListener,
+  type ConversationProjectionPatch,
+  type ConversationProjectionSnapshot,
+  type ConversationProjectionStore,
+  type ConversationProjectionUpdate,
+  type ConversationTurnProjection,
+} from './projection/conversation-projection-store';
+
+export {
   createConversationRuntimeContext,
   type ConversationRuntimeContext,
   type ConversationRuntimeLifecycle,

@@ -77,4 +77,36 @@ describe('ConversationRuntimeContext', () => {
     expect(session.dispose).toHaveBeenCalledOnce();
     expect(context.lifecycle).toBe('disposed');
   });
+
+  it('owns and disposes an independent authoritative projection store', () => {
+    const contextA = createConversationRuntimeContext({
+      conversationId: 'conversation-a',
+      session: createSession(),
+    });
+    const contextB = createConversationRuntimeContext({
+      conversationId: 'conversation-b',
+      session: createSession(),
+    });
+
+    contextA.projection.apply({
+      type: 'agentTurnTimelineUpdate',
+      conversationId: 'conversation-a',
+      turnId: 'turn-a',
+      messageId: 'message-a',
+      operations: [],
+      completion: { status: 'completed', completedAt: 1 },
+    });
+
+    expect(contextA.projection.snapshot().projectionVersion).toBe(1);
+    expect(contextB.projection.snapshot().projectionVersion).toBe(0);
+
+    contextA.dispose();
+
+    expect(() => contextA.projection.snapshot()).toThrow(/disposed/i);
+    expect(contextB.projection.snapshot()).toMatchObject({
+      conversationId: 'conversation-b',
+      projectionVersion: 0,
+    });
+    contextB.dispose();
+  });
 });

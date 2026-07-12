@@ -10,13 +10,18 @@ import type {
 import type { AgentEvent } from '../../session/types';
 import { applyToolResultBackfillToResult } from '../tool-result-backfill';
 import {
+  applyAgentTurnProjectionOperations,
+  cloneAgentTurnProjectionItem,
+} from '../projection/agent-turn-projection';
+import type { ConversationProjectionUpdate } from '../projection/conversation-projection-store';
+import {
   AGENT_ERROR_WITHOUT_DETAIL_CODE,
   readAgentEventErrorCode,
   readAgentEventErrorDetails,
   readAgentEventErrorMessage,
 } from './agent-event-error';
 
-export interface AgentTurnTimelineAccumulatorUpdate {
+export interface AgentTurnTimelineAccumulatorUpdate extends ConversationProjectionUpdate {
   readonly type: 'agentTurnTimelineUpdate';
   readonly conversationId: string;
   readonly turnId: string;
@@ -119,7 +124,7 @@ export function createAgentTurnTimelineAccumulator(input: {
     nextCompletion?: AgentTurnTimelineCompletion,
   ): AgentTurnTimelineAccumulatorUpdate | null => {
     if (operations.length === 0 && !nextCompletion) return null;
-    applyOperationsToAuthoritativeItems(items, operations);
+    applyAgentTurnProjectionOperations(items, operations);
     if (nextCompletion) completion = cloneValue(nextCompletion);
     return {
       type: 'agentTurnTimelineUpdate',
@@ -424,7 +429,7 @@ export function createAgentTurnTimelineAccumulator(input: {
         messageId: input.messageId,
         items: Array.from(items.values())
           .sort((left, right) => left.sequence - right.sequence)
-          .map((item) => cloneTimelineItem(item)),
+          .map((item) => cloneAgentTurnProjectionItem(item)),
         ...(completion ? { completion: cloneValue(completion) } : {}),
       };
     },
@@ -444,55 +449,6 @@ function assertActive(lifecycle: 'active' | 'completed' | 'disposed'): void {
   if (lifecycle !== 'active') {
     throw new Error(`Agent Timeline accumulator rejects mutation after ${lifecycle}.`);
   }
-}
-
-function applyOperationsToAuthoritativeItems(
-  items: Map<string, AgentTurnTimelineItem>,
-  operations: readonly AgentTurnTimelineOperation[],
-): void {
-  for (const operation of operations) {
-    if (operation.operation === 'complete') {
-      const current = items.get(operation.itemId);
-      if (!current || (current.kind !== 'assistant_text' && current.kind !== 'thinking')) {
-        throw new Error(`Timeline completion references unknown text item: ${operation.itemId}`);
-      }
-      items.set(operation.itemId, {
-        ...current,
-        itemRevision: operation.itemRevision,
-        status: operation.status,
-        updatedAt: operation.updatedAt,
-      });
-      continue;
-    }
-    const item = operation.item;
-    const current = items.get(item.itemId);
-    if (operation.operation === 'append' && current) {
-      if (current.kind === 'assistant_text' && item.kind === 'assistant_text') {
-        items.set(item.itemId, {
-          ...item,
-          createdAt: current.createdAt,
-          sequence: current.sequence,
-          payload: { ...item.payload, content: current.payload.content + item.payload.content },
-        });
-        continue;
-      }
-      if (current.kind === 'thinking' && item.kind === 'thinking') {
-        items.set(item.itemId, {
-          ...item,
-          createdAt: current.createdAt,
-          sequence: current.sequence,
-          payload: { ...item.payload, content: current.payload.content + item.payload.content },
-        });
-        continue;
-      }
-      throw new Error(`Timeline append changed item kind: ${item.itemId}`);
-    }
-    items.set(item.itemId, cloneTimelineItem(item));
-  }
-}
-
-function cloneTimelineItem(item: AgentTurnTimelineItem): AgentTurnTimelineItem {
-  return cloneValue(item);
 }
 
 function cloneValue<T>(value: T): T {
