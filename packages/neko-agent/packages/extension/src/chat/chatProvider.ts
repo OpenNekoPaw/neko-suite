@@ -1000,20 +1000,6 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
           return;
         }
 
-        if (!this._webviewReady) {
-          this._webviewReady = true;
-          const currentEndpointEpoch = this._projectionEndpointEpoch;
-          if (!currentEndpointEpoch) {
-            throw new Error('Projection endpoint epoch is unavailable for the active Webview.');
-          }
-          await webview.postMessage({
-            type: 'projectionEndpointReady',
-            endpointEpoch: currentEndpointEpoch,
-          });
-          this._flushPendingMessages();
-          this._replayUndeliveredTasks();
-        }
-
         // 1. Delegate config messages to ConfigBridge
         if (this._configBridge) {
           const handled = await this._configBridge.handleMessage(message, postMessageFn);
@@ -1027,6 +1013,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
         handleChatWebviewMessage(message, {
           webview,
           projectionAttachments,
+          announceProjectionEndpoint: () => this._announceProjectionEndpoint(webview),
           reportProjectionProtocolError: (error, key) =>
             this._reportProjectionProtocolError(webview, error, key),
           messages: this._messages,
@@ -1057,6 +1044,21 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
         });
       }),
     );
+  }
+
+  private _announceProjectionEndpoint(webview: vscode.Webview): void {
+    if (this._view?.webview !== webview) {
+      throw new Error('Cannot announce a replaced projection endpoint.');
+    }
+    const endpointEpoch = this._projectionEndpointEpoch;
+    if (!endpointEpoch) {
+      throw new Error('Projection endpoint epoch is unavailable for the active Webview.');
+    }
+    void webview.postMessage({ type: 'projectionEndpointReady', endpointEpoch });
+    if (this._webviewReady) return;
+    this._webviewReady = true;
+    this._flushPendingMessages();
+    this._replayUndeliveredTasks();
   }
 
   private _refreshConfigSnapshot(

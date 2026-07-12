@@ -260,6 +260,7 @@ describe('chatProvider', () => {
     const receiveSecondMessage = vi.mocked(secondWebview.onDidReceiveMessage).mock.calls[0]?.[0] as
       ((message: unknown) => void | Promise<void>) | undefined;
     await receiveSecondMessage?.({ type: 'getActiveConversation' });
+    await receiveSecondMessage?.({ type: 'projectionEndpointDiscover' });
     await receiveSecondMessage?.({ type: 'getTabState' });
     await flushWebviewAsyncWork();
 
@@ -1232,6 +1233,11 @@ describe('chatProvider', () => {
     );
 
     await receiveMessage?.({ type: 'getConfig' });
+    expect(webview.postMessage).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'prefillInput', message: 'queued message' }),
+    );
+
+    await receiveMessage?.({ type: 'projectionEndpointDiscover' });
     expect(webview.postMessage).toHaveBeenCalledWith(
       expect.objectContaining({ type: 'prefillInput', message: 'queued message' }),
     );
@@ -1258,7 +1264,7 @@ describe('chatProvider', () => {
     await Promise.resolve();
     const receiveFirstMessage = vi.mocked(firstWebview.onDidReceiveMessage).mock.calls[0]?.[0] as
       ((message: unknown) => void | Promise<void>) | undefined;
-    await receiveFirstMessage?.({ type: 'getTabState' });
+    await receiveFirstMessage?.({ type: 'projectionEndpointDiscover' });
     const firstEndpointMessage = vi
       .mocked(firstWebview.postMessage)
       .mock.calls.map(([message]) => message)
@@ -1282,7 +1288,7 @@ describe('chatProvider', () => {
     await Promise.resolve();
     const receiveSecondMessage = vi.mocked(secondWebview.onDidReceiveMessage).mock.calls[0]?.[0] as
       ((message: unknown) => void | Promise<void>) | undefined;
-    await receiveSecondMessage?.({ type: 'getTabState' });
+    await receiveSecondMessage?.({ type: 'projectionEndpointDiscover' });
     const secondEndpointMessage = vi
       .mocked(secondWebview.postMessage)
       .mock.calls.map(([message]) => message)

@@ -70,6 +70,7 @@ function createDeps(): ChatWebviewMessageRouterDeps {
       detach: vi.fn().mockResolvedValue(undefined),
       dispose: vi.fn().mockResolvedValue(undefined),
     },
+    announceProjectionEndpoint: vi.fn(),
     reportProjectionProtocolError: vi.fn(),
     messages: {
       handleUserMessage: vi.fn(),

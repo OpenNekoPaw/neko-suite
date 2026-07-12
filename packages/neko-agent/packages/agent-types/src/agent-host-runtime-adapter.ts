@@ -93,6 +93,7 @@ export const AGENT_WEBVIEW_TO_HOST_MESSAGE_TYPES = [
   'revealContextSource',
   'webviewKeyboardFocus',
   'webviewKeyboardEditable',
+  'projectionEndpointDiscover',
   'projectionAttach',
   'projectionSnapshotAck',
   'projectionDetach',

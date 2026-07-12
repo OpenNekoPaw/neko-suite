@@ -24,6 +24,7 @@ import type {
 export interface ChatWebviewMessageRouterDeps {
   readonly webview: vscode.Webview;
   readonly projectionAttachments: ConversationProjectionAttachmentServer;
+  readonly announceProjectionEndpoint: () => void;
   readonly reportProjectionProtocolError: (error: Error, key: ProjectionAttachmentKey) => void;
   readonly messages?: AgentMessageTurnHandler;
   readonly characterDialogue?: CharacterDialogueController;

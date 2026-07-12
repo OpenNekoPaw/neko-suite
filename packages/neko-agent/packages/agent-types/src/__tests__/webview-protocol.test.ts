@@ -53,6 +53,12 @@ const cacheResourceRef = createResourceRef({
 });
 
 describe('webview protocol parser', () => {
+  it('accepts explicit projection endpoint discovery', () => {
+    expect(parseWebviewToExtensionMessage({ type: 'projectionEndpointDiscover' })).toEqual({
+      type: 'projectionEndpointDiscover',
+    });
+  });
+
   it('accepts projection attachment lifecycle messages with complete identity', () => {
     const key = {
       endpointEpoch: 'endpoint-1',

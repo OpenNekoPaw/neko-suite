@@ -13,6 +13,7 @@ describe('Agent host runtime adapter contracts', () => {
     expect(AGENT_WEBVIEW_TO_HOST_MESSAGE_TYPES).toContain('sendMessage');
     expect(AGENT_WEBVIEW_TO_HOST_MESSAGE_TYPES).toContain('refreshConfigSnapshot');
     expect(AGENT_WEBVIEW_TO_HOST_MESSAGE_TYPES).toContain('webviewKeyboardEditable');
+    expect(AGENT_WEBVIEW_TO_HOST_MESSAGE_TYPES).toContain('projectionEndpointDiscover');
   });
 
   it('reports missing host route classifications', () => {
@@ -28,12 +29,9 @@ describe('Agent host runtime adapter contracts', () => {
       severity: 'error',
       hostKind: 'electron',
       messageType: 'refreshConfigSnapshot',
-      message:
-        "Agent host 'electron' has no route classification for 'refreshConfigSnapshot'.",
+      message: "Agent host 'electron' has no route classification for 'refreshConfigSnapshot'.",
     });
-    expect(diagnostics).not.toContainEqual(
-      expect.objectContaining({ messageType: 'sendMessage' }),
-    );
+    expect(diagnostics).not.toContainEqual(expect.objectContaining({ messageType: 'sendMessage' }));
   });
 
   it('accepts complete route classifications', () => {

@@ -509,6 +509,10 @@ export type ConversationProjectionAttachmentHostFrame = ProjectionAttachmentHost
   ConversationProjectionPatch
 >;
 
+export interface ProjectionEndpointDiscoverRequest {
+  readonly type: 'projectionEndpointDiscover';
+}
+
 export interface ProjectionEndpointReadyMessage {
   readonly type: 'projectionEndpointReady';
   readonly endpointEpoch: string;
@@ -555,6 +559,7 @@ export type WebviewToExtensionMessage =
   | RevealContextSourceWebviewMessage
   | WebviewKeyboardFocusWebviewMessage
   | WebviewKeyboardEditableWebviewMessage
+  | ProjectionEndpointDiscoverRequest
   | ProjectionAttachRequest
   | ProjectionSnapshotAcknowledgement
   | ProjectionDetachMessage
@@ -1326,6 +1331,7 @@ export const WEBVIEW_TO_EXTENSION_MESSAGE_TYPES = [
   'revealContextSource',
   'webviewKeyboardFocus',
   'webviewKeyboardEditable',
+  'projectionEndpointDiscover',
   'projectionAttach',
   'projectionSnapshotAck',
   'projectionDetach',
@@ -1882,6 +1888,9 @@ export function parseWebviewToExtensionMessage(raw: unknown): WebviewToExtension
   if (!isRecord(raw) || typeof raw.type !== 'string') return null;
 
   const type = raw.type;
+  if (type === 'projectionEndpointDiscover') {
+    return { type };
+  }
   if (type === 'projectionAttach') {
     const key = parseProjectionAttachmentKey(raw.key);
     return key ? { type, key } : null;

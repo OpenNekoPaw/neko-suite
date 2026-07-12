@@ -6,6 +6,10 @@ export function tryHandleProjectionRoute(
   deps: ChatWebviewMessageRouterDeps,
 ): boolean {
   switch (message.type) {
+    case 'projectionEndpointDiscover':
+      deps.announceProjectionEndpoint();
+      return true;
+
     case 'projectionAttach':
       void deps.projectionAttachments.attach(message).catch((error: unknown) => {
         deps.reportProjectionProtocolError(toError(error), message.key);

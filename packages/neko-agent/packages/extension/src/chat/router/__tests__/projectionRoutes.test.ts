@@ -21,18 +21,32 @@ function createDeps() {
     detach: vi.fn().mockResolvedValue(undefined),
     dispose: vi.fn().mockResolvedValue(undefined),
   };
+  const announceProjectionEndpoint = vi.fn();
   const reportProjectionProtocolError = vi.fn();
   return {
     deps: {
       projectionAttachments,
+      announceProjectionEndpoint,
       reportProjectionProtocolError,
     } as unknown as ChatWebviewMessageRouterDeps,
     projectionAttachments,
+    announceProjectionEndpoint,
     reportProjectionProtocolError,
   };
 }
 
 describe('projection routes', () => {
+  it('announces the endpoint for explicit discovery without touching attachment state', () => {
+    const { deps, projectionAttachments, announceProjectionEndpoint } = createDeps();
+
+    expect(tryHandleProjectionRoute({ type: 'projectionEndpointDiscover' }, deps)).toBe(true);
+
+    expect(announceProjectionEndpoint).toHaveBeenCalledTimes(1);
+    expect(projectionAttachments.attach).not.toHaveBeenCalled();
+    expect(projectionAttachments.acknowledge).not.toHaveBeenCalled();
+    expect(projectionAttachments.detach).not.toHaveBeenCalled();
+  });
+
   it('routes attach, snapshot acknowledgement, and detach to the endpoint server', () => {
     const { deps, projectionAttachments } = createDeps();
     const attach: ProjectionAttachRequest = { type: 'projectionAttach', key };
