@@ -125,6 +125,14 @@ export {
 } from './session/conversation-runtime-context';
 
 export {
+  ConversationRunRegistryError,
+  createConversationRunRegistry,
+  type ConversationRunCancellationHandle,
+  type ConversationRunRegistry,
+  type ConversationRunRegistryErrorCode,
+} from './session/conversation-run-registry';
+
+export {
   AgentMessageQueueOperationError,
   createAgentConversationMessageQueue,
   createAgentRuntimeSessionMessageQueuePort,

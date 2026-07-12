@@ -43,6 +43,25 @@ describe('ConversationRuntimeContext', () => {
     expect(() => context.cancel()).toThrow(/is disposed/);
   });
 
+  it('disposes the owned run registry before releasing the session', () => {
+    const order: string[] = [];
+    const session = createSession();
+    session.cancel.mockImplementation(() => order.push('session'));
+    const context = createConversationRuntimeContext({
+      conversationId: 'conversation-a',
+      session,
+    });
+    context.markReady();
+    context.runs.registerRun({ conversationId: 'conversation-a', runId: 'run-1' }, () =>
+      order.push('run'),
+    );
+
+    context.dispose();
+
+    expect(order).toEqual(['run', 'session']);
+    expect(context.runs.disposed).toBe(true);
+  });
+
   it('still disposes the session when cancellation fails and exposes the failure', () => {
     const session = createSession();
     session.cancel.mockImplementation(() => {

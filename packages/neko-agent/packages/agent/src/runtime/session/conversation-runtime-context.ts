@@ -1,3 +1,8 @@
+import {
+  createConversationRunRegistry,
+  type ConversationRunRegistry,
+} from './conversation-run-registry';
+
 export type ConversationRuntimeLifecycle = 'restoring' | 'ready' | 'disposing' | 'disposed';
 
 export interface ManagedConversationRuntimeSession {
@@ -10,6 +15,7 @@ export interface ConversationRuntimeContext<
 > {
   readonly conversationId: string;
   readonly session: TSession;
+  readonly runs: ConversationRunRegistry;
   readonly lifecycle: ConversationRuntimeLifecycle;
   markReady(): void;
   cancel(): void;
@@ -29,12 +35,14 @@ class DefaultConversationRuntimeContext<
   TSession extends ManagedConversationRuntimeSession,
 > implements ConversationRuntimeContext<TSession> {
   private _lifecycle: ConversationRuntimeLifecycle = 'restoring';
+  readonly runs: ConversationRunRegistry;
 
   constructor(
     readonly conversationId: string,
     readonly session: TSession,
   ) {
     assertConversationId(conversationId);
+    this.runs = createConversationRunRegistry(conversationId);
   }
 
   get lifecycle(): ConversationRuntimeLifecycle {
@@ -64,30 +72,32 @@ class DefaultConversationRuntimeContext<
     }
 
     this._lifecycle = 'disposing';
-    let cancellationError: unknown;
+    const errors: unknown[] = [];
+    try {
+      this.runs.dispose(new Error(`Conversation runtime ${this.conversationId} is disposing.`));
+    } catch (error) {
+      errors.push(error);
+    }
     try {
       this.session.cancel();
     } catch (error) {
-      cancellationError = error;
+      errors.push(error);
     }
-
-    let disposalError: unknown;
     try {
       this.session.dispose();
     } catch (error) {
-      disposalError = error;
+      errors.push(error);
     } finally {
       this._lifecycle = 'disposed';
     }
 
-    if (cancellationError !== undefined && disposalError !== undefined) {
+    if (errors.length === 1) throw errors[0];
+    if (errors.length > 1) {
       throw new AggregateError(
-        [cancellationError, disposalError],
-        `Conversation runtime ${this.conversationId} failed to cancel and dispose.`,
+        errors,
+        `Conversation runtime ${this.conversationId} failed to dispose.`,
       );
     }
-    if (cancellationError !== undefined) throw cancellationError;
-    if (disposalError !== undefined) throw disposalError;
   }
 }
 
