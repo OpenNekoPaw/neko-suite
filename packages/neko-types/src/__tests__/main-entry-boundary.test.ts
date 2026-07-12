@@ -8,4 +8,10 @@ describe('@neko/shared main entry boundary', () => {
     expect('useResizable' in shared).toBe(false);
     expect('ContextMenu' in shared).toBe(false);
   });
+
+  it('does not export removed path-only quality normalization contracts', () => {
+    expect('normalizeQualityReviewPayload' in shared).toBe(false);
+    expect('normalizeQualityConsistencyPayload' in shared).toBe(false);
+    expect('buildVideoContentIndex' in shared).toBe(false);
+  });
 });
