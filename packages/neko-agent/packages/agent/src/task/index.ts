@@ -152,6 +152,16 @@ export {
   type WorkspaceVisibleAgentTaskStorageOptions,
 } from './task-storage';
 export {
+  migrateLegacyTaskStorageContent,
+  migrateLegacyTaskStorageFile,
+  TaskStorageMigrationError,
+  type LegacyTaskStorageContentMigrationInput,
+  type LegacyTaskStorageContentMigrationResult,
+  type LegacyTaskStorageFileMigrationOptions,
+  type LegacyTaskStorageFileMigrationResult,
+  type TaskStorageMigrationFailureReason,
+} from './task-storage-migration';
+export {
   CLEANUP_TASK_STATUSES,
   DEFAULT_TASK_CLEANUP_INTERVAL_MS,
   DEFAULT_TASK_RETENTION_PERIOD_MS,

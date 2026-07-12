@@ -25,6 +25,7 @@
 - [x] 3.5 Add fail-closed migration diagnostics for valuable persisted Task/SubAgent records with ambiguous ownership.
 - [x] 3.6 Delete or make inaccessible bare-ID session control paths and add path assertions proving they are not used.
 - [x] 3.7 Verify cancelling or disposing conversation A leaves B's Agent/SubAgents/Tasks unchanged.
+- [x] 3.8 Add and execute an explicit, atomic migration for legacy Task records whose replicated owner metadata is complete and consistent.
 
 ## 4. Independent Webview Tab Render Runtimes
 
