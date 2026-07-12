@@ -24,7 +24,6 @@ export interface UseTabManagerProps {
   conversations: ConversationSummary[];
   setActiveTab: (tab: TabType) => void;
   onAllTabsClosed?: () => void;
-  onBeforeTabActivation?: () => void;
   onBeforeConversationActivation?: (
     request: Omit<ActivateConversationWebviewMessage, 'type' | 'tabState'>,
   ) => void;
@@ -51,7 +50,6 @@ export function useTabManager({
   conversations,
   setActiveTab,
   onAllTabsClosed,
-  onBeforeTabActivation,
   onBeforeConversationActivation,
   onConversationActivated,
   onActivateCharacterRoleTab,
@@ -105,7 +103,6 @@ export function useTabManager({
     (conversationId: string, title: string) => {
       const existingTab = openTabs.find((t) => t.conversationId === conversationId);
       onBeforeTabOpen?.();
-      onBeforeTabActivation?.();
       if (existingTab) {
         setActiveTabId(existingTab.id);
         if (isCharacterRoleTab(existingTab)) {
@@ -132,7 +129,6 @@ export function useTabManager({
       setOpenTabs,
       setActiveTabId,
       setActiveTab,
-      onBeforeTabActivation,
       onBeforeTabOpen,
       activateOrdinaryConversation,
       onActivateCharacterRoleTab,
@@ -149,9 +145,6 @@ export function useTabManager({
       if (!tab) return;
 
       const isClosingActiveTab = activeTabId === tabId;
-      if (isClosingActiveTab) {
-        onBeforeTabActivation?.();
-      }
 
       const conversation = conversations.find((c) => c.id === tab.conversationId);
       const hasPersistedMessages = (conversation?.messageCount ?? 0) > 0;
@@ -199,7 +192,6 @@ export function useTabManager({
       setOpenTabs,
       setActiveTabId,
       onAllTabsClosed,
-      onBeforeTabActivation,
       activateOrdinaryConversation,
       onActivateCharacterRoleTab,
       hasLocalConversationActivity,
@@ -212,7 +204,6 @@ export function useTabManager({
       const tab = openTabs.find((t) => t.id === tabId);
       if (tab) {
         onBeforeTabOpen?.();
-        onBeforeTabActivation?.();
         setActiveTabId(tabId);
         if (isCharacterRoleTab(tab)) {
           persistTabState(openTabs, tab.id);
@@ -227,7 +218,6 @@ export function useTabManager({
       openTabs,
       setActiveTabId,
       setActiveTab,
-      onBeforeTabActivation,
       onBeforeTabOpen,
       activateOrdinaryConversation,
       onActivateCharacterRoleTab,

@@ -663,39 +663,6 @@ export function ConversationController({
     ],
   );
 
-  const persistCurrentVisibleConversation = useCallback(() => {
-    const conversationId = visibleConversationId;
-    if (!conversationId) return;
-    const currentStreaming = conversationStreamingRef.current.get(conversationId);
-    const snapshot = ingestConversationRenderSnapshot({
-      coordinator: conversationRenderCoordinator,
-      conversationId,
-      messages,
-      streaming: {
-        ...(currentStreaming ?? {}),
-        streamingMessageId: streamingMessageIdRef.current,
-        isThinking,
-        queuedMessageCount,
-        queuedMessages,
-      },
-    });
-    commitConversationSnapshotProjection({
-      snapshot,
-      conversationMessagesRef,
-      conversationStreamingRef,
-    });
-  }, [
-    conversationMessagesRef,
-    conversationRenderCoordinator,
-    conversationStreamingRef,
-    isThinking,
-    queuedMessageCount,
-    queuedMessages,
-    messages,
-    streamingMessageIdRef,
-    visibleConversationId,
-  ]);
-
   const clearConversationMessages = useCallback(
     (conversationId: string) => {
       const snapshot = ingestConversationRenderSnapshot({
@@ -786,100 +753,96 @@ export function ConversationController({
   }, []);
 
   // ---- Message handler ----
-  const {
-    handleMessage,
-    flushTimelineRendering,
-    commitTimelineMarkdownSnapshot,
-    disposeConversationRendering,
-  } = useMessageHandler({
-    messages,
-    isThinking,
-    activeConversationId,
-    streamingMessageId,
-    queuedMessageCount,
-    queuedMessages,
-    openTabs,
-    activeTabId,
-    isTablessConversationViewRef,
-    pendingForegroundConversationActivationRef,
-    tabStateRevisionRef,
-    reconcileTabRenderRuntimes: (bindings, nextActiveTabId) => {
-      tabRenderRuntimeRegistry.reconcile(bindings, nextActiveTabId);
-    },
-    completeForegroundConversationActivation,
-    requestQueuedMessageEdit: (request) => {
-      const runtime = tabRenderRuntimeRegistry.require(request.tabId);
-      if (runtime.conversationId !== request.conversationId) {
-        throw new Error(
-          `Queued edit Tab ${request.tabId} belongs to ${runtime.conversationId}, not ${request.conversationId}.`,
-        );
-      }
-      nextQueuedEditRequestIdRef.current += 1;
-      runtime.store.updateState({
-        queuedEdit: {
-          requestId: nextQueuedEditRequestIdRef.current,
-          item: request.item,
-        },
-      });
-    },
-    requestContextInjection: (request) => {
-      const runtime = tabRenderRuntimeRegistry.require(request.tabId);
-      if (runtime.conversationId !== request.conversationId) {
-        throw new Error(
-          `Context injection Tab ${request.tabId} belongs to ${runtime.conversationId}, not ${request.conversationId}.`,
-        );
-      }
-      runtime.store.updateState((state) => ({
-        activeSurface: 'chat',
-        ...(state.contextReferences.some((reference) => reference.id === request.payload.id)
-          ? {}
-          : { contextReferences: [...state.contextReferences, request.payload] }),
-        ...(request.payload.intent ? { inputValue: request.payload.intent } : {}),
-      }));
-    },
-    requestConfigSnapshot,
-    activeConversationIdRef,
-    streamingMessageIdRef,
-    conversationMessagesRef,
-    conversationStreamingRef,
-    conversationRenderCoordinator,
-    setMessages,
-    setIsThinking,
-    setStreamingMessageId,
-    setQueuedMessageCount,
-    setQueuedMessages,
-    setConversations,
-    setActiveConversationId,
-    setOpenTabs,
-    setActiveTabId,
-    setActiveTab,
-    setSettings,
-    setHasConfigSnapshot,
-    selectedModelRef,
-    setSelectedModel,
-    setMediaModelSelection,
-    setWorkItemsByConversation,
-    setPluginsAvailable,
-    setProjectFiles,
-    setMentionItems,
-    mentionSearchFilter,
-    mentionSearchFilterRef,
-    setPluginCommands,
-    setAgentState,
-    conversationAgentStateRef,
-    forceAgentStateUpdate,
-    setSkills,
-    setActiveSkill,
-    setActivationProgressByConversation,
-    updateSettings,
-    setPromptModeForConversation,
-    setShowOnboarding,
-    setGlobalError,
-    reportConversationDiagnostic,
-    conversationTokenCountRef,
-    conversationCompressingRef,
-    forceContextUpdate: triggerForceUpdate,
-  });
+  const { handleMessage, commitTimelineMarkdownSnapshot, disposeConversationRendering } =
+    useMessageHandler({
+      messages,
+      isThinking,
+      activeConversationId,
+      streamingMessageId,
+      queuedMessageCount,
+      queuedMessages,
+      openTabs,
+      activeTabId,
+      isTablessConversationViewRef,
+      pendingForegroundConversationActivationRef,
+      tabStateRevisionRef,
+      reconcileTabRenderRuntimes: (bindings, nextActiveTabId) => {
+        tabRenderRuntimeRegistry.reconcile(bindings, nextActiveTabId);
+      },
+      completeForegroundConversationActivation,
+      requestQueuedMessageEdit: (request) => {
+        const runtime = tabRenderRuntimeRegistry.require(request.tabId);
+        if (runtime.conversationId !== request.conversationId) {
+          throw new Error(
+            `Queued edit Tab ${request.tabId} belongs to ${runtime.conversationId}, not ${request.conversationId}.`,
+          );
+        }
+        nextQueuedEditRequestIdRef.current += 1;
+        runtime.store.updateState({
+          queuedEdit: {
+            requestId: nextQueuedEditRequestIdRef.current,
+            item: request.item,
+          },
+        });
+      },
+      requestContextInjection: (request) => {
+        const runtime = tabRenderRuntimeRegistry.require(request.tabId);
+        if (runtime.conversationId !== request.conversationId) {
+          throw new Error(
+            `Context injection Tab ${request.tabId} belongs to ${runtime.conversationId}, not ${request.conversationId}.`,
+          );
+        }
+        runtime.store.updateState((state) => ({
+          activeSurface: 'chat',
+          ...(state.contextReferences.some((reference) => reference.id === request.payload.id)
+            ? {}
+            : { contextReferences: [...state.contextReferences, request.payload] }),
+          ...(request.payload.intent ? { inputValue: request.payload.intent } : {}),
+        }));
+      },
+      requestConfigSnapshot,
+      activeConversationIdRef,
+      streamingMessageIdRef,
+      conversationMessagesRef,
+      conversationStreamingRef,
+      conversationRenderCoordinator,
+      setMessages,
+      setIsThinking,
+      setStreamingMessageId,
+      setQueuedMessageCount,
+      setQueuedMessages,
+      setConversations,
+      setActiveConversationId,
+      setOpenTabs,
+      setActiveTabId,
+      setActiveTab,
+      setSettings,
+      setHasConfigSnapshot,
+      selectedModelRef,
+      setSelectedModel,
+      setMediaModelSelection,
+      setWorkItemsByConversation,
+      setPluginsAvailable,
+      setProjectFiles,
+      setMentionItems,
+      mentionSearchFilter,
+      mentionSearchFilterRef,
+      setPluginCommands,
+      setAgentState,
+      conversationAgentStateRef,
+      forceAgentStateUpdate,
+      setSkills,
+      setActiveSkill,
+      setActivationProgressByConversation,
+      updateSettings,
+      setPromptModeForConversation,
+      setShowOnboarding,
+      setGlobalError,
+      reportConversationDiagnostic,
+      conversationTokenCountRef,
+      conversationCompressingRef,
+      forceContextUpdate: triggerForceUpdate,
+    });
 
   const commitConversationTabActivation = useCallback(
     (conversationId: string, source: ConversationActivationSource) => {
@@ -996,16 +959,11 @@ export function ConversationController({
   // ---- Conversation CRUD callbacks ----
   const startNewForegroundConversation = useCallback(() => {
     isTablessConversationViewRef.current = false;
-    persistCurrentVisibleConversation();
     beginForegroundConversationActivation();
     requestConfigSnapshot();
     AgentHostMessages.newConversation();
     setActiveTab('chat');
-  }, [
-    beginForegroundConversationActivation,
-    persistCurrentVisibleConversation,
-    requestConfigSnapshot,
-  ]);
+  }, [beginForegroundConversationActivation, requestConfigSnapshot]);
 
   const handleNewChat = useCallback(() => {
     setPendingSendRequest(null);
@@ -1325,13 +1283,6 @@ export function ConversationController({
   ]);
 
   // ---- Tab management ----
-  const prepareCurrentConversationForTabActivation = useCallback(() => {
-    // Persist local UI-only state first; a pending canonical Timeline frame then overwrites
-    // the cache with the newest delivery before the incoming tab reads it.
-    persistCurrentVisibleConversation();
-    flushTimelineRendering(activeConversationIdRef.current);
-  }, [activeConversationIdRef, flushTimelineRendering, persistCurrentVisibleConversation]);
-
   const { handleOpenTab, handleCloseTab, handleSwitchTab } = useTabManager({
     openTabs,
     setOpenTabs,
@@ -1341,7 +1292,6 @@ export function ConversationController({
     conversations,
     setActiveTab,
     onAllTabsClosed: handleAllTabsClosed,
-    onBeforeTabActivation: prepareCurrentConversationForTabActivation,
     onBeforeConversationActivation: handleBeforeConversationActivation,
     onConversationActivated: requestConversationResourceSnapshot,
     onActivateCharacterRoleTab: activateCharacterRoleTab,
