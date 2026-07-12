@@ -95,6 +95,7 @@ import {
 import { DEFAULT_GENERATION_PARAMS } from '@/components/ChatView/InputArea/types';
 import type { TabRenderState } from '@/render-runtime/tab-render-runtime';
 import { useTabRenderRuntimeRegistry } from '@/render-runtime/useTabRenderRuntimeRegistry';
+import { useProjectionEndpoint } from '@/render-runtime/useProjectionEndpoint';
 
 // =============================================================================
 // Props
@@ -193,6 +194,7 @@ export function ConversationController({
     setActiveTabId,
   } = conversation;
   const tabRenderRuntimeRegistry = useTabRenderRuntimeRegistry(openTabs, activeTabId);
+  useProjectionEndpoint(tabRenderRuntimeRegistry, openTabs);
 
   // ---- UI state for active tab ----
   const [activeTab, setActiveTab] = useState<TabType>('chat');

@@ -4,6 +4,7 @@ import type {
   ProjectionAttachRequest,
   ProjectionAttachmentHostFrame,
   ProjectionAttachmentKey,
+  ProjectionAttachmentProtocolDiagnosticCode,
   ProjectionDetachMessage,
   ProjectionSnapshotAcknowledgement,
 } from '@neko-agent/types';
@@ -36,11 +37,22 @@ export interface ProjectionAttachmentClientOptions {
   readonly reportError: (error: Error, key: ProjectionAttachmentKey) => void;
 }
 
+export class ProjectionAttachmentClientProtocolError extends Error {
+  constructor(
+    readonly code: ProjectionAttachmentProtocolDiagnosticCode,
+    message: string,
+  ) {
+    super(message);
+    this.name = 'ProjectionAttachmentClientProtocolError';
+  }
+}
+
 export interface ProjectionAttachmentClient {
   getSnapshot(): ProjectionAttachmentClientSnapshot;
   attach(identity: Pick<ProjectionAttachmentKey, 'endpointEpoch' | 'attachmentId'>): void;
   accept(frame: ConversationProjectionAttachmentFrame): void;
   detach(reason: ProjectionDetachMessage['reason']): void;
+  abandon(): void;
   dispose(): void;
 }
 
@@ -121,7 +133,7 @@ class DefaultProjectionAttachmentClient implements ProjectionAttachmentClient {
       return;
     }
 
-    this.fail(new Error(frame.message), key);
+    this.fail(new ProjectionAttachmentClientProtocolError(frame.code, frame.message), key);
   }
 
   detach(reason: ProjectionDetachMessage['reason']): void {
@@ -129,6 +141,16 @@ class DefaultProjectionAttachmentClient implements ProjectionAttachmentClient {
     const key = this.snapshot.key;
     if (!key) return;
     this.options.send({ type: 'projectionDetach', key, reason });
+    this.snapshot = Object.freeze({
+      phase: 'detached',
+      key: null,
+      lastSequence: -1,
+      projectionVersion: null,
+    });
+  }
+
+  abandon(): void {
+    this.assertNotDisposed();
     this.snapshot = Object.freeze({
       phase: 'detached',
       key: null,
@@ -157,7 +179,8 @@ class DefaultProjectionAttachmentClient implements ProjectionAttachmentClient {
     const key = this.requireKey();
     if (this.snapshot.phase !== 'awaiting-snapshot') {
       this.fail(
-        new Error(
+        new ProjectionAttachmentClientProtocolError(
+          'attachment-snapshot-required',
           `Projection attachment ${key.attachmentId} received snapshot from ${this.snapshot.phase}.`,
         ),
         key,
@@ -165,7 +188,10 @@ class DefaultProjectionAttachmentClient implements ProjectionAttachmentClient {
     }
     if (frame.sequence !== 0) {
       this.fail(
-        new Error(`Projection attachment ${key.attachmentId} snapshot sequence must be 0.`),
+        new ProjectionAttachmentClientProtocolError(
+          'attachment-snapshot-required',
+          `Projection attachment ${key.attachmentId} snapshot sequence must be 0.`,
+        ),
         key,
       );
     }
@@ -174,7 +200,10 @@ class DefaultProjectionAttachmentClient implements ProjectionAttachmentClient {
       frame.projectionVersion !== frame.projection.projectionVersion
     ) {
       this.fail(
-        new Error(`Projection attachment ${key.attachmentId} snapshot identity/version mismatch.`),
+        new ProjectionAttachmentClientProtocolError(
+          'attachment-identity-mismatch',
+          `Projection attachment ${key.attachmentId} snapshot identity/version mismatch.`,
+        ),
         key,
       );
     }
@@ -200,7 +229,8 @@ class DefaultProjectionAttachmentClient implements ProjectionAttachmentClient {
     const key = this.requireKey();
     if (this.snapshot.phase !== 'live') {
       this.fail(
-        new Error(
+        new ProjectionAttachmentClientProtocolError(
+          'attachment-snapshot-required',
           `Projection attachment ${key.attachmentId} requires a snapshot before live patches.`,
         ),
         key,
@@ -209,7 +239,8 @@ class DefaultProjectionAttachmentClient implements ProjectionAttachmentClient {
     const expectedSequence = this.snapshot.lastSequence + 1;
     if (frame.sequence !== expectedSequence) {
       this.fail(
-        new Error(
+        new ProjectionAttachmentClientProtocolError(
+          'attachment-frame-gap',
           `Projection attachment ${key.attachmentId} frame gap: expected ${expectedSequence}, received ${frame.sequence}.`,
         ),
         key,
@@ -222,7 +253,10 @@ class DefaultProjectionAttachmentClient implements ProjectionAttachmentClient {
       frame.patch.conversationId !== key.conversationId
     ) {
       this.fail(
-        new Error(`Projection attachment ${key.attachmentId} patch base/version mismatch.`),
+        new ProjectionAttachmentClientProtocolError(
+          'attachment-patch-base-mismatch',
+          `Projection attachment ${key.attachmentId} patch base/version mismatch.`,
+        ),
         key,
       );
     }

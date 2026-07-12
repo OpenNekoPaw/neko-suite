@@ -765,7 +765,8 @@ export type AgentSessionDiagnosticCode =
   | 'conversation-durability-failed'
   | 'stale-tab-state-revision'
   | 'invalid-conversation-activation'
-  | 'queued-edit-draft-conflict';
+  | 'queued-edit-draft-conflict'
+  | 'projection-attachment-protocol-fatal';
 
 export interface AgentSessionDiagnosticMessage {
   type: 'sessionDiagnostic';

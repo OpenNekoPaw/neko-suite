@@ -146,6 +146,10 @@ export interface TabRenderRuntime extends TabRenderBinding {
   beginAttach(): void;
   detach(): void;
   attachProjection(binding: TabProjectionAttachmentBinding): void;
+  reattachProjection(
+    binding: TabProjectionAttachmentBinding,
+    reason: 'endpoint-replaced' | 'protocol-fatal',
+  ): void;
   acceptProjectionFrame(frame: ConversationProjectionAttachmentFrame): void;
   detachProjection(reason: import('@neko-agent/types').ProjectionDetachMessage['reason']): void;
   setVisible(visible: boolean): void;
@@ -349,6 +353,26 @@ class DefaultTabRenderRuntime implements TabRenderRuntime {
       endpointEpoch: binding.endpointEpoch,
       attachmentId: binding.attachmentId,
     });
+  }
+
+  reattachProjection(
+    binding: TabProjectionAttachmentBinding,
+    reason: 'endpoint-replaced' | 'protocol-fatal',
+  ): void {
+    if (this.currentLifecycle === 'disposed') {
+      throw new Error(`Tab render runtime ${this.tabId} is disposed.`);
+    }
+    const current = this.currentProjectionAttachment;
+    if (current) {
+      if (reason === 'endpoint-replaced') {
+        current.abandon();
+      } else {
+        current.detach('protocol-fatal');
+      }
+      current.dispose();
+      this.currentProjectionAttachment = null;
+    }
+    this.attachProjection(binding);
   }
 
   acceptProjectionFrame(frame: ConversationProjectionAttachmentFrame): void {

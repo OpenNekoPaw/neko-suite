@@ -49,6 +49,17 @@ vi.mock('@/messages', () => ({
   }),
 }));
 
+vi.mock('@/host-runtime-context', () => ({
+  useAgentHostRuntimeAdapter: () => ({
+    hostKind: 'vscode',
+    runtimeId: 'conversation-controller-test',
+    send: vi.fn(),
+    subscribe: vi.fn(() => ({ dispose: vi.fn() })),
+    getState: () => undefined,
+    setState: vi.fn(),
+  }),
+}));
+
 vi.mock('@/i18n/I18nContext', () => ({
   useTranslation: () => ({
     locale: 'en',
