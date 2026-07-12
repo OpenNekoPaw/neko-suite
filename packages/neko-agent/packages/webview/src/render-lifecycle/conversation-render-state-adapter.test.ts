@@ -35,7 +35,6 @@ describe('conversation render state adapter', () => {
       revision: 3,
       messages: [],
       streaming: createIdleConversationStreamingSnapshot(),
-      viewport: { followMode: 'follow-tail' },
       visibility: 'background',
       retention: 'retained',
     };

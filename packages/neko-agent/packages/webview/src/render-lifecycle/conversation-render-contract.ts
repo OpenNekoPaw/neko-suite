@@ -10,12 +10,6 @@ export type ForegroundConversationAvailability =
   | { readonly kind: 'loading' }
   | { readonly kind: 'unavailable'; readonly diagnostic: string };
 
-export interface ConversationViewportSnapshot {
-  readonly followMode: 'follow-tail' | 'detached';
-  readonly anchorMessageId?: string;
-  readonly anchorOffset?: number;
-}
-
 export interface ConversationStreamingSnapshot {
   readonly streamingMessageId: string | null;
   readonly isThinking: boolean;
@@ -31,7 +25,6 @@ export interface ConversationRenderSnapshot {
   readonly revision: number;
   readonly messages: readonly Message[];
   readonly streaming: ConversationStreamingSnapshot;
-  readonly viewport: ConversationViewportSnapshot;
   readonly visibility: ConversationVisibility;
   readonly retention: ConversationRetention;
 }
@@ -46,7 +39,6 @@ export type ConversationRenderMutation =
       readonly kind: 'host-snapshot';
       readonly messages: readonly Message[];
       readonly streaming: ConversationStreamingSnapshot;
-      readonly viewport?: ConversationViewportSnapshot;
     })
   | (RevisionedConversationMutation & {
       readonly kind: 'timeline-commit';
@@ -63,10 +55,6 @@ export type ConversationRenderMutation =
   | (RevisionedConversationMutation & {
       readonly kind: 'completion';
       readonly messages: readonly Message[];
-    })
-  | (RevisionedConversationMutation & {
-      readonly kind: 'viewport-update';
-      readonly viewport: ConversationViewportSnapshot;
     })
   | {
       readonly kind: 'activation';
@@ -133,10 +121,6 @@ export interface ConversationActivationTransaction {
     readonly markdown?: ConversationMarkdownTimelineResourceOwner;
   }): void;
 }
-
-export const DEFAULT_CONVERSATION_VIEWPORT: ConversationViewportSnapshot = {
-  followMode: 'follow-tail',
-};
 
 export function createIdleConversationStreamingSnapshot(): ConversationStreamingSnapshot {
   return {

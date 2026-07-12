@@ -72,12 +72,9 @@ import {
   discardConversationSnapshotProjection,
   ingestConversationRenderSnapshot,
 } from '@/render-lifecycle/conversation-render-state-adapter';
-import {
-  ConversationRenderLifecycleError,
-  DEFAULT_CONVERSATION_VIEWPORT,
-  type ConversationActivationSource,
-  type ConversationViewportSnapshot,
-  type ForegroundConversationAvailability,
+import type {
+  ConversationActivationSource,
+  ForegroundConversationAvailability,
 } from '@/render-lifecycle/conversation-render-contract';
 import {
   applyUserMessageToConversationSummaries,
@@ -1384,32 +1381,6 @@ export function ConversationController({
     [conversationRenderCoordinator, tabConversationIds, tabRenderRevisionSignature],
   );
 
-  const visibleViewport = visibleConversationId
-    ? (tabRenderSnapshots.get(visibleConversationId)?.viewport ?? DEFAULT_CONVERSATION_VIEWPORT)
-    : DEFAULT_CONVERSATION_VIEWPORT;
-  const handleViewportChange = useCallback(
-    (viewport: ConversationViewportSnapshot): void => {
-      if (!visibleConversationId) return;
-      const snapshot = conversationRenderCoordinator.read(visibleConversationId);
-      if (!snapshot) {
-        const error = new ConversationRenderLifecycleError({
-          code: 'conversation-snapshot-unavailable',
-          message: `Conversation ${visibleConversationId} has no retained render snapshot for viewport update.`,
-          conversationId: visibleConversationId,
-        });
-        setGlobalError(error.message);
-        throw error;
-      }
-      conversationRenderCoordinator.ingest({
-        kind: 'viewport-update',
-        conversationId: visibleConversationId,
-        baseRevision: snapshot.revision,
-        viewport,
-      });
-    },
-    [conversationRenderCoordinator, visibleConversationId],
-  );
-
   const displayTabs = useMemo(
     () =>
       projectDisplayTabs({
@@ -1574,8 +1545,6 @@ export function ConversationController({
             activeSkill={activeSkill}
             setActiveSkill={setActiveSkill}
             activationProgress={activationProgress}
-            viewport={visibleViewport}
-            onViewportChange={handleViewportChange}
             // Context chips
             ambientNodes={ambientNodes}
             // Agent state

@@ -20,10 +20,8 @@ import type { AgentContextPayload, TaskRunScope } from '@neko/shared';
 import type { AmbientCanvasNodeProjection } from '@/presenters/plugin-transfer-presenter';
 import type { ActivationProgressTimeline } from '@/presenters/activation-progress-presenter';
 import type { ActiveSkillIndicator } from '@/components/ChatView/SkillIndicator';
-import type {
-  ConversationViewportSnapshot,
-  ForegroundConversationAvailability,
-} from '@/render-lifecycle/conversation-render-contract';
+import type { ForegroundConversationAvailability } from '@/render-lifecycle/conversation-render-contract';
+import type { TabViewportSnapshot } from '@/render-runtime/tab-render-runtime';
 import { CharacterDialogueHeader } from '@/components/ChatView/CharacterDialogueHeader';
 import { EmbodyCharacterHeader } from '@/components/ChatView/EmbodyCharacterHeader';
 import { AgentRunStatus } from '@/components/ChatView/AgentRunStatus';
@@ -49,8 +47,8 @@ interface ChatViewProps {
   /** Active skill indicator */
   activeSkill?: ActiveSkillIndicator | null;
   activationProgress?: readonly ActivationProgressTimeline[];
-  viewport?: ConversationViewportSnapshot;
-  onViewportChange?: (viewport: ConversationViewportSnapshot) => void;
+  viewport?: TabViewportSnapshot;
+  onViewportChange?: (viewport: TabViewportSnapshot) => void;
   onClearActiveSkill?: (recordId?: string) => void;
   // Unified work items
   workItems?: AgentWorkItem[];

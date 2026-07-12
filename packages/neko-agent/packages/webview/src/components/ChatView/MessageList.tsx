@@ -8,7 +8,7 @@
 import { useRef, useEffect, useCallback, useMemo, type UIEvent } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { Message } from '@neko-agent/types';
-import type { ConversationViewportSnapshot } from '@/render-lifecycle/conversation-render-contract';
+import type { TabViewportSnapshot } from '@/render-runtime/tab-render-runtime';
 import { MessageItem } from '@/components/ChatView/MessageItem';
 import { ContentBlockItem } from '@/components/ChatView/ContentBlockItem';
 import { ProcessRecordsGroup } from '@/components/ChatView/ProcessRecordsGroup';
@@ -34,8 +34,8 @@ interface MessageListProps {
   activeSkillNotice?: ActiveSkillIndicator | null;
   activationProgress?: readonly ActivationProgressTimeline[];
   onClearActiveSkill?: (recordId?: string) => void;
-  viewport?: ConversationViewportSnapshot;
-  onViewportChange?: (viewport: ConversationViewportSnapshot) => void;
+  viewport?: TabViewportSnapshot;
+  onViewportChange?: (viewport: TabViewportSnapshot) => void;
 }
 
 export function MessageList({
@@ -59,7 +59,7 @@ export function MessageList({
     conversationId: string | null;
     message: Message | undefined;
   }>({ conversationId: null, message: undefined });
-  const lastReportedViewportRef = useRef<ConversationViewportSnapshot>(viewport);
+  const lastReportedViewportRef = useRef<TabViewportSnapshot>(viewport);
   const autoScrollRafRef = useRef<number | null>(null);
   const autoScrollWindowRef = useRef<Window | null>(null);
   const programmaticScrollTargetRef = useRef<number | null>(null);
@@ -174,7 +174,7 @@ export function MessageList({
       const currentVirtualizer = virtualizerRef.current;
       const nextViewport =
         distanceFromTail <= 24
-          ? ({ followMode: 'follow-tail' } satisfies ConversationViewportSnapshot)
+          ? ({ followMode: 'follow-tail' } satisfies TabViewportSnapshot)
           : captureDetachedViewport(
               element.scrollTop,
               currentVirtualizer.getVirtualItems(),
@@ -326,7 +326,7 @@ function captureDetachedViewport(
   virtualItems: readonly { readonly index: number; readonly start: number }[],
   items: readonly { readonly ownerMessageId: string | null }[],
   getItemStart: (index: number) => number | undefined,
-): ConversationViewportSnapshot | null {
+): TabViewportSnapshot | null {
   const ownedItems = virtualItems.flatMap((virtualItem) => {
     const ownerMessageId = items[virtualItem.index]?.ownerMessageId;
     return ownerMessageId ? [{ ...virtualItem, ownerMessageId }] : [];
@@ -349,10 +349,7 @@ function captureDetachedViewport(
   };
 }
 
-function isMatchingViewport(
-  current: ConversationViewportSnapshot,
-  next: ConversationViewportSnapshot,
-): boolean {
+function isMatchingViewport(current: TabViewportSnapshot, next: TabViewportSnapshot): boolean {
   return (
     current.followMode === next.followMode &&
     current.anchorMessageId === next.anchorMessageId &&

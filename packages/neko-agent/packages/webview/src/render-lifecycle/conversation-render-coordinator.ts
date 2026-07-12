@@ -4,10 +4,7 @@ import type {
   ConversationRenderSnapshot,
   ConversationStreamingSnapshot,
 } from './conversation-render-contract';
-import {
-  ConversationRenderLifecycleError,
-  DEFAULT_CONVERSATION_VIEWPORT,
-} from './conversation-render-contract';
+import { ConversationRenderLifecycleError } from './conversation-render-contract';
 
 type RevisionedMutation = Extract<ConversationRenderMutation, { readonly baseRevision: number }>;
 type ActivationMutation = Extract<ConversationRenderMutation, { readonly kind: 'activation' }>;
@@ -241,7 +238,6 @@ function createNextSnapshot(
       revision: 0,
       messages: [],
       streaming: emptyStreamingForMutation(mutation),
-      viewport: DEFAULT_CONVERSATION_VIEWPORT,
       visibility: 'background',
       retention: 'retained',
     } satisfies ConversationRenderSnapshot);
@@ -253,7 +249,6 @@ function createNextSnapshot(
         revision: base.revision + 1,
         messages: [...mutation.messages],
         streaming: copyStreaming(mutation.streaming),
-        viewport: mutation.viewport ?? base.viewport,
       };
     case 'timeline-commit':
       return {
@@ -290,25 +285,7 @@ function createNextSnapshot(
             : null,
         },
       };
-    case 'viewport-update':
-      if (isMatchingViewport(base.viewport, mutation.viewport)) return base;
-      return {
-        ...base,
-        revision: base.revision + 1,
-        viewport: { ...mutation.viewport },
-      };
   }
-}
-
-function isMatchingViewport(
-  current: ConversationRenderSnapshot['viewport'],
-  next: ConversationRenderSnapshot['viewport'],
-): boolean {
-  return (
-    current.followMode === next.followMode &&
-    current.anchorMessageId === next.anchorMessageId &&
-    current.anchorOffset === next.anchorOffset
-  );
 }
 
 function emptyStreamingForMutation(mutation: RevisionedMutation): ConversationStreamingSnapshot {

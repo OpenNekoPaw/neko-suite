@@ -60,11 +60,8 @@ import {
   projectMediaModelSelectionForSessionModeChange,
 } from '@/presenters/config-message-presenter';
 import { isCharacterRoleConversationKind } from '@/presenters/character-role-session-presenter';
-import type {
-  ConversationViewportSnapshot,
-  ForegroundConversationAvailability,
-} from '@/render-lifecycle/conversation-render-contract';
-import type { TabRenderStore } from '@/render-runtime/tab-render-runtime';
+import type { ForegroundConversationAvailability } from '@/render-lifecycle/conversation-render-contract';
+import type { TabRenderStore, TabViewportSnapshot } from '@/render-runtime/tab-render-runtime';
 import { useTabRenderStore } from '@/render-runtime/useTabRenderStore';
 
 // =============================================================================
@@ -116,8 +113,6 @@ export interface ChatWorkspaceProps {
   activeSkill: BoundActiveSkillIndicator | null;
   setActiveSkill: React.Dispatch<React.SetStateAction<BoundActiveSkillIndicator | null>>;
   activationProgress?: readonly ActivationProgressTimeline[];
-  viewport: ConversationViewportSnapshot;
-  onViewportChange: (viewport: ConversationViewportSnapshot) => void;
   // Context chips
   ambientNodes: Array<{ nodeId: string; type: string; summary: string }>;
   // Agent state
@@ -181,8 +176,6 @@ export function ChatWorkspace({
   activeSkill,
   setActiveSkill,
   activationProgress = [],
-  viewport,
-  onViewportChange,
   ambientNodes,
   agentState,
   handleMessage,
@@ -218,6 +211,7 @@ export function ChatWorkspace({
   const entryPromptMenu = tabState.menus.entryPrompt;
   const composition = tabState.composition;
   const focus = tabState.focus;
+  const viewport = tabState.viewport;
 
   const setInputValue = useCallback<React.Dispatch<React.SetStateAction<string>>>(
     (value) => {
@@ -259,6 +253,13 @@ export function ChatWorkspace({
       focus: { target: 'input', requestRevision: state.focus.requestRevision + 1 },
     }));
   }, [updateTabRenderState]);
+
+  const setViewport = useCallback(
+    (nextViewport: TabViewportSnapshot) => {
+      updateTabRenderState({ viewport: nextViewport });
+    },
+    [updateTabRenderState],
+  );
 
   const setSelectedModel = useCallback(
     (modelId: string) => {
@@ -841,7 +842,7 @@ export function ChatWorkspace({
         }
         activationProgress={!isCharacterRoleSession ? activationProgress : []}
         viewport={viewport}
-        onViewportChange={onViewportChange}
+        onViewportChange={setViewport}
         onClearActiveSkill={skillActions.handleClearActiveSkill}
         workItems={workItems}
         pluginsAvailable={pluginsAvailable}

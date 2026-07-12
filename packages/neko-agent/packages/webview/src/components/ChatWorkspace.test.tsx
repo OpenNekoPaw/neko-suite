@@ -121,6 +121,16 @@ vi.mock('@/components/ChatView', () => ({
     focusRequestOwner?: string;
     focusRequestTarget?: 'none' | 'input';
     focusRequestRevision?: number;
+    viewport?: {
+      followMode: 'follow-tail' | 'detached';
+      anchorMessageId?: string;
+      anchorOffset?: number;
+    };
+    onViewportChange?: (viewport: {
+      followMode: 'follow-tail' | 'detached';
+      anchorMessageId?: string;
+      anchorOffset?: number;
+    }) => void;
   }) => (
     <div>
       <button
@@ -202,6 +212,21 @@ vi.mock('@/components/ChatView', () => ({
         {props.focusRequestOwner ?? 'none'}:{props.focusRequestTarget ?? 'none'}:
         {props.focusRequestRevision ?? 0}
       </span>
+      <span data-testid="viewport-state">
+        {props.viewport?.followMode ?? 'none'}:{props.viewport?.anchorMessageId ?? 'none'}:
+        {props.viewport?.anchorOffset ?? 0}
+      </span>
+      <button
+        type="button"
+        data-testid="detach-viewport"
+        onClick={() =>
+          props.onViewportChange?.({
+            followMode: 'detached',
+            anchorMessageId: `anchor-${props.focusRequestOwner ?? 'none'}`,
+            anchorOffset: 25,
+          })
+        }
+      />
       <span data-testid="attachment-count">{props.attachedFiles?.length ?? 0}</span>
       <span data-testid="reference-count">{props.selectedFileReferences?.length ?? 0}</span>
     </div>
@@ -768,6 +793,31 @@ describe('ChatWorkspace pending send', () => {
     );
   });
 
+  it('keeps viewport and scroll intent isolated by Tab store', () => {
+    const runtimeA = createTabRenderRuntime({ tabId: 'tab-a', conversationId: 'conv-a' });
+    const runtimeB = createTabRenderRuntime({ tabId: 'tab-b', conversationId: 'conv-a' });
+    const { rerender } = render(
+      <ChatWorkspace {...createProps({ tabRenderStore: runtimeA.store })} />,
+    );
+
+    fireEvent.click(screen.getByTestId('detach-viewport'));
+    expect(runtimeA.store.getSnapshot().state.viewport).toEqual({
+      followMode: 'detached',
+      anchorMessageId: 'anchor-tab-a',
+      anchorOffset: 25,
+    });
+
+    rerender(<ChatWorkspace {...createProps({ tabRenderStore: runtimeB.store })} />);
+    expect(screen.getByTestId('viewport-state').textContent).toContain('follow-tail:none:0');
+    fireEvent.click(screen.getByTestId('detach-viewport'));
+    expect(runtimeB.store.getSnapshot().state.viewport).toEqual({
+      followMode: 'detached',
+      anchorMessageId: 'anchor-tab-b',
+      anchorOffset: 25,
+    });
+    expect(runtimeA.store.getSnapshot().state.viewport.anchorMessageId).toBe('anchor-tab-a');
+  });
+
   it('keeps composition and focus requests isolated by Tab store', () => {
     const runtimeA = createTabRenderRuntime({ tabId: 'tab-a', conversationId: 'conv-a' });
     const runtimeB = createTabRenderRuntime({ tabId: 'tab-b', conversationId: 'conv-b' });
@@ -873,8 +923,6 @@ function createProps(overrides: Partial<ChatWorkspaceProps> = {}): ChatWorkspace
     skills: [],
     activeSkill: null,
     setActiveSkill: noop as React.Dispatch<React.SetStateAction<ChatWorkspaceProps['activeSkill']>>,
-    viewport: { followMode: 'follow-tail' },
-    onViewportChange: noop,
     ambientNodes: [],
     agentState: null,
     handleMessage: noop,

@@ -15,10 +15,16 @@ import type {
 } from '@/components/ChatView/InputArea/types';
 import { DEFAULT_GENERATION_PARAMS } from '@/components/ChatView/InputArea/types';
 import type { MediaModelSelection, MediaUnderstandingSelection } from '@/hooks/useUIState';
-import {
-  DEFAULT_CONVERSATION_VIEWPORT,
-  type ConversationViewportSnapshot,
-} from '@/render-lifecycle/conversation-render-contract';
+
+export interface TabViewportSnapshot {
+  readonly followMode: 'follow-tail' | 'detached';
+  readonly anchorMessageId?: string;
+  readonly anchorOffset?: number;
+}
+
+export const DEFAULT_TAB_VIEWPORT: TabViewportSnapshot = {
+  followMode: 'follow-tail',
+};
 
 export type TabRenderRuntimeLifecycle = 'attaching' | 'ready' | 'detached' | 'disposed';
 export type TabRenderVisibility = 'visible' | 'hidden';
@@ -64,7 +70,7 @@ export interface TabRenderState {
   readonly generationParams: Readonly<GenerationParams>;
   readonly composition: TabComposerCompositionState;
   readonly focus: TabComposerFocusState;
-  readonly viewport: ConversationViewportSnapshot;
+  readonly viewport: TabViewportSnapshot;
   readonly menus: TabRenderMenuState;
   readonly queuedEdit: TabQueuedEditState | null;
   readonly diagnostics: readonly AgentSessionDiagnosticMessage[];
@@ -339,7 +345,7 @@ function createInitialTabRenderState(): TabRenderState {
     generationParams: Object.freeze({ ...DEFAULT_GENERATION_PARAMS }),
     composition: Object.freeze({ isComposing: false }),
     focus: Object.freeze({ target: 'none', requestRevision: 0 }),
-    viewport: Object.freeze({ ...DEFAULT_CONVERSATION_VIEWPORT }),
+    viewport: Object.freeze({ ...DEFAULT_TAB_VIEWPORT }),
     menus: Object.freeze({ entryPrompt: null }),
     queuedEdit: null,
     diagnostics: Object.freeze([]),
