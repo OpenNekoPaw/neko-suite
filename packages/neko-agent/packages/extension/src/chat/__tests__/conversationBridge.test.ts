@@ -452,7 +452,7 @@ describe('ConversationBridge', () => {
 
       expect(handler.getActiveId()).toBe(activeId);
       expect(webview.postMessage).toHaveBeenCalledWith({
-        type: 'activeConversation',
+        type: 'conversationSnapshot',
         conversation: expect.objectContaining({
           id: backgroundId,
           messages: [expect.objectContaining({ id: 'm-bg', content: 'background' })],

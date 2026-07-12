@@ -54,6 +54,7 @@ export const AGENT_WEBVIEW_TO_HOST_MESSAGE_TYPES = [
   'getActiveConversation',
   'getAgentStates',
   'getSettings',
+  'getConversationSnapshot',
   'getConfig',
   'refreshConfigSnapshot',
   'getSkills',

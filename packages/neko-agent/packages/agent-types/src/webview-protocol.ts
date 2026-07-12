@@ -264,6 +264,11 @@ export interface GetSettingsWebviewMessage {
   conversationId: string;
 }
 
+export interface GetConversationSnapshotWebviewMessage {
+  type: 'getConversationSnapshot';
+  conversationId: string;
+}
+
 export interface UpdateSettingsWebviewMessage {
   type: 'updateSettings';
   settings: Record<string, unknown>;
@@ -521,6 +526,7 @@ export type WebviewToExtensionMessage =
   | ConversationLifecycleWebviewMessage
   | EmptyWebviewMessage
   | GetSettingsWebviewMessage
+  | GetConversationSnapshotWebviewMessage
   | PlanActionWebviewMessage
   | PlanStepActionWebviewMessage
   | UpdateSettingsWebviewMessage
@@ -799,6 +805,15 @@ export interface ActiveConversationMessage {
     id: string;
     title?: string;
     messages?: Message[];
+  };
+}
+
+export interface ConversationSnapshotMessage {
+  type: 'conversationSnapshot';
+  conversation: {
+    id: string;
+    title?: string;
+    messages: Message[];
   };
 }
 
@@ -1172,6 +1187,7 @@ export type ExtensionToWebviewMessage =
   | ConversationListMessage
   | ConversationLifecycleResultMessage
   | ActiveConversationMessage
+  | ConversationSnapshotMessage
   | SettingsDataMessage
   | ProjectFilesMessage
   | ConfigStateMessage
@@ -1301,6 +1317,8 @@ export const WEBVIEW_TO_EXTENSION_MESSAGE_TYPES = [
   ...QUEUED_MESSAGE_ACTION_TYPES,
   'conversationLifecycle',
   ...EMPTY_MESSAGE_TYPES,
+  'getSettings',
+  'getConversationSnapshot',
   ...PLAN_ACTION_MESSAGE_TYPES,
   ...PLAN_STEP_ACTION_MESSAGE_TYPES,
   'updateSettings',
@@ -1866,6 +1884,10 @@ export function parseWebviewToExtensionMessage(raw: unknown): WebviewToExtension
     return parseActivateConversationMessage(raw);
   }
   if (type === 'getSettings') {
+    const conversationId = requiredString(raw.conversationId);
+    return conversationId ? { type, conversationId } : null;
+  }
+  if (type === 'getConversationSnapshot') {
     const conversationId = requiredString(raw.conversationId);
     return conversationId ? { type, conversationId } : null;
   }

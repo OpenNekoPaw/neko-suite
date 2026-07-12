@@ -44,6 +44,7 @@ export const CHAT_WEBVIEW_MESSAGE_ROUTER_TYPES = [
   'setPromptMode',
   'getPromptMode',
   'getSettings',
+  'getConversationSnapshot',
   'refreshConfigSnapshot',
   'updateSettings',
   'getTabState',

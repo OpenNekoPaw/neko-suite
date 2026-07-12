@@ -125,8 +125,6 @@ export interface ChatWorkspaceProps {
   ambientNodes: Array<{ nodeId: string; type: string; summary: string }>;
   // Agent state
   agentState: AgentState | null;
-  // Message handler (for pre-intercept)
-  handleMessage: (event: MessageEvent) => void;
   setAmbientNodes: React.Dispatch<
     React.SetStateAction<Array<{ nodeId: string; type: string; summary: string }>>
   >;
@@ -183,7 +181,6 @@ export function ChatWorkspace({
   activationProgress = [],
   ambientNodes,
   agentState,
-  handleMessage,
   setAmbientNodes,
   onNewChat,
   onUserMessageSent,
@@ -562,8 +559,7 @@ export function ChatWorkspace({
     updateTabRenderState,
   ]);
 
-  // Pre-intercept handler: catches messages not in the registry
-  const handleMessageWithExtras = useCallback(
+  const handleVisibleUiMessage = useCallback(
     (event: MessageEvent) => {
       const msg = event.data as {
         type?: string;
@@ -572,7 +568,7 @@ export function ChatWorkspace({
         conversationId?: string | null;
         nodes?: Array<{ nodeId: string; type: string; summary: string }>;
       };
-      if (!msg?.type) return handleMessage(event);
+      if (!msg?.type) return;
       switch (msg.type) {
         case 'externalMessage':
           if (isCharacterRoleSession) {
@@ -593,9 +589,6 @@ export function ChatWorkspace({
             inputValueRef.current = msg.message;
           }
           break;
-        case 'injectContext':
-          handleMessage(event);
-          break;
         case 'ambientCanvasUpdate':
           if (isCharacterRoleSession) {
             break;
@@ -607,11 +600,10 @@ export function ChatWorkspace({
           setAmbientNodes(msg.nodes ?? []);
           break;
         default:
-          handleMessage(event);
+          break;
       }
     },
     [
-      handleMessage,
       triggerSend,
       setInputValue,
       setActiveTab,
@@ -621,15 +613,15 @@ export function ChatWorkspace({
     ],
   );
 
-  const visibleMessageHandlerRef = useRef(handleMessageWithExtras);
+  const visibleMessageHandlerRef = useRef(handleVisibleUiMessage);
   const isVisibleRef = useRef(isVisible);
   useLayoutEffect(() => {
-    visibleMessageHandlerRef.current = handleMessageWithExtras;
+    visibleMessageHandlerRef.current = handleVisibleUiMessage;
     isVisibleRef.current = isVisible;
-  }, [handleMessageWithExtras, isVisible]);
+  }, [handleVisibleUiMessage, isVisible]);
 
-  // Every retained workspace keeps one stable listener. Only the visible Tab may
-  // consume host UI events, so switching cannot create a detach/attach gap.
+  // Domain messages are owned by ConversationController. A retained workspace
+  // consumes only visible, Tab-local UI events.
   useEffect(() => {
     const listener = (event: MessageEvent) => {
       if (isVisibleRef.current) visibleMessageHandlerRef.current(event);

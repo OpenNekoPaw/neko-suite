@@ -13,6 +13,13 @@ The Agent Webview SHALL create one `TabRenderRuntime` per open Tab binding. Each
 - **THEN** A's independent store and component lifecycle MUST receive or retain A's projection updates
 - **AND** B's rendered messages, Markdown, scroll, input, and configuration MUST remain unchanged
 
+#### Scenario: Webview realm restores multiple open Tabs
+- **WHEN** a new Webview realm receives bindings for multiple open Tabs
+- **THEN** it SHALL reconcile all Tab runtimes before requesting historical conversation and settings snapshots
+- **AND** it SHALL request each unique bound conversation at most once during that realm
+- **AND** historical snapshot responses SHALL update only the named conversation cache without changing foreground activation
+- **AND** ordinary Tab switching SHALL NOT repeat those restore requests
+
 ### Requirement: Tab activation changes visibility only
 Activating a Tab SHALL change which keyed Tab subtree is visible. Activation MUST NOT copy save/restore state through a shared input component, rebind Agent runtime ownership, mutate conversation configuration, or flush, discard, attach, detach, or reset another Tab's projection channel.
 

@@ -212,9 +212,12 @@ On Webview initialization:
 
 1. Extension exposes open Tab bindings and endpoint epoch.
 2. Webview creates one `TabRenderRuntime` per Tab.
-3. Each runtime attaches to its conversation and receives an authoritative projection/config/session snapshot.
-4. Webview ACKs and begins live frames.
-5. The active Tab is made visible only after its own runtime reaches a renderable state; background Tabs continue independently.
+3. After the bindings exist, the Webview requests one cache-only historical conversation snapshot and one conversation-settings snapshot for each unique bound `conversationId` in that browser realm.
+4. Each runtime attaches to its conversation and receives an authoritative projection snapshot.
+5. Webview ACKs and begins live frames.
+6. The active Tab is made visible only after its own runtime reaches a renderable state; background Tabs continue independently.
+
+`tabState` never carries or triggers foreground-dependent conversation hydration in the Extension. The Webview issues restore reads only after reconciling immutable Tab bindings, deduplicates them per conversation for the lifetime of the realm, and does not issue them on ordinary Tab switching. A historical snapshot response updates only the named conversation cache; it cannot mutate Extension or Webview foreground activation.
 
 Endpoint discovery includes an explicit Agent Webview protocol version and a Webview-realm identity generated once per mounted realm. The Extension echoes that realm identity with the endpoint epoch. A different realm identity on the same VS Code Webview means the browser realm was reloaded: the Extension abandons the old realm's attachment server without posting detach frames into the new realm, allocates a new endpoint epoch, and only then accepts new attachments. Repeated discovery from the same realm is idempotent. This distinguishes a retained stale Webview bundle after Extension Host restart, a same-Webview realm reload, and a malformed same-version message before attachments start.
 

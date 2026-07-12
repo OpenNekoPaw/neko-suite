@@ -7,6 +7,7 @@
 import { defineHandler } from './types';
 import type { MessageHandler, HandlerRegistration } from './types';
 import type { TabStateMessage } from './messages';
+import { AgentHostMessages } from '../messages';
 
 /**
  * Handle 'tabState' message - Restore tab state from extension
@@ -45,6 +46,17 @@ const handleTabState: MessageHandler<'tabState'> = (message: TabStateMessage, co
       context.setActiveTabId(activeTabId);
     }
 
+    const restoredConversationIds = context.restoredConversationIdsRef;
+    if (!restoredConversationIds) {
+      throw new Error('Tab state handling requires a Webview-owned restore request registry.');
+    }
+    for (const conversationId of new Set(openTabs.map((tab) => tab.conversationId))) {
+      if (restoredConversationIds.current.has(conversationId)) continue;
+      restoredConversationIds.current.add(conversationId);
+      AgentHostMessages.getConversationSnapshot(conversationId);
+      AgentHostMessages.getSettings(conversationId);
+    }
+
     if (isEmptyTabState) {
       context.isTablessConversationViewRef.current = true;
       context.setActiveConversationId(null);
@@ -54,9 +66,6 @@ const handleTabState: MessageHandler<'tabState'> = (message: TabStateMessage, co
     }
 
     const activeTab = activeTabId ? openTabs.find((tab) => tab.id === activeTabId) : undefined;
-    if (activeTab) {
-      context.requestConfigSnapshot?.();
-    }
     if (activeTab) {
       context.isTablessConversationViewRef.current = false;
       context.setActiveTab('chat');

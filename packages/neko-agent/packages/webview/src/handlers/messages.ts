@@ -20,6 +20,7 @@ export type {
   ContextTokenCountMessage,
   ConversationLifecycleResultMessage,
   ConversationListMessage,
+  ConversationSnapshotMessage,
   ErrorMessage,
   ExtensionToWebviewMessage,
   ExternalMessage,

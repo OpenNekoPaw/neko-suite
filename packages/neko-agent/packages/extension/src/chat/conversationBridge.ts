@@ -509,7 +509,7 @@ export class ConversationBridge {
     }
 
     await webview.postMessage({
-      type: 'activeConversation',
+      type: 'conversationSnapshot',
       conversation: {
         id: conversation.id,
         title: conversation.title,

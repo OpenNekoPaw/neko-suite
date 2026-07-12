@@ -445,6 +445,8 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
     });
     this._conversationMessageHandler = new ConversationMessageHandler({
       conversations: this._conversations,
+      onConversationCreated: (conversationId) =>
+        this._bindCreatedConversationToForegroundTab(conversationId),
       promptModeCleanup: this._systemPrompt,
       getWebview: () => this._view?.webview,
     });
@@ -1253,6 +1255,27 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
     this._view.webview.postMessage(
       buildChatTabStateMessage(this._tabState, this._tabStateRevision),
     );
+  }
+
+  private _bindCreatedConversationToForegroundTab(conversationId: string): void {
+    const conversation = this._conversations.get(conversationId);
+    if (!conversation) {
+      throw new Error(`Cannot bind missing created conversation ${conversationId} to a Tab.`);
+    }
+    const existingTab = this._tabState.openTabs.find(
+      (tab) => tab.conversationId === conversationId,
+    );
+    const tab = existingTab ?? {
+      id: `tab-${conversationId}`,
+      title: conversation.title || 'New Chat',
+      conversationId,
+    };
+    this._tabState = {
+      openTabs: existingTab ? this._tabState.openTabs : [...this._tabState.openTabs, tab],
+      activeTabId: tab.id,
+    };
+    this._saveTabState();
+    this._sendTabState();
   }
 
   private _activateConversation(message: ActivateConversationWebviewMessage): void {

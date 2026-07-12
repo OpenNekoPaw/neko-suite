@@ -19,6 +19,7 @@ import type {
   ConversationListMessage,
   ConversationLifecycleResultMessage,
   ActiveConversationMessage,
+  ConversationSnapshotMessage,
 } from './messages';
 import type { Message } from '@neko-agent/types';
 import {
@@ -172,16 +173,7 @@ const handleActiveConversation: MessageHandler<'activeConversation'> = (
     activeTab.conversationId !== conversationId &&
     !shouldActivateForeground;
 
-  if (conversationId) {
-    cacheConversationProjection(context, conversationId, projection.messages, projection.streaming);
-    context.forceUpdate();
-
-    if (projection.workItems.length > 0) {
-      context.setWorkItemsByConversation((previous) =>
-        upsertWorkItemsForConversation(previous, conversationId, projection.workItems),
-      );
-    }
-  }
+  if (conversationId) cacheProjectedConversation(context, conversationId, projection);
 
   if (
     shouldCacheOnly ||
@@ -219,6 +211,31 @@ const handleActiveConversation: MessageHandler<'activeConversation'> = (
   }
 };
 
+const handleConversationSnapshot: MessageHandler<'conversationSnapshot'> = (
+  message: ConversationSnapshotMessage,
+  context,
+) => {
+  const projection = projectActiveConversation({
+    conversation: message.conversation,
+    openTabs: context.openTabs,
+  });
+  cacheProjectedConversation(context, message.conversation.id, projection);
+};
+
+function cacheProjectedConversation(
+  context: MessageHandlerContext,
+  conversationId: string,
+  projection: ReturnType<typeof projectActiveConversation>,
+): void {
+  cacheConversationProjection(context, conversationId, projection.messages, projection.streaming);
+  context.forceUpdate();
+  if (projection.workItems.length > 0) {
+    context.setWorkItemsByConversation((previous) =>
+      upsertWorkItemsForConversation(previous, conversationId, projection.workItems),
+    );
+  }
+}
+
 function cacheConversationProjection(
   context: MessageHandlerContext,
   conversationId: string,
@@ -250,4 +267,5 @@ export const conversationHandlers: HandlerRegistration[] = [
   defineHandler('conversationList', handleConversationList),
   defineHandler('conversationLifecycleResult', handleConversationLifecycleResult),
   defineHandler('activeConversation', handleActiveConversation),
+  defineHandler('conversationSnapshot', handleConversationSnapshot),
 ];

@@ -19,6 +19,13 @@ import type {
   StreamingState,
 } from '../types';
 
+const hostMessageMocks = vi.hoisted(() => ({
+  getConversationSnapshot: vi.fn(),
+  getSettings: vi.fn(),
+}));
+
+vi.mock('@/messages', () => ({ AgentHostMessages: hostMessageMocks }));
+
 describe('character role context isolation', () => {
   it('projects creative lifecycle results without coupling them to Tab rendering', () => {
     const harness = createContextHarness({
@@ -120,6 +127,33 @@ describe('character role context isolation', () => {
     expect(harness.messages()).toEqual([message('visible-old', 'assistant', 'visible old')]);
   });
 
+  it('caches a conversationSnapshot without changing active Tab metadata', () => {
+    const harness = createContextHarness({
+      activeConversationId: 'conv-a',
+      activeTabId: 'tab-a',
+      openTabs: [
+        { id: 'tab-a', title: 'A', conversationId: 'conv-a' },
+        { id: 'tab-b', title: 'B', conversationId: 'conv-b' },
+      ],
+    });
+    const backgroundMessage = message('background', 'assistant', 'background snapshot');
+
+    dispatch(
+      conversationHandlers,
+      {
+        type: 'conversationSnapshot',
+        conversation: conversation('conv-b', [backgroundMessage]),
+      },
+      harness.context,
+    );
+
+    expect(harness.activeConversationId()).toBe('conv-a');
+    expect(harness.activeTabId()).toBe('tab-a');
+    expect(harness.conversationMessages().get('conv-b')).toEqual([backgroundMessage]);
+    expect(harness.messages()).toEqual([message('visible-old', 'assistant', 'visible old')]);
+    expect(harness.forceUpdateCount()).toBe(1);
+  });
+
   it('does not let an ordinary snapshot replace an active character-role Tab', () => {
     const roleTab: OpenTab = {
       id: 'tab-role',
@@ -202,6 +236,8 @@ describe('character role context isolation', () => {
   });
 
   it('applies tabState as runtime binding and visibility state only', () => {
+    hostMessageMocks.getConversationSnapshot.mockClear();
+    hostMessageMocks.getSettings.mockClear();
     const harness = createContextHarness({
       activeConversationId: 'conv-a',
       activeTabId: 'tab-a',
@@ -239,6 +275,21 @@ describe('character role context isolation', () => {
       queuedMessageCount: 2,
     });
     expect(harness.activeConversationId()).toBe('conv-a');
+    expect(hostMessageMocks.getConversationSnapshot.mock.calls).toEqual([['conv-a'], ['conv-b']]);
+    expect(hostMessageMocks.getSettings.mock.calls).toEqual([['conv-a'], ['conv-b']]);
+
+    dispatch(
+      tabHandlers,
+      {
+        type: 'tabState',
+        revision: 3,
+        tabState: { openTabs: nextTabs, activeTabId: 'tab-a' },
+      },
+      harness.context,
+    );
+
+    expect(hostMessageMocks.getConversationSnapshot.mock.calls).toEqual([['conv-a'], ['conv-b']]);
+    expect(hostMessageMocks.getSettings.mock.calls).toEqual([['conv-a'], ['conv-b']]);
   });
 
   it('keeps shared content untouched when the final Tab closes', () => {
@@ -369,6 +420,7 @@ function createContextHarness(options: ContextHarnessOptions = {}): ContextHarne
     isTablessConversationViewRef: ref(false),
     pendingForegroundConversationActivationRef,
     tabStateRevisionRef: ref(0),
+    restoredConversationIdsRef: ref(new Set<string>()),
     reconcileTabRenderRuntimes: (bindings, nextActiveTabId) => {
       reconciliations.push({ bindings, activeTabId: nextActiveTabId });
     },

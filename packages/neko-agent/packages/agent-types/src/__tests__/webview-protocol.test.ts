@@ -227,6 +227,13 @@ describe('webview protocol parser', () => {
     expect(parseWebviewToExtensionMessage({ type: 'getSettings' })).toBeNull();
     expect(
       parseWebviewToExtensionMessage({
+        type: 'getConversationSnapshot',
+        conversationId: 'conv-1',
+      }),
+    ).toEqual({ type: 'getConversationSnapshot', conversationId: 'conv-1' });
+    expect(parseWebviewToExtensionMessage({ type: 'getConversationSnapshot' })).toBeNull();
+    expect(
+      parseWebviewToExtensionMessage({
         type: 'updateSettings',
         conversationId: 'conv-1',
         settings: { executionMode: 'auto' },

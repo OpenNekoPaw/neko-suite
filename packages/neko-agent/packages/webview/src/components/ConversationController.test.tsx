@@ -33,6 +33,7 @@ const vscodeMocks = vi.hoisted(() => ({
   deleteConversation: vi.fn(),
   searchProjectFiles: vi.fn(),
   getSettings: vi.fn(),
+  getConversationSnapshot: vi.fn(),
   getContextTokenCount: vi.fn(),
   getTasks: vi.fn(),
   getPromptMode: vi.fn(),
@@ -1625,6 +1626,55 @@ describe('ConversationController entry state', () => {
     expect(screen.getByTestId('workspace-tab-conversation').textContent).toBe('conv-b');
     expect(screen.getByTestId('workspace-switching').textContent).toBe('idle');
     expect(screen.getByTestId('workspace-messages').textContent).toBe('生成猫猫玩耍的图片');
+  });
+
+  it('caches every restored Tab snapshot across the tabless-to-tabs listener transition', () => {
+    render(<ConversationController {...createProps()} />);
+
+    act(() => {
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          data: {
+            type: 'tabState',
+            revision: 1,
+            tabState: {
+              openTabs: [
+                { id: 'tab-a', title: 'A', conversationId: 'conv-a' },
+                { id: 'tab-b', title: 'B', conversationId: 'conv-b' },
+              ],
+              activeTabId: 'tab-b',
+            },
+          },
+        }),
+      );
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          data: {
+            type: 'conversationSnapshot',
+            conversation: {
+              id: 'conv-a',
+              title: 'A',
+              messages: [message('message-a', 'background A')],
+            },
+          },
+        }),
+      );
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          data: {
+            type: 'conversationSnapshot',
+            conversation: {
+              id: 'conv-b',
+              title: 'B',
+              messages: [message('message-b', 'visible B')],
+            },
+          },
+        }),
+      );
+    });
+
+    expect(screen.getByTestId('workspace-messages').textContent).toBe('visible B');
+    expect(screen.getByTestId('workspace-messages-tab-a').textContent).toBe('background A');
   });
 });
 

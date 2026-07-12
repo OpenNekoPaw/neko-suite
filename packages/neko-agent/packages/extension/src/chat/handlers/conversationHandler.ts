@@ -75,6 +75,7 @@ export interface ConversationLifecycleCommandHandler {
  */
 export interface ConversationMessageHandlerDeps {
   conversations: ConversationBridge;
+  onConversationCreated?: (conversationId: string) => void;
   agentManager?: IAgentManager;
   messages?: AgentMessageTurnHandler;
   creativeAiLifecycle?: ConversationLifecycleCommandHandler;
@@ -371,6 +372,7 @@ export class ConversationMessageHandler {
     const promptModeCleanup = this.deps.promptModeCleanup;
     const effects: ConversationControlRuntimeEffects = {
       createConversation: () => this.deps.conversations.create(),
+      onConversationCreated: (conversationId) => this.deps.onConversationCreated?.(conversationId),
       switchConversation: (conversationId) => this.deps.conversations.switchTo(conversationId),
       deleteConversation: (conversationId, options) =>
         this.deps.conversations.delete(conversationId, options),

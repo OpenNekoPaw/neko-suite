@@ -63,6 +63,10 @@ export function tryHandleConversationRoute(
       void deps.conversationMessageHandler.sendActiveConversation();
       return true;
 
+    case 'getConversationSnapshot':
+      void deps.conversationMessageHandler.sendConversationSnapshot(message.conversationId);
+      return true;
+
     case 'getAgentStates':
       deps.conversationMessageHandler.sendAgentStateSnapshot(webview);
       return true;

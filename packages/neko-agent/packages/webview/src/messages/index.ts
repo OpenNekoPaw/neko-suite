@@ -180,6 +180,11 @@ export const AgentHostMessages = {
     postConversationMessage({ type: 'getSettings', conversationId });
   },
 
+  /** Request a cache-only historical snapshot for one bound conversation. */
+  getConversationSnapshot: (conversationId: string) => {
+    postConversationMessage({ type: 'getConversationSnapshot', conversationId });
+  },
+
   /** Request a lifecycle-scoped config/settings snapshot */
   refreshConfigSnapshot: () => {
     postWebviewMessage({ type: 'refreshConfigSnapshot' });

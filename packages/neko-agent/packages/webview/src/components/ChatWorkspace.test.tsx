@@ -727,12 +727,10 @@ describe('ChatWorkspace pending send', () => {
   });
 
   it('keeps hidden Tab workspaces mounted but non-interactive', () => {
-    const handleMessage = vi.fn();
     const { getByTestId } = render(
       <ChatWorkspace
         {...createProps({
           isVisible: false,
-          handleMessage,
         })}
       />,
     );
@@ -750,13 +748,11 @@ describe('ChatWorkspace pending send', () => {
     });
     fireEvent.click(getByTestId('send'));
 
-    expect(handleMessage).not.toHaveBeenCalled();
     expect(vscodeMocks.sendMessage).not.toHaveBeenCalled();
   });
 
   it('routes visible mutations through the immutable Tab runtime binding', () => {
     const clearMessages = vi.fn();
-    const handleMessage = vi.fn();
     const setAmbientNodes = vi.fn();
     const runtime = createTabRenderRuntime({ tabId: 'tab-b', conversationId: 'conv-b' });
     runtime.store.updateState({
@@ -782,23 +778,12 @@ describe('ChatWorkspace pending send', () => {
               },
             ],
           },
-          handleMessage,
           setAmbientNodes,
         })}
       />,
     );
 
     act(() => {
-      window.dispatchEvent(
-        new MessageEvent('message', {
-          data: {
-            type: 'injectContext',
-            tabId: 'tab-b',
-            conversationId: 'conv-b',
-            payload: contextPayload('ctx-switch', 'Switching context'),
-          },
-        }),
-      );
       window.dispatchEvent(
         new MessageEvent('message', {
           data: {
@@ -838,11 +823,6 @@ describe('ChatWorkspace pending send', () => {
     expect(vscodeMocks.viewTaskResult).toHaveBeenCalledWith('task-1', 'result-1');
     expect(clearMessages).toHaveBeenCalledTimes(1);
     expect(runtime.store.getSnapshot().state.promptMode).toBe('plan');
-    expect(handleMessage).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({ type: 'injectContext', tabId: 'tab-b' }),
-      }),
-    );
     expect(setAmbientNodes).toHaveBeenCalledWith([
       { nodeId: 'node-b', type: 'scene', summary: 'Tab B scene' },
     ]);
@@ -970,7 +950,6 @@ function createProps(overrides: Partial<ChatWorkspaceProps> = {}): ChatWorkspace
     setActiveSkill: noop as React.Dispatch<React.SetStateAction<ChatWorkspaceProps['activeSkill']>>,
     ambientNodes: [],
     agentState: null,
-    handleMessage: noop,
     setAmbientNodes: noop as React.Dispatch<
       React.SetStateAction<Array<{ nodeId: string; type: string; summary: string }>>
     >,

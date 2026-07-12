@@ -56,6 +56,7 @@
 - [x] 6.7 Migrate Markdown sessions and work-item/message rendering to consume each Tab runtime's projection replica.
 - [x] 6.8 Add deterministic tests for snapshot-before-patch, projection changes during ACK, rapid visibility switching, endpoint restart, stale ACK, frame gap, and exact final content.
 - [x] 6.9 Add explicit Webview-realm discovery identity and replace the attachment endpoint after a same-Webview realm reload without retry loops or old-realm frame delivery.
+- [x] 6.10 Restore every open Tab's historical conversation snapshot after a Webview realm reload through a cache-only message that cannot mutate foreground activation.
 
 ## 7. Legacy Removal, Documentation, and Validation
 

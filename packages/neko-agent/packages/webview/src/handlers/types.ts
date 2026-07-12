@@ -176,6 +176,8 @@ export interface HelperContext {
   pendingForegroundConversationActivationRef?: MutableRefObject<PendingForegroundConversationActivation | null>;
   /** Latest accepted or optimistically allocated Tab-state revision in this Webview realm. */
   tabStateRevisionRef?: MutableRefObject<number>;
+  /** Conversations whose restore snapshots were requested in this Webview realm. */
+  restoredConversationIdsRef?: MutableRefObject<Set<string>>;
   reconcileTabRenderRuntimes?: (
     bindings: readonly { readonly tabId: string; readonly conversationId: string }[],
     activeTabId: string | null,

@@ -139,6 +139,7 @@ function createDeps(): ChatWebviewMessageRouterDeps {
       handleConversationLifecycle: vi.fn(),
       sendConversationList: vi.fn(),
       sendActiveConversation: vi.fn(),
+      sendConversationSnapshot: vi.fn(),
       sendAgentStateSnapshot: vi.fn(),
       sendMessageQueueSnapshot: vi.fn(),
       handlePromoteQueuedMessage: vi.fn(),
@@ -193,6 +194,20 @@ describe('handleChatWebviewMessage', () => {
         routes: implementedRoutes,
       }),
     ).toEqual([]);
+  });
+
+  it('routes explicit conversation snapshot reads without foreground activation', () => {
+    const deps = createDeps();
+
+    handleChatWebviewMessage(
+      { type: 'getConversationSnapshot', conversationId: 'conv-background' },
+      deps,
+    );
+
+    expect(deps.conversationMessageHandler.sendConversationSnapshot).toHaveBeenCalledWith(
+      'conv-background',
+    );
+    expect(deps.activateConversation).not.toHaveBeenCalled();
   });
 
   it('routes sendMessage to the message handler with explicit conversation state', () => {

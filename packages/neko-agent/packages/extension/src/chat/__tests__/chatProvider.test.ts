@@ -144,6 +144,50 @@ describe('chatProvider', () => {
     provider.dispose();
   });
 
+  it('persists a foreground Tab binding before projecting a newly created conversation', async () => {
+    const context = createMockContext();
+    const webview = vscode.createMockWebview();
+    const provider = new ChatViewProvider(vscode.Uri.file('/ext/neko-agent'), context, {
+      localResourceAccess: createImmediateLocalResourceAccess(),
+    });
+
+    provider.resolveWebviewView(
+      {
+        webview,
+        visible: true,
+        onDidChangeVisibility: vi.fn(() => ({ dispose: vi.fn() })),
+      } as never,
+      {} as never,
+      {} as never,
+    );
+    await flushWebviewAsyncWork();
+    vi.mocked(webview.postMessage).mockClear();
+    vi.mocked(context.workspaceState.update).mockClear();
+    const receiveMessage = vi.mocked(webview.onDidReceiveMessage).mock.calls[0]?.[0] as
+      ((message: unknown) => void | Promise<void>) | undefined;
+
+    await receiveMessage?.({ type: 'newConversation' });
+    await flushWebviewAsyncWork();
+
+    const tabStateUpdate = vi
+      .mocked(context.workspaceState.update)
+      .mock.calls.find(([key]) => key === 'neko.tabState');
+    expect(tabStateUpdate?.[1]).toEqual({
+      openTabs: [
+        expect.objectContaining({
+          id: expect.stringMatching(/^tab-/),
+          conversationId: expect.any(String),
+        }),
+      ],
+      activeTabId: expect.stringMatching(/^tab-/),
+    });
+    const postedTypes = vi.mocked(webview.postMessage).mock.calls.map(([message]) => message.type);
+    expect(postedTypes.indexOf('tabState')).toBeGreaterThanOrEqual(0);
+    expect(postedTypes.indexOf('tabState')).toBeLessThan(postedTypes.indexOf('activeConversation'));
+
+    provider.dispose();
+  });
+
   it('starts with entry state instead of restoring previously open conversation tabs', async () => {
     const historicalConversation = {
       id: 'conv-history',
@@ -1429,6 +1473,112 @@ describe('chatProvider', () => {
     expect(firstRealmMessages[1]?.endpointEpoch).toBe(firstRealmMessages[0]?.endpointEpoch);
     expect(secondRealmMessage?.endpointEpoch).toEqual(expect.any(String));
     expect(secondRealmMessage?.endpointEpoch).not.toBe(firstRealmMessages[0]?.endpointEpoch);
+
+    provider.dispose();
+  });
+
+  it('serves cache-only snapshots requested after Tab bindings restore', async () => {
+    const now = Date.now();
+    const conversationA = {
+      id: 'conv-a',
+      title: 'A',
+      messages: [{ id: 'msg-a', role: 'user', content: 'message-a', timestamp: now }],
+      createdAt: now,
+      updatedAt: now,
+      resumable: false,
+      tokenCount: 1,
+    };
+    const conversationB = {
+      id: 'conv-b',
+      title: 'B',
+      messages: [{ id: 'msg-b', role: 'user', content: 'message-b', timestamp: now }],
+      createdAt: now,
+      updatedAt: now,
+      resumable: false,
+      tokenCount: 1,
+    };
+    const context = createMockContext({
+      conversations: {
+        conversations: [
+          ['conv-a', conversationA],
+          ['conv-b', conversationB],
+        ],
+        activeId: null,
+      },
+    });
+    const webview = vscode.createMockWebview();
+    const provider = new ChatViewProvider(vscode.Uri.file('/ext/neko-agent'), context, {
+      localResourceAccess: createImmediateLocalResourceAccess(),
+    });
+
+    provider.resolveWebviewView(
+      {
+        webview,
+        visible: true,
+        onDidChangeVisibility: vi.fn(() => ({ dispose: vi.fn() })),
+      } as never,
+      {} as never,
+      {} as never,
+    );
+    await Promise.resolve();
+    const receiveMessage = vi.mocked(webview.onDidReceiveMessage).mock.calls[0]?.[0] as
+      ((message: unknown) => void | Promise<void>) | undefined;
+    await receiveMessage?.({
+      type: 'activateConversation',
+      activationId: 1,
+      conversationId: 'conv-a',
+      tabId: 'tab-a',
+      expectedTabStateRevision: 0,
+      tabState: {
+        openTabs: [{ id: 'tab-a', title: 'A', conversationId: 'conv-a' }],
+        activeTabId: 'tab-a',
+      },
+    });
+    await receiveMessage?.({
+      type: 'activateConversation',
+      activationId: 2,
+      conversationId: 'conv-b',
+      tabId: 'tab-b',
+      expectedTabStateRevision: 1,
+      tabState: {
+        openTabs: [
+          { id: 'tab-a', title: 'A', conversationId: 'conv-a' },
+          { id: 'tab-b', title: 'B', conversationId: 'conv-b' },
+        ],
+        activeTabId: 'tab-b',
+      },
+    });
+    await flushWebviewAsyncWork();
+    vi.mocked(webview.postMessage).mockClear();
+
+    await receiveMessage?.({ type: 'getTabState' });
+    await flushWebviewAsyncWork();
+
+    const messages = vi.mocked(webview.postMessage).mock.calls.map(([message]) => message);
+    expect(messages[0]).toEqual(
+      expect.objectContaining({
+        type: 'tabState',
+        tabState: expect.objectContaining({ activeTabId: 'tab-b' }),
+      }),
+    );
+    expect(messages).toHaveLength(1);
+
+    await receiveMessage?.({ type: 'getConversationSnapshot', conversationId: 'conv-a' });
+    await receiveMessage?.({ type: 'getConversationSnapshot', conversationId: 'conv-b' });
+    await flushWebviewAsyncWork();
+
+    expect(vi.mocked(webview.postMessage).mock.calls.map(([message]) => message)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'conversationSnapshot',
+          conversation: expect.objectContaining({ id: 'conv-a' }),
+        }),
+        expect.objectContaining({
+          type: 'conversationSnapshot',
+          conversation: expect.objectContaining({ id: 'conv-b' }),
+        }),
+      ]),
+    );
 
     provider.dispose();
   });

@@ -18,6 +18,7 @@ import {
   useEffect,
   useCallback,
   useMemo,
+  useLayoutEffect,
   useState,
   useRef,
   useSyncExternalStore,
@@ -328,6 +329,7 @@ export function ConversationController({
   const pendingForegroundConversationActivationRef =
     useRef<PendingForegroundConversationActivation | null>(null);
   const tabStateRevisionRef = useRef(0);
+  const restoredConversationIdsRef = useRef(new Set<string>());
   const [isForegroundConversationActivationPending, setIsForegroundConversationActivationPending] =
     useState(false);
   const reportConversationDiagnostic = useCallback(
@@ -739,6 +741,7 @@ export function ConversationController({
     isTablessConversationViewRef,
     pendingForegroundConversationActivationRef,
     tabStateRevisionRef,
+    restoredConversationIdsRef,
     reconcileTabRenderRuntimes: (bindings, nextActiveTabId) => {
       tabRenderRuntimeRegistry.reconcile(bindings, nextActiveTabId);
     },
@@ -821,32 +824,37 @@ export function ConversationController({
     return () => window.clearTimeout(timer);
   }, [globalError]);
 
-  useEffect(() => {
-    if (openTabs.length > 0) return;
+  const controllerMessageHandlerRef = useRef(handleMessage);
+  useLayoutEffect(() => {
+    controllerMessageHandlerRef.current = handleMessage;
+  }, [handleMessage]);
 
-    const handleTablessMessage = (event: MessageEvent) => {
+  useEffect(() => {
+    const handleControllerMessage = (event: MessageEvent) => {
       const type = (event.data as { type?: string } | undefined)?.type;
       if (type === 'externalMessage' || type === 'prefillInput' || type === 'ambientCanvasUpdate') {
         return;
       }
-      handleMessage(event);
+      controllerMessageHandlerRef.current(event);
     };
 
-    window.addEventListener('message', handleTablessMessage);
-    return () => window.removeEventListener('message', handleTablessMessage);
-  }, [handleMessage, openTabs.length]);
+    window.addEventListener('message', handleControllerMessage);
+    return () => window.removeEventListener('message', handleControllerMessage);
+  }, []);
 
   useEffect(() => {
     const handleScopedDesktopHostMessage = (event: Event) => {
       const message = (event as CustomEvent<ExtensionToWebviewMessage>).detail;
       if (!message?.type) return;
-      handleMessage({ data: message } as MessageEvent<ExtensionToWebviewMessage>);
+      controllerMessageHandlerRef.current({
+        data: message,
+      } as MessageEvent<ExtensionToWebviewMessage>);
     };
 
     window.addEventListener(NEKO_AGENT_HOST_MESSAGE_EVENT, handleScopedDesktopHostMessage);
     return () =>
       window.removeEventListener(NEKO_AGENT_HOST_MESSAGE_EVENT, handleScopedDesktopHostMessage);
-  }, [handleMessage]);
+  }, []);
 
   // ---- Request data on mount ----
   useEffect(() => {
@@ -1456,7 +1464,6 @@ export function ConversationController({
             activationProgress={sessionState.skill.activationProgress}
             ambientNodes={[...sessionState.context.ambientNodes]}
             agentState={sessionState.agentState}
-            handleMessage={handleMessage}
             setAmbientNodes={(value) => setAmbientNodesForConversation(tab.conversationId, value)}
             onNewChat={handleNewChat}
             onUserMessageSent={handleUserMessageSent}
@@ -1473,7 +1480,10 @@ export function ConversationController({
       })}
 
       {globalError ? (
-        <div className="fixed right-4 top-12 z-50 max-w-[360px] rounded-lg border border-[var(--vscode-inputValidation-errorBorder,var(--agent-border))] bg-[var(--vscode-inputValidation-errorBackground,var(--agent-elevated))] px-3 py-2 text-sm text-[var(--vscode-inputValidation-errorForeground,var(--agent-fg))] shadow-lg animate-slide-in">
+        <div
+          role="alert"
+          className="fixed right-4 top-12 z-50 max-w-[360px] rounded-lg border border-[var(--vscode-inputValidation-errorBorder,var(--agent-border))] bg-[var(--vscode-inputValidation-errorBackground,var(--agent-elevated))] px-3 py-2 text-sm text-[var(--vscode-inputValidation-errorForeground,var(--agent-fg))] shadow-lg animate-slide-in"
+        >
           <div className="font-medium">全局错误</div>
           <div className="mt-1 opacity-90">{globalError}</div>
         </div>
