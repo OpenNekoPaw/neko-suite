@@ -119,11 +119,7 @@ export interface ChatWorkspaceProps {
   viewport: ConversationViewportSnapshot;
   onViewportChange: (viewport: ConversationViewportSnapshot) => void;
   // Context chips
-  contextChips: AgentContextPayload[];
   ambientNodes: Array<{ nodeId: string; type: string; summary: string }>;
-  onAddContextChip: (payload: AgentContextPayload) => void;
-  onRemoveContextChip: (id: string) => void;
-  onInjectContextChip: (payload: AgentContextPayload, conversationId?: string | null) => void;
   // Agent state
   agentState: AgentState | null;
   // Message handler (for pre-intercept)
@@ -187,11 +183,7 @@ export function ChatWorkspace({
   activationProgress = [],
   viewport,
   onViewportChange,
-  contextChips,
   ambientNodes,
-  onAddContextChip,
-  onRemoveContextChip,
-  onInjectContextChip,
   agentState,
   handleMessage,
   setAmbientNodes,
@@ -218,6 +210,7 @@ export function ChatWorkspace({
   const latestSessionDiagnostic = tabState.diagnostics.at(-1) ?? null;
   const attachedFiles = [...tabState.attachedFiles];
   const selectedFileReferences = [...tabState.selectedFileReferences];
+  const contextChips = [...tabState.contextReferences];
   const genCategory = tabState.generationCategory;
   const genParams = tabState.generationParams;
   const mediaUnderstandingSelection = tabState.mediaUnderstandingSelection;
@@ -232,6 +225,25 @@ export function ChatWorkspace({
     },
     [updateTabRenderState],
   );
+  const handleAddContextChip = useCallback(
+    (payload: AgentContextPayload) => {
+      updateTabRenderState((state) =>
+        state.contextReferences.some((reference) => reference.id === payload.id)
+          ? {}
+          : { contextReferences: [...state.contextReferences, payload] },
+      );
+    },
+    [updateTabRenderState],
+  );
+  const handleRemoveContextChip = useCallback(
+    (id: string) => {
+      updateTabRenderState((state) => ({
+        contextReferences: state.contextReferences.filter((reference) => reference.id !== id),
+      }));
+    },
+    [updateTabRenderState],
+  );
+
   const setSelectedModel = useCallback(
     (modelId: string) => {
       updateTabRenderState({ selectedModel: modelId });
@@ -573,22 +585,7 @@ export function ChatWorkspace({
           }
           break;
         case 'injectContext':
-          if (isCharacterRoleSession) {
-            break;
-          }
-          if (msg.payload) {
-            setActiveTab('chat');
-            const injectConversationId = msg.conversationId ?? sessionMutationConversationId;
-            if (!injectConversationId) {
-              break;
-            }
-            onInjectContextChip(msg.payload, injectConversationId);
-            const shouldPrefillActiveInput = injectConversationId === sessionMutationConversationId;
-            if (shouldPrefillActiveInput && msg.payload.intent) {
-              setInputValue(msg.payload.intent);
-              inputValueRef.current = msg.payload.intent;
-            }
-          }
+          handleMessage(event);
           break;
         case 'ambientCanvasUpdate':
           if (isCharacterRoleSession) {
@@ -609,7 +606,6 @@ export function ChatWorkspace({
       triggerSend,
       setInputValue,
       setActiveTab,
-      onInjectContextChip,
       setAmbientNodes,
       sessionMutationConversationId,
       isCharacterRoleSession,
@@ -791,9 +787,9 @@ export function ChatWorkspace({
         }
       }}
       mentionItems={mentionItems}
-      onAddContextChip={onAddContextChip}
+      onAddContextChip={handleAddContextChip}
       contextChips={contextChips}
-      onRemoveContextChip={onRemoveContextChip}
+      onRemoveContextChip={handleRemoveContextChip}
       ambientNodes={ambientNodes}
       genCategory={genCategory}
       genParams={genParams}

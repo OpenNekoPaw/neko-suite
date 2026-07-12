@@ -48,11 +48,27 @@ vi.mock('@/components/ChatView/InputAreaContext', () => ({
     promptMode?: 'default' | 'plan';
     selectedModel?: string;
     onModelSelect?: (modelId: string) => void;
+    contextChips?: readonly AgentContextPayload[];
+    onAddContextChip?: (payload: AgentContextPayload) => void;
+    onRemoveContextChip?: (id: string) => void;
   }) => (
     <div>
       <span data-testid="session-mode">{props.sessionMode ?? 'agent'}</span>
       <span data-testid="prompt-mode">{props.promptMode ?? 'default'}</span>
       <span data-testid="selected-model">{props.selectedModel ?? 'none'}</span>
+      <span data-testid="context-chips">
+        {props.contextChips?.map((chip) => chip.label).join('|') ?? ''}
+      </span>
+      <button
+        type="button"
+        data-testid="add-context-chip"
+        onClick={() => props.onAddContextChip?.(contextPayload('ctx-a', 'Context A'))}
+      />
+      <button
+        type="button"
+        data-testid="remove-context-chip"
+        onClick={() => props.onRemoveContextChip?.('ctx-a')}
+      />
       <button
         type="button"
         data-testid="set-model-b"
@@ -498,6 +514,52 @@ describe('ChatWorkspace pending send', () => {
     expect(runtimeB.store.getSnapshot().state.selectedModel).toBe('test-model');
   });
 
+  it('keeps context references in their owning Tab store while switching', () => {
+    const runtimeA = createTabRenderRuntime({ tabId: 'tab-a', conversationId: 'conv-a' });
+    const runtimeB = createTabRenderRuntime({ tabId: 'tab-b', conversationId: 'conv-a' });
+    const { getByTestId, rerender } = render(
+      <ChatWorkspace
+        {...createProps({
+          tabRenderStore: runtimeA.store,
+          activeConversationId: 'conv-a',
+          activeConversationIdRef: createRefWithCurrent<string | null>('conv-a'),
+          activeTabConversationId: 'conv-a',
+        })}
+      />,
+    );
+
+    fireEvent.click(getByTestId('add-context-chip'));
+    expect(getByTestId('context-chips').textContent).toBe('Context A');
+    expect(runtimeA.store.getSnapshot().state.contextReferences).toHaveLength(1);
+
+    rerender(
+      <ChatWorkspace
+        {...createProps({
+          tabRenderStore: runtimeB.store,
+          activeConversationId: 'conv-a',
+          activeConversationIdRef: createRefWithCurrent<string | null>('conv-a'),
+          activeTabConversationId: 'conv-a',
+        })}
+      />,
+    );
+
+    expect(getByTestId('context-chips').textContent).toBe('');
+    expect(runtimeB.store.getSnapshot().state.contextReferences).toEqual([]);
+
+    rerender(
+      <ChatWorkspace
+        {...createProps({
+          tabRenderStore: runtimeA.store,
+          activeConversationId: 'conv-a',
+          activeConversationIdRef: createRefWithCurrent<string | null>('conv-a'),
+          activeTabConversationId: 'conv-a',
+        })}
+      />,
+    );
+    fireEvent.click(getByTestId('remove-context-chip'));
+    expect(runtimeA.store.getSnapshot().state.contextReferences).toEqual([]);
+  });
+
   it('keeps composer state in its owning Tab store while switching', () => {
     const runtimeA = createTabRenderRuntime({ tabId: 'tab-a', conversationId: 'conv-a' });
     const runtimeB = createTabRenderRuntime({ tabId: 'tab-b', conversationId: 'conv-b' });
@@ -589,7 +651,7 @@ describe('ChatWorkspace pending send', () => {
   it('does not route visible tab mutations to the stale active conversation during a switch', () => {
     const clearMessages = vi.fn();
     const updateSettings = vi.fn();
-    const onInjectContextChip = vi.fn();
+    const handleMessage = vi.fn();
     const setAmbientNodes = vi.fn();
     const onSessionDiagnostic = vi.fn();
     const clearInputTarget = render(
@@ -614,7 +676,7 @@ describe('ChatWorkspace pending send', () => {
               },
             ],
           },
-          onInjectContextChip,
+          handleMessage,
           setAmbientNodes,
           onSessionDiagnostic,
         })}
@@ -626,6 +688,8 @@ describe('ChatWorkspace pending send', () => {
         new MessageEvent('message', {
           data: {
             type: 'injectContext',
+            tabId: 'tab-1',
+            conversationId: 'conv-1',
             payload: contextPayload('ctx-switch', 'Switching context'),
           },
         }),
@@ -667,7 +731,11 @@ describe('ChatWorkspace pending send', () => {
     expect(vscodeMocks.viewTaskResult).not.toHaveBeenCalled();
     expect(clearMessages).not.toHaveBeenCalled();
     expect(updateSettings).not.toHaveBeenCalled();
-    expect(onInjectContextChip).not.toHaveBeenCalled();
+    expect(handleMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ type: 'injectContext', tabId: 'tab-1' }),
+      }),
+    );
     expect(setAmbientNodes).not.toHaveBeenCalled();
     expect(onSessionDiagnostic).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -757,11 +825,7 @@ function createProps(overrides: Partial<ChatWorkspaceProps> = {}): ChatWorkspace
     setActiveSkill: noop as React.Dispatch<React.SetStateAction<ChatWorkspaceProps['activeSkill']>>,
     viewport: { followMode: 'follow-tail' },
     onViewportChange: noop,
-    contextChips: [],
     ambientNodes: [],
-    onAddContextChip: noop,
-    onRemoveContextChip: noop,
-    onInjectContextChip: noop,
     agentState: null,
     handleMessage: noop,
     setAmbientNodes: noop as React.Dispatch<

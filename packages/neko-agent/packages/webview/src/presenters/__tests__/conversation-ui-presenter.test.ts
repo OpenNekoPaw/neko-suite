@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest';
-import type { AgentContextPayload } from '@neko/shared';
 import type { AgentQueuedMessageItem, AgentState, AgentWorkItem, Message } from '@neko-agent/types';
 import type { ActiveTurnTimelineState } from '../active-turn-timeline-presenter';
 import type { ActivationProgressTimeline } from '../activation-progress-presenter';
@@ -416,8 +415,6 @@ describe('conversation UI presenter', () => {
     const activeSkillB = { conversationId: 'conv-b', skillName: 'skill-b' };
     const activationA = activationProgress('conv-a', 'activation-a');
     const activationB = activationProgress('conv-b', 'activation-b');
-    const chipA = contextChip('chip-a');
-    const chipB = contextChip('chip-b');
     const agentStateB: AgentState = { phase: 'acting', toolName: 'ReadFile', startedAt: 20 };
     const workItemB = workItem('work-b', 'conv-b');
 
@@ -454,10 +451,6 @@ describe('conversation UI presenter', () => {
       activationProgressByConversation: new Map([
         ['conv-a', [activationA]],
         ['conv-b', [activationB]],
-      ]),
-      contextChipsByConversation: new Map([
-        ['conv-a', [chipA]],
-        ['conv-b', [chipB]],
       ]),
       ambientNodesByConversation: new Map([
         ['conv-a', [{ nodeId: 'node-a', type: 'scene', summary: 'A scene' }]],
@@ -501,7 +494,6 @@ describe('conversation UI presenter', () => {
         activationProgress: [activationB],
       },
       context: {
-        chips: [chipB],
         ambientNodes: [{ nodeId: 'node-b', type: 'shot', summary: 'B shot' }],
         tokenCount: 200,
         isCompressing: false,
@@ -598,16 +590,6 @@ function activationProgress(
     requestedBy: 'agent',
     status: 'succeeded',
     events: [],
-  };
-}
-
-function contextChip(id: string): AgentContextPayload {
-  return {
-    id,
-    type: 'canvas-node',
-    label: id,
-    summary: id,
-    data: {},
   };
 }
 

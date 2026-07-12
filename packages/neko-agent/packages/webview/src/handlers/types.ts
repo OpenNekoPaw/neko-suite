@@ -5,6 +5,7 @@
  */
 
 import type { MutableRefObject } from 'react';
+import type { AgentContextPayload } from '@neko/shared';
 import type { ExtensionToWebviewMessage, MessageOfType } from './messages';
 import type {
   Message,
@@ -147,6 +148,12 @@ export interface QueuedMessageEditRequest {
   readonly item: AgentQueuedMessageItem;
 }
 
+export interface ContextInjectionRequest {
+  readonly tabId: string;
+  readonly conversationId: string;
+  readonly payload: AgentContextPayload;
+}
+
 /** Context window token tracking and compression */
 export interface ContextManagementContext {
   conversationTokenCountRef: MutableRefObject<Map<string, number>>;
@@ -181,6 +188,7 @@ export interface HelperContext {
   ) => void;
   completeForegroundConversationActivation?: (conversationId: string) => void;
   requestQueuedMessageEdit?: (request: QueuedMessageEditRequest) => void;
+  requestContextInjection?: (request: ContextInjectionRequest) => void;
 }
 
 // =============================================================================

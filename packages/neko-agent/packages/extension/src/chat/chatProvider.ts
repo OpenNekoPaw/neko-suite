@@ -46,6 +46,7 @@ import {
   buildChatTabStateMessage,
   buildInvalidWebviewPayloadMessage,
   createCapabilityRuntimeRefreshRuntime,
+  requireActiveConversationTabBinding,
   updateTabStateRuntime,
   type CapabilityRuntimeRefreshRuntime,
 } from '@neko/agent/runtime';
@@ -375,7 +376,11 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
   private _keyboardFocused = false;
   private _keyboardEditable = false;
   private _keyboardEditableUpdateSequence = 0;
-  private _pendingContextPayload: import('@neko/shared').AgentContextPayload | null = null;
+  private _pendingContextPayload: {
+    readonly payload: import('@neko/shared').AgentContextPayload;
+    readonly tabId: string;
+    readonly conversationId: string;
+  } | null = null;
   private _pendingExternalMessage: { message: string; autoSend: boolean } | null = null;
 
   constructor(
@@ -812,14 +817,11 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
     payload: import('@neko/shared').AgentContextPayload,
   ): Promise<void> {
     await vscode.commands.executeCommand(NEKO_AI_ASSISTANT_FOCUS_COMMAND);
+    const target = requireActiveConversationTabBinding(this._tabState, 'send context payload');
     if (this._webviewReady && this._view?.webview) {
-      this._view.webview.postMessage(
-        buildChatContextInjectionMessage(payload, {
-          conversationId: this._conversations.getActiveId(),
-        }),
-      );
+      this._view.webview.postMessage(buildChatContextInjectionMessage(payload, target));
     } else {
-      this._pendingContextPayload = payload;
+      this._pendingContextPayload = { payload, ...target };
     }
   }
 
@@ -1443,11 +1445,12 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
     if (!webview) return;
 
     if (this._pendingContextPayload) {
-      const payload = this._pendingContextPayload;
+      const request = this._pendingContextPayload;
       this._pendingContextPayload = null;
       webview.postMessage(
-        buildChatContextInjectionMessage(payload, {
-          conversationId: this._conversations.getActiveId(),
+        buildChatContextInjectionMessage(request.payload, {
+          tabId: request.tabId,
+          conversationId: request.conversationId,
         }),
       );
     }

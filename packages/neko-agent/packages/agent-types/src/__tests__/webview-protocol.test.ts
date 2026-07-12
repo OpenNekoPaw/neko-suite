@@ -218,6 +218,33 @@ describe('webview protocol parser', () => {
     });
   });
 
+  it('requires exact Tab ownership for context injection', () => {
+    const payload = {
+      source: 'canvas' as const,
+      kind: 'selection' as const,
+      title: 'Selected node',
+      metadata: { nodeId: 'node-1' },
+    };
+
+    expect(
+      buildInjectContextMessage(payload, {
+        tabId: 'tab-1',
+        conversationId: 'conv-1',
+      }),
+    ).toEqual({
+      type: 'injectContext',
+      tabId: 'tab-1',
+      conversationId: 'conv-1',
+      payload,
+    });
+    expect(() =>
+      buildInjectContextMessage(payload, { tabId: '', conversationId: 'conv-1' }),
+    ).toThrow('injectContext requires non-empty tabId');
+    expect(() =>
+      buildInjectContextMessage(payload, { tabId: 'tab-1', conversationId: '' }),
+    ).toThrow('injectContext requires non-empty conversationId');
+  });
+
   it('correlates queued edit responses to the requesting Tab', () => {
     expect(
       buildQueuedMessageEditRequestedMessage({

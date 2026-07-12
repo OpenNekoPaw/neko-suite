@@ -10,6 +10,7 @@ import {
   type MessageHandlerContext,
   type PendingForegroundConversationActivation,
   type QueuedMessageEditRequest,
+  type ContextInjectionRequest,
   type StreamingState,
   type NonCurrentConversationUpdater,
 } from '@/handlers';
@@ -85,6 +86,7 @@ export interface UseMessageHandlerProps {
   ) => void;
   completeForegroundConversationActivation?: (conversationId: string) => void;
   requestQueuedMessageEdit?: (request: QueuedMessageEditRequest) => void;
+  requestContextInjection?: (request: ContextInjectionRequest) => void;
   requestConfigSnapshot?: () => void;
 
   // Refs
@@ -215,6 +217,7 @@ export function useMessageHandler(props: UseMessageHandlerProps): UseMessageHand
     reconcileTabRenderRuntimes,
     completeForegroundConversationActivation,
     requestQueuedMessageEdit,
+    requestContextInjection,
     requestConfigSnapshot,
     activeConversationIdRef,
     streamingMessageIdRef,
@@ -378,6 +381,7 @@ export function useMessageHandler(props: UseMessageHandlerProps): UseMessageHand
       reconcileTabRenderRuntimes,
       completeForegroundConversationActivation,
       requestQueuedMessageEdit,
+      requestContextInjection,
     }),
     [
       activeConversationId,
@@ -442,6 +446,7 @@ export function useMessageHandler(props: UseMessageHandlerProps): UseMessageHand
       reconcileTabRenderRuntimes,
       completeForegroundConversationActivation,
       requestQueuedMessageEdit,
+      requestContextInjection,
     ],
   );
 

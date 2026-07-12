@@ -10,6 +10,7 @@ import type {
   ContextTokenCountMessage,
   CompressionResultMessage,
   CompressionErrorMessage,
+  InjectContextMessage,
 } from './messages';
 import {
   projectCompressionError,
@@ -19,6 +20,17 @@ import {
 import { getLogger } from '../utils/logger';
 
 const logger = getLogger('ContextHandlers');
+
+const handleInjectContext: MessageHandler<'injectContext'> = (
+  message: InjectContextMessage,
+  context,
+) => {
+  context.requestContextInjection?.({
+    tabId: message.tabId,
+    conversationId: message.conversationId,
+    payload: message.payload,
+  });
+};
 
 /**
  * Handle 'contextTokenCount' - Token count update for a conversation
@@ -86,6 +98,7 @@ const handleCompressionError: MessageHandler<'compressionError'> = (
 };
 
 export const contextHandlers: HandlerRegistration[] = [
+  defineHandler('injectContext', handleInjectContext),
   defineHandler('contextTokenCount', handleContextTokenCount),
   defineHandler('compressionResult', handleCompressionResult),
   defineHandler('compressionError', handleCompressionError),

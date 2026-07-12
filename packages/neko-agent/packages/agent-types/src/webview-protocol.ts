@@ -1110,8 +1110,9 @@ export interface PrefillInputMessage {
 
 export interface InjectContextMessage {
   type: 'injectContext';
-  conversationId?: string | null;
-  payload?: AgentContextPayload;
+  tabId: string;
+  conversationId: string;
+  payload: AgentContextPayload;
 }
 
 export interface AmbientCanvasUpdateMessage {
@@ -1643,11 +1644,12 @@ export function buildAgentCapabilityActivationProgressMessage(input: {
 
 export function buildInjectContextMessage(
   payload: AgentContextPayload,
-  input: { readonly conversationId?: string | null } = {},
+  input: { readonly tabId: string; readonly conversationId: string },
 ): InjectContextMessage {
   return {
     type: 'injectContext',
-    ...(input.conversationId !== undefined ? { conversationId: input.conversationId } : {}),
+    tabId: requireBuilderTabId(input.tabId, 'injectContext'),
+    conversationId: requireBuilderConversationId(input.conversationId, 'injectContext'),
     payload,
   };
 }

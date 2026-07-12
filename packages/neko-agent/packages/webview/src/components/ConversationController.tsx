@@ -22,7 +22,6 @@ import {
   useRef,
   useSyncExternalStore,
 } from 'react';
-import type { AgentContextPayload } from '@neko/shared';
 import type { ConversationLifecycleAction } from '@neko/shared/types/creative-ai-invocation';
 import {
   NEKO_AGENT_HOST_MESSAGE_EVENT,
@@ -351,62 +350,9 @@ export function ConversationController({
   const nextQueuedEditRequestIdRef = useRef(0);
 
   // ---- Context chips & ambient nodes ----
-  const [contextChipsByConversation, setContextChipsByConversation] = useState<
-    Map<string, AgentContextPayload[]>
-  >(() => new Map());
   const [ambientNodesByConversation, setAmbientNodesByConversation] = useState<
     Map<string, ConversationAmbientNode[]>
   >(() => new Map());
-
-  const setContextChipsForConversation = useCallback(
-    (
-      conversationId: string,
-      value: AgentContextPayload[] | ((current: AgentContextPayload[]) => AgentContextPayload[]),
-    ) => {
-      setContextChipsByConversation((prev) => {
-        const current = prev.get(conversationId) ?? [];
-        const nextValue = typeof value === 'function' ? value(current) : value;
-        const next = new Map(prev);
-        if (nextValue.length === 0) {
-          next.delete(conversationId);
-        } else {
-          next.set(conversationId, nextValue);
-        }
-        return next;
-      });
-    },
-    [],
-  );
-  const handleRemoveContextChip = useCallback(
-    (id: string) => {
-      if (!visibleConversationId) return;
-      setContextChipsForConversation(visibleConversationId, (prev) =>
-        prev.filter((c) => c.id !== id),
-      );
-    },
-    [setContextChipsForConversation, visibleConversationId],
-  );
-  const handleAddContextChip = useCallback(
-    (payload: AgentContextPayload) => {
-      if (!visibleConversationId) return;
-      setContextChipsForConversation(visibleConversationId, (prev) => {
-        if (prev.some((c) => c.id === payload.id)) return prev;
-        return [...prev, payload];
-      });
-    },
-    [setContextChipsForConversation, visibleConversationId],
-  );
-  const handleInjectContextChip = useCallback(
-    (payload: AgentContextPayload, conversationId?: string | null) => {
-      const targetConversationId = conversationId ?? visibleConversationId;
-      if (!targetConversationId) return;
-      setContextChipsForConversation(targetConversationId, (prev) => {
-        if (prev.some((c) => c.id === payload.id)) return prev;
-        return [...prev, payload];
-      });
-    },
-    [setContextChipsForConversation, visibleConversationId],
-  );
   const setAmbientNodesForVisibleConversation = useCallback<
     React.Dispatch<React.SetStateAction<ConversationAmbientNode[]>>
   >(
@@ -433,12 +379,6 @@ export function ConversationController({
       conversationCompressingRef.current.delete(conversationId);
       conversationMediaCallCountRef.current.delete(conversationId);
       setWorkItemsByConversation((prev) => removeConversationWorkItems(prev, conversationId));
-      setContextChipsByConversation((prev) => {
-        if (!prev.has(conversationId)) return prev;
-        const next = new Map(prev);
-        next.delete(conversationId);
-        return next;
-      });
       setActiveSkillByConversation((prev) => {
         if (!prev.has(conversationId)) return prev;
         const next = new Map(prev);
@@ -484,7 +424,6 @@ export function ConversationController({
       streamingByConversation,
       activeSkillByConversation,
       activationProgressByConversation,
-      contextChipsByConversation,
       ambientNodesByConversation,
       tokenCountByConversation: conversationTokenCountRef.current,
       compressingByConversation: conversationCompressingRef.current,
@@ -497,7 +436,6 @@ export function ConversationController({
     activeSkillByConversation,
     activationProgressByConversation,
     ambientNodesByConversation,
-    contextChipsByConversation,
     conversationMessagesRef,
     conversationStreamingRef,
     isThinking,
@@ -518,7 +456,6 @@ export function ConversationController({
   const workItems = [...visibleSessionState.workItems];
   const activeSkill = visibleSessionState.skill.activeSkill;
   const activationProgress = visibleSessionState.skill.activationProgress;
-  const contextChips = [...visibleSessionState.context.chips];
   const ambientNodes = [...visibleSessionState.context.ambientNodes];
   const visibleAgentState =
     visibleSessionState.agentState ??
@@ -865,6 +802,21 @@ export function ConversationController({
         },
       });
     },
+    requestContextInjection: (request) => {
+      const runtime = tabRenderRuntimeRegistry.require(request.tabId);
+      if (runtime.conversationId !== request.conversationId) {
+        throw new Error(
+          `Context injection Tab ${request.tabId} belongs to ${runtime.conversationId}, not ${request.conversationId}.`,
+        );
+      }
+      runtime.store.updateState((state) => ({
+        activeSurface: 'chat',
+        ...(state.contextReferences.some((reference) => reference.id === request.payload.id)
+          ? {}
+          : { contextReferences: [...state.contextReferences, request.payload] }),
+        ...(request.payload.intent ? { inputValue: request.payload.intent } : {}),
+      }));
+    },
     requestConfigSnapshot,
     activeConversationIdRef,
     streamingMessageIdRef,
@@ -969,12 +921,7 @@ export function ConversationController({
 
     const handleTablessMessage = (event: MessageEvent) => {
       const type = (event.data as { type?: string } | undefined)?.type;
-      if (
-        type === 'externalMessage' ||
-        type === 'prefillInput' ||
-        type === 'injectContext' ||
-        type === 'ambientCanvasUpdate'
-      ) {
+      if (type === 'externalMessage' || type === 'prefillInput' || type === 'ambientCanvasUpdate') {
         return;
       }
       handleMessage(event);
@@ -1630,11 +1577,7 @@ export function ConversationController({
             viewport={visibleViewport}
             onViewportChange={handleViewportChange}
             // Context chips
-            contextChips={contextChips}
             ambientNodes={ambientNodes}
-            onAddContextChip={handleAddContextChip}
-            onRemoveContextChip={handleRemoveContextChip}
-            onInjectContextChip={handleInjectContextChip}
             // Agent state
             agentState={visibleAgentState}
             // Message handler (for pre-intercept)

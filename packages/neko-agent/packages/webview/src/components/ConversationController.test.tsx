@@ -128,10 +128,8 @@ vi.mock('@/components/ChatWorkspace', () => ({
     queuedMessages?: readonly AgentQueuedMessageItem[];
     activationProgress?: readonly ActivationProgressTimeline[];
     activeSkill?: { skillName: string } | null;
-    contextChips?: readonly AgentContextPayload[];
     contextTokenCount?: number;
     workItems?: readonly AgentWorkItem[];
-    onAddContextChip?: (payload: AgentContextPayload) => void;
     viewport?: ConversationViewportSnapshot;
     onViewportChange?: (viewport: ConversationViewportSnapshot) => void;
     handleMessage?: (event: MessageEvent) => void;
@@ -207,8 +205,9 @@ vi.mock('@/components/ChatWorkspace', () => ({
         </span>
         <span data-testid="workspace-active-skill">{props.activeSkill?.skillName ?? 'none'}</span>
         <span data-testid="workspace-context-chips">
-          {props.contextChips?.map((chip) => chip.label).join('|') ?? ''}
+          {tabRenderSnapshot.snapshot.state.contextReferences.map((chip) => chip.label).join('|')}
         </span>
+        <span data-testid="workspace-input">{tabRenderSnapshot.snapshot.state.inputValue}</span>
         <span data-testid="workspace-token-count">{props.contextTokenCount ?? 0}</span>
         <span data-testid="workspace-work-items">
           {props.workItems?.map((item) => item.title).join('|') ?? ''}
@@ -231,7 +230,11 @@ vi.mock('@/components/ChatWorkspace', () => ({
         <button
           type="button"
           data-testid="add-context-chip"
-          onClick={() => props.onAddContextChip?.(contextPayload('ctx-a', 'A context'))}
+          onClick={() =>
+            tabRenderSnapshot.updateState((state) => ({
+              contextReferences: [...state.contextReferences, contextPayload('ctx-a', 'A context')],
+            }))
+          }
         />
         <span data-testid="entry-menu">{props.initialEntryPromptMenuRequest?.menu ?? 'none'}</span>
         <span data-testid="pending-send">
@@ -1190,6 +1193,47 @@ describe('ConversationController entry state', () => {
     expect(screen.getByTestId('workspace-diagnostics').textContent).toContain(
       'Conversation A only.',
     );
+  });
+
+  it('routes injected context and intent to the exact Tab runtime', () => {
+    vi.clearAllMocks();
+    render(<ConversationController {...createProps()} />);
+    const openTabs = [
+      { id: 'tab-a', title: 'Chat A', conversationId: 'conv-a' },
+      { id: 'tab-b', title: 'Chat B', conversationId: 'conv-a' },
+    ];
+
+    act(() => {
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          data: { type: 'tabState', tabState: { openTabs, activeTabId: 'tab-b' } },
+        }),
+      );
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          data: {
+            type: 'injectContext',
+            tabId: 'tab-a',
+            conversationId: 'conv-a',
+            payload: {
+              ...contextPayload('ctx-tab-a', 'Tab A context'),
+              intent: 'Continue in Tab A',
+            },
+          },
+        }),
+      );
+    });
+
+    expect(screen.getByTestId('workspace-context-chips').textContent).toBe('');
+    expect(screen.getByTestId('workspace-input').textContent).toBe('');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Switch Chat A' }));
+    expect(screen.getByTestId('workspace-context-chips').textContent).toBe('Tab A context');
+    expect(screen.getByTestId('workspace-input').textContent).toBe('Continue in Tab A');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Switch Chat B' }));
+    expect(screen.getByTestId('workspace-context-chips').textContent).toBe('');
+    expect(screen.getByTestId('workspace-input').textContent).toBe('');
   });
 
   it('routes queued edit responses to the exact requesting Tab runtime', () => {

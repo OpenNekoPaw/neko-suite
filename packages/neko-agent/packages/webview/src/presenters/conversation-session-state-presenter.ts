@@ -1,4 +1,3 @@
-import type { AgentContextPayload } from '@neko/shared';
 import type {
   AgentState,
   AgentWorkItem,
@@ -7,7 +6,10 @@ import type {
   Message,
   PromptMode,
 } from '@neko-agent/types';
-import type { MessageAttachment, SelectedFileReference } from '@/components/ChatView/InputArea/types';
+import type {
+  MessageAttachment,
+  SelectedFileReference,
+} from '@/components/ChatView/InputArea/types';
 import type { ActiveSkillIndicator } from '@/components/ChatView/SkillIndicator';
 import type { ActiveTurnTimelineState } from './active-turn-timeline-presenter';
 import type { ActivationProgressTimeline } from './activation-progress-presenter';
@@ -32,7 +34,6 @@ export interface ConversationSessionSkillProjection {
 }
 
 export interface ConversationSessionContextProjection {
-  readonly chips: readonly AgentContextPayload[];
   readonly ambientNodes: readonly ConversationAmbientNode[];
   readonly tokenCount: number;
   readonly isCompressing: boolean;
@@ -63,15 +64,11 @@ export interface ProjectConversationSessionStateInput {
   readonly messagesByConversation: ReadonlyMap<string, readonly Message[]>;
   readonly streamingByConversation: ReadonlyMap<string, ConversationSessionStreamingState>;
   readonly promptModeByConversation?: ReadonlyMap<string, PromptMode>;
-  readonly activeSkillByConversation?: ReadonlyMap<
-    string,
-    ConversationSessionActiveSkill | null
-  >;
+  readonly activeSkillByConversation?: ReadonlyMap<string, ConversationSessionActiveSkill | null>;
   readonly activationProgressByConversation?: ReadonlyMap<
     string,
     readonly ActivationProgressTimeline[]
   >;
-  readonly contextChipsByConversation?: ReadonlyMap<string, readonly AgentContextPayload[]>;
   readonly ambientNodesByConversation?: ReadonlyMap<string, readonly ConversationAmbientNode[]>;
   readonly tokenCountByConversation?: ReadonlyMap<string, number>;
   readonly compressingByConversation?: ReadonlyMap<string, boolean>;
@@ -93,12 +90,9 @@ export function projectConversationSessionState(
       input.promptModeByConversation?.get(conversationId) ?? input.defaultPromptMode ?? 'default',
     skill: {
       activeSkill: input.activeSkillByConversation?.get(conversationId) ?? null,
-      activationProgress: [
-        ...(input.activationProgressByConversation?.get(conversationId) ?? []),
-      ],
+      activationProgress: [...(input.activationProgressByConversation?.get(conversationId) ?? [])],
     },
     context: {
-      chips: [...(input.contextChipsByConversation?.get(conversationId) ?? [])],
       ambientNodes: [...(input.ambientNodesByConversation?.get(conversationId) ?? [])],
       tokenCount: input.tokenCountByConversation?.get(conversationId) ?? 0,
       isCompressing: input.compressingByConversation?.get(conversationId) ?? false,

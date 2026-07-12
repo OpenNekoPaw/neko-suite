@@ -72,6 +72,11 @@ export interface UpdateTabStateRuntimeResult {
   sync: ConversationTabSyncResult;
 }
 
+export interface ConversationTabBinding {
+  readonly tabId: string;
+  readonly conversationId: string;
+}
+
 export type ChatRestorePlanAction =
   | { type: 'syncCanvasAmbientScope' }
   | { type: 'sendConversationList' }
@@ -156,6 +161,18 @@ export function updateTabStateRuntime(
   };
 }
 
+export function requireActiveConversationTabBinding(
+  tabState: TabState,
+  operation: string,
+): ConversationTabBinding {
+  const tabId = tabState.activeTabId;
+  const activeTab = tabId ? tabState.openTabs.find((tab) => tab.id === tabId) : undefined;
+  if (!tabId || !activeTab) {
+    throw new Error(`Cannot ${operation} without an active conversation Tab.`);
+  }
+  return { tabId, conversationId: activeTab.conversationId };
+}
+
 export function buildChatAmbientCanvasUpdateMessage(input: {
   nodes: AmbientCanvasUpdateMessage['nodes'];
   conversationId: string | null;
@@ -165,7 +182,7 @@ export function buildChatAmbientCanvasUpdateMessage(input: {
 
 export function buildChatContextInjectionMessage(
   payload: AgentContextPayload,
-  input: { conversationId: string | null },
+  input: { tabId: string; conversationId: string },
 ): InjectContextMessage {
   return buildInjectContextMessage(payload, input);
 }

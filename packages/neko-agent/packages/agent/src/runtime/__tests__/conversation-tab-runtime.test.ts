@@ -7,6 +7,7 @@ import {
   buildChatRestorePlan,
   buildChatTabStateMessage,
   buildInvalidWebviewPayloadMessage,
+  requireActiveConversationTabBinding,
   syncActiveConversationFromTabState,
   updateTabStateRuntime,
   type ConversationTabRuntimeEffects,
@@ -25,6 +26,34 @@ function createEffects(
 }
 
 describe('conversation-tab-runtime', () => {
+  it('requires an exact active conversation Tab binding', () => {
+    expect(
+      requireActiveConversationTabBinding(
+        {
+          openTabs: [{ id: 'tab-1', title: 'Chat', conversationId: 'conv-1' }],
+          activeTabId: 'tab-1',
+        },
+        'send context payload',
+      ),
+    ).toEqual({ tabId: 'tab-1', conversationId: 'conv-1' });
+
+    expect(() =>
+      requireActiveConversationTabBinding(
+        { openTabs: [], activeTabId: null },
+        'send context payload',
+      ),
+    ).toThrow('Cannot send context payload without an active conversation Tab.');
+    expect(() =>
+      requireActiveConversationTabBinding(
+        {
+          openTabs: [{ id: 'tab-1', title: 'Chat', conversationId: 'conv-1' }],
+          activeTabId: 'tab-missing',
+        },
+        'send context payload',
+      ),
+    ).toThrow('Cannot send context payload without an active conversation Tab.');
+  });
+
   it('switches active conversation to the active tab conversation', () => {
     const effects = createEffects();
     const result = syncActiveConversationFromTabState(
@@ -261,10 +290,13 @@ describe('conversation-tab-runtime', () => {
       nodes: [{ id: 'node-1', label: 'Node 1', kind: 'image' }],
       conversationId: 'conv-1',
     });
-    expect(buildChatContextInjectionMessage(payload, { conversationId: 'conv-1' })).toEqual({
+    expect(
+      buildChatContextInjectionMessage(payload, { tabId: 'tab-1', conversationId: 'conv-1' }),
+    ).toEqual({
       type: 'injectContext',
-      payload,
+      tabId: 'tab-1',
       conversationId: 'conv-1',
+      payload,
     });
     expect(buildChatExternalInputMessage({ message: 'run', autoSend: true })).toEqual({
       type: 'externalMessage',
