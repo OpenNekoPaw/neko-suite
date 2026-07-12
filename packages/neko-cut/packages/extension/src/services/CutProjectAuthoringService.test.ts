@@ -31,6 +31,12 @@ describe('CutProjectAuthoringService', () => {
       created: true,
       revealed: false,
       target: { kind: 'new', created: true, reveal: false },
+      projectRef: {
+        domain: 'cut',
+        documentUri: 'file:///project/generated.nkv',
+        projectRevision: expect.stringMatching(/^nkv:/),
+        contentDigest: expect.any(String),
+      },
     });
     expect(fileOps.readText('/project/generated.nkv')).toContain('"name": "Generated"');
     expect(fileOps.readText('/project/generated.nkv')).toContain('"fps": 24');
@@ -248,7 +254,7 @@ describe('CutProjectAuthoringService', () => {
       createId: createSequentialIdFactory(),
     });
 
-    await service.importMediaSource({
+    const imported = await service.importMediaSource({
       target: { kind: 'file', documentUri: 'file:///project/reopen.nkv' },
       sourcePath: '/project/media/reopen.mp4',
       mediaType: 'video',
@@ -261,6 +267,7 @@ describe('CutProjectAuthoringService', () => {
       target: { kind: 'file', documentUri: 'file:///project/reopen.nkv' },
     });
 
+    expect(imported.projectRef).toEqual(reopened.projectRef);
     expect(reopened.ok).toBe(true);
     expect(reopened.data?.tracks.flatMap((track) => track.elements)).toEqual([
       expect.objectContaining({ src: 'media/reopen.mp4' }),

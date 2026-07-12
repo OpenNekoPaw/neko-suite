@@ -20,6 +20,7 @@ import {
 import { createServiceId } from '../base';
 import type { IProjectSessionService } from './ProjectSessionService';
 import { ProjectSessionService } from './ProjectSessionService';
+import { createNkvProjectRef } from './CutProjectQualityFacade';
 import { addCutTimelineClip, type CutTimelineClipMediaType } from './cutTimelineAuthoring';
 import {
   addCutStoryboardToTimeline,
@@ -179,6 +180,7 @@ export class CutProjectAuthoringService implements ICutProjectAuthoringService {
         },
         created: false,
         revealed: false,
+        projectRef: createNkvProjectRef(target.documentUri, project),
         diagnostics: [],
         data: project,
       });
@@ -219,6 +221,7 @@ export class CutProjectAuthoringService implements ICutProjectAuthoringService {
         },
         created: true,
         revealed: false,
+        projectRef: createNkvProjectRef(target.documentUri, project),
         diagnostics: [],
         data: project,
       });
@@ -252,6 +255,7 @@ export class CutProjectAuthoringService implements ICutProjectAuthoringService {
         },
         created: false,
         revealed: false,
+        projectRef: createNkvProjectRef(target.documentUri, project),
         diagnostics: [],
         data: project,
       });
@@ -354,6 +358,7 @@ export class CutProjectAuthoringService implements ICutProjectAuthoringService {
         },
         created,
         revealed: false,
+        projectRef: createNkvProjectRef(target.documentUri, clip.projectData),
         diagnostics: [],
         data: {
           sourcePath: clip.sourcePath,
@@ -465,6 +470,7 @@ export class CutProjectAuthoringService implements ICutProjectAuthoringService {
         },
         created,
         revealed: false,
+        projectRef: createNkvProjectRef(target.documentUri, clip.projectData),
         diagnostics: [],
         data: {
           sourcePath: clip.sourcePath,
@@ -574,6 +580,7 @@ export class CutProjectAuthoringService implements ICutProjectAuthoringService {
         },
         created,
         revealed: false,
+        projectRef: createNkvProjectRef(target.documentUri, timeline.projectData),
         diagnostics: [],
         data: {
           projectName: request.payload.projectName,
