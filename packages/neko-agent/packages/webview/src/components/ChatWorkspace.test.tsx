@@ -45,11 +45,13 @@ vi.mock('@/components/ChatView/InputAreaContext', () => ({
     onSessionModeChange?: (mode: 'agent' | 'image' | 'video' | 'audio') => void;
     onCompressContext?: () => Promise<void>;
     onPromptModeChange?: (mode: 'default' | 'plan') => void;
+    promptMode?: 'default' | 'plan';
     selectedModel?: string;
     onModelSelect?: (modelId: string) => void;
   }) => (
     <div>
       <span data-testid="session-mode">{props.sessionMode ?? 'agent'}</span>
+      <span data-testid="prompt-mode">{props.promptMode ?? 'default'}</span>
       <span data-testid="selected-model">{props.selectedModel ?? 'none'}</span>
       <button
         type="button"
@@ -431,6 +433,35 @@ describe('ChatWorkspace pending send', () => {
     expect(vscodeMocks.cancelQueuedMessage).toHaveBeenCalledWith('conv-1', 'queued-1');
     fireEvent.click(getByTestId('edit-queued'));
     expect(vscodeMocks.editQueuedMessage).toHaveBeenCalledWith('conv-1', 'queued-1');
+  });
+
+  it('keeps prompt mode in its owning Tab store while switching', () => {
+    const runtimeA = createTabRenderRuntime({ tabId: 'tab-a', conversationId: 'conv-a' });
+    const runtimeB = createTabRenderRuntime({ tabId: 'tab-b', conversationId: 'conv-b' });
+    runtimeA.store.updateState({ promptMode: 'plan', promptModeInitialized: true });
+    const { getByTestId, rerender } = render(
+      <ChatWorkspace
+        {...createProps({
+          tabRenderStore: runtimeA.store,
+          activeConversationId: 'conv-a',
+          activeConversationIdRef: createRefWithCurrent<string | null>('conv-a'),
+          activeTabConversationId: 'conv-a',
+        })}
+      />,
+    );
+
+    expect(getByTestId('prompt-mode').textContent).toBe('plan');
+    rerender(
+      <ChatWorkspace
+        {...createProps({
+          tabRenderStore: runtimeB.store,
+          activeConversationId: 'conv-b',
+          activeConversationIdRef: createRefWithCurrent<string | null>('conv-b'),
+          activeTabConversationId: 'conv-b',
+        })}
+      />,
+    );
+    expect(getByTestId('prompt-mode').textContent).toBe('default');
   });
 
   it('keeps model selection in its owning Tab store while switching', () => {

@@ -18,6 +18,8 @@ import {
 } from '@/markdown/agent-markdown-session-registry';
 import { ConversationRenderCoordinator } from '@/render-lifecycle/conversation-render-coordinator';
 import type { ConversationViewportSnapshot } from '@/render-lifecycle/conversation-render-contract';
+import type { TabRenderStore } from '@/render-runtime/tab-render-runtime';
+import { useTabRenderStore } from '@/render-runtime/useTabRenderStore';
 import { ConversationController } from './ConversationController';
 
 const vscodeMocks = vi.hoisted(() => ({
@@ -111,6 +113,7 @@ vi.mock('@/i18n/I18nContext', () => ({
 
 vi.mock('@/components/ChatWorkspace', () => ({
   ChatWorkspace: (props: {
+    tabRenderStore: TabRenderStore;
     activeConversationId?: string | null;
     activeTabConversationId?: string | null;
     messages?: Message[];
@@ -137,6 +140,7 @@ vi.mock('@/components/ChatWorkspace', () => ({
     initialEntryPromptMenuRequest?: { id: number; menu: 'generate-assets' | 'roleplay' } | null;
     onInitialEntryPromptMenuRequestConsumed?: (id: number) => void;
   }) => {
+    const tabRenderSnapshot = useTabRenderStore(props.tabRenderStore);
     const isConversationSwitching = Boolean(
       props.isForegroundConversationActivationPending ||
       (props.activeTabConversationId &&
@@ -153,6 +157,14 @@ vi.mock('@/components/ChatWorkspace', () => ({
     return (
       <div data-testid="chat-workspace">
         <span data-testid="workspace-conversation">{props.activeConversationId ?? 'none'}</span>
+        <span data-testid="workspace-prompt-mode">
+          {tabRenderSnapshot.snapshot.state.promptMode}
+        </span>
+        <span data-testid="workspace-diagnostics">
+          {tabRenderSnapshot.snapshot.state.diagnostics
+            .map((diagnostic) => diagnostic.message)
+            .join('|')}
+        </span>
         <span data-testid="workspace-tab-conversation">
           {props.activeTabConversationId ?? 'none'}
         </span>
@@ -1122,6 +1134,59 @@ describe('ConversationController entry state', () => {
 
     expect(screen.getByTestId('workspace-messages').textContent).toBe('partial role');
     expect(screen.getByTestId('workspace-streaming-flags').textContent).toBe('false:false');
+  });
+
+  it('routes prompt mode and diagnostics to every Tab store for the owning conversation only', () => {
+    vi.clearAllMocks();
+    render(<ConversationController {...createProps()} />);
+    const openTabs = [
+      { id: 'tab-a-1', title: 'Chat A1', conversationId: 'conv-a' },
+      { id: 'tab-a-2', title: 'Chat A2', conversationId: 'conv-a' },
+      { id: 'tab-b', title: 'Chat B', conversationId: 'conv-b' },
+    ];
+
+    act(() => {
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          data: { type: 'tabState', tabState: { openTabs, activeTabId: 'tab-b' } },
+        }),
+      );
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          data: {
+            type: 'promptModeChanged',
+            conversationId: 'conv-a',
+            mode: 'plan',
+          },
+        }),
+      );
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          data: {
+            type: 'sessionDiagnostic',
+            code: 'conversation-durability-failed',
+            severity: 'error',
+            conversationId: 'conv-a',
+            message: 'Conversation A only.',
+          },
+        }),
+      );
+    });
+
+    expect(screen.getByTestId('workspace-prompt-mode').textContent).toContain('default');
+    expect(screen.getByTestId('workspace-diagnostics').textContent).toBe('');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Switch Chat A1' }));
+    expect(screen.getByTestId('workspace-prompt-mode').textContent).toContain('plan');
+    expect(screen.getByTestId('workspace-diagnostics').textContent).toContain(
+      'Conversation A only.',
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Switch Chat A2' }));
+    expect(screen.getByTestId('workspace-prompt-mode').textContent).toContain('plan');
+    expect(screen.getByTestId('workspace-diagnostics').textContent).toContain(
+      'Conversation A only.',
+    );
   });
 
   it('keeps activation rejection diagnostics scoped to the requested conversation', () => {

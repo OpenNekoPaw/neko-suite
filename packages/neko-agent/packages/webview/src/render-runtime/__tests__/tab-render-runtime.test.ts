@@ -117,6 +117,26 @@ describe('TabRenderRuntimeRegistry', () => {
     expect(storeB.getSnapshot().visibility).toBe('visible');
   });
 
+  it('queries every independent Tab runtime attached to one conversation', () => {
+    const registry = createTabRenderRuntimeRegistry();
+    registry.reconcile(
+      [
+        { tabId: 'tab-a-1', conversationId: 'conv-a' },
+        { tabId: 'tab-a-2', conversationId: 'conv-a' },
+        { tabId: 'tab-b', conversationId: 'conv-b' },
+      ],
+      'tab-a-1',
+    );
+
+    expect(registry.getByConversation('conv-a').map((runtime) => runtime.tabId)).toEqual([
+      'tab-a-1',
+      'tab-a-2',
+    ]);
+    expect(registry.getByConversation('conv-b').map((runtime) => runtime.tabId)).toEqual(['tab-b']);
+    expect(registry.getByConversation('conv-missing')).toEqual([]);
+    expect(() => registry.getByConversation('')).toThrow(/Conversation ID is required/);
+  });
+
   it('disposes closed Tabs without touching retained runtimes', () => {
     const registry = createTabRenderRuntimeRegistry();
     registry.reconcile(

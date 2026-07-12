@@ -79,6 +79,10 @@ export interface UseMessageHandlerProps {
   isTablessConversationViewRef: MutableRefObject<boolean>;
   pendingForegroundConversationActivationRef?: MutableRefObject<PendingForegroundConversationActivation | null>;
   tabStateRevisionRef: MutableRefObject<number>;
+  reconcileTabRenderRuntimes: (
+    bindings: readonly { readonly tabId: string; readonly conversationId: string }[],
+    activeTabId: string | null,
+  ) => void;
   completeForegroundConversationActivation?: (conversationId: string) => void;
   requestQueuedMessageEdit?: (request: QueuedMessageEditRequest) => void;
   requestConfigSnapshot?: () => void;
@@ -208,6 +212,7 @@ export function useMessageHandler(props: UseMessageHandlerProps): UseMessageHand
     isTablessConversationViewRef,
     pendingForegroundConversationActivationRef,
     tabStateRevisionRef,
+    reconcileTabRenderRuntimes,
     completeForegroundConversationActivation,
     requestQueuedMessageEdit,
     requestConfigSnapshot,
@@ -370,6 +375,7 @@ export function useMessageHandler(props: UseMessageHandlerProps): UseMessageHand
       disposeConversationRendering: renderRuntime.disposeConversation,
       pendingForegroundConversationActivationRef,
       tabStateRevisionRef,
+      reconcileTabRenderRuntimes,
       completeForegroundConversationActivation,
       requestQueuedMessageEdit,
     }),
@@ -433,6 +439,7 @@ export function useMessageHandler(props: UseMessageHandlerProps): UseMessageHand
       renderRuntime,
       pendingForegroundConversationActivationRef,
       tabStateRevisionRef,
+      reconcileTabRenderRuntimes,
       completeForegroundConversationActivation,
       requestQueuedMessageEdit,
     ],

@@ -103,6 +103,7 @@ import {
   projectConversationSessionState,
 } from '@/presenters/conversation-session-state-presenter';
 import { DEFAULT_GENERATION_PARAMS } from '@/components/ChatView/InputArea/types';
+import type { TabRenderState } from '@/render-runtime/tab-render-runtime';
 import { useTabRenderRuntimeRegistry } from '@/render-runtime/useTabRenderRuntimeRegistry';
 
 // =============================================================================
@@ -225,9 +226,6 @@ export function ConversationController({
     audio: 'none',
   });
   const [globalError, setGlobalError] = useState<string | null>(null);
-  const [conversationDiagnostics, setConversationDiagnostics] = useState<Map<string, string>>(
-    () => new Map(),
-  );
   const [foregroundAvailabilityByConversation, setForegroundAvailabilityByConversation] = useState<
     Map<string, ForegroundConversationAvailability>
   >(() => new Map());
@@ -248,10 +246,6 @@ export function ConversationController({
   const conversationMediaCallCountRef = useRef<Map<string, number>>(new Map());
   const [projectionVersion, forceUpdate] = useState(0);
 
-  // Prompt mode is session state, not global settings: each tab/conversation can plan independently.
-  const [promptModeByConversation, setPromptModeByConversation] = useState<Map<string, PromptMode>>(
-    () => new Map(),
-  );
   const mentionSearchFilterRef = useRef(mentionSearchFilter);
   useEffect(() => {
     mentionSearchFilterRef.current = mentionSearchFilter;
@@ -267,13 +261,14 @@ export function ConversationController({
     entryInputValueRef.current = value;
     setEntryInputValue(value);
   }, []);
-  const setPromptModeForConversation = useCallback((conversationId: string, mode: PromptMode) => {
-    setPromptModeByConversation((prev) => {
-      const next = new Map(prev);
-      next.set(conversationId, mode);
-      return next;
-    });
-  }, []);
+  const setPromptModeForConversation = useCallback(
+    (conversationId: string, mode: PromptMode) => {
+      for (const runtime of tabRenderRuntimeRegistry.getByConversation(conversationId)) {
+        runtime.store.updateState({ promptMode: mode, promptModeInitialized: true });
+      }
+    },
+    [tabRenderRuntimeRegistry],
+  );
 
   // ---- Skills state ----
   const [skills, setSkills] = useState<SkillSummary[]>([]);
@@ -308,33 +303,36 @@ export function ConversationController({
   const tabStateRevisionRef = useRef(0);
   const [isForegroundConversationActivationPending, setIsForegroundConversationActivationPending] =
     useState(false);
-  const reportConversationDiagnostic = useCallback((diagnostic: AgentSessionDiagnosticMessage) => {
-    const conversationId = diagnostic.conversationId;
-    if (!conversationId) {
-      setGlobalError(`${diagnostic.code}: ${diagnostic.message}`);
-      return;
-    }
-    const message = `${diagnostic.code}: ${diagnostic.message}`;
-    setConversationDiagnostics((previous) => {
-      const next = new Map(previous);
-      next.set(conversationId, message);
-      return next;
-    });
-    const pending = pendingForegroundConversationActivationRef.current;
-    const rejectsPendingActivation =
-      pending?.reason === 'switch-conversation' &&
-      pending.conversationId === conversationId &&
-      (diagnostic.action === 'activate-conversation' ||
-        diagnostic.code === 'unknown-conversation' ||
-        diagnostic.code === 'deleted-conversation');
-    if (rejectsPendingActivation) {
-      setForegroundAvailabilityByConversation((previous) => {
-        const next = new Map(previous);
-        next.set(conversationId, { kind: 'unavailable', diagnostic: message });
-        return next;
-      });
-    }
-  }, []);
+  const reportConversationDiagnostic = useCallback(
+    (diagnostic: AgentSessionDiagnosticMessage) => {
+      const conversationId = diagnostic.conversationId;
+      if (!conversationId) {
+        setGlobalError(`${diagnostic.code}: ${diagnostic.message}`);
+        return;
+      }
+      const message = `${diagnostic.code}: ${diagnostic.message}`;
+      for (const runtime of tabRenderRuntimeRegistry.getByConversation(conversationId)) {
+        runtime.store.updateState((state) => ({
+          diagnostics: [...state.diagnostics, diagnostic],
+        }));
+      }
+      const pending = pendingForegroundConversationActivationRef.current;
+      const rejectsPendingActivation =
+        pending?.reason === 'switch-conversation' &&
+        pending.conversationId === conversationId &&
+        (diagnostic.action === 'activate-conversation' ||
+          diagnostic.code === 'unknown-conversation' ||
+          diagnostic.code === 'deleted-conversation');
+      if (rejectsPendingActivation) {
+        setForegroundAvailabilityByConversation((previous) => {
+          const next = new Map(previous);
+          next.set(conversationId, { kind: 'unavailable', diagnostic: message });
+          return next;
+        });
+      }
+    },
+    [tabRenderRuntimeRegistry],
+  );
   const nextPendingSendRequestIdRef = useRef(0);
   const [pendingSendRequest, setPendingSendRequest] = useState<{
     id: number;
@@ -465,12 +463,6 @@ export function ConversationController({
         next.delete(conversationId);
         return next;
       });
-      setPromptModeByConversation((prev) => {
-        if (!prev.has(conversationId)) return prev;
-        const next = new Map(prev);
-        next.delete(conversationId);
-        return next;
-      });
     },
     [setWorkItemsByConversation],
   );
@@ -496,7 +488,6 @@ export function ConversationController({
       conversationId,
       messagesByConversation,
       streamingByConversation,
-      promptModeByConversation,
       activeSkillByConversation,
       activationProgressByConversation,
       contextChipsByConversation,
@@ -517,7 +508,6 @@ export function ConversationController({
     conversationStreamingRef,
     isThinking,
     messages,
-    promptModeByConversation,
     projectionVersion,
     queuedMessageCount,
     queuedMessages,
@@ -539,28 +529,34 @@ export function ConversationController({
   const visibleAgentState =
     visibleSessionState.agentState ??
     (visibleConversationId === activeConversationId ? agentState : null);
-  const activePromptMode = visibleSessionState.promptMode;
-  const activeSettings = useMemo<SettingsState>(
-    () => ({ ...settings, promptMode: activePromptMode }),
-    [settings, activePromptMode],
-  );
+  const activeSettings = settings;
 
   useEffect(() => {
-    if (!activeTabRenderStore || activeSettings.chatModelOptions.length === 0) return;
+    if (!activeTabRenderStore) return;
     const state = activeTabRenderStore.getSnapshot().state;
-    if (state.configurationInitialized) return;
-    activeTabRenderStore.updateState({
-      configurationInitialized: true,
-      selectedModel,
-      mediaModelSelection,
-      promptMode: visibleSessionState.promptMode,
-    });
+    const update: Partial<TabRenderState> = {};
+    if (activeSettings.chatModelOptions.length > 0 && !state.modelConfigurationInitialized) {
+      Object.assign(update, {
+        modelConfigurationInitialized: true,
+        selectedModel,
+        mediaModelSelection,
+      });
+    }
+    if (!state.promptModeInitialized) {
+      Object.assign(update, {
+        promptModeInitialized: true,
+        promptMode: activeSettings.promptMode,
+      });
+    }
+    if (Object.keys(update).length > 0) {
+      activeTabRenderStore.updateState(update);
+    }
   }, [
     activeSettings.chatModelOptions.length,
+    activeSettings.promptMode,
     activeTabRenderStore,
     mediaModelSelection,
     selectedModel,
-    visibleSessionState.promptMode,
   ]);
   const entryModelState = useMemo(
     () =>
@@ -582,14 +578,14 @@ export function ConversationController({
   const updateActiveSettings = useCallback(
     (partial: Partial<SettingsState>) => {
       const { promptMode, ...globalSettings } = partial;
-      if (promptMode && visibleConversationId) {
-        setPromptModeForConversation(visibleConversationId, promptMode);
+      if (promptMode && activeTabRenderStore) {
+        setPromptModeForConversation(activeTabRenderStore.getSnapshot().conversationId, promptMode);
       }
       if (Object.keys(globalSettings).length > 0) {
         updateSettings(globalSettings);
       }
     },
-    [setPromptModeForConversation, updateSettings, visibleConversationId],
+    [activeTabRenderStore, setPromptModeForConversation, updateSettings],
   );
   const handleModelSelect = useCallback(
     (modelId: string) => {
@@ -836,12 +832,6 @@ export function ConversationController({
       next.set(conversationId, { kind: 'ready' });
       return next;
     });
-    setConversationDiagnostics((previous) => {
-      if (!previous.has(conversationId)) return previous;
-      const next = new Map(previous);
-      next.delete(conversationId);
-      return next;
-    });
   }, []);
 
   // ---- Message handler ----
@@ -862,6 +852,9 @@ export function ConversationController({
     isTablessConversationViewRef,
     pendingForegroundConversationActivationRef,
     tabStateRevisionRef,
+    reconcileTabRenderRuntimes: (bindings, nextActiveTabId) => {
+      tabRenderRuntimeRegistry.reconcile(bindings, nextActiveTabId);
+    },
     completeForegroundConversationActivation,
     requestQueuedMessageEdit: (request) => {
       nextQueuedEditRequestIdRef.current += 1;
@@ -1239,12 +1232,6 @@ export function ConversationController({
         next.set(conversationId, hasRetainedProjection ? { kind: 'ready' } : { kind: 'loading' });
         return next;
       });
-      setConversationDiagnostics((previous) => {
-        if (!previous.has(conversationId)) return previous;
-        const next = new Map(previous);
-        next.delete(conversationId);
-        return next;
-      });
       if (hasRetainedProjection) {
         commitConversationTabActivation(conversationId, 'ui-tab');
       }
@@ -1517,10 +1504,6 @@ export function ConversationController({
   const foregroundConversationAvailability = visibleConversationId
     ? (foregroundAvailabilityByConversation.get(visibleConversationId) ?? { kind: 'ready' })
     : { kind: 'ready' as const };
-  const visibleConversationDiagnostic = visibleConversationId
-    ? (conversationDiagnostics.get(visibleConversationId) ?? null)
-    : null;
-
   return (
     <>
       {renderHeader({
@@ -1675,17 +1658,6 @@ export function ConversationController({
             onSessionDiagnostic={reportConversationDiagnostic}
           />
         ) : null
-      ) : null}
-
-      {visibleConversationDiagnostic &&
-      foregroundConversationAvailability.kind !== 'unavailable' ? (
-        <div
-          className="fixed right-4 top-12 z-50 max-w-[360px] rounded-lg border border-[var(--vscode-inputValidation-errorBorder,var(--agent-border))] bg-[var(--vscode-inputValidation-errorBackground,var(--agent-elevated))] px-3 py-2 text-sm text-[var(--vscode-inputValidation-errorForeground,var(--agent-fg))] shadow-lg animate-slide-in"
-          role="alert"
-        >
-          <div className="font-medium">会话错误</div>
-          <div className="mt-1 opacity-90">{visibleConversationDiagnostic}</div>
-        </div>
       ) : null}
 
       {globalError ? (

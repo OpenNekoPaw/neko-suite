@@ -39,6 +39,14 @@ const handleTabState: MessageHandler<'tabState'> = (message: TabStateMessage, co
       openTabs.length === 0 &&
       (activeTabId ?? null) === null;
 
+    if (!context.reconcileTabRenderRuntimes) {
+      throw new Error('Tab state handling requires a Tab render runtime reconciler.');
+    }
+    context.reconcileTabRenderRuntimes(
+      openTabs.map((tab) => ({ tabId: tab.id, conversationId: tab.conversationId })),
+      activeTabId ?? null,
+    );
+
     if (Array.isArray(openTabs)) {
       context.setOpenTabs(openTabs);
     }

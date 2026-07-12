@@ -1137,6 +1137,33 @@ describe('character role context isolation', () => {
     });
   });
 
+  it('fails visibly when Tab state arrives without the runtime reconciler', () => {
+    const harness = createContextHarness({
+      activeConversationId: null,
+      activeTabId: null,
+      currentMessages: [],
+      currentStreaming: { isThinking: false, streamingMessageId: null },
+      openTabs: [],
+      isTablessConversationView: true,
+    });
+    delete harness.context.reconcileTabRenderRuntimes;
+
+    expect(() =>
+      dispatch(
+        tabHandlers,
+        {
+          type: 'tabState',
+          revision: 1,
+          tabState: {
+            openTabs: [{ id: 'tab-a', title: 'Chat A', conversationId: 'conv-a' }],
+            activeTabId: 'tab-a',
+          },
+        },
+        harness.context,
+      ),
+    ).toThrow('Tab state handling requires a Tab render runtime reconciler.');
+  });
+
   it('restores ordinary tab messages when activeConversation arrives before restored tabState', () => {
     const ordinaryMessage = message('ordinary-message', 'assistant', '普通 Agent 回复');
     const harness = createContextHarness({
@@ -1468,6 +1495,7 @@ function createContextHarness(options: ContextHarnessOptions): ContextHarness {
     isTablessConversationViewRef,
     pendingForegroundConversationActivationRef,
     tabStateRevisionRef: ref(0),
+    reconcileTabRenderRuntimes: () => undefined,
     completeForegroundConversationActivation: (conversationId) => {
       const pending = pendingForegroundConversationActivationRef.current;
       if (!pending) return;

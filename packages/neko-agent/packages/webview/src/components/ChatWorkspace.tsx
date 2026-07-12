@@ -221,6 +221,8 @@ export function ChatWorkspace({
   const inputValue = tabState.inputValue;
   const selectedModel = tabState.selectedModel;
   const mediaModelSelection = tabState.mediaModelSelection;
+  const promptMode = tabState.promptMode;
+  const latestSessionDiagnostic = tabState.diagnostics.at(-1) ?? null;
   const attachedFiles = [...tabState.attachedFiles];
   const selectedFileReferences = [...tabState.selectedFileReferences];
   const genCategory = tabState.generationCategory;
@@ -756,7 +758,7 @@ export function ChatWorkspace({
       onMediaUnderstandingModelSelect={handleMediaUnderstandingModelSelect}
       executionMode={settings.executionMode}
       onExecutionModeChange={handleExecutionModeChange}
-      promptMode={settings.promptMode}
+      promptMode={promptMode}
       onPromptModeChange={handlePromptModeChange}
       contextTokenCount={contextTokenCount}
       maxContextTokens={selectedEffectiveInputBudget}
@@ -784,6 +786,17 @@ export function ChatWorkspace({
       onGenCategoryChange={setGenCategory}
       onGenParamsChange={updateGenParams}
     >
+      {latestSessionDiagnostic && foregroundConversationAvailability?.kind !== 'unavailable' ? (
+        <div
+          className="fixed right-4 top-12 z-50 max-w-[360px] rounded-lg border border-[var(--vscode-inputValidation-errorBorder,var(--agent-border))] bg-[var(--vscode-inputValidation-errorBackground,var(--agent-elevated))] px-3 py-2 text-sm text-[var(--vscode-inputValidation-errorForeground,var(--agent-fg))] shadow-lg animate-slide-in"
+          role="alert"
+        >
+          <div className="font-medium">会话错误</div>
+          <div className="mt-1 opacity-90">
+            {latestSessionDiagnostic.code}: {latestSessionDiagnostic.message}
+          </div>
+        </div>
+      ) : null}
       <ChatView
         messages={messages}
         inputValue={inputValue}

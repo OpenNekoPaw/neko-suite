@@ -48,7 +48,8 @@ export interface TabQueuedEditState {
 }
 
 export interface TabRenderState {
-  readonly configurationInitialized: boolean;
+  readonly modelConfigurationInitialized: boolean;
+  readonly promptModeInitialized: boolean;
   readonly activeSurface: TabType;
   readonly inputValue: string;
   readonly attachedFiles: readonly MessageAttachment[];
@@ -99,6 +100,7 @@ export interface TabRenderRuntime extends TabRenderBinding {
 export interface TabRenderRuntimeRegistry {
   readonly size: number;
   get(tabId: string): TabRenderRuntime | undefined;
+  getByConversation(conversationId: string): readonly TabRenderRuntime[];
   require(tabId: string): TabRenderRuntime;
   reconcile(bindings: readonly TabRenderBinding[], activeTabId: string | null): void;
   dispose(): void;
@@ -246,6 +248,16 @@ class DefaultTabRenderRuntimeRegistry implements TabRenderRuntimeRegistry {
     return this.runtimes.get(tabId);
   }
 
+  getByConversation(conversationId: string): readonly TabRenderRuntime[] {
+    this.assertActive();
+    if (conversationId.length === 0) {
+      throw new Error('Conversation ID is required to query Tab render runtimes.');
+    }
+    return [...this.runtimes.values()].filter(
+      (runtime) => runtime.conversationId === conversationId,
+    );
+  }
+
   require(tabId: string): TabRenderRuntime {
     const runtime = this.runtimes.get(tabId);
     if (!runtime) {
@@ -311,7 +323,8 @@ class DefaultTabRenderRuntimeRegistry implements TabRenderRuntimeRegistry {
 
 function createInitialTabRenderState(): TabRenderState {
   return Object.freeze({
-    configurationInitialized: false,
+    modelConfigurationInitialized: false,
+    promptModeInitialized: false,
     activeSurface: 'chat',
     inputValue: '',
     attachedFiles: Object.freeze([]),
