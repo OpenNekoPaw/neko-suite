@@ -15,6 +15,7 @@ import {
   STORYBOARD_TABLE_REQUIRED_FIELDS,
   classifyStoryboardMediaIdentity,
   interpretStoryboardImageStrategies,
+  normalizeCanonicalStoryboardTable,
   normalizeStoryboardTable,
   projectStoryboardTableToCutPayload,
   validateStoryboardTable,
@@ -167,6 +168,36 @@ describe('storyboard table contract', () => {
         }),
       ]),
     );
+  });
+
+  it('rejects flat scene rows at the canonical Storyboard handoff boundary', () => {
+    const result = normalizeCanonicalStoryboardTable({
+      value: {
+        schemaVersion: 1,
+        kind: 'storyboard-table',
+        title: 'Flat canonical input',
+        scenes: [
+          {
+            sceneId: 'scene-1',
+            sceneTitle: 'Scene',
+            shotNumber: 1,
+            duration: 3,
+            visualDescription: 'A cat enters.',
+            characterAction: 'The cat walks.',
+            imageStrategy: 'generate-new',
+          },
+        ],
+      },
+    });
+
+    expect(result.table).toBeUndefined();
+    expect(result.diagnostics).toEqual([
+      expect.objectContaining({
+        severity: 'error',
+        code: 'canonical-scene-shot-hierarchy-required',
+        path: ['scenes', 0, 'shots'],
+      }),
+    ]);
   });
 
   it('normalizes flat storyboard shot rows mistakenly placed in scenes', () => {

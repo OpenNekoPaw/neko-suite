@@ -10,13 +10,22 @@ import type {
   StoryScenePlan,
   StoryShotPlan,
 } from '../types/storyboard-planner';
-import { validateCanonicalStoryboardTable, type StoryboardTable } from '../types/storyboard-table';
+import {
+  validateCanonicalStoryboardTable,
+  type StoryboardMediaRef,
+  type StoryboardTable,
+} from '../types/storyboard-table';
 import type { ShotCharacter } from '../types/canvas';
 import type {
   CanvasCompositeConnectionSpec,
   CanvasCreateConnectionRequest,
 } from '../types/canvas-agent-operations';
-import { migrateLegacyCanvasStoryboardShot } from '../types/canvas-semantic-storyboard';
+import {
+  CANVAS_STORYBOARD_PROMPT_DOCUMENT_VERSION,
+  CANVAS_STORYBOARD_PROMPT_STATE_VERSION,
+  migrateLegacyCanvasStoryboardShot,
+  type CanvasStoryboardPromptState,
+} from '../types/canvas-semantic-storyboard';
 
 const DEFAULT_START_X = 100;
 const DEFAULT_START_Y = 100;
@@ -109,56 +118,74 @@ export function projectCanonicalStoryboardToCanvasPayload(
     return { diagnostics: validation.diagnostics };
   }
 
-  const scenes: CanvasStoryboardScenePlan[] = table.scenes.map((scene, sceneIndex) => ({
-    sceneId: scene.sceneId,
-    sceneTitle: scene.sceneTitle,
-    sceneNumber: scene.sceneNumber ?? sceneIndex + 1,
-    ...(scene.location ? { location: scene.location } : {}),
-    ...(scene.timeOfDay ? { timeOfDay: scene.timeOfDay } : {}),
-    shotPlans: scene.shots.map((shot): CanvasStoryboardShotPlan => ({
-      ...(shot.shotId ? { shotId: shot.shotId } : {}),
-      shotNumber: shot.shotNumber,
-      duration: shot.duration,
-      visualDescription: shot.visualDescription,
-      characters: (shot.characters ?? []).map((character) => ({
-        ...(character.characterId ? { characterId: character.characterId } : {}),
-        ...(character.entityRef ? { entityRef: character.entityRef } : {}),
-        ...(character.candidateId ? { candidateId: character.candidateId } : {}),
-        characterName: character.name,
-        ...(character.action ? { action: character.action } : {}),
-        ...(character.emotion ? { emotion: character.emotion } : {}),
-        ...(character.continuityNotes ? { continuityNotes: character.continuityNotes } : {}),
-        ...(character.appearanceNotes ? { appearanceNotes: character.appearanceNotes } : {}),
-      })),
-      shotScale: shot.shotScale ?? 'MS',
-      ...(shot.cameraMovement ? { cameraMovement: shot.cameraMovement } : {}),
-      ...(shot.cameraAngle ? { cameraAngle: shot.cameraAngle } : {}),
-      characterAction: shot.characterAction,
-      emotion: shot.emotion ?? [],
-      sceneTags: shot.sceneTags ?? [],
-      ...(shot.dialogue ? { dialogue: shot.dialogue } : {}),
-      ...(shot.voiceOver ? { voiceOver: shot.voiceOver } : {}),
-      ...(shot.soundCue ? { soundCue: shot.soundCue } : {}),
-      ...(shot.textCues ? { textCues: shot.textCues } : {}),
-      ...(shot.voiceCues ? { voiceCues: shot.voiceCues } : {}),
-      ...(shot.imagePrompt ? { imagePrompt: shot.imagePrompt } : {}),
-      ...(shot.videoPrompt ? { videoPrompt: shot.videoPrompt } : {}),
-      ...(shot.visualStyle ? { visualStyle: shot.visualStyle } : {}),
-      ...(shot.vfx ? { vfx: shot.vfx } : {}),
-      ...(shot.sourceMediaRefs ? { sourceMediaRefs: shot.sourceMediaRefs } : {}),
-      ...(shot.generatedMediaRefs ? { generatedMediaRefs: shot.generatedMediaRefs } : {}),
-      ...(shot.mediaRefs ? { mediaRefs: shot.mediaRefs } : {}),
-      ...(shot.sourceMediaRefs?.[0]?.resourceRef
-        ? { referenceResourceRef: shot.sourceMediaRefs[0].resourceRef }
-        : {}),
-    })),
-  }));
-  const sourceStoryboardRef = `storyboard:${table.revision.revisionId}`;
+  const storyboardRevision = table.revision;
+  const scenes: CanvasStoryboardScenePlan[] = table.scenes.map((scene, sceneIndex) => {
+    const sceneStoryboardPrompt = createCanonicalSceneVideoPromptState(
+      scene,
+      storyboardRevision.revisionId,
+    );
+    return {
+      sceneId: scene.sceneId,
+      sceneTitle: scene.sceneTitle,
+      sceneNumber: scene.sceneNumber ?? sceneIndex + 1,
+      ...(scene.location ? { location: scene.location } : {}),
+      ...(scene.timeOfDay ? { timeOfDay: scene.timeOfDay } : {}),
+      ...(sceneStoryboardPrompt ? { storyboardPrompt: sceneStoryboardPrompt } : {}),
+      shotPlans: scene.shots.map((shot): CanvasStoryboardShotPlan => {
+        const previewMediaRef = selectStoryboardShotPreviewMediaRef(shot);
+        const shotStoryboardPrompt = createCanonicalShotImagePromptState(
+          shot,
+          storyboardRevision.revisionId,
+        );
+        return {
+          ...(shot.shotId ? { shotId: shot.shotId } : {}),
+          shotNumber: shot.shotNumber,
+          duration: shot.duration,
+          visualDescription: shot.visualDescription,
+          characters: (shot.characters ?? []).map((character) => ({
+            ...(character.characterId ? { characterId: character.characterId } : {}),
+            ...(character.entityRef ? { entityRef: character.entityRef } : {}),
+            ...(character.candidateId ? { candidateId: character.candidateId } : {}),
+            characterName: character.name,
+            ...(character.action ? { action: character.action } : {}),
+            ...(character.emotion ? { emotion: character.emotion } : {}),
+            ...(character.continuityNotes ? { continuityNotes: character.continuityNotes } : {}),
+            ...(character.appearanceNotes ? { appearanceNotes: character.appearanceNotes } : {}),
+          })),
+          shotScale: shot.shotScale ?? 'MS',
+          ...(shot.cameraMovement ? { cameraMovement: shot.cameraMovement } : {}),
+          ...(shot.cameraAngle ? { cameraAngle: shot.cameraAngle } : {}),
+          characterAction: shot.characterAction,
+          emotion: shot.emotion ?? [],
+          sceneTags: shot.sceneTags ?? [],
+          ...(shot.dialogue ? { dialogue: shot.dialogue } : {}),
+          ...(shot.voiceOver ? { voiceOver: shot.voiceOver } : {}),
+          ...(shot.soundCue ? { soundCue: shot.soundCue } : {}),
+          ...(shot.textCues ? { textCues: shot.textCues } : {}),
+          ...(shot.voiceCues ? { voiceCues: shot.voiceCues } : {}),
+          ...(shot.imagePrompt ? { imagePrompt: shot.imagePrompt } : {}),
+          ...(shotStoryboardPrompt ? { storyboardPrompt: shotStoryboardPrompt } : {}),
+          ...(shot.visualStyle ? { visualStyle: shot.visualStyle } : {}),
+          ...(shot.vfx ? { vfx: shot.vfx } : {}),
+          ...(shot.sourceMediaRefs ? { sourceMediaRefs: shot.sourceMediaRefs } : {}),
+          ...(shot.generatedMediaRefs ? { generatedMediaRefs: shot.generatedMediaRefs } : {}),
+          ...(shot.mediaRefs ? { mediaRefs: shot.mediaRefs } : {}),
+          ...(previewMediaRef?.resourceRef
+            ? { referenceResourceRef: previewMediaRef.resourceRef }
+            : {}),
+          ...(previewMediaRef?.documentResourceRef
+            ? { referenceImageResourceRef: previewMediaRef.documentResourceRef }
+            : {}),
+        };
+      }),
+    };
+  });
+  const sourceStoryboardRef = `storyboard:${storyboardRevision.revisionId}`;
   return {
     payload: {
       mode: 'semantic',
       sourceScriptUri: table.source?.sourceUri ?? sourceStoryboardRef,
-      sourceStoryboardRevisionId: table.revision.revisionId,
+      sourceStoryboardRevisionId: storyboardRevision.revisionId,
       projectionMode: 'read-only-projection',
       creativeScope: createStoryboardPayloadScope(sourceStoryboardRef, scenes),
       scenes,
@@ -166,6 +193,62 @@ export function projectCanonicalStoryboardToCanvasPayload(
     },
     diagnostics: validation.diagnostics,
   };
+}
+
+function createCanonicalSceneVideoPromptState(
+  scene: StoryboardTable['scenes'][number],
+  storyboardRevisionId: string,
+): CanvasStoryboardPromptState | undefined {
+  const videoPrompt = scene.shots[0]?.videoPrompt?.trim();
+  if (!videoPrompt) return undefined;
+  return {
+    version: CANVAS_STORYBOARD_PROMPT_STATE_VERSION,
+    promptBlocks: {
+      videoPromptDocument: {
+        version: CANVAS_STORYBOARD_PROMPT_DOCUMENT_VERSION,
+        documentId: `storyboard-scene:${scene.sceneId}:video`,
+        blockKind: 'video',
+        text: videoPrompt,
+        baseRevision: storyboardRevisionId,
+      },
+    },
+  };
+}
+
+function createCanonicalShotImagePromptState(
+  shot: StoryboardTable['scenes'][number]['shots'][number],
+  storyboardRevisionId: string,
+): CanvasStoryboardPromptState | undefined {
+  const imagePrompt = shot.imagePrompt?.trim();
+  if (!imagePrompt) return undefined;
+  const shotId = shot.shotId ?? `shot-${shot.shotNumber}`;
+  return {
+    version: CANVAS_STORYBOARD_PROMPT_STATE_VERSION,
+    promptBlocks: {
+      imagePromptDocument: {
+        version: CANVAS_STORYBOARD_PROMPT_DOCUMENT_VERSION,
+        documentId: `storyboard-shot:${shotId}:image`,
+        blockKind: 'image',
+        text: imagePrompt,
+        baseRevision: storyboardRevisionId,
+      },
+    },
+  };
+}
+
+function selectStoryboardShotPreviewMediaRef(
+  shot: StoryboardTable['scenes'][number]['shots'][number],
+): StoryboardMediaRef | undefined {
+  const candidates = [
+    ...(shot.generatedMediaRefs ?? []),
+    ...(shot.sourceMediaRefs ?? []),
+    ...(shot.mediaRefs ?? []),
+  ];
+  return (
+    candidates.find((mediaRef) => mediaRef.mimeType?.startsWith('image/')) ??
+    candidates.find((mediaRef) => mediaRef.documentResourceRef !== undefined) ??
+    candidates.find((mediaRef) => mediaRef.resourceRef !== undefined)
+  );
 }
 
 export async function applyStoryboardPayloadToCanvas(

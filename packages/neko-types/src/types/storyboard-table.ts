@@ -348,6 +348,7 @@ export type StoryboardValidationDiagnosticSeverity =
 export type StoryboardValidationDiagnosticCode =
   | CanonicalStoryboardDiagnosticCode
   | 'invalid-root'
+  | 'canonical-scene-shot-hierarchy-required'
   | 'invalid-schema-version'
   | 'invalid-kind'
   | 'invalid-profile'
@@ -646,6 +647,38 @@ export function validateStoryboardTable(
     ok: !hasBlockingStoryboardDiagnostics(diagnostics),
     diagnostics: limitStoryboardDiagnostics(diagnostics),
   };
+}
+
+export function normalizeCanonicalStoryboardTable(
+  input: NormalizeStoryboardTableInput,
+): NormalizeStoryboardTableResult {
+  const root = readStoryboardRecord(input.value);
+  if (!root) {
+    return normalizeStoryboardTable(input);
+  }
+
+  const scenes = root['scenes'];
+  if (!Array.isArray(scenes)) {
+    return normalizeStoryboardTable(input);
+  }
+
+  const hierarchyDiagnostics = scenes.flatMap((scene, sceneIndex) => {
+    const sceneRecord = readStoryboardRecord(scene);
+    if (sceneRecord && Array.isArray(sceneRecord['shots'])) return [];
+    return [
+      storyboardDiagnostic(
+        'error',
+        'canonical-scene-shot-hierarchy-required',
+        ['scenes', sceneIndex, 'shots'],
+        'Canonical Storyboard scenes must own an explicit shots[] array.',
+      ),
+    ];
+  });
+  if (hierarchyDiagnostics.length > 0) {
+    return { diagnostics: limitStoryboardDiagnostics(hierarchyDiagnostics) };
+  }
+
+  return normalizeStoryboardTable(input);
 }
 
 export function normalizeStoryboardTable(

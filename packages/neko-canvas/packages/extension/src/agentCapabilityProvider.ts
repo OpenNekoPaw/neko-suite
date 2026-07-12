@@ -528,6 +528,9 @@ function buildCanvasMarkdownCapabilityInput(
   return {
     capabilityId,
     markdown: typeof args.markdown === 'string' ? args.markdown : '',
+    ...(isRecord(args.canonicalStoryboard)
+      ? { canonicalStoryboard: args.canonicalStoryboard }
+      : {}),
     ...(typeof args.title === 'string' ? { title: args.title } : {}),
     ...(typeof args.sourceFormat === 'string' ? { sourceFormat: args.sourceFormat } : {}),
     ...(Array.isArray(args.resources) ? { resources: args.resources } : {}),
@@ -634,6 +637,11 @@ function createMarkdownCapabilityTool(
                   'Optional advisory ingest intent. Canvas remains the parsing authority.',
               },
               profileHint: { type: 'string', description: 'Optional Canvas-owned profile hint.' },
+              canonicalStoryboard: {
+                type: 'object',
+                description:
+                  'Preferred typed canonical Storyboard artifact. Preserve nested scenes/shots, revision, prompts, source trace, and stable media refs unchanged.',
+              },
               tableTitle: { type: 'string', description: 'Optional table title.' },
               mode: {
                 type: 'string',
@@ -648,7 +656,11 @@ function createMarkdownCapabilityTool(
               },
             },
       required:
-        definition.capabilityId === 'canvas.attachResource' ? ['target', 'resource'] : ['markdown'],
+        definition.capabilityId === 'canvas.attachResource'
+          ? ['target', 'resource']
+          : definition.capabilityId === 'canvas.createStoryboardFromMarkdown'
+            ? []
+            : ['markdown'],
     } satisfies ToolParameters,
     domain: { id: 'canvas', source: 'capability', operationDomain: 'markdown-authoring' },
     async execute(args, options) {
@@ -1164,7 +1176,7 @@ const CANVAS_MARKDOWN_TOOL_DEFINITIONS: readonly CanvasMarkdownToolDefinition[] 
     displayName: 'Create Storyboard Nodes',
     phase: 'apply',
     description:
-      'Create production Canvas storyboard nodes (scene.basic + shot.basic) from validated Markdown after explicit confirmation through the headless .nkc authoring path. Requires a completed storyboard creative table and mode=create-nodes; host-confirmed tool calls provide approval automatically.',
+      'Create production Canvas storyboard nodes (scene.basic + shot.basic) through the headless .nkc authoring path. Prefer a typed canonical Storyboard artifact; Markdown remains a source adapter for text-only inputs. Requires mode=create-nodes and explicit confirmation; host-confirmed tool calls provide approval automatically.',
     requiresConfirmation: true,
   },
   {
@@ -2861,7 +2873,7 @@ class NekoCanvasCapabilityProviderImpl implements AgentCapabilityProvider {
           '- Call canvas_describe_authoring_capabilities when you need supported node types, presets, containers, connections, fields, operations, recipes, or prompt support.',
           '- Call canvas_get_active_context before choosing insertion points, selected nodes, focused containers, or targetable fields.',
           '- For relationships between nodes, query canvas_list_connections or canvas_get_connection before canvas_create_connection.',
-          '- For completed storyboard creative tables that should become Canvas storyboard nodes, validate if useful, then call canvas.createStoryboardFromMarkdown with profileHint=storyboard, mode=create-nodes, and explicit approval.',
+          '- For an already-canonical Storyboard, pass canonicalStoryboard unchanged to canvas.createStoryboardFromMarkdown with mode=create-nodes and explicit approval; do not flatten it to assets or reconstruct it from Markdown. For text-only storyboard tables, Markdown remains a source adapter.',
           '- canvas.createStoryboardFromMarkdown creates or mutates a .nkc target through the headless authoring service and does not require an already open Canvas Webview.',
           '- Use canvas.ingestMarkdown with intentHint=creative-table and profileHint=storyboard only for review-only table/draft ingestion. It creates a table/note review artifact, not scene/shot nodes.',
           '- If canvas.createStoryboardFromMarkdown is listed in the catalog but not exposed as a callable tool, stop and report Canvas tool-surface blocked. Do not call canvas.ingestMarkdown as a substitute.',
@@ -2876,7 +2888,7 @@ class NekoCanvasCapabilityProviderImpl implements AgentCapabilityProvider {
               '- 需要节点类型、预设、容器、连接、字段、操作、recipe 或 prompt 支持时，先调用 canvas_describe_authoring_capabilities。',
               '- 选择插入点、选中节点、焦点容器或目标字段前，先调用 canvas_get_active_context。',
               '- 节点关系变更前先查询 canvas_list_connections 或 canvas_get_connection，再调用 canvas_create_connection。',
-              '- Send to Canvas 分镜 creative table 如果要变成 Canvas 分镜节点，必要时先校验，然后调用 canvas.createStoryboardFromMarkdown，并传入 profileHint=storyboard、mode=create-nodes 和显式审批。',
+              '- 已经 canonical 的 Storyboard 必须原样通过 canonicalStoryboard 传给 canvas.createStoryboardFromMarkdown，并传入 mode=create-nodes 和显式审批；不得压平为素材或从 Markdown 重建。只有文本表格来源继续使用 Markdown adapter。',
               '- canvas.createStoryboardFromMarkdown 通过无 UI authoring service 创建或修改 .nkc target，不要求 Canvas Webview 已打开。',
               '- canvas.ingestMarkdown 传入 intentHint=creative-table、profileHint=storyboard 时只用于 review-only 表格/草稿摄入。它创建 table/note 审阅产物，不创建 scene/shot 节点。',
               '- 如果 catalog 中有 canvas.createStoryboardFromMarkdown 但没有作为可调用工具暴露，停止并报告 Canvas tool-surface blocked。不要用 canvas.ingestMarkdown 替代。',

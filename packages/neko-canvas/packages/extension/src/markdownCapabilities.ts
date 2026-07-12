@@ -10,6 +10,8 @@ import {
   CANVAS_STORYBOARD_PROMPT_STATE_VERSION,
   STORYBOARD_CREATIVE_TABLE_PROFILE,
   resolveCanvasStoryboardNextCreativeState,
+  normalizeCanonicalStoryboardTable,
+  projectCanonicalStoryboardToCanvasPayload,
   validateCanvasMarkdownCapabilityInput,
   type CanvasAgentApplyContentResult,
   type CanvasAgentContentPayload,
@@ -51,7 +53,11 @@ export interface CanvasMarkdownCapabilityOperations {
   createComposite(request: CanvasCreateCompositeRequest): Promise<CanvasCreateCompositeResult>;
   createStoryboard(
     payload: CanvasStoryboardPayload,
-    options?: { readonly startX?: number; readonly startY?: number; readonly workflowPlanId?: string },
+    options?: {
+      readonly startX?: number;
+      readonly startY?: number;
+      readonly workflowPlanId?: string;
+    },
   ): Promise<CreatedCanvasStoryboard & { readonly documentUri?: string }>;
 }
 
@@ -549,15 +555,6 @@ async function createStoryboardFromMarkdown(
   >,
   operations: CanvasMarkdownCapabilityOperations,
 ): Promise<CanvasMarkdownCapabilityResult> {
-  const parsed = parseSingleMarkdownTable(input.markdown);
-  if (parsed.diagnostics.length > 0 || !parsed.table) {
-    return {
-      capabilityId: input.capabilityId,
-      status: 'blocked',
-      diagnostics: parsed.diagnostics,
-      preview: createTablePreview(input, parsed.table, []),
-    };
-  }
   if (input.mode !== 'create-nodes') {
     return {
       capabilityId: input.capabilityId,
@@ -570,7 +567,6 @@ async function createStoryboardFromMarkdown(
           'mode',
         ),
       ],
-      preview: createTablePreview(input, parsed.table, []),
     };
   }
   if (!input.approval) {
@@ -585,6 +581,49 @@ async function createStoryboardFromMarkdown(
           'approval',
         ),
       ],
+    };
+  }
+
+  if (input.canonicalStoryboard) {
+    const normalized = normalizeCanonicalStoryboardTable({ value: input.canonicalStoryboard });
+    if (!normalized.table) {
+      return {
+        capabilityId: input.capabilityId,
+        status: 'blocked',
+        diagnostics: normalized.diagnostics.map((diagnostic) =>
+          createCanvasMarkdownDiagnostic(
+            diagnostic.severity === 'error' ? 'error' : 'warning',
+            diagnostic.code,
+            diagnostic.message,
+            diagnostic.path.map(String).join('.'),
+          ),
+        ),
+      };
+    }
+    const projection = projectCanonicalStoryboardToCanvasPayload(normalized.table);
+    if (!projection.payload) {
+      return {
+        capabilityId: input.capabilityId,
+        status: 'blocked',
+        diagnostics: projection.diagnostics.map((diagnostic) =>
+          createCanvasMarkdownDiagnostic(
+            diagnostic.severity === 'error' ? 'error' : 'warning',
+            diagnostic.code,
+            diagnostic.message,
+            diagnostic.path.map(String).join('.'),
+          ),
+        ),
+      };
+    }
+    return createStoryboardFromPayload(input, operations, projection.payload);
+  }
+
+  const parsed = parseSingleMarkdownTable(input.markdown);
+  if (parsed.diagnostics.length > 0 || !parsed.table) {
+    return {
+      capabilityId: input.capabilityId,
+      status: 'blocked',
+      diagnostics: parsed.diagnostics,
       preview: createTablePreview(input, parsed.table, []),
     };
   }
@@ -624,7 +663,24 @@ async function createStoryboardFromMarkdown(
     };
   }
 
-  const result = await operations.createStoryboard(production.payload, {
+  return createStoryboardFromPayload(
+    input,
+    operations,
+    production.payload,
+    createTablePreview(input, parsed.table, []),
+  );
+}
+
+async function createStoryboardFromPayload(
+  input: Extract<
+    CanvasMarkdownCapabilityInput,
+    { capabilityId: 'canvas.createStoryboardFromMarkdown' }
+  >,
+  operations: CanvasMarkdownCapabilityOperations,
+  payload: CanvasStoryboardPayload,
+  preview?: CanvasMarkdownCapabilityPreviewSummary,
+): Promise<CanvasMarkdownCapabilityResult> {
+  const result = await operations.createStoryboard(payload, {
     startX: input.target?.insertionPoint?.x,
     startY: input.target?.insertionPoint?.y,
   });
@@ -636,7 +692,7 @@ async function createStoryboardFromMarkdown(
     nodeIds,
     diagnostics: [],
     preview: {
-      ...createTablePreview(input, parsed.table, []),
+      ...(preview ?? { title: input.canonicalStoryboard?.title ?? input.title }),
       rowCount: result.totalShots,
     },
   };
@@ -1298,10 +1354,7 @@ function createStoryboardScenesFromRows(input: {
     const imagePrompt = input.imagePromptColumn ? getCell(row, input.imagePromptColumn) : '';
     const sceneVideoPrompt = input.videoPromptColumn ? getCell(row, input.videoPromptColumn) : '';
     if (sceneVideoPrompt.trim()) {
-      activeScene = applyMarkdownStoryboardSceneVideoPrompt(
-        activeScene,
-        sceneVideoPrompt.trim(),
-      );
+      activeScene = applyMarkdownStoryboardSceneVideoPrompt(activeScene, sceneVideoPrompt.trim());
     }
     const dialogue = input.dialogueColumn ? getCell(row, input.dialogueColumn) : '';
     const duration = parseDurationSeconds(
@@ -1317,8 +1370,8 @@ function createStoryboardScenesFromRows(input: {
     const referenceFields = createStoryboardReferenceFieldsForRow({
       row,
       resourceBindings: input.resourceBindings,
-      resourceColumns: [input.sourceColumn].filter(
-        (column): column is MarkdownTableColumn => Boolean(column),
+      resourceColumns: [input.sourceColumn].filter((column): column is MarkdownTableColumn =>
+        Boolean(column),
       ),
       sourcePanel: input.sourcePanelColumn ? getCell(row, input.sourcePanelColumn) : undefined,
     });
@@ -1332,7 +1385,7 @@ function createStoryboardScenesFromRows(input: {
       ...(input.motionColumn
         ? { cameraMovement: normalizeCameraMovement(getCell(row, input.motionColumn)) }
         : {}),
-      characterAction: input.motionColumn ? (getCell(row, input.motionColumn) || visual) : visual,
+      characterAction: input.motionColumn ? getCell(row, input.motionColumn) || visual : visual,
       emotion: [],
       sceneTags: [activeSceneTitle].filter(Boolean),
       ...(dialogue ? { dialogue } : {}),
@@ -1400,7 +1453,9 @@ function createStoryboardReferenceFieldsForRow(input: {
   const resourcesByToken = new Map(
     input.resourceBindings.bindings
       .filter(
-        (binding): binding is ResourceBindingSummary & { readonly resource: CanvasMarkdownResourceRef } =>
+        (
+          binding,
+        ): binding is ResourceBindingSummary & { readonly resource: CanvasMarkdownResourceRef } =>
           binding.status === 'bound' && Boolean(binding.resource),
       )
       .map((binding) => [normalizeResourceToken(binding.token), binding.resource] as const),
@@ -1411,10 +1466,9 @@ function createStoryboardReferenceFieldsForRow(input: {
     for (const token of tokens) {
       const resource = resourcesByToken.get(normalizeResourceToken(token));
       if (!resource) continue;
-      const sourcePanel = input.sourcePanel?.trim() || extractResourceHintFromCell(cellValue, token);
-      const metadata = sourcePanel
-        ? { markdownSourcePanel: sourcePanel }
-        : undefined;
+      const sourcePanel =
+        input.sourcePanel?.trim() || extractResourceHintFromCell(cellValue, token);
+      const metadata = sourcePanel ? { markdownSourcePanel: sourcePanel } : undefined;
       if (isResourceRef(resource.resourceRef)) {
         return {
           referenceResourceRef: resource.resourceRef,
@@ -1439,7 +1493,11 @@ function createStoryboardReferenceFieldsForRow(input: {
               role: 'source',
               locator: {
                 type: 'workspace-path',
-                path: resource.documentResourceRef.entryPath ?? resource.token ?? resource.alias ?? token,
+                path:
+                  resource.documentResourceRef.entryPath ??
+                  resource.token ??
+                  resource.alias ??
+                  token,
               },
               ...(resource.label ? { label: resource.label } : {}),
               documentResourceRef: resource.documentResourceRef,
@@ -1811,7 +1869,10 @@ function extractResourceHintFromCell(value: string, token: string): string | und
   );
   if (imageHint) return imageHint;
   const valueWithoutImages = value.replace(COMMONMARK_IMAGE_RE, ' ');
-  return extractResourceHintFromCandidates(valueWithoutImages.split(RESOURCE_TOKEN_SPLIT_RE), token);
+  return extractResourceHintFromCandidates(
+    valueWithoutImages.split(RESOURCE_TOKEN_SPLIT_RE),
+    token,
+  );
 }
 
 function extractResourceHintFromCandidates(

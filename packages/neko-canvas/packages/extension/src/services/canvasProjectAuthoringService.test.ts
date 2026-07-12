@@ -399,23 +399,51 @@ describe('CanvasProjectAuthoringService', () => {
     });
   });
 
-  it('creates reopenable storyboard scene and shot nodes from payload without an active Webview', async () => {
+  it('preserves canonical scene/shot hierarchy, prompts, revision, and stable image refs after reopen', async () => {
     const provider = createProvider();
     const service = new CanvasProjectAuthoringService({
       context: { subscriptions: [] } as never,
       canvasEditorProvider: provider,
     });
+    const sourceImageResourceRef = {
+      id: 'source-image-resource',
+      scope: 'project',
+      provider: 'workspace',
+      kind: 'media',
+      source: { kind: 'file', projectRelativePath: 'assets/cat.png' },
+      locator: { kind: 'file', path: '${WORKSPACE}/assets/cat.png' },
+      fingerprint: { strategy: 'hash', value: 'cat-source' },
+    } as const;
+    const documentImageResourceRef = {
+      kind: 'document-entry',
+      source: { filePath: '${WORKSPACE}/books/comic.cbz', format: 'cbz' },
+      entryPath: 'pages/page-002.png',
+    } as const;
 
     const result = await service.createStoryboardFromPayload({
       target: { title: 'Payload Storyboard' },
       payload: {
         mode: 'semantic',
-        sourceScriptUri: 'markdown:test-storyboard',
+        sourceScriptUri: 'storyboard:storyboard-rev-1',
+        sourceStoryboardRevisionId: 'storyboard-rev-1',
+        projectionMode: 'read-only-projection',
         scenes: [
           {
             sceneId: 'scene-alpha',
             sceneTitle: 'Scene Alpha',
             sceneNumber: 1,
+            storyboardPrompt: {
+              version: 1,
+              promptBlocks: {
+                videoPromptDocument: {
+                  version: 1,
+                  documentId: 'storyboard-scene:scene-alpha:video',
+                  blockKind: 'video',
+                  text: 'slow push through the corridor',
+                  baseRevision: 'storyboard-rev-1',
+                },
+              },
+            },
             shotPlans: [
               {
                 shotId: 'shot-alpha-1',
@@ -427,6 +455,83 @@ describe('CanvasProjectAuthoringService', () => {
                 characterAction: 'A figure turns.',
                 emotion: [],
                 sceneTags: ['Scene Alpha'],
+                imagePrompt: 'cat corridor keyframe',
+                storyboardPrompt: {
+                  version: 1,
+                  promptBlocks: {
+                    imagePromptDocument: {
+                      version: 1,
+                      documentId: 'storyboard-shot:shot-alpha-1:image',
+                      blockKind: 'image',
+                      text: 'cat corridor keyframe',
+                      baseRevision: 'storyboard-rev-1',
+                    },
+                  },
+                },
+                referenceResourceRef: sourceImageResourceRef,
+                sourceMediaRefs: [
+                  {
+                    refId: 'source-image-1',
+                    role: 'source',
+                    locator: { type: 'workspace-path', path: '${WORKSPACE}/assets/cat.png' },
+                    resourceRef: sourceImageResourceRef,
+                  },
+                ],
+              },
+              {
+                shotId: 'shot-alpha-2',
+                shotNumber: 2,
+                duration: 2,
+                visualDescription: 'The cat jumps.',
+                characters: [],
+                shotScale: 'CU',
+                characterAction: 'The cat jumps.',
+                emotion: ['playful'],
+                sceneTags: ['Scene Alpha'],
+                imagePrompt: 'cat jumping keyframe',
+                storyboardPrompt: {
+                  version: 1,
+                  promptBlocks: {
+                    imagePromptDocument: {
+                      version: 1,
+                      documentId: 'storyboard-shot:shot-alpha-2:image',
+                      blockKind: 'image',
+                      text: 'cat jumping keyframe',
+                      baseRevision: 'storyboard-rev-1',
+                    },
+                  },
+                },
+                referenceImageResourceRef: documentImageResourceRef,
+                sourceMediaRefs: [
+                  {
+                    refId: 'document-page-2',
+                    role: 'reference',
+                    locator: {
+                      type: 'workspace-path',
+                      path: '${WORKSPACE}/books/pages/page-002.png',
+                    },
+                    documentResourceRef: documentImageResourceRef,
+                  },
+                ],
+              },
+            ],
+          },
+          {
+            sceneId: 'scene-beta',
+            sceneTitle: 'Scene Beta',
+            sceneNumber: 2,
+            shotPlans: [
+              {
+                shotId: 'shot-beta-1',
+                shotNumber: 1,
+                duration: 3,
+                visualDescription: 'The cat lands.',
+                characters: [],
+                shotScale: 'WS',
+                characterAction: 'The cat rolls over.',
+                emotion: ['content'],
+                sceneTags: ['Scene Beta'],
+                imagePrompt: 'cat landing keyframe',
               },
             ],
           },
@@ -434,15 +539,78 @@ describe('CanvasProjectAuthoringService', () => {
       },
     });
 
-    expect(result.storyboard?.scenesCreated).toBe(1);
-    expect(result.storyboard?.totalShots).toBe(1);
+    expect(result.storyboard?.scenesCreated).toBe(2);
+    expect(result.storyboard?.totalShots).toBe(3);
     const reopened = loadNkc(
       new TextDecoder().decode(
         vscodeMockState.files.get('/workspace/project/Payload Storyboard.nkc'),
       ),
     );
     expect(reopened.validation.valid).toBe(true);
-    expect(reopened.data.nodes.map((node) => node.type)).toEqual(['scene', 'shot']);
+    expect(reopened.data.nodes.map((node) => node.type)).toEqual([
+      'scene',
+      'shot',
+      'shot',
+      'scene',
+      'shot',
+    ]);
+
+    const scenes = reopened.data.nodes.filter((node) => node.type === 'scene');
+    const shots = reopened.data.nodes.filter((node) => node.type === 'shot');
+    expect(scenes).toHaveLength(2);
+    expect(shots).toHaveLength(3);
+    expect(scenes[0]).toMatchObject({
+      data: {
+        sceneId: 'scene-alpha',
+        sourceStoryboardRevisionId: 'storyboard-rev-1',
+        storyboardProjectionMode: 'read-only-projection',
+        storyboardPrompt: {
+          promptBlocks: {
+            videoPromptDocument: expect.objectContaining({
+              blockKind: 'video',
+              text: 'slow push through the corridor',
+              baseRevision: 'storyboard-rev-1',
+            }),
+          },
+        },
+      },
+      container: { policy: 'scene', childIds: [shots[0]!.id, shots[1]!.id] },
+    });
+    expect(scenes[1]).toMatchObject({
+      data: { sceneId: 'scene-beta' },
+      container: { policy: 'scene', childIds: [shots[2]!.id] },
+    });
+    expect(shots[0]).toMatchObject({
+      parentId: scenes[0]!.id,
+      data: {
+        shotId: 'shot-alpha-1',
+        sourceStoryboardRevisionId: 'storyboard-rev-1',
+        storyboardProjectionMode: 'read-only-projection',
+        referenceResourceRef: sourceImageResourceRef,
+        sourceMediaRefs: [expect.objectContaining({ refId: 'source-image-1' })],
+        storyboardPrompt: {
+          promptBlocks: {
+            imagePromptDocument: expect.objectContaining({ text: 'cat corridor keyframe' }),
+          },
+        },
+      },
+    });
+    expect(shots[0]?.data.storyboardPrompt?.promptBlocks?.videoPromptDocument).toBeUndefined();
+    expect(shots[1]).toMatchObject({
+      parentId: scenes[0]!.id,
+      data: {
+        shotId: 'shot-alpha-2',
+        referenceImageResourceRef: documentImageResourceRef,
+        sourceMediaRefs: [expect.objectContaining({ refId: 'document-page-2' })],
+        storyboardPrompt: {
+          promptBlocks: {
+            imagePromptDocument: expect.objectContaining({ text: 'cat jumping keyframe' }),
+          },
+        },
+      },
+    });
+    expect(shots[2]?.parentId).toBe(scenes[1]?.id);
+    expect(JSON.stringify(reopened.data)).not.toMatch(/blob:|webview|\/tmp\/neko-cache/);
     expect(provider.revealCanvasDocument).not.toHaveBeenCalled();
   });
 

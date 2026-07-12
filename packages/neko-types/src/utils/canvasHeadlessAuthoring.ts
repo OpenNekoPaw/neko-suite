@@ -48,10 +48,16 @@ import type {
   CanvasHeadlessAuthoringPlan,
 } from '../types/canvas-headless-authoring';
 import { CANVAS_HEADLESS_AUTHORING_CONTRACT_VERSION } from '../types/canvas-headless-authoring';
-import type { CanvasSerializableRecord, CanvasSerializableValue } from '../types/canvas-serializable';
+import type {
+  CanvasSerializableRecord,
+  CanvasSerializableValue,
+} from '../types/canvas-serializable';
 import type { FieldBinding } from '../types/canvas-layered';
 import type { JsonPointerPath } from '../types/canvas-layered';
-import { getBuiltInCanvasNodePresetMetadata, getDefaultCanvasNodePresetName } from '../types/canvas-presets';
+import {
+  getBuiltInCanvasNodePresetMetadata,
+  getDefaultCanvasNodePresetName,
+} from '../types/canvas-presets';
 import type {
   ApplyCanvasStoryboardOptions,
   CanvasStoryboardPayload,
@@ -62,7 +68,12 @@ import { migrateLegacyCanvasStoryboardShot } from '../types/canvas-semantic-stor
 import { isDocumentArchiveResourceRef } from '../types/document-reading';
 import { isResourceRef } from '../types/resource-cache';
 import { isCanvasStoryboardPromptState } from '../types/canvas-semantic-storyboard';
-import { isJsonPointerPath, readJsonPointer, writeFieldBinding, writeJsonPointer } from './fieldBinding';
+import {
+  isJsonPointerPath,
+  readJsonPointer,
+  writeFieldBinding,
+  writeJsonPointer,
+} from './fieldBinding';
 
 export interface CanvasHeadlessAuthoringPlannerContext {
   readonly canvasData: CanvasData;
@@ -209,9 +220,11 @@ export function planCanvasNodeCreation(
   context: CanvasHeadlessAuthoringPlannerContext,
   request: CanvasNodeCreateSpec,
 ): CanvasHeadlessAuthoringPlan<{ nodeId: string; node: CanvasNode }> {
-  const generateId = context.generateId ?? createCanvasHeadlessAuthoringIdFactory({
-    existingIds: context.canvasData.nodes.map((node) => node.id),
-  });
+  const generateId =
+    context.generateId ??
+    createCanvasHeadlessAuthoringIdFactory({
+      existingIds: context.canvasData.nodes.map((node) => node.id),
+    });
   const node = createNodeFromSpec({
     spec: request,
     id: generateId(),
@@ -232,10 +245,12 @@ export function planCanvasConnectionCreation(
 ): CanvasHeadlessAuthoringPlan<CanvasCreateConnectionResult> {
   assertNodeExists(context.canvasData.nodes, request.sourceId, 'sourceId');
   assertNodeExists(context.canvasData.nodes, request.targetId, 'targetId');
-  const generateId = context.generateId ?? createCanvasHeadlessAuthoringIdFactory({
-    prefix: 'canvas-connection',
-    existingIds: context.canvasData.connections.map((connection) => connection.id),
-  });
+  const generateId =
+    context.generateId ??
+    createCanvasHeadlessAuthoringIdFactory({
+      prefix: 'canvas-connection',
+      existingIds: context.canvasData.connections.map((connection) => connection.id),
+    });
   const connection: CanvasConnection = {
     id: generateId(),
     sourceId: request.sourceId,
@@ -264,12 +279,14 @@ export function planCanvasCompositeCreation(
   context: CanvasHeadlessAuthoringPlannerContext,
   request: CanvasCreateCompositeRequest,
 ): CanvasHeadlessAuthoringPlan<CanvasCreateCompositeResult> {
-  const generateId = context.generateId ?? createCanvasHeadlessAuthoringIdFactory({
-    existingIds: [
-      ...context.canvasData.nodes.map((node) => node.id),
-      ...context.canvasData.connections.map((connection) => connection.id),
-    ],
-  });
+  const generateId =
+    context.generateId ??
+    createCanvasHeadlessAuthoringIdFactory({
+      existingIds: [
+        ...context.canvasData.nodes.map((node) => node.id),
+        ...context.canvasData.connections.map((connection) => connection.id),
+      ],
+    });
   const containerPresetName = resolveContainerPresetName(request);
   const containerPreset = getBuiltInCanvasNodePresetMetadata(containerPresetName);
   if (!containerPreset?.containerPolicy) {
@@ -310,7 +327,10 @@ export function planCanvasCompositeCreation(
   ];
   const createdNodes = [nodes.container, ...nodes.children].map(createdNodeRef);
   const createdConnections = connections.map(createdConnectionRef);
-  assertNoRuntimeResourceIdentity({ nodes: [nodes.container, ...nodes.children], connections }, 'composite');
+  assertNoRuntimeResourceIdentity(
+    { nodes: [nodes.container, ...nodes.children], connections },
+    'composite',
+  );
   const batch = createBatch(operations, createdNodes, createdConnections);
 
   return {
@@ -427,9 +447,11 @@ function planAgentContentNodeInsert(
   target: CanvasAgentTargetRef | undefined,
   mode: CanvasAgentMutationMode,
 ): CanvasHeadlessAuthoringPlan<CanvasAgentApplyContentResult> {
-  const generateId = context.generateId ?? createCanvasHeadlessAuthoringIdFactory({
-    existingIds: context.canvasData.nodes.map((node) => node.id),
-  });
+  const generateId =
+    context.generateId ??
+    createCanvasHeadlessAuthoringIdFactory({
+      existingIds: context.canvasData.nodes.map((node) => node.id),
+    });
   const node = createNodeFromSpec({
     spec: {
       type: 'text',
@@ -458,7 +480,9 @@ function planAgentContentNodeInsert(
     };
   }
 
-  const container = context.canvasData.nodes.find((candidate) => candidate.id === target.containerId);
+  const container = context.canvasData.nodes.find(
+    (candidate) => candidate.id === target.containerId,
+  );
   if (!container) {
     throw new Error(`Target container "${target.containerId}" not found`);
   }
@@ -552,6 +576,8 @@ export function planCanvasStoryboardSceneShotCreation(
           location: scene.location,
           timeOfDay: scene.timeOfDay ?? undefined,
           storyboardPrompt: scene.storyboardPrompt,
+          sourceStoryboardRevisionId: payload.sourceStoryboardRevisionId,
+          storyboardProjectionMode: payload.projectionMode,
         },
         children: scene.shotPlans.map((shot, shotIndex) => ({
           type: 'shot',
@@ -560,7 +586,7 @@ export function planCanvasStoryboardSceneShotCreation(
             x: sceneX + 24 + shotIndex * (SHOT_WIDTH + SHOT_GAP),
             y: startY + 64,
           },
-          data: createCanvasStoryboardShotNodeData(shot, options),
+          data: createCanvasStoryboardShotNodeData(shot, options, payload),
         })),
         connections: createStoryboardShotSequenceConnections(scene.shotPlans.length),
         autoLayout: false,
@@ -677,7 +703,9 @@ export function assertNoRuntimeResourceIdentity(value: unknown, rootLabel = 'val
   const diagnostics = validateCanvasDurableResourceIdentity(value, { rootLabel });
   const firstError = diagnostics.find((diagnostic) => diagnostic.severity === 'error');
   if (firstError) {
-    throw new Error(`${firstError.code}: ${firstError.message} (${firstError.target ?? rootLabel})`);
+    throw new Error(
+      `${firstError.code}: ${firstError.message} (${firstError.target ?? rootLabel})`,
+    );
   }
 }
 
@@ -869,7 +897,9 @@ function createNodeFromSpec(input: {
             ? { documentResourceRef: data['documentResourceRef'] }
             : {}),
           ...(isResourceRef(data['resourceRef']) ? { resourceRef: data['resourceRef'] } : {}),
-          ...(asString(data['thumbnailPath']) ? { thumbnailPath: asString(data['thumbnailPath']) } : {}),
+          ...(asString(data['thumbnailPath'])
+            ? { thumbnailPath: asString(data['thumbnailPath']) }
+            : {}),
           mediaType: inferMediaType(data['mediaType']),
           ...(typeof data['duration'] === 'number' ? { duration: data['duration'] } : {}),
         },
@@ -955,6 +985,7 @@ function createNodeFromSpec(input: {
         ...base,
         type: 'shot',
         data: {
+          ...(asString(data['shotId']) ? { shotId: asString(data['shotId']) } : {}),
           shotNumber: asNumber(data['shotNumber'], input.zIndex + 1),
           duration: asNumber(data['duration'], 3),
           visualDescription: asString(data['visualDescription']),
@@ -1015,7 +1046,15 @@ function createNodeFromSpec(input: {
           ...(asString(data['lastImportedToTimelineProject'])
             ? { lastImportedToTimelineProject: asString(data['lastImportedToTimelineProject']) }
             : {}),
-          ...(asString(data['workflowPlanId']) ? { workflowPlanId: asString(data['workflowPlanId']) } : {}),
+          ...(asString(data['workflowPlanId'])
+            ? { workflowPlanId: asString(data['workflowPlanId']) }
+            : {}),
+          ...(asString(data['sourceStoryboardRevisionId'])
+            ? { sourceStoryboardRevisionId: asString(data['sourceStoryboardRevisionId']) }
+            : {}),
+          ...(data['storyboardProjectionMode'] === 'read-only-projection'
+            ? { storyboardProjectionMode: 'read-only-projection' as const }
+            : {}),
         },
       } as CanvasNode;
     case 'scene':
@@ -1040,6 +1079,12 @@ function createNodeFromSpec(input: {
           ...(asString(data['timeOfDay']) ? { timeOfDay: asString(data['timeOfDay']) } : {}),
           ...(isCanvasStoryboardPromptState(data['storyboardPrompt'])
             ? { storyboardPrompt: data['storyboardPrompt'] }
+            : {}),
+          ...(asString(data['sourceStoryboardRevisionId'])
+            ? { sourceStoryboardRevisionId: asString(data['sourceStoryboardRevisionId']) }
+            : {}),
+          ...(data['storyboardProjectionMode'] === 'read-only-projection'
+            ? { storyboardProjectionMode: 'read-only-projection' as const }
             : {}),
         },
       };
@@ -1192,7 +1237,11 @@ function resolvePreset(preset: string | undefined, nodeType: CanvasNodeType): st
 }
 
 function resolveContainerPresetName(request: CanvasCreateCompositeRequest): string {
-  const preset = request.containerPreset ?? (request.containerType ? getDefaultCanvasNodePresetName(request.containerType) : 'group.container');
+  const preset =
+    request.containerPreset ??
+    (request.containerType
+      ? getDefaultCanvasNodePresetName(request.containerType)
+      : 'group.container');
   if (!preset) {
     throw new Error('Container type or preset is required');
   }
@@ -1224,10 +1273,16 @@ function attachChildrenToContainer(
   };
 }
 
-function assertContainerAcceptsChildren(container: CanvasNode, children: readonly CanvasNode[]): void {
+function assertContainerAcceptsChildren(
+  container: CanvasNode,
+  children: readonly CanvasNode[],
+): void {
   const policy = getContainerPolicy(container);
   for (const child of children) {
-    if ((policy === 'scene' && child.type !== 'shot') || (policy === 'gallery' && child.type !== 'media')) {
+    if (
+      (policy === 'scene' && child.type !== 'shot') ||
+      (policy === 'gallery' && child.type !== 'media')
+    ) {
       throw new Error(`Container policy "${policy}" rejects child node type "${child.type}"`);
     }
     if ((policy === 'scene' || policy === 'gallery') && child.container) {
@@ -1277,6 +1332,7 @@ function createCompositeConnections(
 function createCanvasStoryboardShotNodeData(
   shot: CanvasStoryboardShotPlan,
   options: ApplyCanvasStoryboardOptions,
+  payload: Pick<CanvasStoryboardPayload, 'sourceStoryboardRevisionId' | 'projectionMode'>,
 ): Record<string, unknown> {
   const migration = migrateLegacyCanvasStoryboardShot({
     shotData: {
@@ -1296,6 +1352,8 @@ function createCanvasStoryboardShotNodeData(
       soundCue: shot.soundCue,
       textCues: shot.textCues ? [...shot.textCues] : undefined,
       voiceCues: shot.voiceCues ? [...shot.voiceCues] : undefined,
+      imagePrompt: shot.imagePrompt,
+      videoPrompt: shot.videoPrompt,
       generationPrompt: shot.generationPrompt,
       visualStyle: shot.visualStyle,
       referenceImagePath: shot.referenceImagePath,
@@ -1342,6 +1400,10 @@ function createCanvasStoryboardShotNodeData(
     mediaRefs: shot.mediaRefs ? [...shot.mediaRefs] : undefined,
     shotImagePrepPlan: shot.shotImagePrepPlan,
     ...(options.workflowPlanId !== undefined ? { workflowPlanId: options.workflowPlanId } : {}),
+    ...(payload.sourceStoryboardRevisionId
+      ? { sourceStoryboardRevisionId: payload.sourceStoryboardRevisionId }
+      : {}),
+    ...(payload.projectionMode ? { storyboardProjectionMode: payload.projectionMode } : {}),
   };
 }
 
@@ -1381,7 +1443,11 @@ function createStoryboardIdGenerator(
   const queue = [
     sceneNodeId,
     ...scene.shotPlans.map((shot) =>
-      createUniqueStableId('shot', shot.shotId ?? `${scene.sceneId}-${shot.shotNumber}`, existingIds),
+      createUniqueStableId(
+        'shot',
+        shot.shotId ?? `${scene.sceneId}-${shot.shotNumber}`,
+        existingIds,
+      ),
     ),
   ];
   return () => queue.shift() ?? createUniqueStableId('canvas-storyboard', 'generated', existingIds);
@@ -1411,7 +1477,9 @@ function createdNodeRef(node: CanvasNode): CanvasHeadlessAuthoringCreatedNodeRef
   };
 }
 
-function createdConnectionRef(connection: CanvasConnection): CanvasHeadlessAuthoringCreatedConnectionRef {
+function createdConnectionRef(
+  connection: CanvasConnection,
+): CanvasHeadlessAuthoringCreatedConnectionRef {
   return {
     connectionId: connection.id,
     sourceId: connection.sourceId,
@@ -1496,7 +1564,9 @@ function resolveUpdateBinding(request: CanvasUpdateBlockRequest): FieldBinding {
     }
     return { path: request.path, mode: 'readwrite' };
   }
-  throw new Error(`Block "${request.blockId ?? 'unknown'}" has no writable binding in headless mode`);
+  throw new Error(
+    `Block "${request.blockId ?? 'unknown'}" has no writable binding in headless mode`,
+  );
 }
 
 function defaultNodeSize(
@@ -1514,7 +1584,10 @@ function defaultNodeSize(
   return DEFAULT_NODE_SIZES[type] ?? { width: 220, height: 120 };
 }
 
-function defaultPortsForNode(type: CanvasNodeType, data: Record<string, unknown>): PortDefinition[] | undefined {
+function defaultPortsForNode(
+  type: CanvasNodeType,
+  data: Record<string, unknown>,
+): PortDefinition[] | undefined {
   if (type === 'media') return [...MEDIA_NODE_PORTS];
   if (type === 'storyboard') return [...STORYBOARD_NODE_PORTS];
   if (type === 'shot') return [...SHOT_NODE_PORTS];

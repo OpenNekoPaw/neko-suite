@@ -7,6 +7,11 @@ import {
 import { isDocumentArchiveResourceRef, type DocumentArchiveResourceRef } from './document-reading';
 import { isResourceRef, type ResourceRef } from './resource-cache';
 import type { AgentCapabilityApprovalContext } from './agent-capability-lifecycle';
+import {
+  normalizeCanonicalStoryboardTable,
+  validateCanonicalStoryboardTable,
+  type StoryboardTable,
+} from './storyboard-table';
 import { isAgentCapabilityApprovalSource } from './agent-capability-lifecycle';
 
 // Shared because Agent/Webview and Canvas both need the same local capability
@@ -181,6 +186,8 @@ export interface CanvasCreateTableFromMarkdownInput extends CanvasMarkdownCapabi
 
 export interface CanvasCreateStoryboardFromMarkdownInput extends CanvasMarkdownCapabilityBaseInput {
   readonly capabilityId: 'canvas.createStoryboardFromMarkdown';
+  /** Preferred production input when Storyboard is already canonical; Markdown remains a source adapter. */
+  readonly canonicalStoryboard?: StoryboardTable;
   readonly mode?: 'review-first' | 'create-nodes';
   readonly approval?: AgentCapabilityApprovalContext;
 }
@@ -439,12 +446,56 @@ export function validateCanvasMarkdownCapabilityInput(
     return diagnostics;
   }
 
-  if (typeof value['markdown'] !== 'string' || value['markdown'].trim().length === 0) {
+  const canonicalStoryboard = value['canonicalStoryboard'];
+  const hasCanonicalStoryboard = canonicalStoryboard !== undefined;
+  if (hasCanonicalStoryboard) {
+    if (capabilityId !== 'canvas.createStoryboardFromMarkdown') {
+      diagnostics.push(
+        createCanvasMarkdownDiagnostic(
+          'error',
+          'canvas-storyboard-canonical-input-unsupported',
+          'Canonical Storyboard input is only supported by Canvas storyboard creation.',
+          'canonicalStoryboard',
+        ),
+      );
+    } else {
+      const normalized = normalizeCanonicalStoryboardTable({ value: canonicalStoryboard });
+      if (!normalized.table) {
+        diagnostics.push(
+          ...normalized.diagnostics.map((diagnostic) =>
+            createCanvasMarkdownDiagnostic(
+              diagnostic.severity === 'error' ? 'error' : 'warning',
+              diagnostic.code,
+              diagnostic.message,
+              ['canonicalStoryboard', ...diagnostic.path.map(String)].join('.'),
+            ),
+          ),
+        );
+      } else {
+        for (const diagnostic of validateCanonicalStoryboardTable(normalized.table).diagnostics) {
+          if (diagnostic.severity !== 'error') continue;
+          diagnostics.push(
+            createCanvasMarkdownDiagnostic(
+              'error',
+              diagnostic.code,
+              diagnostic.message,
+              ['canonicalStoryboard', ...diagnostic.path.map(String)].join('.'),
+            ),
+          );
+        }
+      }
+    }
+  }
+
+  if (
+    !hasCanonicalStoryboard &&
+    (typeof value['markdown'] !== 'string' || value['markdown'].trim().length === 0)
+  ) {
     diagnostics.push(
       createCanvasMarkdownDiagnostic(
         'error',
         'canvas-markdown-missing-markdown',
-        'Canvas Markdown capability input must include non-empty markdown.',
+        'Canvas storyboard creation requires canonical Storyboard input or non-empty Markdown.',
         'markdown',
       ),
     );

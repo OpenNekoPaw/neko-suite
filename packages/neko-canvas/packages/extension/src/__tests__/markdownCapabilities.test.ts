@@ -6,6 +6,7 @@ import {
   type CanvasMarkdownCapabilityInput,
   type CanvasMarkdownResourceRef,
   type ResourceRef,
+  type StoryboardTable,
 } from '@neko/shared';
 import {
   invokeCanvasMarkdownCapability,
@@ -279,7 +280,9 @@ describe('Canvas Markdown capabilities', () => {
         }),
       }),
     });
-    expect(payload.scenes[0]?.shotPlans[0]?.storyboardPrompt?.promptBlocks?.videoPromptDocument).toBeUndefined();
+    expect(
+      payload.scenes[0]?.shotPlans[0]?.storyboardPrompt?.promptBlocks?.videoPromptDocument,
+    ).toBeUndefined();
     expect(secondShot?.storyboardPrompt?.promptBlocks?.videoPromptDocument).toBeUndefined();
     expect(payload.scenes[0]?.shotPlans[0]).not.toHaveProperty('generationPrompt');
     expect(secondShot).not.toHaveProperty('generationPrompt');
@@ -1565,7 +1568,306 @@ describe('Canvas Markdown capabilities', () => {
     expect(JSON.stringify(result.diagnostics)).not.toContain('filePath');
     expect(JSON.stringify(result.diagnostics)).not.toContain('${MEDIA}');
   });
+
+  it('creates Canvas scene and shot plans directly from canonical Storyboard without parsing Markdown', async () => {
+    const operations = createOperations();
+    const canonicalStoryboard = createCanonicalStoryboard();
+
+    const result = await invokeCanvasMarkdownCapability(
+      {
+        capabilityId: 'canvas.createStoryboardFromMarkdown',
+        mode: 'create-nodes',
+        approval: {
+          source: 'creation-apply',
+          creationId: 'creation-canonical',
+          iterationId: 'iteration-1',
+          profileId: 'idc.default',
+          stageId: 'apply',
+        },
+        markdown: 'poison: canonical storyboard must not use Markdown parsing',
+        canonicalStoryboard,
+      },
+      operations,
+    );
+
+    expect(result).toMatchObject({
+      status: 'created',
+      nodeIds: ['scene-1', 'shot-1', 'shot-2', 'scene-2', 'shot-3'],
+      preview: { title: 'Canonical Storyboard', rowCount: 3 },
+    });
+    expect(operations.createStoryboard).toHaveBeenCalledTimes(1);
+    const payload = readStoryboardPayload(operations);
+    expect(payload).toMatchObject({
+      sourceStoryboardRevisionId: 'storyboard-rev-1',
+      projectionMode: 'read-only-projection',
+      scenes: [
+        {
+          sceneId: 'scene-1',
+          storyboardPrompt: {
+            promptBlocks: {
+              videoPromptDocument: expect.objectContaining({
+                blockKind: 'video',
+                text: 'cat crosses the hallway',
+                baseRevision: 'storyboard-rev-1',
+              }),
+            },
+          },
+          shotPlans: [
+            {
+              shotId: 'shot-1',
+              imagePrompt: 'cat hallway keyframe',
+              sourceMediaRefs: [
+                expect.objectContaining({
+                  refId: 'source-image-1',
+                  resourceRef: expect.objectContaining({ id: 'source-image-resource' }),
+                }),
+              ],
+            },
+            {
+              shotId: 'shot-2',
+              referenceImageResourceRef: expect.objectContaining({
+                kind: 'document-entry',
+                entryPath: 'pages/page-002.png',
+              }),
+            },
+          ],
+        },
+        {
+          sceneId: 'scene-2',
+          shotPlans: [
+            {
+              shotId: 'shot-3',
+              referenceResourceRef: expect.objectContaining({ id: 'generated-image-resource' }),
+              generatedMediaRefs: [
+                expect.objectContaining({ refId: 'generated-image-3', mimeType: 'image/png' }),
+              ],
+            },
+          ],
+        },
+      ],
+    });
+    expect(payload.scenes[0]?.shotPlans[0]).not.toHaveProperty('videoPrompt');
+    expect(
+      payload.scenes[0]?.shotPlans[0]?.storyboardPrompt?.promptBlocks?.videoPromptDocument,
+    ).toBeUndefined();
+  });
+
+  it('blocks flat canonical Storyboard rows without reconstructing scenes from Markdown', async () => {
+    const operations = createOperations();
+    const canonicalStoryboard = createCanonicalStoryboard();
+    const shot = canonicalStoryboard.scenes[0]!.shots[0]!;
+
+    const result = await invokeCanvasMarkdownCapability(
+      {
+        capabilityId: 'canvas.createStoryboardFromMarkdown',
+        mode: 'create-nodes',
+        approval: {
+          source: 'creation-apply',
+          creationId: 'creation-flat-canonical',
+          iterationId: 'iteration-1',
+          profileId: 'idc.default',
+          stageId: 'apply',
+        },
+        markdown: [
+          '| Scene | Shot | Visual |',
+          '| --- | --- | --- |',
+          '| fallback | 1 | must not be parsed |',
+        ].join('\n'),
+        canonicalStoryboard: {
+          ...canonicalStoryboard,
+          scenes: [
+            {
+              ...shot,
+              sceneId: 'scene-1',
+              sceneTitle: 'Opening',
+            },
+          ],
+        } as never,
+      },
+      operations,
+    );
+
+    expect(result).toMatchObject({
+      status: 'blocked',
+      diagnostics: [expect.objectContaining({ code: 'canonical-scene-shot-hierarchy-required' })],
+    });
+    expect(operations.createStoryboard).not.toHaveBeenCalled();
+  });
+
+  it('blocks invalid canonical Storyboard media refs without falling back to parseable Markdown', async () => {
+    const operations = createOperations();
+    const canonicalStoryboard = createCanonicalStoryboard();
+    const firstScene = canonicalStoryboard.scenes[0]!;
+    const firstShot = firstScene.shots[0]!;
+    const invalidStoryboard: StoryboardTable = {
+      ...canonicalStoryboard,
+      scenes: [
+        {
+          ...firstScene,
+          shots: [
+            {
+              ...firstShot,
+              sourceMediaRefs: [
+                {
+                  refId: 'runtime-cache-image',
+                  role: 'source',
+                  locator: { type: 'workspace-path', path: '/tmp/neko-cache/panel.png' },
+                },
+              ],
+            },
+            ...firstScene.shots.slice(1),
+          ],
+        },
+        ...canonicalStoryboard.scenes.slice(1),
+      ],
+    };
+
+    const result = await invokeCanvasMarkdownCapability(
+      {
+        capabilityId: 'canvas.createStoryboardFromMarkdown',
+        mode: 'create-nodes',
+        approval: {
+          source: 'creation-apply',
+          creationId: 'creation-invalid-canonical',
+          iterationId: 'iteration-1',
+          profileId: 'idc.default',
+          stageId: 'apply',
+        },
+        markdown: [
+          '| Scene | Shot | Visual |',
+          '| --- | --- | --- |',
+          '| fallback | 1 | must not be parsed |',
+        ].join('\n'),
+        canonicalStoryboard: invalidStoryboard,
+      },
+      operations,
+    );
+
+    expect(result.status).toBe('blocked');
+    expect(result.diagnostics).toEqual(
+      expect.arrayContaining([expect.objectContaining({ severity: 'error' })]),
+    );
+    expect(operations.createStoryboard).not.toHaveBeenCalled();
+  });
 });
+
+function createCanonicalStoryboard(): StoryboardTable {
+  const sourceResource = createResourceRef({
+    id: 'story-source-resource',
+    scope: 'project',
+    provider: 'workspace',
+    kind: 'document',
+    source: { kind: 'file', projectRelativePath: 'scripts/story.md' },
+    locator: { kind: 'file', path: '${WORKSPACE}/scripts/story.md' },
+    fingerprint: createResourceFingerprint({ strategy: 'hash', value: 'story-source' }),
+  });
+  const imageResource = createResourceRef({
+    id: 'source-image-resource',
+    scope: 'project',
+    provider: 'workspace',
+    kind: 'media',
+    source: { kind: 'file', projectRelativePath: 'assets/cat.png' },
+    locator: { kind: 'file', path: '${WORKSPACE}/assets/cat.png' },
+    fingerprint: createResourceFingerprint({ strategy: 'hash', value: 'cat-source' }),
+  });
+  const generatedImageResource = createResourceRef({
+    id: 'generated-image-resource',
+    scope: 'project',
+    provider: 'workspace',
+    kind: 'media',
+    source: { kind: 'file', projectRelativePath: 'generated/cat-roll.png' },
+    locator: { kind: 'file', path: '${WORKSPACE}/generated/cat-roll.png' },
+    fingerprint: createResourceFingerprint({ strategy: 'hash', value: 'cat-generated' }),
+  });
+  return {
+    schemaVersion: 1,
+    kind: 'storyboard-table',
+    contractVersion: 1,
+    sourceProfile: 'from-script',
+    revision: {
+      revisionId: 'storyboard-rev-1',
+      sequence: 1,
+      contentDigest: 'storyboard-rev-1',
+      createdAt: '2026-07-12T00:00:00.000Z',
+    },
+    sourceTrace: [{ traceId: 'trace-1', sourceProfile: 'from-script', sourceRef: sourceResource }],
+    title: 'Canonical Storyboard',
+    scenes: [
+      {
+        sceneId: 'scene-1',
+        sceneTitle: 'Hallway',
+        shots: [
+          {
+            shotId: 'shot-1',
+            shotNumber: 1,
+            duration: 3,
+            visualDescription: 'A cat enters.',
+            characterAction: 'The cat walks.',
+            imageStrategy: 'use-as-reference',
+            imagePrompt: 'cat hallway keyframe',
+            videoPrompt: 'cat crosses the hallway',
+            sourceMediaRefs: [
+              {
+                refId: 'source-image-1',
+                role: 'source',
+                locator: { type: 'workspace-path', path: '${WORKSPACE}/assets/cat.png' },
+                resourceRef: imageResource,
+              },
+            ],
+          },
+          {
+            shotId: 'shot-2',
+            shotNumber: 2,
+            duration: 2,
+            visualDescription: 'The cat jumps.',
+            characterAction: 'The cat bats a toy.',
+            imageStrategy: 'generate-new',
+            imagePrompt: 'cat jumping keyframe',
+            sourceMediaRefs: [
+              {
+                refId: 'document-page-2',
+                role: 'reference',
+                locator: { type: 'workspace-path', path: '${WORKSPACE}/books/pages/page-002.png' },
+                documentResourceRef: {
+                  kind: 'document-entry',
+                  source: {
+                    filePath: '${WORKSPACE}/books/comic.cbz',
+                    format: 'cbz',
+                  },
+                  entryPath: 'pages/page-002.png',
+                },
+              },
+            ],
+          },
+        ],
+      },
+      {
+        sceneId: 'scene-2',
+        sceneTitle: 'Living Room',
+        shots: [
+          {
+            shotId: 'shot-3',
+            shotNumber: 1,
+            duration: 4,
+            visualDescription: 'The cat lands.',
+            characterAction: 'The cat rolls over.',
+            imageStrategy: 'generate-new',
+            imagePrompt: 'cat rolling keyframe',
+            generatedMediaRefs: [
+              {
+                refId: 'generated-image-3',
+                role: 'generated',
+                locator: { type: 'workspace-path', path: '${WORKSPACE}/generated/cat-roll.png' },
+                mimeType: 'image/png',
+                resourceRef: generatedImageResource,
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  };
+}
 
 const STORYBOARD_MARKDOWN = [
   '| Scene | Shot | Visual | Prompt | Video Prompt | Duration | Character | Next Action |',
@@ -1605,7 +1907,9 @@ function createOperations(): CanvasMarkdownCapabilityOperations {
   };
 }
 
-function readStoryboardPayload(operations: CanvasMarkdownCapabilityOperations): CanvasStoryboardPayload {
+function readStoryboardPayload(
+  operations: CanvasMarkdownCapabilityOperations,
+): CanvasStoryboardPayload {
   const payload = vi.mocked(operations.createStoryboard).mock.calls[0]?.[0];
   if (!payload) {
     throw new Error('Expected createStoryboard to be called');

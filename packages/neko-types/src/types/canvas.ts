@@ -518,6 +518,10 @@ export interface ShotCanvasNode extends CanvasNodeBase {
     generationPrompt?: string;
     /** Provider-neutral prompt slots imported from Creative Tables. */
     promptSlots?: readonly CanvasCreativePromptSlot[];
+    /** Canonical Storyboard revision projected into this shot. */
+    sourceStoryboardRevisionId?: string;
+    /** Canvas is a projection and does not become a second Storyboard authority. */
+    storyboardProjectionMode?: 'read-only-projection';
     /** Visual style directive (e.g. "noir", "cyberpunk") */
     visualStyle?: string;
     /** Reference image asset path from [[REF: path]] */
@@ -579,6 +583,10 @@ export interface SceneGroupCanvasNode extends CanvasNodeBase {
     storyboardPrompt?: CanvasStoryboardPromptState;
     /** Provider-neutral scene prompt slots imported from Creative Tables. */
     promptSlots?: readonly CanvasCreativePromptSlot[];
+    /** Canonical Storyboard revision projected into this scene container. */
+    sourceStoryboardRevisionId?: string;
+    /** Canvas is a projection and does not become a second Storyboard authority. */
+    storyboardProjectionMode?: 'read-only-projection';
   };
 }
 
