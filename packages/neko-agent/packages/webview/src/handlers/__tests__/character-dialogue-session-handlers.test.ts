@@ -134,9 +134,9 @@ interface TabRuntimeReconciliation {
 function createContextHarness(options: ContextHarnessOptions): ContextHarness {
   let activeConversationId: string | null = options.activeConversationId;
   let activeTabId: string | null = options.openTabs?.[0]?.id ?? null;
-  let messages: Message[] = [{ id: 'old', role: 'assistant', content: 'old', timestamp: 1 }];
+  const messages: Message[] = [{ id: 'old', role: 'assistant', content: 'old', timestamp: 1 }];
   let openTabs: OpenTab[] = options.openTabs ?? [];
-  let streaming: StreamingState = {
+  const streaming: StreamingState = {
     isThinking: true,
     streamingMessageId: 'old-stream',
     queuedMessageCount: 0,
@@ -152,35 +152,8 @@ function createContextHarness(options: ContextHarnessOptions): ContextHarness {
   const reconciliations: TabRuntimeReconciliation[] = [];
 
   const context = {
-    setMessages: createSetter(
-      () => messages,
-      (next) => {
-        messages = next;
-        context.messages = next;
-      },
-    ),
     messages,
     isThinking: streaming.isThinking,
-    setIsThinking: createSetter(
-      () => streaming.isThinking,
-      (next) => {
-        streaming = { ...streaming, isThinking: next };
-        context.isThinking = next;
-      },
-    ),
-    setStreamingMessageId: createSetter(
-      () => streaming.streamingMessageId,
-      (next) => {
-        streaming = { ...streaming, streamingMessageId: next };
-        streamingMessageIdRef.current = next;
-      },
-    ),
-    setQueuedMessageCount: createSetter(
-      () => streaming.queuedMessageCount ?? 0,
-      (next) => {
-        streaming = { ...streaming, queuedMessageCount: next };
-      },
-    ),
     queuedMessageCount: streaming.queuedMessageCount,
     streamingMessageId: streaming.streamingMessageId,
     streamingMessageIdRef,
@@ -226,7 +199,7 @@ function createContextHarness(options: ContextHarnessOptions): ContextHarness {
     },
     isCurrentConversation: (conversationId?: string) =>
       conversationId === activeConversationIdRef.current,
-    updateNonCurrentConversation: () => undefined,
+    updateConversationRenderState: () => undefined,
     setConversations: noopDispatch(),
     setActiveConversationId: createSetter(
       () => activeConversationId,

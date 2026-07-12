@@ -41,25 +41,13 @@ import {
  * Handle 'error' message - Error occurred
  */
 const handleError: MessageHandler<'error'> = (message: ErrorMessage, context) => {
-  if (context.isCurrentConversation(message.conversationId)) {
-    context.setMessages((prev) => [
-      ...projectConversationError({
-        messages: projectQueuedMessagesCleared(prev),
-        errorMessage: message.message,
-      }).messages,
-    ]);
-    const streaming = projectHistoryClearedConversation().streaming;
-    context.setStreamingMessageId(streaming.streamingMessageId);
-    context.setIsThinking(streaming.isThinking);
-    context.setQueuedMessageCount?.(streaming.queuedMessageCount ?? 0);
-  } else if (message.conversationId) {
-    context.updateNonCurrentConversation(message.conversationId, (msgs, _streaming) => ({
-      ...projectConversationError({
-        messages: projectQueuedMessagesCleared(msgs),
-        errorMessage: message.message,
-      }),
-    }));
-  }
+  if (!message.conversationId) return;
+  context.updateConversationRenderState(message.conversationId, (messages) => ({
+    ...projectConversationError({
+      messages: projectQueuedMessagesCleared(messages),
+      errorMessage: message.message,
+    }),
+  }));
 };
 
 /**

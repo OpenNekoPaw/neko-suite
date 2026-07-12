@@ -4,7 +4,7 @@
  * Manages conversation-related state for the AIAssistant component.
  */
 
-import { useState, useRef, useEffect, useCallback, type MutableRefObject } from 'react';
+import { useState, useRef, useCallback, type MutableRefObject } from 'react';
 import type {
   AgentQueuedMessageItem,
   Message,
@@ -15,18 +15,14 @@ import { ConversationRenderCoordinator } from '@/render-lifecycle/conversation-r
 import {
   commitConversationSnapshotProjection,
   ingestConversationRenderSnapshot,
+  type ConversationRenderStateUpdater as CanonicalConversationRenderStateUpdater,
+  type ConversationRenderStreamingState,
 } from '@/render-lifecycle/conversation-render-state-adapter';
 
 /**
  * Streaming state for a conversation
  */
-export interface StreamingState {
-  streamingMessageId: string | null;
-  isThinking: boolean;
-  queuedMessageCount?: number;
-  queuedMessages?: readonly AgentQueuedMessageItem[];
-  messageQueueVersion?: number;
-}
+export type StreamingState = ConversationRenderStreamingState;
 
 /**
  * Conversation state shape
@@ -61,18 +57,19 @@ export interface ConversationStateRefs {
 /**
  * Conversation state actions
  */
+export type ConversationRenderStateUpdater =
+  CanonicalConversationRenderStateUpdater<StreamingState>;
+
 export interface ConversationStateActions {
-  setMessages: React.Dispatch<React.SetStateAction<Message[]>>;
-  setIsThinking: React.Dispatch<React.SetStateAction<boolean>>;
-  setStreamingMessageId: React.Dispatch<React.SetStateAction<string | null>>;
-  setQueuedMessageCount: React.Dispatch<React.SetStateAction<number>>;
-  setQueuedMessages: React.Dispatch<React.SetStateAction<readonly AgentQueuedMessageItem[]>>;
   setConversations: React.Dispatch<React.SetStateAction<ConversationSummary[]>>;
   setActiveConversationId: React.Dispatch<React.SetStateAction<string | null>>;
   setOpenTabs: React.Dispatch<React.SetStateAction<OpenTab[]>>;
   setActiveTabId: React.Dispatch<React.SetStateAction<string | null>>;
-  addMessage: (message: Message) => void;
-  clearMessages: () => void;
+  clearVisibleState: () => void;
+  updateConversationRenderState: (
+    conversationId: string,
+    updater: ConversationRenderStateUpdater,
+  ) => void;
 }
 
 /**
@@ -92,79 +89,86 @@ export function useConversationState(): UseConversationStateReturn {
   conversationRenderCoordinatorRef.current ??= new ConversationRenderCoordinator();
   const conversationRenderCoordinator = conversationRenderCoordinatorRef.current;
 
-  // Current conversation's chat state
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [isThinking, setIsThinking] = useState(false);
-  const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null);
-  const [queuedMessageCount, setQueuedMessageCount] = useState(0);
-  const [queuedMessages, setQueuedMessages] = useState<readonly AgentQueuedMessageItem[]>([]);
-  // Ref for immediate access (fixes race condition with async state updates)
+  // Current conversation's visible projection state. Conversation-owned maps and the
+  // render coordinator remain authoritative; these values only project the active conversation.
+  const [messages, setVisibleMessages] = useState<Message[]>([]);
+  const [isThinking, setVisibleIsThinking] = useState(false);
+  const [streamingMessageId, setVisibleStreamingMessageId] = useState<string | null>(null);
+  const [queuedMessageCount, setVisibleQueuedMessageCount] = useState(0);
+  const [queuedMessages, setVisibleQueuedMessages] = useState<readonly AgentQueuedMessageItem[]>(
+    [],
+  );
   const streamingMessageIdRef = useRef<string | null>(null);
 
   // Conversation management
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
-  const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
+  const [activeConversationId, setVisibleActiveConversationId] = useState<string | null>(null);
   const activeConversationIdRef = useRef<string | null>(null);
 
   // Tab state
   const [openTabs, setOpenTabs] = useState<OpenTab[]>([]);
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
 
-  // Keep ref in sync with state for use in message handler
-  useEffect(() => {
-    activeConversationIdRef.current = activeConversationId;
-  }, [activeConversationId]);
-
-  // Keep streamingMessageIdRef in sync
-  useEffect(() => {
-    streamingMessageIdRef.current = streamingMessageId;
-  }, [streamingMessageId]);
-
-  // Save current conversation state to maps when it changes
-  useEffect(() => {
-    if (activeConversationId) {
+  const updateConversationRenderState = useCallback(
+    (conversationId: string, updater: ConversationRenderStateUpdater): void => {
+      const currentMessages = conversationMessagesRef.current.get(conversationId) ?? [];
+      const currentStreaming = conversationStreamingRef.current.get(conversationId) ?? {
+        streamingMessageId: null,
+        isThinking: false,
+        queuedMessageCount: 0,
+        queuedMessages: [],
+      };
+      const updated = updater([...currentMessages], currentStreaming);
       const snapshot = ingestConversationRenderSnapshot({
         coordinator: conversationRenderCoordinator,
-        conversationId: activeConversationId,
-        messages,
-        streaming: {
-          ...(conversationStreamingRef.current.get(activeConversationId) ?? {}),
-          streamingMessageId,
-          isThinking,
-          queuedMessageCount,
-          queuedMessages,
-        },
+        conversationId,
+        messages: updated.messages,
+        streaming: updated.streaming,
       });
       commitConversationSnapshotProjection({
         snapshot,
         conversationMessagesRef,
         conversationStreamingRef,
       });
+
+      if (conversationId !== activeConversationIdRef.current) return;
+
+      const projectedStreaming = conversationStreamingRef.current.get(conversationId);
+      if (!projectedStreaming) {
+        throw new Error(
+          `Missing committed streaming projection for conversation ${conversationId}.`,
+        );
+      }
+      setVisibleMessages([...snapshot.messages]);
+      setVisibleIsThinking(projectedStreaming.isThinking);
+      setVisibleStreamingMessageId(projectedStreaming.streamingMessageId);
+      setVisibleQueuedMessageCount(projectedStreaming.queuedMessageCount ?? 0);
+      setVisibleQueuedMessages(projectedStreaming.queuedMessages ?? []);
+      streamingMessageIdRef.current = projectedStreaming.streamingMessageId;
+    },
+    [conversationRenderCoordinator],
+  );
+
+  const setActiveConversationId = useCallback<React.Dispatch<React.SetStateAction<string | null>>>(
+    (value) => {
+      const nextValue =
+        typeof value === 'function' ? value(activeConversationIdRef.current) : value;
+      activeConversationIdRef.current = nextValue;
+      setVisibleActiveConversationId(nextValue);
+    },
+    [],
+  );
+
+  const clearVisibleState = useCallback(() => {
+    if (activeConversationIdRef.current) {
+      throw new Error('Visible state can only be cleared after detaching the active conversation.');
     }
-  }, [
-    activeConversationId,
-    messages,
-    streamingMessageId,
-    isThinking,
-    queuedMessageCount,
-    queuedMessages,
-    conversationMessagesRef,
-    conversationRenderCoordinator,
-    conversationStreamingRef,
-  ]);
-
-  // Helper: add a single message
-  const addMessage = useCallback((message: Message) => {
-    setMessages((prev) => [...prev, message]);
-  }, []);
-
-  // Helper: clear all messages
-  const clearMessages = useCallback(() => {
-    setMessages([]);
-    setStreamingMessageId(null);
-    setIsThinking(false);
-    setQueuedMessageCount(0);
-    setQueuedMessages([]);
+    setVisibleMessages([]);
+    setVisibleStreamingMessageId(null);
+    streamingMessageIdRef.current = null;
+    setVisibleIsThinking(false);
+    setVisibleQueuedMessageCount(0);
+    setVisibleQueuedMessages([]);
   }, []);
 
   return {
@@ -185,16 +189,11 @@ export function useConversationState(): UseConversationStateReturn {
     conversationStreamingRef,
     conversationRenderCoordinator,
     // Actions
-    setMessages,
-    setIsThinking,
-    setStreamingMessageId,
-    setQueuedMessageCount,
-    setQueuedMessages,
     setConversations,
     setActiveConversationId,
     setOpenTabs,
     setActiveTabId,
-    addMessage,
-    clearMessages,
+    clearVisibleState,
+    updateConversationRenderState,
   };
 }

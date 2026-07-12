@@ -723,10 +723,7 @@ describe('ConversationController entry state', () => {
 
   it('keeps Tab activation out of the conversation render coordinator', () => {
     vi.clearAllMocks();
-    const prepareActivation = vi.spyOn(
-      ConversationRenderCoordinator.prototype,
-      'prepareActivation',
-    );
+    expect('prepareActivation' in ConversationRenderCoordinator.prototype).toBe(false);
     render(<ConversationController {...createProps()} />);
 
     const openTabs = [
@@ -769,8 +766,7 @@ describe('ConversationController entry state', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Switch Chat B' }));
     fireEvent.click(screen.getByRole('button', { name: 'Switch Role C' }));
 
-    expect(prepareActivation).not.toHaveBeenCalled();
-    prepareActivation.mockRestore();
+    expect('prepareActivation' in ConversationRenderCoordinator.prototype).toBe(false);
   });
 
   it('retains independent keyed workspace instances for different conversations while switching visibility', () => {

@@ -329,8 +329,8 @@ function createContextHarness(options: ContextHarnessOptions = {}): ContextHarne
   let activeConversationId: string | null =
     options.activeConversationId === undefined ? 'conv-old' : options.activeConversationId;
   let activeTabId = options.activeTabId ?? null;
-  let messages = [message('visible-old', 'assistant', 'visible old')];
-  let streaming: StreamingState = {
+  const messages = [message('visible-old', 'assistant', 'visible old')];
+  const streaming: StreamingState = {
     isThinking: true,
     streamingMessageId: 'visible-stream',
     queuedMessageCount: 2,
@@ -354,40 +354,7 @@ function createContextHarness(options: ContextHarnessOptions = {}): ContextHarne
 
   const context = {
     messages,
-    setMessages: createSetter(
-      () => messages,
-      (next) => {
-        messages = next;
-        context.messages = next;
-      },
-    ),
     isThinking: streaming.isThinking,
-    setIsThinking: createSetter(
-      () => streaming.isThinking,
-      (next) => {
-        streaming = { ...streaming, isThinking: next };
-        context.isThinking = next;
-      },
-    ),
-    setStreamingMessageId: createSetter(
-      () => streaming.streamingMessageId,
-      (next) => {
-        streaming = { ...streaming, streamingMessageId: next };
-        streamingMessageIdRef.current = next;
-      },
-    ),
-    setQueuedMessageCount: createSetter(
-      () => streaming.queuedMessageCount ?? 0,
-      (next) => {
-        streaming = { ...streaming, queuedMessageCount: next };
-      },
-    ),
-    setQueuedMessages: createSetter(
-      () => streaming.queuedMessages ?? [],
-      (next) => {
-        streaming = { ...streaming, queuedMessages: next };
-      },
-    ),
     streamingMessageId: streaming.streamingMessageId,
     queuedMessageCount: streaming.queuedMessageCount,
     queuedMessages: streaming.queuedMessages,
@@ -449,7 +416,7 @@ function createContextHarness(options: ContextHarnessOptions = {}): ContextHarne
     },
     isCurrentConversation: (conversationId?: string) =>
       conversationId === activeConversationIdRef.current,
-    updateNonCurrentConversation: () => undefined,
+    updateConversationRenderState: () => undefined,
     setConversations: createSetter(
       () => conversations,
       (next) => {

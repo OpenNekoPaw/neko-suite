@@ -12,7 +12,7 @@ import {
   type QueuedMessageEditRequest,
   type ContextInjectionRequest,
   type StreamingState,
-  type NonCurrentConversationUpdater,
+  type ConversationRenderStateUpdater,
 } from '@/handlers';
 import { getLogger } from '../utils/logger';
 import type {
@@ -36,10 +36,6 @@ import type {
 import type { BoundActiveSkillIndicator } from './types';
 import type { ActivationProgressTimeline } from '@/presenters/activation-progress-presenter';
 import type { ConversationRenderCoordinator } from '@/render-lifecycle/conversation-render-coordinator';
-import {
-  commitConversationSnapshotProjection,
-  ingestConversationRenderSnapshot,
-} from '@/render-lifecycle/conversation-render-state-adapter';
 import type { ExtensionToWebviewMessage } from './messages';
 import {
   createConversationRenderRuntimeLifecycle,
@@ -88,13 +84,10 @@ export interface UseMessageHandlerProps {
   conversationMessagesRef: MutableRefObject<Map<string, Message[]>>;
   conversationStreamingRef: MutableRefObject<Map<string, StreamingState>>;
   conversationRenderCoordinator: ConversationRenderCoordinator;
-
-  // State setters - Chat
-  setMessages: React.Dispatch<React.SetStateAction<Message[]>>;
-  setIsThinking: React.Dispatch<React.SetStateAction<boolean>>;
-  setStreamingMessageId: React.Dispatch<React.SetStateAction<string | null>>;
-  setQueuedMessageCount: React.Dispatch<React.SetStateAction<number>>;
-  setQueuedMessages: React.Dispatch<React.SetStateAction<readonly AgentQueuedMessageItem[]>>;
+  updateConversationRenderState: (
+    conversationId: string,
+    updater: ConversationRenderStateUpdater,
+  ) => void;
 
   // State setters - Conversation
   setConversations: React.Dispatch<React.SetStateAction<ConversationSummary[]>>;
@@ -206,11 +199,7 @@ export function useMessageHandler(props: UseMessageHandlerProps): UseMessageHand
     conversationMessagesRef,
     conversationStreamingRef,
     conversationRenderCoordinator,
-    setMessages,
-    setIsThinking,
-    setStreamingMessageId,
-    setQueuedMessageCount,
-    setQueuedMessages,
+    updateConversationRenderState,
     setConversations,
     setActiveConversationId,
     setOpenTabs,
@@ -255,44 +244,6 @@ export function useMessageHandler(props: UseMessageHandlerProps): UseMessageHand
     [activeConversationIdRef],
   );
 
-  // Helper: update non-current conversation state
-  const updateNonCurrentConversation = useCallback(
-    (conversationId: string, updater: NonCurrentConversationUpdater): void => {
-      const currentMessages = conversationMessagesRef.current.get(conversationId) || [];
-      const currentStreaming = conversationStreamingRef.current.get(conversationId) || {
-        streamingMessageId: null,
-        isThinking: false,
-        queuedMessageCount: 0,
-        queuedMessages: [],
-      };
-      const updated = updater(currentMessages, currentStreaming);
-      const snapshot = ingestConversationRenderSnapshot({
-        coordinator: conversationRenderCoordinator,
-        conversationId,
-        messages: updated.messages,
-        streaming: updated.streaming,
-      });
-      commitConversationSnapshotProjection({
-        snapshot,
-        conversationMessagesRef,
-        conversationStreamingRef,
-      });
-      if (
-        currentStreaming.streamingMessageId !== updated.streaming.streamingMessageId ||
-        currentStreaming.isThinking !== updated.streaming.isThinking ||
-        (currentStreaming.queuedMessageCount ?? 0) !== (updated.streaming.queuedMessageCount ?? 0)
-      ) {
-        forceContextUpdate();
-      }
-    },
-    [
-      conversationMessagesRef,
-      conversationRenderCoordinator,
-      conversationStreamingRef,
-      forceContextUpdate,
-    ],
-  );
-
   // Create context object
   const context = useMemo<MessageHandlerContext>(
     () => ({
@@ -301,12 +252,7 @@ export function useMessageHandler(props: UseMessageHandlerProps): UseMessageHand
       conversationMessagesRef,
       conversationStreamingRef,
       messages,
-      setMessages,
       isThinking,
-      setIsThinking,
-      setStreamingMessageId,
-      setQueuedMessageCount,
-      setQueuedMessages,
       streamingMessageId,
       queuedMessageCount,
       queuedMessages,
@@ -346,7 +292,7 @@ export function useMessageHandler(props: UseMessageHandlerProps): UseMessageHand
       conversationCompressingRef,
       forceUpdate: forceContextUpdate,
       isCurrentConversation,
-      updateNonCurrentConversation,
+      updateConversationRenderState,
       markdownSessionRegistry,
       conversationRenderCoordinator,
       disposeConversationRendering: renderRuntime.disposeConversation,
@@ -363,16 +309,11 @@ export function useMessageHandler(props: UseMessageHandlerProps): UseMessageHand
       conversationMessagesRef,
       conversationStreamingRef,
       messages,
-      setMessages,
       isThinking,
-      setIsThinking,
-      setStreamingMessageId,
       streamingMessageId,
       queuedMessageCount,
       queuedMessages,
       streamingMessageIdRef,
-      setQueuedMessageCount,
-      setQueuedMessages,
       setConversations,
       setActiveConversationId,
       openTabs,
@@ -408,7 +349,7 @@ export function useMessageHandler(props: UseMessageHandlerProps): UseMessageHand
       conversationCompressingRef,
       forceContextUpdate,
       isCurrentConversation,
-      updateNonCurrentConversation,
+      updateConversationRenderState,
       markdownSessionRegistry,
       conversationRenderCoordinator,
       renderRuntime,

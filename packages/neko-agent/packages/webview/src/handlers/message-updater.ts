@@ -8,10 +8,6 @@
 
 import type { MessageHandlerContext, StreamingState } from './types';
 import type { AgentQueuedMessageItem, Message } from '@neko-agent/types';
-import {
-  commitConversationSnapshotProjection,
-  ingestConversationRenderSnapshot,
-} from '@/render-lifecycle/conversation-render-state-adapter';
 
 /**
  * Result of a conversation update that may change streaming state.
@@ -45,95 +41,38 @@ export type ConversationUpdater = (
  * Update a conversation's messages (and optionally streaming state),
  * auto-routing between current and non-current conversations.
  *
- * For current conversation: uses setMessages + setStreamingMessageId + setIsThinking
- * For non-current: uses updateNonCurrentConversation
+ * Commits through the single conversation-scoped render-state mutation port.
  */
 export function updateConversation(
   context: MessageHandlerContext,
   conversationId: string | undefined,
   updater: ConversationUpdater,
 ): void {
-  if (!conversationId) {
-    return;
-  }
+  if (!conversationId) return;
 
-  if (context.isCurrentConversation(conversationId)) {
-    const currentMessages =
-      context.conversationMessagesRef.current.get(conversationId) ?? context.messages;
-    const currentStreaming = context.conversationStreamingRef.current.get(conversationId) ?? {
-      streamingMessageId: context.streamingMessageIdRef.current,
-      isThinking: context.isThinking,
-      queuedMessageCount: context.queuedMessageCount ?? 0,
-      queuedMessages: context.queuedMessages ?? [],
-      messageQueueVersion: undefined,
-    };
-    const result = updater(currentMessages, currentStreaming.streamingMessageId, currentStreaming);
-    const nextStreaming = {
-      streamingMessageId:
-        result.streamingMessageId !== undefined
-          ? result.streamingMessageId
-          : currentStreaming.streamingMessageId,
-      isThinking: result.isThinking !== undefined ? result.isThinking : currentStreaming.isThinking,
-      queuedMessageCount:
-        result.queuedMessageCount !== undefined
-          ? result.queuedMessageCount
-          : currentStreaming.queuedMessageCount,
-      queuedMessages:
-        result.queuedMessages !== undefined
-          ? result.queuedMessages
-          : (currentStreaming.queuedMessages ?? []),
-      messageQueueVersion:
-        result.messageQueueVersion !== undefined
-          ? result.messageQueueVersion
-          : currentStreaming.messageQueueVersion,
-    };
-
-    const coordinator = context.conversationRenderCoordinator;
-    if (!coordinator) {
-      throw new Error('Conversation updates require the canonical render coordinator.');
-    }
-    const snapshot = ingestConversationRenderSnapshot({
-      coordinator,
-      conversationId,
+  context.updateConversationRenderState(conversationId, (messages, streaming) => {
+    const result = updater(messages, streaming.streamingMessageId, streaming);
+    return {
       messages: result.messages,
-      streaming: nextStreaming,
-    });
-    commitConversationSnapshotProjection({
-      snapshot,
-      conversationMessagesRef: context.conversationMessagesRef,
-      conversationStreamingRef: context.conversationStreamingRef,
-    });
-    context.setMessages([...snapshot.messages]);
-    context.streamingMessageIdRef.current = nextStreaming.streamingMessageId;
-    context.setStreamingMessageId(nextStreaming.streamingMessageId);
-    context.setIsThinking(nextStreaming.isThinking);
-    context.setQueuedMessageCount?.(nextStreaming.queuedMessageCount ?? 0);
-    context.setQueuedMessages?.(nextStreaming.queuedMessages ?? []);
-  } else if (conversationId) {
-    context.updateNonCurrentConversation(conversationId, (msgs, streaming) => {
-      const result = updater(msgs, streaming.streamingMessageId, streaming);
-      return {
-        messages: result.messages,
-        streaming: {
-          streamingMessageId:
-            result.streamingMessageId !== undefined
-              ? result.streamingMessageId
-              : streaming.streamingMessageId,
-          isThinking: result.isThinking !== undefined ? result.isThinking : streaming.isThinking,
-          queuedMessageCount:
-            result.queuedMessageCount !== undefined
-              ? result.queuedMessageCount
-              : streaming.queuedMessageCount,
-          queuedMessages:
-            result.queuedMessages !== undefined
-              ? result.queuedMessages
-              : (streaming.queuedMessages ?? []),
-          messageQueueVersion:
-            result.messageQueueVersion !== undefined
-              ? result.messageQueueVersion
-              : streaming.messageQueueVersion,
-        },
-      };
-    });
-  }
+      streaming: {
+        streamingMessageId:
+          result.streamingMessageId !== undefined
+            ? result.streamingMessageId
+            : streaming.streamingMessageId,
+        isThinking: result.isThinking !== undefined ? result.isThinking : streaming.isThinking,
+        queuedMessageCount:
+          result.queuedMessageCount !== undefined
+            ? result.queuedMessageCount
+            : streaming.queuedMessageCount,
+        queuedMessages:
+          result.queuedMessages !== undefined
+            ? result.queuedMessages
+            : (streaming.queuedMessages ?? []),
+        messageQueueVersion:
+          result.messageQueueVersion !== undefined
+            ? result.messageQueueVersion
+            : streaming.messageQueueVersion,
+      },
+    };
+  });
 }

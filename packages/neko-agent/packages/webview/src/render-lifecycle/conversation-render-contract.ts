@@ -1,6 +1,5 @@
 import type { AgentQueuedMessageItem, Message } from '@neko-agent/types';
 
-export type ConversationVisibility = 'foreground' | 'background';
 export type ConversationRetention = 'retained' | 'disposed';
 
 export type ForegroundConversationAvailability =
@@ -21,7 +20,6 @@ export interface ConversationRenderSnapshot {
   readonly revision: number;
   readonly messages: readonly Message[];
   readonly streaming: ConversationStreamingSnapshot;
-  readonly visibility: ConversationVisibility;
   readonly retention: ConversationRetention;
 }
 
@@ -48,42 +46,18 @@ export type ConversationRenderMutation =
       readonly messages: readonly Message[];
     })
   | {
-      readonly kind: 'activation';
-      readonly conversationId: string;
-      readonly source: ConversationActivationSource;
-    }
-  | {
       readonly kind: 'disposal';
       readonly conversationId: string;
       readonly reason: 'conversation-delete' | 'confirmed-empty-conversation';
     };
 
-export type ConversationActivationSource =
-  'ui-tab' | 'character-role-tab' | 'extension-tab-state' | 'extension-active-conversation';
-
-export interface ConversationVisibleStatePort {
-  commit(snapshot: ConversationRenderSnapshot): void;
-  currentConversationId(): string | null;
-}
-
-export interface ConversationRenderPublication {
-  publish(): void;
-}
-
 export type ConversationRenderDiagnosticCode =
-  | 'stale-revision'
-  | 'conversation-snapshot-unavailable'
-  | 'conversation-disposed'
-  | 'activation-already-committed'
-  | 'visible-state-commit-mismatch'
-  | 'background-visible-state-write'
-  | 'activation-publication-order-invalid';
+  'stale-revision' | 'conversation-snapshot-unavailable' | 'conversation-disposed';
 
 export interface ConversationRenderDiagnostic {
   readonly code: ConversationRenderDiagnosticCode;
   readonly message: string;
   readonly conversationId: string;
-  readonly activationSource?: ConversationActivationSource;
   readonly currentRevision?: number;
   readonly targetRevision?: number;
   readonly messageId?: string;
@@ -95,12 +69,6 @@ export class ConversationRenderLifecycleError extends Error {
     super(`${diagnostic.code}: ${diagnostic.message}`);
     this.name = 'ConversationRenderLifecycleError';
   }
-}
-
-export interface ConversationActivationTransaction {
-  readonly snapshot: ConversationRenderSnapshot;
-  readonly source: ConversationActivationSource;
-  commit(input: { readonly visibleState: ConversationVisibleStatePort }): void;
 }
 
 export function createIdleConversationStreamingSnapshot(): ConversationStreamingSnapshot {

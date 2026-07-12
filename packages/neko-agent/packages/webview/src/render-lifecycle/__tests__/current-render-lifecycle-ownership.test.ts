@@ -20,13 +20,13 @@ interface RenderLifecycleOwnerInventoryItem {
 const currentRenderLifecycleOwners: readonly RenderLifecycleOwnerInventoryItem[] = [
   {
     concern: 'visible-react-state',
-    currentOwner: 'ConversationVisibleStatePort',
+    currentOwner: 'useConversationState active output projection',
     lifecycleScope: 'component',
     writableFromBackground: false,
   },
   {
     concern: 'foreground-refs',
-    currentOwner: 'ConversationVisibleStatePort',
+    currentOwner: 'useConversationState active output projection',
     lifecycleScope: 'component',
     writableFromBackground: false,
   },
@@ -96,7 +96,7 @@ describe('current conversation render lifecycle ownership', () => {
     expect(mutationOwners).toEqual([stateProjectionAdapterPath]);
   });
 
-  it('keeps prepareActivation private to the coordinator state adapter', () => {
+  it('removes foreground activation adapters from the canonical render path', () => {
     const productionFiles = [
       'components/ConversationController.tsx',
       'handlers/conversation-handlers.ts',
@@ -108,7 +108,7 @@ describe('current conversation render lifecycle ownership', () => {
       readFileSync(join(srcRoot, relativePath), 'utf8').includes('.prepareActivation('),
     );
 
-    expect(prepareActivationCallers).toEqual([stateProjectionAdapterPath]);
+    expect(prepareActivationCallers).toEqual([]);
     expect(existsSync(join(srcRoot, 'presenters/conversation-tab-activation-presenter.ts'))).toBe(
       false,
     );

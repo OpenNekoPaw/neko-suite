@@ -75,11 +75,7 @@ function createActivationEvent(
 function createContext(): MessageHandlerContext {
   return {
     messages: [],
-    setMessages: vi.fn(),
     isThinking: false,
-    setIsThinking: vi.fn(),
-    setStreamingMessageId: vi.fn(),
-    setQueuedMessageCount: vi.fn(),
     streamingMessageId: null,
     queuedMessageCount: 0,
     streamingMessageIdRef: { current: null },
@@ -111,7 +107,7 @@ function createContext(): MessageHandlerContext {
     conversationCompressingRef: { current: new Map() },
     forceUpdate: vi.fn(),
     isCurrentConversation: () => true,
-    updateNonCurrentConversation: vi.fn(),
+    updateConversationRenderState: vi.fn(),
     setConversations: vi.fn(),
     setActiveConversationId: vi.fn(),
     setWorkItemsByConversation: vi.fn(),

@@ -9,6 +9,7 @@ export { useUIState, type UIState, type UIStateActions, type UseUIStateReturn } 
 export {
   useConversationState,
   type StreamingState,
+  type ConversationRenderStateUpdater,
   type ConversationState,
   type ConversationStateRefs,
   type ConversationStateActions,

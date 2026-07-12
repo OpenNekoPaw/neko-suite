@@ -31,6 +31,10 @@ import type {
 } from '@/components/ChatView/InputArea/types';
 import type { ActiveSkillIndicator } from '@/components/ChatView/SkillIndicator';
 import type { ConversationRenderCoordinator } from '@/render-lifecycle/conversation-render-coordinator';
+import type {
+  ConversationRenderStateUpdater as CanonicalConversationRenderStateUpdater,
+  ConversationRenderStreamingState,
+} from '@/render-lifecycle/conversation-render-state-adapter';
 
 /** Active skill indicator bound to a specific conversation */
 export interface BoundActiveSkillIndicator extends ActiveSkillIndicator {
@@ -40,13 +44,7 @@ export interface BoundActiveSkillIndicator extends ActiveSkillIndicator {
 /**
  * Streaming state for a conversation
  */
-export interface StreamingState {
-  streamingMessageId: string | null;
-  isThinking: boolean;
-  queuedMessageCount?: number;
-  queuedMessages?: readonly AgentQueuedMessageItem[];
-  messageQueueVersion?: number;
-}
+export type StreamingState = ConversationRenderStreamingState;
 
 export type PendingForegroundConversationActivation =
   | {
@@ -61,12 +59,10 @@ export type PendingForegroundConversationActivation =
     };
 
 /**
- * Non-current conversation update function signature
+ * Conversation-scoped render-state update function signature.
  */
-export type NonCurrentConversationUpdater = (
-  messages: Message[],
-  streaming: StreamingState,
-) => { messages: Message[]; streaming: StreamingState };
+export type ConversationRenderStateUpdater =
+  CanonicalConversationRenderStateUpdater<StreamingState>;
 
 // =============================================================================
 // Semantic sub-interfaces grouped by responsibility
@@ -75,12 +71,7 @@ export type NonCurrentConversationUpdater = (
 /** Chat streaming state: message list, thinking indicator, streaming ID */
 export interface ChatStateContext {
   messages: Message[];
-  setMessages: React.Dispatch<React.SetStateAction<Message[]>>;
   isThinking: boolean;
-  setIsThinking: React.Dispatch<React.SetStateAction<boolean>>;
-  setStreamingMessageId: React.Dispatch<React.SetStateAction<string | null>>;
-  setQueuedMessageCount?: React.Dispatch<React.SetStateAction<number>>;
-  setQueuedMessages?: React.Dispatch<React.SetStateAction<readonly AgentQueuedMessageItem[]>>;
   streamingMessageId: string | null;
   queuedMessageCount?: number;
   queuedMessages?: readonly AgentQueuedMessageItem[];
@@ -178,9 +169,9 @@ export interface HelperContext {
     reason: 'conversation-delete' | 'confirmed-empty-conversation',
   ) => void;
   isCurrentConversation: (conversationId?: string) => boolean;
-  updateNonCurrentConversation: (
+  updateConversationRenderState: (
     conversationId: string,
-    updater: NonCurrentConversationUpdater,
+    updater: ConversationRenderStateUpdater,
   ) => void;
   pendingForegroundConversationActivationRef?: MutableRefObject<PendingForegroundConversationActivation | null>;
   /** Latest accepted or optimistically allocated Tab-state revision in this Webview realm. */

@@ -31,14 +31,10 @@ const handleSubAgentEvent: MessageHandler<'subagentEvent'> = (
 
   if (event.type !== 'spawned' && event.type !== 'started') return;
 
-  if (context.isCurrentConversation(conversationId)) {
-    context.setMessages((prev) => appendSubAgentMessageToMessages(prev, event.subAgentId));
-  } else {
-    context.updateNonCurrentConversation(conversationId, (messages, streaming) => ({
-      messages: appendSubAgentMessageToMessages(messages, event.subAgentId),
-      streaming,
-    }));
-  }
+  context.updateConversationRenderState(conversationId, (messages, streaming) => ({
+    messages: appendSubAgentMessageToMessages(messages, event.subAgentId),
+    streaming,
+  }));
 };
 
 export const subAgentHandlers: HandlerRegistration[] = [

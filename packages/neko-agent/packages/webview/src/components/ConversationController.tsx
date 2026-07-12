@@ -57,7 +57,7 @@ import {
   useConversationState,
   useTabManager,
   type PendingSendInput,
-  type StreamingState,
+  type ConversationRenderStateUpdater,
 } from '@/hooks';
 import {
   useMessageHandler,
@@ -70,11 +70,7 @@ import { shouldActivateForegroundConversation } from '@/handlers/foreground-acti
 import { ConversationTabRuntimeView } from './ConversationTabRuntimeView';
 import { useRetainedTabComponents } from '@/render-runtime/useRetainedTabComponents';
 import { isCharacterRoleConversationKind } from '@/presenters/character-role-session-presenter';
-import {
-  commitConversationSnapshotProjection,
-  discardConversationSnapshotProjection,
-  ingestConversationRenderSnapshot,
-} from '@/render-lifecycle/conversation-render-state-adapter';
+import { discardConversationSnapshotProjection } from '@/render-lifecycle/conversation-render-state-adapter';
 import type { ForegroundConversationAvailability } from '@/render-lifecycle/conversation-render-contract';
 import {
   applyUserMessageToConversationSummaries,
@@ -198,15 +194,10 @@ export function ConversationController({
   const conversation = useConversationState();
   const {
     messages,
-    setMessages,
     isThinking,
-    setIsThinking,
     streamingMessageId,
-    setStreamingMessageId,
     queuedMessageCount,
-    setQueuedMessageCount,
     queuedMessages,
-    setQueuedMessages,
     streamingMessageIdRef,
     conversations,
     setConversations,
@@ -216,6 +207,8 @@ export function ConversationController({
     conversationMessagesRef,
     conversationStreamingRef,
     conversationRenderCoordinator,
+    updateConversationRenderState: commitConversationRenderState,
+    clearVisibleState,
     openTabs,
     setOpenTabs,
     activeTabId,
@@ -568,58 +561,11 @@ export function ConversationController({
 
   const triggerForceUpdate = useCallback(() => forceUpdate((n) => n + 1), []);
   const updateConversationRenderState = useCallback(
-    (
-      conversationId: string,
-      updater: (
-        messages: Message[],
-        streaming: StreamingState,
-      ) => {
-        messages: Message[];
-        streaming: StreamingState;
-      },
-    ) => {
-      const currentMessages = conversationMessagesRef.current.get(conversationId) ?? [];
-      const currentStreaming = conversationStreamingRef.current.get(conversationId) ?? {
-        streamingMessageId: null,
-        isThinking: false,
-        queuedMessageCount: 0,
-        queuedMessages: [],
-      };
-      const updated = updater([...currentMessages], currentStreaming);
-      const snapshot = ingestConversationRenderSnapshot({
-        coordinator: conversationRenderCoordinator,
-        conversationId,
-        messages: updated.messages,
-        streaming: updated.streaming,
-      });
-      commitConversationSnapshotProjection({
-        snapshot,
-        conversationMessagesRef,
-        conversationStreamingRef,
-      });
-      if (conversationId === activeConversationIdRef.current) {
-        setMessages([...snapshot.messages]);
-        setIsThinking(updated.streaming.isThinking);
-        setStreamingMessageId(updated.streaming.streamingMessageId);
-        setQueuedMessageCount(updated.streaming.queuedMessageCount ?? 0);
-        setQueuedMessages(updated.streaming.queuedMessages ?? []);
-        streamingMessageIdRef.current = updated.streaming.streamingMessageId;
-      }
+    (conversationId: string, updater: ConversationRenderStateUpdater) => {
+      commitConversationRenderState(conversationId, updater);
       triggerForceUpdate();
     },
-    [
-      activeConversationIdRef,
-      conversationMessagesRef,
-      conversationRenderCoordinator,
-      conversationStreamingRef,
-      setIsThinking,
-      setMessages,
-      setQueuedMessageCount,
-      setQueuedMessages,
-      setStreamingMessageId,
-      streamingMessageIdRef,
-      triggerForceUpdate,
-    ],
+    [commitConversationRenderState, triggerForceUpdate],
   );
   const requestConfigSnapshot = useCallback(() => {
     AgentHostMessages.refreshConfigSnapshot();
@@ -634,47 +580,33 @@ export function ConversationController({
   const handleUserMessageSent = useCallback(
     (event: { conversationId: string; message: Message }) => {
       const optimisticQueuedItem = projectOptimisticQueuedMessageItem(event);
-      const cachedMessages =
-        conversationMessagesRef.current.get(event.conversationId) ??
-        (event.conversationId === activeConversationIdRef.current ? messages : []);
-      const nextMessages = cachedMessages.some((message) => message.id === event.message.id)
-        ? cachedMessages
-        : optimisticQueuedItem
-          ? cachedMessages
-          : [...cachedMessages, event.message];
-
-      const currentStreaming = conversationStreamingRef.current.get(event.conversationId);
-      const nextQueuedMessages =
-        currentStreaming?.queuedMessages && currentStreaming.queuedMessages.length > 0
-          ? currentStreaming.queuedMessages
+      updateConversationRenderState(event.conversationId, (currentMessages, currentStreaming) => {
+        const nextMessages = currentMessages.some((message) => message.id === event.message.id)
+          ? currentMessages
           : optimisticQueuedItem
-            ? [optimisticQueuedItem]
-            : queuedMessages;
-      const snapshot = ingestConversationRenderSnapshot({
-        coordinator: conversationRenderCoordinator,
-        conversationId: event.conversationId,
-        messages: nextMessages,
-        streaming: {
-          ...(currentStreaming ?? {}),
-          streamingMessageId: event.message.isQueued
-            ? (currentStreaming?.streamingMessageId ?? streamingMessageIdRef.current)
-            : null,
-          isThinking: true,
-          queuedMessageCount:
-            currentStreaming?.queuedMessageCount ?? (optimisticQueuedItem ? 1 : 0),
-          queuedMessages: nextQueuedMessages,
-          messageQueueVersion: currentStreaming?.messageQueueVersion,
-        },
+            ? currentMessages
+            : [...currentMessages, event.message];
+        const nextQueuedMessages =
+          currentStreaming.queuedMessages && currentStreaming.queuedMessages.length > 0
+            ? currentStreaming.queuedMessages
+            : optimisticQueuedItem
+              ? [optimisticQueuedItem]
+              : queuedMessages;
+        return {
+          messages: nextMessages,
+          streaming: {
+            ...currentStreaming,
+            streamingMessageId: event.message.isQueued
+              ? (currentStreaming.streamingMessageId ?? streamingMessageIdRef.current)
+              : null,
+            isThinking: true,
+            queuedMessageCount: optimisticQueuedItem
+              ? Math.max(currentStreaming.queuedMessageCount ?? 0, nextQueuedMessages.length)
+              : (currentStreaming.queuedMessageCount ?? 0),
+            queuedMessages: nextQueuedMessages,
+          },
+        };
       });
-      commitConversationSnapshotProjection({
-        snapshot,
-        conversationMessagesRef,
-        conversationStreamingRef,
-      });
-      if (event.conversationId === activeConversationIdRef.current && optimisticQueuedItem) {
-        setQueuedMessageCount((currentCount) => Math.max(currentCount, nextQueuedMessages.length));
-        setQueuedMessages(nextQueuedMessages);
-      }
 
       if (!optimisticQueuedItem) {
         setOpenTabs((prev) =>
@@ -693,28 +625,19 @@ export function ConversationController({
           }),
         );
       }
-      triggerForceUpdate();
     },
     [
-      activeConversationIdRef,
-      conversationMessagesRef,
-      conversationRenderCoordinator,
-      conversationStreamingRef,
-      messages,
       queuedMessages,
       setConversations,
-      setQueuedMessageCount,
-      setQueuedMessages,
       setOpenTabs,
-      triggerForceUpdate,
+      streamingMessageIdRef,
+      updateConversationRenderState,
     ],
   );
 
   const clearConversationMessages = useCallback(
     (conversationId: string) => {
-      const snapshot = ingestConversationRenderSnapshot({
-        coordinator: conversationRenderCoordinator,
-        conversationId,
+      updateConversationRenderState(conversationId, () => ({
         messages: [],
         streaming: {
           streamingMessageId: null,
@@ -722,20 +645,9 @@ export function ConversationController({
           queuedMessageCount: 0,
           queuedMessages: [],
         },
-      });
-      commitConversationSnapshotProjection({
-        snapshot,
-        conversationMessagesRef,
-        conversationStreamingRef,
-      });
-      triggerForceUpdate();
+      }));
     },
-    [
-      conversationMessagesRef,
-      conversationRenderCoordinator,
-      conversationStreamingRef,
-      triggerForceUpdate,
-    ],
+    [updateConversationRenderState],
   );
 
   const beginForegroundConversationActivation = useCallback(() => {
@@ -838,11 +750,7 @@ export function ConversationController({
     conversationMessagesRef,
     conversationStreamingRef,
     conversationRenderCoordinator,
-    setMessages,
-    setIsThinking,
-    setStreamingMessageId,
-    setQueuedMessageCount,
-    setQueuedMessages,
+    updateConversationRenderState,
     setConversations,
     setActiveConversationId,
     setOpenTabs,
@@ -1153,25 +1061,12 @@ export function ConversationController({
     setInitialInputRequest(null);
     setEntryPromptMenu(null);
     isTablessConversationViewRef.current = true;
-    setMessages([]);
-    setStreamingMessageId(null);
-    streamingMessageIdRef.current = null;
-    setIsThinking(false);
-    setQueuedMessageCount(0);
     setActiveConversationId(null);
-    activeConversationIdRef.current = null;
+    clearVisibleState();
     pendingForegroundConversationActivationRef.current = null;
     setIsForegroundConversationActivationPending(false);
     setActiveTab('chat');
-  }, [
-    activeConversationIdRef,
-    setActiveConversationId,
-    setIsThinking,
-    setMessages,
-    setQueuedMessageCount,
-    setStreamingMessageId,
-    streamingMessageIdRef,
-  ]);
+  }, [clearVisibleState, setActiveConversationId]);
 
   const isProtectedConversation = useCallback(
     (conversationId: string): boolean => {

@@ -208,8 +208,8 @@ interface ContextHarness {
 
 function createContextHarness(options: ContextHarnessOptions): ContextHarness {
   let activeConversationId: string | null = options.activeConversationId;
-  let messages = options.currentMessages;
-  let streaming: StreamingState = {
+  const messages = options.currentMessages;
+  const streaming: StreamingState = {
     isThinking: false,
     streamingMessageId: null,
     queuedMessageCount: 0,
@@ -224,29 +224,7 @@ function createContextHarness(options: ContextHarnessOptions): ContextHarness {
 
   const context: MessageHandlerContext = {
     messages,
-    setMessages: createSetter(
-      () => messages,
-      (next) => {
-        messages = next;
-        context.messages = next;
-      },
-    ),
     isThinking: streaming.isThinking,
-    setIsThinking: createSetter(
-      () => streaming.isThinking,
-      (next) => {
-        streaming = { ...streaming, isThinking: next };
-        context.isThinking = next;
-      },
-    ),
-    setStreamingMessageId: createSetter(
-      () => streaming.streamingMessageId,
-      (next) => {
-        streaming = { ...streaming, streamingMessageId: next };
-        streamingMessageIdRef.current = next;
-      },
-    ),
-    setQueuedMessageCount: noopDispatch(),
     streamingMessageId: streaming.streamingMessageId,
     queuedMessageCount: streaming.queuedMessageCount,
     streamingMessageIdRef,
@@ -280,7 +258,7 @@ function createContextHarness(options: ContextHarnessOptions): ContextHarness {
     forceUpdate: () => undefined,
     isCurrentConversation: (conversationId?: string) =>
       conversationId === activeConversationIdRef.current,
-    updateNonCurrentConversation: (conversationId, updater) => {
+    updateConversationRenderState: (conversationId, updater) => {
       const existingMessages = conversationMessagesRef.current.get(conversationId) ?? [];
       const existingStreaming = conversationStreamingRef.current.get(conversationId) ?? {
         isThinking: false,

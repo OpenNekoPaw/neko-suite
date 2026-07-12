@@ -1,5 +1,4 @@
 import type {
-  ConversationActivationTransaction,
   ConversationRenderMutation,
   ConversationRenderSnapshot,
   ConversationStreamingSnapshot,
@@ -7,21 +6,15 @@ import type {
 import { ConversationRenderLifecycleError } from './conversation-render-contract';
 
 type RevisionedMutation = Extract<ConversationRenderMutation, { readonly baseRevision: number }>;
-type ActivationMutation = Extract<ConversationRenderMutation, { readonly kind: 'activation' }>;
 type DisposalMutation = Extract<ConversationRenderMutation, { readonly kind: 'disposal' }>;
 
 export class ConversationRenderCoordinator {
   private readonly snapshots = new Map<string, ConversationRenderSnapshot>();
   private readonly disposedRevisions = new Map<string, number>();
   private readonly revisionListeners = new Map<string, Set<() => void>>();
-  private foregroundId: string | null = null;
 
   read(conversationId: string): ConversationRenderSnapshot | undefined {
     return this.snapshots.get(conversationId);
-  }
-
-  foregroundConversationId(): string | null {
-    return this.foregroundId;
   }
 
   revision(conversationId: string): number {
@@ -76,77 +69,6 @@ export class ConversationRenderCoordinator {
     return next;
   }
 
-  prepareActivation(mutation: ActivationMutation): ConversationActivationTransaction {
-    const current = this.snapshots.get(mutation.conversationId);
-    const disposedRevision = this.disposedRevisions.get(mutation.conversationId);
-    if (!current || disposedRevision !== undefined) {
-      throw lifecycleError({
-        code:
-          disposedRevision !== undefined
-            ? 'conversation-disposed'
-            : 'conversation-snapshot-unavailable',
-        message:
-          disposedRevision !== undefined
-            ? `Conversation ${mutation.conversationId} is disposed.`
-            : `Conversation ${mutation.conversationId} has no retained render snapshot.`,
-        conversationId: mutation.conversationId,
-        activationSource: mutation.source,
-        currentRevision: disposedRevision,
-      });
-    }
-
-    const snapshot: ConversationRenderSnapshot = {
-      ...current,
-      revision: current.revision + 1,
-      streaming: current.streaming,
-      visibility: 'foreground',
-    };
-    let committed = false;
-
-    return {
-      snapshot,
-      source: mutation.source,
-      commit: ({ visibleState }): void => {
-        if (committed) {
-          throw lifecycleError({
-            code: 'activation-already-committed',
-            message: `Activation for ${mutation.conversationId} may only commit once.`,
-            conversationId: mutation.conversationId,
-            activationSource: mutation.source,
-            targetRevision: snapshot.revision,
-          });
-        }
-        committed = true;
-        visibleState.commit(snapshot);
-        if (visibleState.currentConversationId() !== mutation.conversationId) {
-          throw lifecycleError({
-            code: 'visible-state-commit-mismatch',
-            message: `Visible state did not commit ${mutation.conversationId}.`,
-            conversationId: mutation.conversationId,
-            activationSource: mutation.source,
-            currentRevision: current.revision,
-            targetRevision: snapshot.revision,
-          });
-        }
-
-        this.commitForegroundSnapshot(snapshot);
-        if (
-          visibleState.currentConversationId() !== mutation.conversationId ||
-          this.foregroundId !== mutation.conversationId
-        ) {
-          throw lifecycleError({
-            code: 'activation-publication-order-invalid',
-            message: `Conversation ${mutation.conversationId} cannot publish renderer state before foreground ownership commits.`,
-            conversationId: mutation.conversationId,
-            activationSource: mutation.source,
-            currentRevision: current.revision,
-            targetRevision: snapshot.revision,
-          });
-        }
-      },
-    };
-  }
-
   dispose(mutation: DisposalMutation): ConversationRenderSnapshot {
     const existingDisposedRevision = this.disposedRevisions.get(mutation.conversationId);
     if (existingDisposedRevision !== undefined) {
@@ -169,34 +91,13 @@ export class ConversationRenderCoordinator {
     const disposed: ConversationRenderSnapshot = {
       ...current,
       revision: current.revision + 1,
-      visibility: 'background',
       retention: 'disposed',
     };
     this.snapshots.delete(mutation.conversationId);
     this.disposedRevisions.set(mutation.conversationId, disposed.revision);
-    if (this.foregroundId === mutation.conversationId) this.foregroundId = null;
     this.publishRevisions([mutation.conversationId]);
     this.revisionListeners.delete(mutation.conversationId);
     return disposed;
-  }
-
-  private commitForegroundSnapshot(snapshot: ConversationRenderSnapshot): void {
-    const previousForegroundId = this.foregroundId;
-    const changedConversationIds = [snapshot.conversationId];
-    if (previousForegroundId && previousForegroundId !== snapshot.conversationId) {
-      const previous = this.snapshots.get(previousForegroundId);
-      if (previous?.retention === 'retained') {
-        this.snapshots.set(previousForegroundId, {
-          ...previous,
-          revision: previous.revision + 1,
-          visibility: 'background',
-        });
-        changedConversationIds.push(previousForegroundId);
-      }
-    }
-    this.snapshots.set(snapshot.conversationId, snapshot);
-    this.foregroundId = snapshot.conversationId;
-    this.publishRevisions(changedConversationIds);
   }
 
   private publishRevisions(conversationIds: readonly string[]): void {
@@ -219,7 +120,6 @@ function createNextSnapshot(
       revision: 0,
       messages: [],
       streaming: emptyStreamingForMutation(mutation),
-      visibility: 'background',
       retention: 'retained',
     } satisfies ConversationRenderSnapshot);
 

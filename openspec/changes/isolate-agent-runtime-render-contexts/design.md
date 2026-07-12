@@ -129,6 +129,8 @@ The store owns conversation projection plus all Tab-local mutable UI state: inpu
 
 `ConversationController` becomes a Tab host and renders one keyed `ConversationTabRuntimeView` per retained Tab. Activation only changes `visibleTabId`; it does not copy state, change runtime ownership, flush/discard delivery, or overwrite one workspace's props with another conversation.
 
+Host snapshots and Webview-originated message/streaming mutations enter one explicit conversation-scoped render-state mutation port. Foreground React state is an output projection for the active tabless surface only; effects MUST NOT write foreground values back into conversation maps, and hidden-conversation mutations MUST NOT invoke foreground setters.
+
 Retention policy:
 
 - running, attaching, composing, or dirty-input Tabs remain mounted;

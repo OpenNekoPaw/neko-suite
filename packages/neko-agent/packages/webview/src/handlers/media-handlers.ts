@@ -47,26 +47,15 @@ const handleMediaTaskCreated: MessageHandler<'mediaTaskCreated'> = (
     return;
   }
 
-  // Stop thinking indicator (only for the active conversation)
-  if (context.isCurrentConversation(conversationId)) {
-    context.setIsThinking(false);
-    context.setStreamingMessageId(null);
-    context.setQueuedMessageCount?.(0);
-
-    // Append an assistant message that embeds the TaskCard.
-    context.setMessages((prev) => appendMediaTaskMessageToMessages(prev, workItem.id));
-  } else if (conversationId) {
-    // Non-current conversation: update refs only
-    context.updateNonCurrentConversation(conversationId, (messages, streaming) => ({
-      messages: appendMediaTaskMessageToMessages(messages, workItem.id),
-      streaming: {
-        ...streaming,
-        isThinking: false,
-        streamingMessageId: null,
-        queuedMessageCount: 0,
-      },
-    }));
-  }
+  context.updateConversationRenderState(conversationId, (messages, streaming) => ({
+    messages: appendMediaTaskMessageToMessages(messages, workItem.id),
+    streaming: {
+      ...streaming,
+      isThinking: false,
+      streamingMessageId: null,
+      queuedMessageCount: 0,
+    },
+  }));
 };
 
 /**
