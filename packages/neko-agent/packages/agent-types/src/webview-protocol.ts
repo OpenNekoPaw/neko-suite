@@ -75,16 +75,6 @@ import type {
 import type { DashboardTask } from '@neko/shared/types/dashboard-task';
 import type { AgentArtifactTransferPayload } from './artifact-transfer';
 import type {
-  AgentTurnTimelineDiagnostic,
-  AgentTurnTimelineMessage,
-  AgentTurnTimelineOperation,
-} from './agent-turn-timeline';
-import {
-  AGENT_TURN_TIMELINE_SCHEMA_VERSION,
-  assertValidAgentTurnTimelineMessage,
-} from './agent-turn-timeline';
-export { validateAgentTurnTimelineMessage } from './agent-turn-timeline';
-import type {
   PluginTransferAssetRef,
   PluginTransferCutStoryboardPayload,
   PluginTransferCutStoryboardShot,
@@ -1143,8 +1133,6 @@ export interface AmbientCanvasUpdateMessage {
   nodes?: Array<{ nodeId: string; type: string; summary: string }>;
 }
 
-export type { AgentTurnTimelineDiagnostic, AgentTurnTimelineMessage };
-
 export type ExtensionToWebviewMessage =
   | ThinkingMessage
   | StreamTextMessage
@@ -1208,9 +1196,7 @@ export type ExtensionToWebviewMessage =
   | InjectContextMessage
   | AmbientCanvasUpdateMessage
   | ProjectionEndpointReadyMessage
-  | ConversationProjectionAttachmentHostFrame
-  | AgentTurnTimelineMessage
-  | AgentTurnTimelineDiagnostic;
+  | ConversationProjectionAttachmentHostFrame;
 
 export type MessageOfType<T extends ExtensionToWebviewMessage['type']> = Extract<
   ExtensionToWebviewMessage,
@@ -1428,33 +1414,6 @@ export function buildStreamCompleteMessage(input: {
       ? { contentBlocks: input.contentBlocks }
       : {}),
   };
-}
-
-export function buildAgentTurnTimelineMessage(input: {
-  readonly connectionEpoch: string;
-  readonly conversationId: string;
-  readonly turnId: string;
-  readonly messageId: string;
-  readonly batchKind: 'delta' | 'snapshot';
-  readonly deliveryRevision: number;
-  readonly operations: readonly AgentTurnTimelineOperation[];
-  readonly completion?: AgentTurnTimelineMessage['completion'];
-}): AgentTurnTimelineMessage {
-  const conversationId = requireBuilderConversationId(input.conversationId, 'agentTurnTimeline');
-  const message: AgentTurnTimelineMessage = {
-    type: 'agentTurnTimeline',
-    schemaVersion: AGENT_TURN_TIMELINE_SCHEMA_VERSION,
-    connectionEpoch: input.connectionEpoch,
-    conversationId,
-    turnId: input.turnId,
-    messageId: input.messageId,
-    batchKind: input.batchKind,
-    deliveryRevision: input.deliveryRevision,
-    operations: input.operations,
-    ...(input.completion ? { completion: input.completion } : {}),
-  };
-  assertValidAgentTurnTimelineMessage(message);
-  return message;
 }
 
 export function buildErrorMessage(input: {

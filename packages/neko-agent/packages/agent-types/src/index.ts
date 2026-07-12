@@ -590,7 +590,6 @@ export {
   buildAgentPhaseMessage,
   buildAssistantTextReplacementMessage,
   buildAgentStateSnapshotMessage,
-  buildAgentTurnTimelineMessage,
   buildAgentCapabilityActivationProgressMessage,
   buildAgentCapabilityLifecycleResultMessage,
   buildAgentSessionDiagnosticMessage,

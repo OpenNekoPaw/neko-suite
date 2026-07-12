@@ -6,7 +6,6 @@ import {
   buildAgentCapabilityActivationProgressMessage,
   buildAgentSessionDiagnosticMessage,
   buildAgentStateSnapshotMessage,
-  buildAgentTurnTimelineMessage,
   buildErrorMessage,
   buildExternalInputMessage,
   buildHistoryClearedMessage,
@@ -30,7 +29,6 @@ import {
   buildToolConfirmationMessage,
   parseSendMessageWebviewMessage,
   parseWebviewToExtensionMessage,
-  validateAgentTurnTimelineMessage,
 } from '../webview-protocol';
 import type { MessageQueuedMessage } from '../webview-protocol';
 import type { AgentTurnTimelineAssistantTextItem } from '../agent-turn-timeline';
@@ -156,43 +154,6 @@ describe('webview protocol parser', () => {
       }),
     ).toBeNull();
   });
-  it('builds valid agent turn timeline V2 batches', () => {
-    const textItem = makeTimelineTextItem({ itemId: 'text-1', sequence: 1, content: 'Hello' });
-    const message = buildAgentTurnTimelineMessage({
-      connectionEpoch: 'epoch-1',
-      conversationId: 'conv-1',
-      turnId: 'turn-1',
-      messageId: 'msg-1',
-      batchKind: 'delta',
-      deliveryRevision: 1,
-      operations: [{ operation: 'append', item: textItem }],
-    });
-
-    expect(message).toMatchObject({
-      type: 'agentTurnTimeline',
-      schemaVersion: 2,
-      connectionEpoch: 'epoch-1',
-      deliveryRevision: 1,
-      operations: [{ operation: 'append', item: textItem }],
-    });
-    expect(validateAgentTurnTimelineMessage(message).ok).toBe(true);
-  });
-
-  it('rejects legacy cumulative timeline shapes', () => {
-    const result = validateAgentTurnTimelineMessage({
-      type: 'agentTurnTimeline',
-      conversationId: 'conv-1',
-      turnId: 'turn-1',
-      messageId: 'msg-1',
-      events: [makeTimelineTextItem({ itemId: 'text-1', sequence: 1, content: 'legacy' })],
-    });
-
-    expect(result.ok).toBe(false);
-    expect(result.diagnostics).toContainEqual(
-      expect.objectContaining({ code: 'unsupported-schema-version' }),
-    );
-  });
-
   it('accepts tabless project search purposes and rejects unknown search purposes', () => {
     expect(
       parseWebviewToExtensionMessage({
