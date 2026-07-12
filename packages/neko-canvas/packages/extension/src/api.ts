@@ -21,6 +21,7 @@ import type {
   CanvasChangeEvent as SharedCanvasChangeEvent,
   CanvasImportAssetRequest,
   CanvasImportAssetResult,
+  NekoCanvasAuthoringAPI,
   CanvasMarkdownCapabilityInput,
   CanvasMarkdownCapabilityResult,
   CanvasNode,
@@ -128,6 +129,9 @@ export interface NekoCanvasAPI {
    * Import media/resource facts into a Canvas document through headless authoring.
    */
   importAsset(asset: CanvasImportAssetRequest): Promise<CanvasImportAssetResult>;
+
+  /** Explicit-target, Webview-independent durable .nkc authoring. */
+  readonly authoring: NekoCanvasAuthoringAPI;
 
   /**
    * Canvas operations

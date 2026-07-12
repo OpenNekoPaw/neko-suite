@@ -467,4 +467,61 @@ describe('CanvasProjectAuthoringService', () => {
     expect(vscodeMockState.files.size).toBe(0);
     expect(provider.applyHostCanvasData).not.toHaveBeenCalled();
   });
+
+  it('imports an approved asset into an explicit target and returns the saved revision', async () => {
+    const provider = createProvider();
+    provider.getActiveCanvasDocumentUri.mockImplementation(() => {
+      throw new Error('active Canvas fallback must not be called');
+    });
+    const service = new CanvasProjectAuthoringService({
+      context: { subscriptions: [] } as never,
+      canvasEditorProvider: provider,
+    });
+
+    const targetUri = vscode.Uri.file('/workspace/project/approved-assets.nkc');
+    const initial = createEmptyCanvasData('Approved Assets');
+    vscodeMockState.files.set(targetUri.fsPath, new TextEncoder().encode(saveNkc(initial)));
+
+    const result = await service.importAssetAuthoring({
+      target: { kind: 'file', documentUri: targetUri.toString() },
+      asset: {
+        path: './assets/approved-shot.png',
+        type: 'image',
+        name: 'Approved Shot',
+      },
+    });
+
+    expect(provider.getActiveCanvasDocumentUri).not.toHaveBeenCalled();
+    expect(provider.revealCanvasDocument).not.toHaveBeenCalled();
+    expect(vscodeMockState.executeCommand).not.toHaveBeenCalled();
+    expect(result.projectRef).toEqual(
+      expect.objectContaining({
+        domain: 'canvas',
+        documentUri: targetUri.toString(),
+        projectRevision: expect.stringMatching(/^nkc:/),
+      }),
+    );
+    const reopened = loadNkc(new TextDecoder().decode(vscodeMockState.files.get(targetUri.fsPath)));
+    expect(reopened.validation.valid).toBe(true);
+    expect(reopened.data.nodes).toHaveLength(1);
+  });
+
+  it('rejects a missing or active project-authoring target before consulting editor state', async () => {
+    const provider = createProvider();
+    provider.getActiveCanvasDocumentUri.mockImplementation(() => {
+      throw new Error('active Canvas fallback must not be called');
+    });
+    const service = new CanvasProjectAuthoringService({
+      context: { subscriptions: [] } as never,
+      canvasEditorProvider: provider,
+    });
+
+    await expect(
+      service.importAssetAuthoring({
+        target: { kind: 'active' },
+        asset: { path: './assets/approved-shot.png', type: 'image' },
+      }),
+    ).rejects.toThrow('missing-authoring-target');
+    expect(provider.getActiveCanvasDocumentUri).not.toHaveBeenCalled();
+  });
 });

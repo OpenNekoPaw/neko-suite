@@ -273,6 +273,9 @@ export function activate(context: vscode.ExtensionContext): NekoCanvasAPI & ISki
       },
     },
     importAsset: (asset) => canvasProjectAuthoringService.importAsset({ asset }),
+    authoring: {
+      importAsset: (request) => canvasProjectAuthoringService.importAssetAuthoring(request),
+    },
     canvas: {
       create: (config) => createCanvas(config),
       addShape: (canvasId, shape) => canvasEditorProvider.addShape(shape),

@@ -160,6 +160,45 @@ export interface NekoCutTimelineElement {
   [key: string]: unknown;
 }
 
+export interface CutProjectAuthoringCreateOptions {
+  readonly name?: string;
+  readonly width?: number;
+  readonly height?: number;
+  readonly fps?: number;
+}
+
+export interface CutProjectAuthoringImportGeneratedClipRequest {
+  readonly target: import('../project-authoring').NekoProjectAuthoringTarget;
+  readonly sourcePath?: string;
+  readonly bytes?: Uint8Array;
+  readonly name?: string;
+  readonly mediaType?: 'video' | 'audio' | 'image';
+  readonly duration?: number;
+  readonly startTime?: number;
+  readonly trackId?: string;
+  readonly trackIndex?: number;
+  readonly requestId?: string;
+  readonly createProjectOptions?: CutProjectAuthoringCreateOptions;
+}
+
+export interface CutProjectAuthoringImportedClip {
+  readonly sourcePath: string;
+  readonly mediaType: 'video' | 'audio' | 'image';
+  readonly trackId: string;
+  readonly elementId: string;
+  readonly createdTrack: boolean;
+  readonly startTime: number;
+  readonly duration: number;
+}
+
+export interface NekoCutAuthoringAPI {
+  importGeneratedClip(
+    request: CutProjectAuthoringImportGeneratedClipRequest,
+  ): Promise<
+    import('../project-authoring').NekoProjectAuthoringResult<CutProjectAuthoringImportedClip>
+  >;
+}
+
 /**
  * NekoCut Extension API
  * Exported by neko-cut extension for timeline manipulation
@@ -167,6 +206,8 @@ export interface NekoCutTimelineElement {
 export interface NekoCutAPI {
   /** Package-owned structural, review-render, runtime, and export-readiness facade for .nkv projects. */
   readonly projectQuality: import('../project-authoring/project-quality').ProjectQualityFacade;
+  /** Explicit-target, Webview-independent durable .nkv authoring. */
+  readonly authoring: NekoCutAuthoringAPI;
 
   timeline: {
     /**
@@ -302,6 +343,21 @@ export interface CanvasImportAssetResult {
   readonly mediaType: 'image' | 'video' | 'audio';
 }
 
+export interface CanvasProjectAuthoringImportAssetRequest {
+  readonly target: import('../project-authoring').NekoProjectAuthoringTarget;
+  readonly asset: Omit<CanvasImportAssetRequest, 'target'>;
+}
+
+export interface CanvasProjectAuthoringImportAssetResult extends CanvasImportAssetResult {
+  readonly projectRef: import('./media-quality').QualityProjectRef;
+}
+
+export interface NekoCanvasAuthoringAPI {
+  importAsset(
+    request: CanvasProjectAuthoringImportAssetRequest,
+  ): Promise<CanvasProjectAuthoringImportAssetResult>;
+}
+
 export interface CanvasPlaybackRevealWorkspaceRequest {
   readonly sourceCanvasUri?: string;
   readonly routeId?: string;
@@ -382,6 +438,9 @@ export interface NekoCanvasAPI {
    * Import media/resource facts into a Canvas document through headless authoring.
    */
   importAsset(asset: CanvasImportAssetRequest): Promise<CanvasImportAssetResult>;
+
+  /** Explicit-target, Webview-independent durable .nkc authoring. */
+  readonly authoring: NekoCanvasAuthoringAPI;
 
   canvas: {
     /**
@@ -984,6 +1043,57 @@ export const NEKO_EXTENSION_IDS = {
   NEKO_AUTH: 'neko.neko-auth',
   NEKO_ASSETS: 'neko.neko-assets',
 } as const;
+
+// =============================================================================
+// NekoAudio API
+// =============================================================================
+
+export interface AudioProjectAuthoringImportSourceRequest {
+  readonly target: import('../project-authoring').NekoProjectAuthoringTarget;
+  readonly sourcePath: string;
+  readonly name?: string;
+  readonly trackId?: string;
+}
+
+export interface AudioProjectAuthoringImportedSource {
+  readonly sourcePath: string;
+  readonly trackId: string;
+  readonly elementId: string;
+  readonly duration: number;
+  readonly createdTrack: boolean;
+}
+
+export interface NekoAudioAuthoringAPI {
+  importSource(
+    request: AudioProjectAuthoringImportSourceRequest,
+  ): Promise<
+    import('../project-authoring').NekoProjectAuthoringResult<AudioProjectAuthoringImportedSource>
+  >;
+}
+
+export interface NekoAudioAPI {
+  readonly projectQuality: import('../project-authoring/project-quality').ProjectQualityFacade;
+  /** Explicit-target, Webview-independent durable .nka authoring. */
+  readonly authoring: NekoAudioAuthoringAPI;
+  readonly isAvailable: boolean;
+  readonly port: number | null;
+  probeAudio(filePath: string): Promise<{
+    readonly duration: number;
+    readonly codec: string;
+    readonly sampleRate: number;
+    readonly channels: number;
+    readonly bitrate?: number;
+    readonly format: string;
+  }>;
+  getWaveform(filePath: string): Promise<{
+    readonly peaks: number[];
+    readonly channelPeaks?: number[][];
+    readonly duration: number;
+    readonly sampleRate: number;
+    readonly channels?: number;
+    readonly peaksPerSecond?: number;
+  }>;
+}
 
 // =============================================================================
 // P3: Skill Provider Interface

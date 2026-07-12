@@ -21,6 +21,9 @@ import {
   type CanvasData,
   type CanvasImportAssetRequest,
   type CanvasImportAssetResult,
+  type CanvasProjectAuthoringImportAssetRequest,
+  type CanvasProjectAuthoringImportAssetResult,
+  type QualityProjectRef,
   type CanvasAgentApplyContentResult,
   type CanvasAgentContentPayload,
   type CanvasHeadlessApplyOperationsRequest,
@@ -142,6 +145,7 @@ export class CanvasProjectAuthoringService {
   }): Promise<{
     readonly nodeId: string;
     readonly documentUri: string;
+    readonly projectRef: QualityProjectRef;
   }> {
     const result = await this.withMutation(input.target, input.fallbackTitle, (canvasData) => {
       const plan = planCanvasNodeCreation({ canvasData }, input.node);
@@ -163,14 +167,35 @@ export class CanvasProjectAuthoringService {
     if (!result.nodeId) {
       throw new Error('Headless Canvas node creation did not return a node id.');
     }
-    return { nodeId: result.nodeId, documentUri: result.documentUri };
+    if (!result.projectRef) {
+      throw new Error('Headless Canvas node creation did not return a project revision.');
+    }
+    return {
+      nodeId: result.nodeId,
+      documentUri: result.documentUri,
+      projectRef: result.projectRef,
+    };
+  }
+
+  async importAssetAuthoring(
+    request: CanvasProjectAuthoringImportAssetRequest,
+  ): Promise<CanvasProjectAuthoringImportAssetResult> {
+    assertExplicitCanvasAuthoringTarget(request.target);
+    const result = await this.importAsset({
+      asset: request.asset,
+      target: request.target,
+    });
+    if (!result.projectRef) {
+      throw new Error('Headless Canvas asset import did not return a project revision.');
+    }
+    return { ...result, projectRef: result.projectRef };
   }
 
   async importAsset(input: {
     readonly asset: CanvasImportAssetRequest;
     readonly target?: CanvasHeadlessAuthoringTarget;
     readonly fallbackTitle?: string;
-  }): Promise<CanvasImportAssetResult> {
+  }): Promise<CanvasImportAssetResult & { readonly projectRef: QualityProjectRef }> {
     const mediaType = normalizeImportedMediaType(input.asset.type, input.asset.path);
     const result = await this.createNode({
       target: input.asset.target ?? input.target,
@@ -186,6 +211,7 @@ export class CanvasProjectAuthoringService {
       documentUri: result.documentUri,
       nodeId: result.nodeId,
       mediaType,
+      projectRef: result.projectRef,
     };
   }
 
@@ -569,6 +595,16 @@ function createImportedAssetCanvasTitle(asset: CanvasImportAssetRequest): string
     asset.resourceRef?.id ||
     'Agent Canvas';
   return sanitizeCanvasFileName(sourceTitle).slice(0, 80) || 'Agent Canvas';
+}
+
+function assertExplicitCanvasAuthoringTarget(
+  target: CanvasProjectAuthoringImportAssetRequest['target'],
+): void {
+  if (target.kind === 'active' || (!target.documentUri && target.kind !== 'new')) {
+    throw new Error(
+      'missing-authoring-target: Canvas project authoring requires an explicit file or new target.',
+    );
+  }
 }
 
 function normalizeImportedMediaType(

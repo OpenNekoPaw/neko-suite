@@ -179,6 +179,10 @@ export async function activate(
   const timelineBridge = new TimelineToolBridge(new TimelineToolExecutor());
   const api: NekoCutAPI & ISkillProvider = {
     projectQuality,
+    authoring: {
+      importGeneratedClip: (request) =>
+        bootstrapResult.cutProjectAuthoringService.importGeneratedClip(request),
+    },
     timeline: {
       getInfo: () => timelineBridge.getInfo(),
       addElement: (config) => timelineBridge.addElement(config),
