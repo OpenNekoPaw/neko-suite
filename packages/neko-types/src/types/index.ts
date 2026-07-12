@@ -79,6 +79,7 @@ export * from './external-research';
 export * from './aiAction';
 
 // Task core types (TaskManager interfaces)
+export * from './agent-runtime-scope';
 export * from './task';
 
 // Task Views (Extension ↔ Webview DTO)
