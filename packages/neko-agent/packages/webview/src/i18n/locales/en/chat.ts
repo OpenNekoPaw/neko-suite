@@ -13,6 +13,7 @@ export const chat = {
   'chat.agentRun.elapsedLabel': 'Elapsed time for this run',
   'chat.autoMode': 'Auto',
   'chat.selectModel': 'Select model',
+  'chat.modelsLoading': 'Loading models...',
   'chat.noModelsAvailable': 'No available models',
   'chat.selectAgent': 'Select agent',
   'chat.defaultAgent': 'Default',

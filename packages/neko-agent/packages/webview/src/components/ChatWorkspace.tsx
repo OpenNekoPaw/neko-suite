@@ -99,6 +99,7 @@ export interface ChatWorkspaceProps {
   clearMessages: () => void;
   // Config
   settings: SettingsState;
+  modelCatalogStatus?: 'loading' | 'ready';
   onModelSelect: (modelId: string) => void;
   mediaUnderstandingModels?: MediaUnderstandingModels;
   mentionItems: MentionItem[];
@@ -163,6 +164,7 @@ export function ChatWorkspace({
   embodyCharacterSession,
   clearMessages,
   settings,
+  modelCatalogStatus = 'ready',
   onModelSelect,
   mediaUnderstandingModels,
   mentionItems,
@@ -735,7 +737,8 @@ export function ChatWorkspace({
     },
     [settings.chatModelOptions, setEntryPromptMenu, setMediaModelSelection, setVisibleSessionMode],
   );
-  const isModelConfigurationBusy = isThinking || workItems.some(isActiveWorkItem);
+  const isModelConfigurationBusy =
+    modelCatalogStatus === 'loading' || isThinking || workItems.some(isActiveWorkItem);
 
   const handlePromoteQueuedMessage = useCallback(
     (queueItemId: string) => {
@@ -768,6 +771,7 @@ export function ChatWorkspace({
   return (
     <InputAreaProvider
       isBusy={isModelConfigurationBusy}
+      modelCatalogStatus={modelCatalogStatus}
       sessionMode={sessionMode}
       conversationKind={conversationKind}
       onSessionModeChange={handleSessionModeChange}

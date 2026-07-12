@@ -85,6 +85,7 @@ export function AppShell() {
     >
       <ConversationController
         settings={settings}
+        hasConfigSnapshot={hasConfigSnapshot}
         setSettings={setSettings}
         setHasConfigSnapshot={setHasConfigSnapshot}
         setProjectFiles={setProjectFiles}

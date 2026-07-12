@@ -315,10 +315,12 @@ vi.mock('@/components/ChatView/InputArea', async () => {
       disabled?: boolean;
       entryPromptMenu?: 'generate-assets' | 'roleplay' | null;
     }) => {
-      const { onRequestFiles, selectedModel, mediaModelSelection } = useInputAreaContext();
+      const { isBusy, modelCatalogStatus, onRequestFiles, selectedModel, mediaModelSelection } =
+        useInputAreaContext();
       return (
         <div>
           <span data-testid="entry-selected-model">{selectedModel}</span>
+          <span data-testid="entry-config-state">{`${modelCatalogStatus}:${String(isBusy)}`}</span>
           <span data-testid="entry-media-models">
             {Object.values(mediaModelSelection).join('|')}
           </span>
@@ -345,6 +347,14 @@ vi.mock('@/components/ChatView/InputArea', async () => {
 });
 
 describe('ConversationController entry state', () => {
+  it('keeps the tabless composer pending until the global config snapshot arrives', () => {
+    render(<ConversationController {...createProps({ hasConfigSnapshot: false })} />);
+
+    expect(screen.getByTestId('entry-config-state').textContent).toBe('loading:true');
+    expect(screen.getByRole('textbox')).toHaveProperty('disabled', true);
+    expect(screen.getByRole('button', { name: 'Send' })).toHaveProperty('disabled', true);
+  });
+
   it('hydrates the tabless composer from global config defaults', () => {
     render(
       <ConversationController
@@ -1638,6 +1648,7 @@ interface CreatePropsOptions {
   readonly history?: readonly ConversationSummary[];
   readonly workItemsByConversation?: Map<string, Map<string, AgentWorkItem>>;
   readonly settings?: SettingsState;
+  readonly hasConfigSnapshot?: boolean;
 }
 
 function createProps(
@@ -1645,6 +1656,7 @@ function createProps(
 ): React.ComponentProps<typeof ConversationController> {
   return {
     settings: options.settings ?? createSettings(),
+    hasConfigSnapshot: options.hasConfigSnapshot ?? true,
     setSettings: vi.fn(),
     setHasConfigSnapshot: vi.fn(),
     setProjectFiles: vi.fn(),

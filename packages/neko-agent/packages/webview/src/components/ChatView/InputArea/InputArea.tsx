@@ -210,6 +210,7 @@ export function InputArea({
   // Global configuration from context (model, modes, compression, skills)
   const {
     sessionMode,
+    modelCatalogStatus = 'ready',
     onSessionModeChange,
     selectedModel,
     availableModels,
@@ -908,6 +909,7 @@ export function InputArea({
     sessionMode,
     selectedModel,
     availableModels,
+    modelCatalogStatus,
     mediaModelSelection,
     availableMediaModels,
     genCategory,

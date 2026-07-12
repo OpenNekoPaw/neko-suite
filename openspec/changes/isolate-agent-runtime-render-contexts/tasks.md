@@ -36,6 +36,7 @@
 - [x] 4.5 Remove conversation save/restore effects, foreground shared component rebinding, and active-conversation UI fallbacks.
 - [x] 4.6 Add concurrent/rapid-switch regression tests for input, attachment, configuration, Markdown, Timeline/projection, focus, and scroll isolation.
 - [x] 4.7 Require every ordinary Tab activation to hydrate its conversation settings snapshot before send, and project model refs from the validated model catalog.
+- [x] 4.8 Represent pending model catalogs explicitly so tabless and conversation composers cannot report an empty catalog or send before their owning config snapshot arrives.
 
 ## 5. Independent TUI Application and Session Runtimes
 

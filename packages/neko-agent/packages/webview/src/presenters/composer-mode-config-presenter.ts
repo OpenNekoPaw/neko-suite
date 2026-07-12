@@ -35,6 +35,7 @@ export function projectComposerModeConfig(input: {
   readonly sessionMode: SessionMode;
   readonly selectedModel: string;
   readonly availableModels: readonly ChatModelOption[];
+  readonly modelCatalogStatus?: 'loading' | 'ready';
   readonly mediaModelSelection: Readonly<MediaModelSelection>;
   readonly availableMediaModels: readonly ChatModelOption[];
   readonly genCategory: GenCategory;
@@ -69,11 +70,16 @@ export function projectComposerModeConfig(input: {
 function projectAgentConfig(input: {
   readonly selectedModel: string;
   readonly availableModels: readonly ChatModelOption[];
+  readonly modelCatalogStatus?: 'loading' | 'ready';
   readonly llmConfig: AgentLlmConfig;
 }): AgentConfigProjection {
   return {
     selectedModelId: input.selectedModel,
-    selectedModelLabel: getSelectedModelLabel(input.selectedModel, input.availableModels),
+    selectedModelLabel: getSelectedModelLabel(
+      input.selectedModel,
+      input.availableModels,
+      input.modelCatalogStatus ?? 'ready',
+    ),
     reasoningLabelKey: `chat.agentConfig.reasoning.${input.llmConfig.reasoningPreset ?? 'balanced'}`,
     verbosityLabelKey: `chat.agentConfig.verbosity.${input.llmConfig.verbosityPreset ?? 'standard'}`,
     creativityLabelKey: `chat.agentConfig.creativity.${input.llmConfig.creativityPreset ?? 'creative'}`,
@@ -101,7 +107,9 @@ function projectMediaConfig(input: {
 function getSelectedModelLabel(
   selectedModel: string,
   availableModels: readonly ChatModelOption[],
+  modelCatalogStatus: 'loading' | 'ready',
 ): string {
+  if (modelCatalogStatus === 'loading') return 'chat.modelsLoading';
   return (
     availableModels.find((model) => model.id === selectedModel)?.label ?? 'chat.noModelsAvailable'
   );

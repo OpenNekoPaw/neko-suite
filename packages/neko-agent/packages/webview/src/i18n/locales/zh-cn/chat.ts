@@ -13,6 +13,7 @@ export const chat = {
   'chat.agentRun.elapsedLabel': '本轮已用时间',
   'chat.autoMode': '自动',
   'chat.selectModel': '选择模型',
+  'chat.modelsLoading': '正在加载模型…',
   'chat.noModelsAvailable': '无可用模型',
   'chat.selectAgent': '选择智能体',
   'chat.defaultAgent': '默认',

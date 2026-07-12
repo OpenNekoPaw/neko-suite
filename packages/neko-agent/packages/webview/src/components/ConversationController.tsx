@@ -129,6 +129,7 @@ interface HeaderRenderProps {
 export interface ConversationControllerProps {
   // From AppShell (config + resource state)
   settings: SettingsState;
+  hasConfigSnapshot: boolean;
   setSettings: React.Dispatch<React.SetStateAction<SettingsState>>;
   setHasConfigSnapshot: React.Dispatch<React.SetStateAction<boolean>>;
   setProjectFiles: React.Dispatch<React.SetStateAction<ProjectFileInfo[]>>;
@@ -175,6 +176,7 @@ function applyConversationSettingsSnapshot(
 
 export function ConversationController({
   settings,
+  hasConfigSnapshot,
   setSettings,
   setHasConfigSnapshot,
   setProjectFiles,
@@ -1320,7 +1322,8 @@ export function ConversationController({
               onEntryAction={handleEntryAction}
             />
             <InputAreaProvider
-              isBusy={false}
+              isBusy={!hasConfigSnapshot}
+              modelCatalogStatus={hasConfigSnapshot ? 'ready' : 'loading'}
               sessionMode={entrySessionMode}
               onSessionModeChange={handleEntrySessionModeChange}
               selectedModel={entrySelectedModel}
@@ -1363,7 +1366,7 @@ export function ConversationController({
                 isThinking={false}
                 onInputChange={updateEntryInputValue}
                 onSend={handleEntryInputSend}
-                disabled={isForegroundConversationActivationPending}
+                disabled={isForegroundConversationActivationPending || !hasConfigSnapshot}
                 entryPromptMenu={entryPromptMenu}
                 onEntryPromptMenuChange={setEntryPromptMenu}
               />
@@ -1428,6 +1431,11 @@ export function ConversationController({
               ...activeSettings,
               ...settingsSnapshotByConversationRef.current.get(tab.conversationId)?.settingsPatch,
             }}
+            modelCatalogStatus={
+              settingsSnapshotByConversationRef.current.has(tab.conversationId)
+                ? 'ready'
+                : 'loading'
+            }
             onModelSelect={(modelId) =>
               handleModelSelectForConversation(tab.conversationId, modelId)
             }

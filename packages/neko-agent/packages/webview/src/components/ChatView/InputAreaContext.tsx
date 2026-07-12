@@ -40,6 +40,8 @@ export interface MediaUnderstandingSelection {
 export interface InputAreaContextValue {
   /** Current conversation is executing; model and generation config must stay locked. */
   isBusy?: boolean;
+  /** Distinguishes a pending host snapshot from a loaded catalog with no models. */
+  modelCatalogStatus?: 'loading' | 'ready';
   // Chat Model
   selectedModel: string;
   availableModels: ChatModelOption[];
@@ -102,6 +104,7 @@ export function InputAreaProvider({
   const memoized = useMemo<InputAreaContextValue>(
     () => ({
       isBusy: value.isBusy,
+      modelCatalogStatus: value.modelCatalogStatus,
       selectedModel: value.selectedModel,
       availableModels: value.availableModels,
       onModelSelect: value.onModelSelect,
@@ -141,6 +144,7 @@ export function InputAreaProvider({
     }),
     [
       value.isBusy,
+      value.modelCatalogStatus,
       value.selectedModel,
       value.availableModels,
       value.onModelSelect,

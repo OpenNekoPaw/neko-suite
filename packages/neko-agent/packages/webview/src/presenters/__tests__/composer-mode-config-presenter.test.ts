@@ -31,6 +31,22 @@ const mediaModels: ChatModelOption[] = [
 ];
 
 describe('composer-mode-config-presenter', () => {
+  it('distinguishes a pending model catalog from an empty catalog', () => {
+    const projection = projectComposerModeConfig({
+      sessionMode: 'agent',
+      selectedModel: '',
+      availableModels: [],
+      modelCatalogStatus: 'loading',
+      mediaModelSelection: { image: 'none', video: 'none', audio: 'none' },
+      availableMediaModels: [],
+      genCategory: 'image',
+      genParams: DEFAULT_GENERATION_PARAMS,
+      llmConfig: {},
+    });
+
+    expect(projection.agent?.selectedModelLabel).toBe('chat.modelsLoading');
+  });
+
   it('projects Agent model and behavior preset controls', () => {
     const projection = projectComposerModeConfig({
       sessionMode: 'agent',
