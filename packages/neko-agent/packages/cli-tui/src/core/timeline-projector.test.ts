@@ -120,14 +120,10 @@ describe('createTerminalTimelineProjector', () => {
     });
 
     const rows = projector.projectMessage({
-      type: 'agentTurnTimeline',
-      connectionEpoch: 'epoch-1',
+      type: 'agentTurnTimelineUpdate',
       conversationId: 'conv-1',
       turnId: 'turn-1',
       messageId: 'msg-1',
-      schemaVersion: 2,
-      batchKind: 'delta',
-      deliveryRevision: 1,
       operations: [
         {
           operation: 'upsert',
@@ -185,14 +181,10 @@ describe('createTerminalTimelineProjector', () => {
     });
 
     projector.projectMessage({
-      type: 'agentTurnTimeline',
-      connectionEpoch: 'epoch-1',
+      type: 'agentTurnTimelineUpdate',
       conversationId: 'conv-1',
       turnId: 'turn-1',
       messageId: 'msg-1',
-      schemaVersion: 2,
-      batchKind: 'delta',
-      deliveryRevision: 1,
       operations: [
         {
           operation: 'upsert',
@@ -599,14 +591,10 @@ describe('createTerminalTimelineProjector', () => {
     });
 
     const rows = projector.projectMessage({
-      type: 'agentTurnTimeline',
-      connectionEpoch: 'epoch-1',
+      type: 'agentTurnTimelineUpdate',
       conversationId: 'conv-1',
       turnId: 'turn-1',
       messageId: 'msg-1',
-      schemaVersion: 2,
-      batchKind: 'delta',
-      deliveryRevision: 1,
       operations: [
         {
           operation: 'upsert',
@@ -656,14 +644,10 @@ describe('createTerminalTimelineProjector', () => {
     });
 
     const rows = projector.projectMessage({
-      type: 'agentTurnTimeline',
-      connectionEpoch: 'epoch-1',
+      type: 'agentTurnTimelineUpdate',
       conversationId: 'conv-1',
       turnId: 'turn-1',
       messageId: 'msg-1',
-      schemaVersion: 2,
-      batchKind: 'delta',
-      deliveryRevision: 1,
       operations: [
         {
           operation: 'upsert',

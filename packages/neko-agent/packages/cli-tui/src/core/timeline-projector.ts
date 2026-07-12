@@ -6,7 +6,6 @@ import {
 } from '@neko/agent/runtime';
 import type {
   AgentTurnTimelineItem,
-  AgentTurnTimelineMessage,
   AgentTurnTimelineOperation,
   AgentWorkItem,
   MediaTaskCreatedMessage,
@@ -27,7 +26,6 @@ import type {
 } from '../types/state';
 
 export type TerminalTimelineMessage =
-  | AgentTurnTimelineMessage
   | AgentTurnTimelineAccumulatorUpdate
   | MediaTaskCreatedMessage
   | MediaTaskProgressMessage
@@ -405,7 +403,6 @@ export function createTerminalTimelineProjector(
 
     projectMessage(message) {
       switch (message.type) {
-        case 'agentTurnTimeline':
         case 'agentTurnTimelineUpdate':
           return projectTimelineOperations({
             operations: message.operations,
