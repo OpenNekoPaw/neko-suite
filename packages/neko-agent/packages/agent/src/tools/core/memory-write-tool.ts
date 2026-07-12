@@ -6,8 +6,9 @@
  * directly; clients or domain runtimes validate and persist accepted proposals.
  */
 
-import type { ToolResult, ToolCategory, ToolParameters } from '@neko/shared';
+import type { ToolResult, ToolCategory, ToolParameters, ToolExecuteOptions } from '@neko/shared';
 import { BuiltinTool } from '@neko/shared';
+import { presentInvalidToolArguments, presentMemoryWriteFailure } from './core-tool-presentation';
 
 export type ProjectMemoryMutationAction = 'upsert' | 'remove';
 
@@ -21,7 +22,7 @@ export interface ProjectMemoryMutationProposal {
 export interface ProjectMemoryMutationProposalSink {
   proposeProjectMemoryMutation(
     proposal: ProjectMemoryMutationProposal,
-  ): Promise<{ readonly proposalId?: string; readonly message?: string } | void>;
+  ): Promise<{ readonly proposalId?: string } | void>;
 }
 
 export interface MemoryWriteToolOptions {
@@ -65,22 +66,26 @@ export class MemoryWriteTool extends BuiltinTool {
     super();
   }
 
-  async execute(args: Record<string, unknown>): Promise<ToolResult> {
+  async execute(args: Record<string, unknown>, options?: ToolExecuteOptions): Promise<ToolResult> {
     const validation = this.validateArgs(args);
     if (!validation.valid) {
-      return this.error(validation.error ?? 'Invalid arguments');
+      return this.error(presentInvalidToolArguments(this.name, options?.metadata?.['locale']));
     }
 
     const action = args.action as 'upsert' | 'remove';
     const key = args.key as string;
 
     if (!key.trim()) {
-      return this.error('`key` must not be empty');
+      return this.error(
+        presentMemoryWriteFailure('empty-key', undefined, options?.metadata?.['locale']),
+      );
     }
 
     const proposal = createProjectMemoryMutationProposal(action, key, args.content);
     if (!proposal) {
-      return this.error('`content` is required for action `upsert`');
+      return this.error(
+        presentMemoryWriteFailure('content-required', undefined, options?.metadata?.['locale']),
+      );
     }
 
     try {
@@ -89,13 +94,14 @@ export class MemoryWriteTool extends BuiltinTool {
         proposal,
         committed: false,
         ...(sinkResult?.proposalId ? { proposalId: sinkResult.proposalId } : {}),
-        message:
-          sinkResult?.message ??
-          `Project memory ${action} proposal created for section "${key}". Client/domain runtime must validate and commit it.`,
       });
     } catch (err) {
       return this.error(
-        `Failed to propose project memory update: ${err instanceof Error ? err.message : String(err)}`,
+        presentMemoryWriteFailure(
+          'proposal-failed',
+          err instanceof Error ? err.message : String(err),
+          options?.metadata?.['locale'],
+        ),
       );
     }
   }

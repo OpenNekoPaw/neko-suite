@@ -6,13 +6,18 @@
 
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
-import type { ToolResult, ToolCategory, ToolParameters } from '@neko/shared';
+import type { ToolResult, ToolCategory, ToolParameters, ToolExecuteOptions } from '@neko/shared';
 import { BuiltinTool } from '@neko/shared';
 import {
   createNoWorkspaceFileAccessPolicy,
   createWorkspaceFileAccessPolicy,
   type CoreFileAccessPolicy,
 } from './file-access-policy';
+import {
+  presentCoreFileAccessDenial,
+  presentGrepFailure,
+  presentInvalidToolArguments,
+} from './core-tool-presentation';
 
 const MAX_RESULTS = 100;
 const MAX_FILE_SIZE = 1024 * 1024; // 1MB per file
@@ -73,10 +78,10 @@ export class GrepTool extends BuiltinTool {
         : createNoWorkspaceFileAccessPolicy());
   }
 
-  async execute(args: Record<string, unknown>): Promise<ToolResult> {
+  async execute(args: Record<string, unknown>, options?: ToolExecuteOptions): Promise<ToolResult> {
     const validation = this.validateArgs(args);
     if (!validation.valid) {
-      return this.error(validation.error ?? 'Invalid arguments');
+      return this.error(presentInvalidToolArguments(this.name, options?.metadata?.['locale']));
     }
 
     const pattern = args.pattern as string;
@@ -88,12 +93,16 @@ export class GrepTool extends BuiltinTool {
     try {
       regex = new RegExp(pattern, 'gi');
     } catch {
-      return this.error(`Invalid regex pattern: ${pattern}`);
+      return this.error(
+        presentGrepFailure('invalid-pattern', pattern, options?.metadata?.['locale']),
+      );
     }
 
     const authorization = this.fileAccessPolicy?.authorize(searchPath, 'read');
     if (authorization && !authorization.allowed) {
-      return this.error(authorization.message ?? `Unauthorized search path: ${searchPath}`);
+      return this.error(
+        presentCoreFileAccessDenial('search-path', authorization, options?.metadata?.['locale']),
+      );
     }
     const resolved = authorization?.path ?? path.resolve(this.defaultCwd ?? '.', searchPath);
     const matches: GrepMatch[] = [];
@@ -105,13 +114,23 @@ export class GrepTool extends BuiltinTool {
       } else if (stat.isDirectory()) {
         await this.searchDir(resolved, regex, include, contextLines, matches);
       } else {
-        return this.error(`Path is not a file or directory: ${searchPath}`);
+        return this.error(
+          presentGrepFailure('invalid-path-kind', searchPath, options?.metadata?.['locale']),
+        );
       }
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
-        return this.error(`Path not found: ${searchPath}`);
+        return this.error(
+          presentGrepFailure('not-found', searchPath, options?.metadata?.['locale']),
+        );
       }
-      return this.error(`Search failed: ${err instanceof Error ? err.message : String(err)}`);
+      return this.error(
+        presentGrepFailure(
+          'search-failed',
+          err instanceof Error ? err.message : String(err),
+          options?.metadata?.['locale'],
+        ),
+      );
     }
 
     const truncated = matches.length > MAX_RESULTS;

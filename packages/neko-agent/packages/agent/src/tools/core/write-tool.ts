@@ -7,13 +7,18 @@
 
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
-import type { ToolResult, ToolCategory, ToolParameters } from '@neko/shared';
+import type { ToolResult, ToolCategory, ToolParameters, ToolExecuteOptions } from '@neko/shared';
 import { BuiltinTool } from '@neko/shared';
 import {
   createNoWorkspaceFileAccessPolicy,
   createWorkspaceFileAccessPolicy,
   type CoreFileAccessPolicy,
 } from './file-access-policy';
+import {
+  presentCoreFileAccessDenial,
+  presentInvalidToolArguments,
+  presentWriteFailure,
+} from './core-tool-presentation';
 
 export interface WriteToolOptions {
   /** Default working directory; relative paths are resolved against this */
@@ -61,10 +66,10 @@ export class WriteTool extends BuiltinTool {
   override readonly requiresConfirmation = true;
   override readonly isDestructive = true;
 
-  async execute(args: Record<string, unknown>): Promise<ToolResult> {
+  async execute(args: Record<string, unknown>, options?: ToolExecuteOptions): Promise<ToolResult> {
     const validation = this.validateArgs(args);
     if (!validation.valid) {
-      return this.error(validation.error ?? 'Invalid arguments');
+      return this.error(presentInvalidToolArguments(this.name, options?.metadata?.['locale']));
     }
 
     const filePath = args.file_path as string;
@@ -74,7 +79,9 @@ export class WriteTool extends BuiltinTool {
     try {
       const authorization = this.fileAccessPolicy?.authorize(filePath, 'write');
       if (authorization && !authorization.allowed) {
-        return this.error(authorization.message ?? `Unauthorized file write: ${filePath}`);
+        return this.error(
+          presentCoreFileAccessDenial('write-file', authorization, options?.metadata?.['locale']),
+        );
       }
       const resolved = authorization?.path ?? path.resolve(this.defaultCwd ?? '.', filePath);
 
@@ -96,7 +103,10 @@ export class WriteTool extends BuiltinTool {
       });
     } catch (err) {
       return this.error(
-        `Failed to write file: ${err instanceof Error ? err.message : String(err)}`,
+        presentWriteFailure(
+          err instanceof Error ? err.message : String(err),
+          options?.metadata?.['locale'],
+        ),
       );
     }
   }

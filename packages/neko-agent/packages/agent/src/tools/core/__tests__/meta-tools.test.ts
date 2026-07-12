@@ -66,8 +66,7 @@ describe('core meta tools', () => {
 
   it('awaits asynchronous skill activation before returning success', async () => {
     const activateSkill = vi.fn(async () => ({
-      success: true,
-      message: 'Activated skill "commit"',
+      success: true as const,
       allowedTools: ['bash'],
     }));
     const tool = new ActivateSkillTool();
@@ -89,7 +88,6 @@ describe('core meta tools', () => {
         activated: true,
         skillName: 'commit',
         reason: 'User asked for a commit message after I inspected the request.',
-        message: 'Activated skill "commit"',
         allowedTools: ['bash'],
       },
     });
@@ -101,8 +99,7 @@ describe('core meta tools', () => {
 
   it('projects the canonical skill name and observable legacy alias diagnostic', async () => {
     const activateSkill = vi.fn(async () => ({
-      success: true,
-      message: 'Activated skill "media-quality-review"',
+      success: true as const,
       skillName: 'media-quality-review',
       requestedSkillName: 'quality-assessment',
       diagnostics: [
@@ -133,11 +130,9 @@ describe('core meta tools', () => {
         skillName: 'media-quality-review',
         requestedSkillName: 'quality-assessment',
         reason: 'Review generated image quality with the canonical media gate.',
-        message: 'Activated skill "media-quality-review"',
         diagnostics: [
           {
             code: 'legacy-skill-alias',
-            message: 'Legacy skill $quality-assessment was replaced by $media-quality-review.',
             skillName: 'media-quality-review',
           },
         ],
@@ -147,8 +142,7 @@ describe('core meta tools', () => {
 
   it('describes and forwards lifecycle slots for supplemental skill activation', async () => {
     const activateSkill = vi.fn(async () => ({
-      success: true,
-      message: 'Activated skill "canvas-authoring"',
+      success: true as const,
       lifecycleRecordId: 'record-canvas',
     }));
     const tool = new ActivateSkillTool();
@@ -175,7 +169,6 @@ describe('core meta tools', () => {
         skillName: 'canvas-authoring',
         reason: 'Need Canvas authoring guidance without replacing comic storyboard output rules.',
         slot: 'referenceSkill',
-        message: 'Activated skill "canvas-authoring"',
         lifecycleRecordId: 'record-canvas',
       },
     });
@@ -186,10 +179,9 @@ describe('core meta tools', () => {
     });
   });
 
-  it('localizes skill activation result messages for Chinese tool execution context', async () => {
+  it('keeps structured skill activation success locale-neutral in Chinese tool context', async () => {
     const activateSkill = vi.fn(async () => ({
-      success: true,
-      message: 'Activated skill "commit"',
+      success: true as const,
       allowedTools: ['bash'],
     }));
     const tool = new ActivateSkillTool();
@@ -206,7 +198,7 @@ describe('core meta tools', () => {
           skillName: 'commit',
           reason: '用户要求提交说明。',
         },
-        { metadata: { locale: 'zh-CN' } },
+        { metadata: { locale: 'zh-cn' } },
       ),
     ).resolves.toEqual({
       success: true,
@@ -214,10 +206,51 @@ describe('core meta tools', () => {
         activated: true,
         skillName: 'commit',
         reason: '用户要求提交说明。',
-        message: '已激活技能 "commit"',
         allowedTools: ['bash'],
       },
     });
+  });
+
+  it('localizes provider failure wrappers while preserving detail and ignoring diagnostic prose', async () => {
+    const activateSkill = vi.fn(async () => ({
+      success: false as const,
+      code: 'provider-error' as const,
+      detail: 'provider 原文: E42',
+      diagnostics: [
+        {
+          code: 'skill-activation-rejected' as const,
+          message: 'POISON LEGACY PROSE',
+          conversationId: 'conv-原文',
+          skillName: 'skill-原文',
+          slot: 'domainSkill' as const,
+        },
+      ],
+    }));
+    const tool = new ActivateSkillTool();
+    tool.setSkillProvider({
+      listSkills: vi.fn(),
+      getActiveSkill: vi.fn(),
+      activateSkill,
+      deactivateSkill: vi.fn(),
+    });
+
+    const english = await tool.execute({ skillName: 'skill-原文', reason: 'needed' });
+    const chinese = await tool.execute(
+      { skillName: 'skill-原文', reason: 'needed' },
+      { metadata: { locale: 'zh-cn' } },
+    );
+
+    expect(english).toEqual({
+      success: false,
+      error:
+        'The provider failed while activating skill "skill-原文". Details: {"code":"skill-activation-rejected","conversationId":"conv-原文","skillName":"skill-原文","slot":"domainSkill"}; provider 原文: E42',
+    });
+    expect(chinese).toEqual({
+      success: false,
+      error:
+        '激活技能 "skill-原文" 时提供商失败。 详情：{"code":"skill-activation-rejected","conversationId":"conv-原文","skillName":"skill-原文","slot":"domainSkill"}; provider 原文: E42',
+    });
+    expect(JSON.stringify([english, chinese])).not.toContain('POISON LEGACY PROSE');
   });
 
   it('rejects agent-driven skill activation without a non-empty reason', async () => {
@@ -232,19 +265,71 @@ describe('core meta tools', () => {
 
     await expect(tool.execute({ skillName: 'commit' })).resolves.toEqual({
       success: false,
-      error: 'Missing required field: reason',
+      error: 'Invalid skill activation arguments.',
     });
     await expect(tool.execute({ skillName: 'commit', reason: '   ' })).resolves.toEqual({
       success: false,
-      error: 'Activation reason is required',
+      error: 'An activation reason is required.',
+    });
+    expect(activateSkill).not.toHaveBeenCalled();
+  });
+
+  it('localizes Skill Tool boundary failures without translating stable input values', async () => {
+    const activateTool = new ActivateSkillTool();
+    const deactivateTool = new DeactivateSkillTool();
+
+    await expect(
+      activateTool.execute(
+        { skillName: 'commit', reason: 'needed' },
+        { metadata: { locale: 'zh-cn' } },
+      ),
+    ).resolves.toEqual({
+      success: false,
+      error: '技能系统不可用。',
+    });
+    await expect(deactivateTool.execute({}, { metadata: { locale: 'zh-cn' } })).resolves.toEqual({
+      success: false,
+      error: '技能系统不可用。',
+    });
+
+    const activateSkill = vi.fn();
+    activateTool.setSkillProvider({
+      listSkills: vi.fn(),
+      getActiveSkill: vi.fn(),
+      activateSkill,
+      deactivateSkill: vi.fn(),
+    });
+
+    await expect(
+      activateTool.execute({ skillName: 'commit' }, { metadata: { locale: 'zh-cn' } }),
+    ).resolves.toEqual({
+      success: false,
+      error: '技能激活参数无效。',
+    });
+    await expect(
+      activateTool.execute(
+        { skillName: 'commit', reason: '   ' },
+        { metadata: { locale: 'zh-cn' } },
+      ),
+    ).resolves.toEqual({
+      success: false,
+      error: '必须提供激活原因。',
+    });
+    await expect(
+      activateTool.execute(
+        { skillName: 'commit', reason: 'needed', slot: 'slot-原文' },
+        { metadata: { locale: 'zh-cn' } },
+      ),
+    ).resolves.toEqual({
+      success: false,
+      error: '技能生命周期槽位无效：slot-原文',
     });
     expect(activateSkill).not.toHaveBeenCalled();
   });
 
   it('awaits asynchronous skill deactivation before returning success', async () => {
     const deactivateSkill = vi.fn(async () => ({
-      success: true,
-      message: 'Skill deactivated',
+      success: true as const,
     }));
     const tool = new DeactivateSkillTool();
     tool.setSkillProvider({
@@ -258,7 +343,6 @@ describe('core meta tools', () => {
       success: true,
       data: {
         deactivated: true,
-        message: 'Skill deactivated',
       },
     });
     expect(deactivateSkill).toHaveBeenCalled();
@@ -267,7 +351,7 @@ describe('core meta tools', () => {
   it('returns locked Creation stage persona diagnostics through GetContext and DeactivateSkill', async () => {
     const deactivateSkill = vi.fn(async () => ({
       success: false,
-      message: 'Creation stage persona is cleared when its owning stage exits',
+      code: 'deactivation-rejected' as const,
       diagnostics: [
         {
           code: 'locked-deactivation' as const,
@@ -314,7 +398,6 @@ describe('core meta tools', () => {
                 id: 'record-stage',
                 slot: 'stagePersona',
                 clearable: false,
-                lockedReason: 'Creation stage persona is cleared when its owning stage exits',
               }),
             ],
             diagnostics: [],
@@ -322,9 +405,14 @@ describe('core meta tools', () => {
         }),
       }),
     );
+    const contextResult = await contextTool.execute({});
+    expect(JSON.stringify(contextResult)).not.toContain(
+      'Creation stage persona is cleared when its owning stage exits',
+    );
     await expect(deactivateTool.execute({ recordId: 'record-stage' })).resolves.toEqual({
       success: false,
-      error: 'Creation stage persona is cleared when its owning stage exits',
+      error:
+        'The skill was not deactivated. Details: {"code":"locked-deactivation","conversationId":"conv-1","skillName":"creation-persona","slot":"stagePersona","recordId":"record-stage"}',
     });
     expect(deactivateSkill).toHaveBeenCalledWith({ recordId: 'record-stage' });
   });
@@ -336,7 +424,15 @@ describe('core meta tools', () => {
       relativePath: 'story-review',
       absolutePath: '/workspace/.agents/skills/story-review',
       fingerprint: 'sha256:story-review',
-      diagnostics: [],
+      diagnostics: [
+        {
+          area: 'creation' as const,
+          code: 'skill-created-warning',
+          severity: 'warning' as const,
+          message: 'POISON SUCCESS PROSE',
+          path: 'story-review',
+        },
+      ],
     }));
     const tool = new CreateSkillTool();
     tool.setSkillProvider({
@@ -380,22 +476,31 @@ describe('core meta tools', () => {
         relativePath: 'story-review',
         absolutePath: '/workspace/.agents/skills/story-review',
         fingerprint: 'sha256:story-review',
-        diagnostics: [],
+        diagnostics: [
+          {
+            area: 'creation',
+            code: 'skill-created-warning',
+            severity: 'warning',
+            path: 'story-review',
+          },
+        ],
       },
     });
+    expect(JSON.stringify(await tool.execute(input))).not.toContain('POISON SUCCESS PROSE');
     expect(createSkill).toHaveBeenCalledWith(input);
   });
 
-  it('returns typed creation diagnostics from the Host provider', async () => {
+  it('projects typed creation failures by locale while preserving external detail', async () => {
     const createSkill = vi.fn(async () => {
-      throw Object.assign(new Error('Skill directory already exists'), {
+      throw Object.assign(new Error('POISON LEGACY PROSE'), {
         code: 'skill-already-exists',
+        detail: 'provider 原文: E42',
         diagnostics: [
           {
             area: 'creation',
             code: 'skill-already-exists',
             severity: 'error',
-            message: 'Skill directory already exists',
+            message: 'POISON LEGACY PROSE',
             path: 'story-review',
           },
         ],
@@ -410,18 +515,21 @@ describe('core meta tools', () => {
       createSkill,
     });
 
-    await expect(
-      tool.execute({
-        target: 'project',
-        skill: {
-          name: 'story-review',
-          description: 'Review story structure.',
-          body: '# Story Review',
-        },
-      }),
-    ).resolves.toEqual({
+    const input = {
+      target: 'project',
+      skill: {
+        name: 'story-review',
+        description: 'Review story structure.',
+        body: '# Story Review',
+      },
+    };
+    const english = await tool.execute(input);
+    const chinese = await tool.execute(input, { metadata: { locale: 'zh-cn' } });
+
+    expect(english).toEqual({
       success: false,
-      error: 'Skill directory already exists',
+      error:
+        'Skill "story-review" already exists. Details: {"area":"creation","code":"skill-already-exists","severity":"error","path":"story-review"}; provider 原文: E42',
       data: {
         code: 'skill-already-exists',
         diagnostics: [
@@ -429,12 +537,19 @@ describe('core meta tools', () => {
             area: 'creation',
             code: 'skill-already-exists',
             severity: 'error',
-            message: 'Skill directory already exists',
             path: 'story-review',
           },
         ],
+        detail: 'provider 原文: E42',
       },
     });
+    expect(chinese).toEqual({
+      success: false,
+      error:
+        '技能 "story-review" 已存在。 详情：{"area":"creation","code":"skill-already-exists","severity":"error","path":"story-review"}; provider 原文: E42',
+      data: english.data,
+    });
+    expect(JSON.stringify([english, chinese])).not.toContain('POISON LEGACY PROSE');
   });
 
   it('rejects malformed native Skill creation input before provider invocation', async () => {
@@ -448,19 +563,43 @@ describe('core meta tools', () => {
       createSkill,
     });
 
-    await expect(
-      tool.execute({
-        target: 'project',
-        skill: {
-          name: 'story-review',
-          description: 'Review story structure.',
-        },
-      }),
-    ).resolves.toEqual({
+    const invalidInput = {
+      target: 'project',
+      skill: {
+        name: 'story-review',
+        description: 'Review story structure.',
+      },
+    };
+    await expect(tool.execute(invalidInput)).resolves.toEqual({
       success: false,
       error: 'Invalid CreateSkill input',
     });
+    await expect(tool.execute(invalidInput, { metadata: { locale: 'zh-cn' } })).resolves.toEqual({
+      success: false,
+      error: 'CreateSkill 输入无效。',
+    });
     expect(createSkill).not.toHaveBeenCalled();
+  });
+
+  it('localizes unavailable Skill creation without invoking a fallback provider', async () => {
+    const tool = new CreateSkillTool();
+    const input = {
+      target: 'project',
+      skill: {
+        name: 'story-review',
+        description: 'Review story structure.',
+        body: '# Story Review',
+      },
+    };
+
+    await expect(tool.execute(input)).resolves.toEqual({
+      success: false,
+      error: 'Skill creation is not initialized',
+    });
+    await expect(tool.execute(input, { metadata: { locale: 'zh-cn' } })).resolves.toEqual({
+      success: false,
+      error: '技能创建功能不可用。',
+    });
   });
 
   it('rejects Host-owned or lifecycle fields instead of silently accepting them', async () => {
@@ -508,11 +647,13 @@ describe('core meta tools', () => {
     expect(tool.parameters.additionalProperties).toBe(false);
   });
 
-  it('sets execution mode through the typed Agent meta tool provider path', async () => {
+  it('sets execution mode through the typed Agent meta tool provider path without provider prose', async () => {
     const setExecutionMode = vi.fn(async () => ({
-      success: true,
-      message: 'Execution mode set to plan',
-      mode: 'plan' as const,
+      success: true as const,
+      changed: true,
+      requestedMode: 'plan' as const,
+      effectiveMode: 'plan' as const,
+      message: 'POISON LEGACY PROSE',
     }));
     const tool = new SetExecutionModeTool();
     tool.setSkillProvider({
@@ -523,18 +664,50 @@ describe('core meta tools', () => {
       setExecutionMode,
     });
 
-    await expect(tool.execute({ mode: 'plan', reason: 'Dry run first' })).resolves.toEqual({
+    const result = await tool.execute({ mode: 'plan', reason: 'Dry run first' });
+    expect(result).toEqual({
       success: true,
       data: {
         changed: true,
+        requestedMode: 'plan',
         mode: 'plan',
-        message: 'Execution mode set to plan',
       },
     });
+    expect(JSON.stringify(result)).not.toContain('POISON LEGACY PROSE');
     expect(setExecutionMode).toHaveBeenCalledWith({
       mode: 'plan',
       reason: 'Dry run first',
     });
+  });
+
+  it('localizes execution mode provider failures while preserving external detail', async () => {
+    const setExecutionMode = vi.fn(async () => ({
+      success: false as const,
+      code: 'provider-error' as const,
+      detail: 'provider 原文: E42',
+      message: 'POISON LEGACY PROSE',
+    }));
+    const tool = new SetExecutionModeTool();
+    tool.setSkillProvider({
+      listSkills: vi.fn(),
+      getActiveSkill: vi.fn(),
+      activateSkill: vi.fn(),
+      deactivateSkill: vi.fn(),
+      setExecutionMode,
+    });
+
+    const english = await tool.execute({ mode: 'ask' });
+    const chinese = await tool.execute({ mode: 'ask' }, { metadata: { locale: 'zh-cn' } });
+
+    expect(english).toEqual({
+      success: false,
+      error: 'The provider failed while activating the execution mode. Details: provider 原文: E42',
+    });
+    expect(chinese).toEqual({
+      success: false,
+      error: '激活执行模式时提供商失败。 详情：provider 原文: E42',
+    });
+    expect(JSON.stringify([english, chinese])).not.toContain('POISON LEGACY PROSE');
   });
 
   it('rejects invalid execution mode meta tool input before provider invocation', async () => {
@@ -550,9 +723,36 @@ describe('core meta tools', () => {
 
     await expect(tool.execute({ mode: 'hidden-idc' })).resolves.toEqual({
       success: false,
-      error: 'Invalid execution mode',
+      error: 'Invalid execution mode.',
+    });
+    await expect(
+      tool.execute({ mode: 'hidden-idc' }, { metadata: { locale: 'zh-cn' } }),
+    ).resolves.toEqual({
+      success: false,
+      error: '执行模式无效。',
+    });
+    await expect(
+      tool.execute({ mode: 'plan', reason: 42 }, { metadata: { locale: 'zh-cn' } }),
+    ).resolves.toEqual({
+      success: false,
+      error: '执行模式参数无效。',
     });
     expect(setExecutionMode).not.toHaveBeenCalled();
+  });
+
+  it('localizes unavailable execution mode activation without a fallback provider', async () => {
+    const tool = new SetExecutionModeTool();
+
+    await expect(tool.execute({ mode: 'auto' })).resolves.toEqual({
+      success: false,
+      error: 'Execution mode activation is unavailable.',
+    });
+    await expect(
+      tool.execute({ mode: 'auto' }, { metadata: { locale: 'zh-cn' } }),
+    ).resolves.toEqual({
+      success: false,
+      error: '执行模式激活功能不可用。',
+    });
   });
 });
 

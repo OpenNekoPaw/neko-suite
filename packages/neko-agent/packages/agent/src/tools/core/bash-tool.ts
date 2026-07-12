@@ -6,8 +6,14 @@
  */
 
 import { execFile } from 'node:child_process';
-import type { ToolResult, ToolCategory, ToolParameters } from '@neko/shared';
+import type { ToolResult, ToolCategory, ToolParameters, ToolExecuteOptions } from '@neko/shared';
 import { BuiltinTool } from '@neko/shared';
+import {
+  presentInvalidToolArguments,
+  presentOutputTruncationMarker,
+  presentOutputTruncationWarning,
+  presentProcessFailure,
+} from './core-tool-presentation';
 
 const DEFAULT_TIMEOUT = 120_000;
 const MAX_OUTPUT_BYTES = 100 * 1024; // 100KB
@@ -52,10 +58,10 @@ export class BashTool extends BuiltinTool {
     this.defaultTimeout = options?.timeout ?? DEFAULT_TIMEOUT;
   }
 
-  async execute(args: Record<string, unknown>): Promise<ToolResult> {
+  async execute(args: Record<string, unknown>, options?: ToolExecuteOptions): Promise<ToolResult> {
     const validation = this.validateArgs(args);
     if (!validation.valid) {
-      return this.error(validation.error ?? 'Invalid arguments');
+      return this.error(presentInvalidToolArguments(this.name, options?.metadata?.['locale']));
     }
 
     const command = args.command as string;
@@ -74,8 +80,8 @@ export class BashTool extends BuiltinTool {
         },
         (error, stdout, stderr) => {
           const exitCode = error ? ((error as { code?: number }).code ?? 1) : 0;
-          const truncatedStdout = truncateOutput(stdout);
-          const truncatedStderr = truncateOutput(stderr);
+          const truncatedStdout = truncateOutput(stdout, options?.metadata?.['locale']);
+          const truncatedStderr = truncateOutput(stderr, options?.metadata?.['locale']);
 
           if (
             error &&
@@ -86,7 +92,7 @@ export class BashTool extends BuiltinTool {
                 stdout: truncatedStdout,
                 stderr: truncatedStderr,
                 exitCode,
-                warning: 'Output truncated (exceeded 100KB limit)',
+                warning: presentOutputTruncationWarning(options?.metadata?.['locale']),
               }),
             );
             return;
@@ -104,16 +110,16 @@ export class BashTool extends BuiltinTool {
 
       // Handle timeout kill
       proc.on('error', (err) => {
-        resolve(this.error(`Process error: ${err.message}`));
+        resolve(this.error(presentProcessFailure(err.message, options?.metadata?.['locale'])));
       });
     });
   }
 }
 
-function truncateOutput(output: string): string {
+function truncateOutput(output: string, locale: unknown): string {
   if (Buffer.byteLength(output, 'utf-8') > MAX_OUTPUT_BYTES) {
     const truncated = output.slice(0, MAX_OUTPUT_BYTES);
-    return truncated + '\n... (output truncated)';
+    return `${truncated}\n${presentOutputTruncationMarker(locale)}`;
   }
   return output;
 }

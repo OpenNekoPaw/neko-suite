@@ -6,9 +6,14 @@
 
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
-import type { ToolResult, ToolCategory, ToolParameters } from '@neko/shared';
+import type { ToolResult, ToolCategory, ToolParameters, ToolExecuteOptions } from '@neko/shared';
 import { BuiltinTool } from '@neko/shared';
 import { createNoWorkspaceFileAccessPolicy, type CoreFileAccessPolicy } from './file-access-policy';
+import {
+  presentCoreFileAccessDenial,
+  presentInvalidToolArguments,
+  presentListDirectoryFailure,
+} from './core-tool-presentation';
 
 const MAX_DEPTH = 3;
 const MAX_ENTRIES = 500;
@@ -51,10 +56,10 @@ export class ListDirectoryTool extends BuiltinTool {
   override readonly isConcurrencySafe = true;
   override readonly isReadOnly = true;
 
-  async execute(args: Record<string, unknown>): Promise<ToolResult> {
+  async execute(args: Record<string, unknown>, options?: ToolExecuteOptions): Promise<ToolResult> {
     const validation = this.validateArgs(args);
     if (!validation.valid) {
-      return this.error(validation.error ?? 'Invalid arguments');
+      return this.error(presentInvalidToolArguments(this.name, options?.metadata?.['locale']));
     }
 
     const dirPath = args.path as string;
@@ -63,7 +68,13 @@ export class ListDirectoryTool extends BuiltinTool {
     try {
       const authorization = this.fileAccessPolicy?.authorize(dirPath, 'read');
       if (authorization && !authorization.allowed) {
-        return this.error(authorization.message ?? `Unauthorized directory read: ${dirPath}`);
+        return this.error(
+          presentCoreFileAccessDenial(
+            'list-directory',
+            authorization,
+            options?.metadata?.['locale'],
+          ),
+        );
       }
       const resolved = authorization?.path ?? path.resolve(dirPath);
       const entries = await this.listDir(resolved, recursive ? MAX_DEPTH : 0, '');
@@ -85,13 +96,21 @@ export class ListDirectoryTool extends BuiltinTool {
       });
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
-        return this.error(`Directory not found: ${dirPath}`);
+        return this.error(
+          presentListDirectoryFailure('not-found', dirPath, options?.metadata?.['locale']),
+        );
       }
       if ((err as NodeJS.ErrnoException).code === 'ENOTDIR') {
-        return this.error(`Path is not a directory: ${dirPath}`);
+        return this.error(
+          presentListDirectoryFailure('not-directory', dirPath, options?.metadata?.['locale']),
+        );
       }
       return this.error(
-        `Failed to list directory: ${err instanceof Error ? err.message : String(err)}`,
+        presentListDirectoryFailure(
+          'list-failed',
+          err instanceof Error ? err.message : String(err),
+          options?.metadata?.['locale'],
+        ),
       );
     }
   }

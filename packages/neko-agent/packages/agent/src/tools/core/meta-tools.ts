@@ -62,6 +62,57 @@ export interface SkillActivationRequest {
   readonly slot?: SkillLifecycleSlot;
 }
 
+export type SkillProviderFailureCode =
+  | 'skill-system-unavailable'
+  | 'skill-not-found'
+  | 'activation-rejected'
+  | 'deactivation-rejected'
+  | 'provider-error';
+
+export type SkillActivationProviderResult =
+  | Readonly<{
+      readonly success: true;
+      readonly skillName?: string;
+      readonly requestedSkillName?: string;
+      readonly allowedTools?: string[];
+      readonly lifecycleRecordId?: string;
+      readonly diagnostics?: readonly SkillLifecycleDiagnostic[];
+    }>
+  | Readonly<{
+      readonly success: false;
+      readonly code: SkillProviderFailureCode;
+      readonly detail?: string;
+      readonly diagnostics?: readonly SkillLifecycleDiagnostic[];
+    }>;
+
+export type SkillDeactivationProviderResult =
+  | Readonly<{
+      readonly success: true;
+      readonly removedRecordIds?: readonly string[];
+      readonly diagnostics?: readonly SkillLifecycleDiagnostic[];
+    }>
+  | Readonly<{
+      readonly success: false;
+      readonly code: SkillProviderFailureCode;
+      readonly detail?: string;
+      readonly diagnostics?: readonly SkillLifecycleDiagnostic[];
+    }>;
+
+export type ExecutionModeActivationFailureCode = 'activation-rejected' | 'provider-error';
+
+export type ExecutionModeActivationResult =
+  | Readonly<{
+      readonly success: true;
+      readonly changed: boolean;
+      readonly requestedMode: ExecutionMode;
+      readonly effectiveMode: ExecutionMode;
+    }>
+  | Readonly<{
+      readonly success: false;
+      readonly code: ExecutionModeActivationFailureCode;
+      readonly detail?: string;
+    }>;
+
 /**
  * Interface for providing skill information to meta tools.
  * Set by the extension layer after initialization.
@@ -77,37 +128,22 @@ export interface ISkillProvider {
     diagnostics: readonly SkillLifecycleDiagnostic[];
   }>;
   /** Activate a skill by name after the Agent has decided and explained why. */
-  activateSkill(input: SkillActivationRequest): SkillProviderMaybePromise<{
-    success: boolean;
-    message: string;
-    skillName?: string;
-    requestedSkillName?: string;
-    allowedTools?: string[];
-    lifecycleRecordId?: string;
-    diagnostics?: readonly SkillLifecycleDiagnostic[];
-  }>;
+  activateSkill(
+    input: SkillActivationRequest,
+  ): SkillProviderMaybePromise<SkillActivationProviderResult>;
   /** Deactivate the current active skill */
   deactivateSkill(input?: {
     readonly recordId?: string;
     readonly slot?: string;
     readonly skillName?: string;
-  }): SkillProviderMaybePromise<{
-    success: boolean;
-    message: string;
-    removedRecordIds?: readonly string[];
-    diagnostics?: readonly SkillLifecycleDiagnostic[];
-  }>;
+  }): SkillProviderMaybePromise<SkillDeactivationProviderResult>;
   /** Create a complete portable Skill package without activating it. */
   createSkill?(input: CreateSkillInput): SkillProviderMaybePromise<CreateSkillResult>;
   /** Request an execution-mode change through an Agent-tool activation intent. */
   setExecutionMode?(input: {
     readonly mode: ExecutionMode;
     readonly reason?: string;
-  }): SkillProviderMaybePromise<{
-    readonly success: boolean;
-    readonly message: string;
-    readonly mode?: ExecutionMode;
-  }>;
+  }): SkillProviderMaybePromise<ExecutionModeActivationResult>;
 }
 
 export type SkillProviderFactory = (conversationId: string) => ISkillProvider;
@@ -162,7 +198,10 @@ export class GetContextTool extends BuiltinTool {
       result.activeSkill = await this._skillProvider.getActiveSkill();
       const lifecycle = await this._skillProvider.getActiveSkillLifecycle?.();
       if (lifecycle) {
-        result.activeSkillLifecycle = lifecycle;
+        result.activeSkillLifecycle = {
+          records: lifecycle.records.map(({ lockedReason: _lockedReason, ...record }) => record),
+          diagnostics: lifecycle.diagnostics.map(projectSkillLifecycleDiagnosticData),
+        };
       }
       result.registeredSkills = await this._skillProvider.listSkills();
     }
@@ -340,30 +379,41 @@ export class CreateSkillTool extends BuiltinTool {
     this._skillProvider = provider;
   }
 
-  async execute(args: Record<string, unknown>): Promise<ToolResult> {
+  async execute(args: Record<string, unknown>, options?: ToolExecuteOptions): Promise<ToolResult> {
+    const locale = options?.metadata?.['locale'];
     const input = readCreateSkillInput(args);
     if (!input) {
-      return this.error('Invalid CreateSkill input');
+      return this.error(presentCreateSkillBoundaryFailure('invalid-input', locale));
     }
     if (!this._skillProvider?.createSkill) {
-      return this.error('Skill creation is not initialized');
+      return this.error(presentCreateSkillBoundaryFailure('creation-unavailable', locale));
     }
 
     try {
       const result = await this._skillProvider.createSkill(input);
       return this.success({
         created: true,
-        ...result,
+        source: result.source,
+        rootId: result.rootId,
+        relativePath: result.relativePath,
+        absolutePath: result.absolutePath,
+        fingerprint: result.fingerprint,
+        diagnostics: result.diagnostics.map(projectSkillDiagnosticData),
       });
     } catch (error) {
       const failure = readCreateSkillFailure(error);
       if (!failure) {
         throw error;
       }
+      const projectedFailure = {
+        code: failure.code,
+        diagnostics: failure.diagnostics.map(projectSkillDiagnosticData),
+        ...(failure.detail === undefined ? {} : { detail: failure.detail }),
+      };
       return {
         success: false,
-        error: failure.diagnostics[0]?.message ?? `CreateSkill failed: ${failure.code}`,
-        data: failure,
+        error: presentCreateSkillFailure(failure, locale, input.skill.name),
+        data: projectedFailure,
       };
     }
   }
@@ -420,23 +470,26 @@ export class ActivateSkillTool extends BuiltinTool {
   }
 
   async execute(args: Record<string, unknown>, options?: ToolExecuteOptions): Promise<ToolResult> {
+    const locale = options?.metadata?.['locale'];
     const validation = this.validateArgs(args);
     if (!validation.valid) {
-      return this.error(validation.error ?? 'Invalid arguments');
+      return this.error(presentSkillToolInputFailure('invalid-activation-arguments', locale));
     }
 
     if (!this._skillProvider) {
-      return this.error('Skill system not initialized');
+      return this.error(presentSkillToolInputFailure('skill-system-unavailable', locale));
     }
 
     const skillName = args.skillName as string;
     const reason = typeof args.reason === 'string' ? args.reason.trim() : '';
     if (reason.length === 0) {
-      return this.error('Activation reason is required');
+      return this.error(presentSkillToolInputFailure('activation-reason-required', locale));
     }
     const slot = readOptionalSkillLifecycleSlot(args.slot);
     if (args.slot !== undefined && slot === undefined) {
-      return this.error(`Invalid skill lifecycle slot: ${String(args.slot)}`);
+      return this.error(
+        presentSkillToolInputFailure('invalid-lifecycle-slot', locale, String(args.slot)),
+      );
     }
 
     const result = await this._skillProvider.activateSkill({
@@ -446,7 +499,7 @@ export class ActivateSkillTool extends BuiltinTool {
     });
 
     if (!result.success) {
-      return this.error(result.message);
+      return this.error(presentSkillProviderFailure('activate', result, locale, skillName));
     }
 
     const activatedSkillName = result.skillName ?? skillName;
@@ -456,10 +509,11 @@ export class ActivateSkillTool extends BuiltinTool {
       ...(result.requestedSkillName ? { requestedSkillName: result.requestedSkillName } : {}),
       reason,
       ...(slot ? { slot } : {}),
-      message: formatSkillActivatedMessage(activatedSkillName, options?.metadata?.['locale']),
       ...(result.allowedTools ? { allowedTools: result.allowedTools } : {}),
       ...(result.lifecycleRecordId ? { lifecycleRecordId: result.lifecycleRecordId } : {}),
-      ...(result.diagnostics ? { diagnostics: result.diagnostics } : {}),
+      ...(result.diagnostics
+        ? { diagnostics: result.diagnostics.map(projectSkillLifecycleDiagnosticData) }
+        : {}),
     });
   }
 }
@@ -500,9 +554,10 @@ export class DeactivateSkillTool extends BuiltinTool {
     this._skillProvider = provider;
   }
 
-  async execute(_args: Record<string, unknown>): Promise<ToolResult> {
+  async execute(_args: Record<string, unknown>, options?: ToolExecuteOptions): Promise<ToolResult> {
+    const locale = options?.metadata?.['locale'];
     if (!this._skillProvider) {
-      return this.error('Skill system not initialized');
+      return this.error(presentSkillToolInputFailure('skill-system-unavailable', locale));
     }
 
     const result = await this._skillProvider.deactivateSkill({
@@ -512,14 +567,15 @@ export class DeactivateSkillTool extends BuiltinTool {
     });
 
     if (!result.success) {
-      return this.error(result.message);
+      return this.error(presentSkillProviderFailure('deactivate', result, locale));
     }
 
     return this.success({
       deactivated: true,
-      message: result.message,
-      removedRecordIds: result.removedRecordIds,
-      diagnostics: result.diagnostics,
+      ...(result.removedRecordIds ? { removedRecordIds: result.removedRecordIds } : {}),
+      ...(result.diagnostics
+        ? { diagnostics: result.diagnostics.map(projectSkillLifecycleDiagnosticData) }
+        : {}),
     });
   }
 }
@@ -558,18 +614,21 @@ export class SetExecutionModeTool extends BuiltinTool {
     this._skillProvider = provider;
   }
 
-  async execute(args: Record<string, unknown>): Promise<ToolResult> {
-    const validation = this.validateArgs(args);
-    if (!validation.valid) {
-      return this.error(validation.error ?? 'Invalid arguments');
+  async execute(args: Record<string, unknown>, options?: ToolExecuteOptions): Promise<ToolResult> {
+    const locale = options?.metadata?.['locale'];
+    if (args.mode === undefined) {
+      return this.error(presentExecutionModeBoundaryFailure('invalid-arguments', locale));
     }
 
     const mode = readExecutionMode(args.mode);
     if (!mode) {
-      return this.error('Invalid execution mode');
+      return this.error(presentExecutionModeBoundaryFailure('invalid-mode', locale));
+    }
+    if (args.reason !== undefined && typeof args.reason !== 'string') {
+      return this.error(presentExecutionModeBoundaryFailure('invalid-arguments', locale));
     }
     if (!this._skillProvider?.setExecutionMode) {
-      return this.error('Execution mode activation is not initialized');
+      return this.error(presentExecutionModeBoundaryFailure('activation-unavailable', locale));
     }
 
     const result = await this._skillProvider.setExecutionMode({
@@ -578,13 +637,13 @@ export class SetExecutionModeTool extends BuiltinTool {
     });
 
     if (!result.success) {
-      return this.error(result.message);
+      return this.error(presentExecutionModeProviderFailure(result, locale));
     }
 
     return this.success({
-      changed: true,
-      mode: result.mode ?? mode,
-      message: result.message,
+      changed: result.changed,
+      requestedMode: result.requestedMode,
+      mode: result.effectiveMode,
     });
   }
 }
@@ -608,6 +667,120 @@ export function createCoreMetaTools(
     new DeactivateSkillTool(),
     new SetExecutionModeTool(),
   ];
+}
+
+type ExecutionModeBoundaryFailureCode =
+  'invalid-arguments' | 'invalid-mode' | 'activation-unavailable';
+
+function presentExecutionModeBoundaryFailure(
+  code: ExecutionModeBoundaryFailureCode,
+  locale: unknown,
+): string {
+  const zh = isChinesePromptLocale(locale);
+  switch (code) {
+    case 'invalid-arguments':
+      return zh ? '执行模式参数无效。' : 'Invalid execution mode arguments.';
+    case 'invalid-mode':
+      return zh ? '执行模式无效。' : 'Invalid execution mode.';
+    case 'activation-unavailable':
+      return zh ? '执行模式激活功能不可用。' : 'Execution mode activation is unavailable.';
+  }
+}
+
+function presentExecutionModeProviderFailure(
+  result: Extract<ExecutionModeActivationResult, { success: false }>,
+  locale: unknown,
+): string {
+  const zh = isChinesePromptLocale(locale);
+  const summary =
+    result.code === 'activation-rejected'
+      ? zh
+        ? '无法激活执行模式。'
+        : 'The execution mode was not activated.'
+      : zh
+        ? '激活执行模式时提供商失败。'
+        : 'The provider failed while activating the execution mode.';
+  return result.detail ? `${summary} ${zh ? '详情：' : 'Details: '}${result.detail}` : summary;
+}
+
+type CreateSkillBoundaryFailureCode = 'invalid-input' | 'creation-unavailable';
+
+function presentCreateSkillBoundaryFailure(
+  code: CreateSkillBoundaryFailureCode,
+  locale: unknown,
+): string {
+  const zh = isChinesePromptLocale(locale);
+  switch (code) {
+    case 'invalid-input':
+      return zh ? 'CreateSkill 输入无效。' : 'Invalid CreateSkill input';
+    case 'creation-unavailable':
+      return zh ? '技能创建功能不可用。' : 'Skill creation is not initialized';
+  }
+}
+
+function presentCreateSkillFailure(
+  failure: CreateSkillFailure,
+  locale: unknown,
+  skillName: string,
+): string {
+  const zh = isChinesePromptLocale(locale);
+  const summary = presentCreateSkillFailureSummary(failure.code, zh, skillName);
+  const details = [
+    ...failure.diagnostics.map((diagnostic) =>
+      JSON.stringify(projectSkillDiagnosticData(diagnostic)),
+    ),
+    ...(failure.detail === undefined ? [] : [failure.detail]),
+  ];
+  return details.length === 0
+    ? summary
+    : `${summary} ${zh ? '详情：' : 'Details: '}${details.join('; ')}`;
+}
+
+function presentCreateSkillFailureSummary(
+  code: CreateSkillFailureCode,
+  zh: boolean,
+  skillName: string,
+): string {
+  switch (code) {
+    case 'invalid-skill':
+      return zh ? `技能 "${skillName}" 的定义无效。` : `Skill "${skillName}" is invalid.`;
+    case 'invalid-overlay':
+      return zh
+        ? `技能 "${skillName}" 的 Neko 配置无效。`
+        : `Skill "${skillName}" has an invalid Neko overlay.`;
+    case 'invalid-resource-path':
+      return zh
+        ? `技能 "${skillName}" 包含无效的资源路径。`
+        : `Skill "${skillName}" contains an invalid resource path.`;
+    case 'reserved-resource-path':
+      return zh
+        ? `技能 "${skillName}" 使用了保留资源路径。`
+        : `Skill "${skillName}" uses a reserved resource path.`;
+    case 'skill-already-exists':
+      return zh ? `技能 "${skillName}" 已存在。` : `Skill "${skillName}" already exists.`;
+    case 'atomic-commit-conflict':
+      return zh
+        ? `创建技能 "${skillName}" 时发生提交冲突。`
+        : `A commit conflict occurred while creating skill "${skillName}".`;
+    case 'filesystem-error':
+      return zh
+        ? `创建技能 "${skillName}" 时文件系统操作失败。`
+        : `A filesystem operation failed while creating skill "${skillName}".`;
+  }
+}
+
+function projectSkillDiagnosticData(diagnostic: SkillDiagnostic): {
+  readonly area: SkillDiagnostic['area'];
+  readonly code: string;
+  readonly severity: SkillDiagnostic['severity'];
+  readonly path?: string;
+} {
+  return {
+    area: diagnostic.area,
+    code: diagnostic.code,
+    severity: diagnostic.severity,
+    ...(diagnostic.path === undefined ? {} : { path: diagnostic.path }),
+  };
 }
 
 function readCreateSkillInput(args: Record<string, unknown>): CreateSkillInput | null {
@@ -876,9 +1049,13 @@ function readCreateSkillFailure(value: unknown): CreateSkillFailure | null {
   if (!Array.isArray(value.diagnostics) || !value.diagnostics.every(isSkillDiagnostic)) {
     return null;
   }
+  if (value.detail !== undefined && typeof value.detail !== 'string') {
+    return null;
+  }
   return {
     code: value.code,
     diagnostics: value.diagnostics,
+    ...(typeof value.detail === 'string' ? { detail: value.detail } : {}),
   };
 }
 
@@ -964,8 +1141,111 @@ function readOptionalSkillLifecycleSlot(value: unknown): SkillLifecycleSlot | un
   }
 }
 
-function formatSkillActivatedMessage(skillName: string, locale: unknown): string {
-  return typeof locale === 'string' && locale.trim().toLowerCase().startsWith('zh')
-    ? `已激活技能 "${skillName}"`
-    : `Activated skill "${skillName}"`;
+type SkillToolInputFailureCode =
+  | 'skill-system-unavailable'
+  | 'invalid-activation-arguments'
+  | 'activation-reason-required'
+  | 'invalid-lifecycle-slot';
+
+function presentSkillToolInputFailure(
+  code: SkillToolInputFailureCode,
+  locale: unknown,
+  detail?: string,
+): string {
+  const zh = isChinesePromptLocale(locale);
+  switch (code) {
+    case 'skill-system-unavailable':
+      return zh ? '技能系统不可用。' : 'The skill system is unavailable.';
+    case 'invalid-activation-arguments':
+      return zh ? '技能激活参数无效。' : 'Invalid skill activation arguments.';
+    case 'activation-reason-required':
+      return zh ? '必须提供激活原因。' : 'An activation reason is required.';
+    case 'invalid-lifecycle-slot': {
+      if (detail === undefined) {
+        throw new Error('Invalid lifecycle slot projection requires detail.');
+      }
+      return zh ? `技能生命周期槽位无效：${detail}` : `Invalid skill lifecycle slot: ${detail}`;
+    }
+  }
+}
+
+function presentSkillProviderFailure(
+  action: 'activate' | 'deactivate',
+  result: Extract<
+    SkillActivationProviderResult | SkillDeactivationProviderResult,
+    { success: false }
+  >,
+  locale: unknown,
+  skillName?: string,
+): string {
+  const zh = isChinesePromptLocale(locale);
+  const summary = presentSkillProviderFailureSummary(action, result.code, zh, skillName);
+  const details = [
+    ...(result.diagnostics ?? []).map((diagnostic) =>
+      JSON.stringify(projectSkillLifecycleDiagnosticData(diagnostic)),
+    ),
+    ...(result.detail ? [result.detail] : []),
+  ];
+  return details.length > 0
+    ? `${summary} ${zh ? '详情：' : 'Details: '}${details.join('; ')}`
+    : summary;
+}
+
+function presentSkillProviderFailureSummary(
+  action: 'activate' | 'deactivate',
+  code: SkillProviderFailureCode,
+  zh: boolean,
+  skillName?: string,
+): string {
+  switch (code) {
+    case 'skill-system-unavailable':
+      return zh ? '技能系统不可用。' : 'The skill system is unavailable.';
+    case 'skill-not-found': {
+      const name = requireSkillName(skillName);
+      return zh ? `未找到技能 "${name}"。` : `Skill "${name}" was not found.`;
+    }
+    case 'activation-rejected': {
+      const name = requireSkillName(skillName);
+      return zh ? `无法激活技能 "${name}"。` : `Skill "${name}" was not activated.`;
+    }
+    case 'deactivation-rejected':
+      return zh ? '无法停用技能。' : 'The skill was not deactivated.';
+    case 'provider-error':
+      if (action === 'activate') {
+        const name = requireSkillName(skillName);
+        return zh
+          ? `激活技能 "${name}" 时提供商失败。`
+          : `The provider failed while activating skill "${name}".`;
+      }
+      return zh ? '停用技能时提供商失败。' : 'The provider failed while deactivating the skill.';
+  }
+}
+
+function isChinesePromptLocale(locale: unknown): boolean {
+  return locale === 'zh-cn';
+}
+
+function requireSkillName(skillName: string | undefined): string {
+  if (skillName === undefined) {
+    throw new Error('Skill activation failure projection requires skillName.');
+  }
+  return skillName;
+}
+
+function projectSkillLifecycleDiagnosticData(diagnostic: SkillLifecycleDiagnostic): {
+  readonly code: SkillLifecycleDiagnostic['code'];
+  readonly conversationId?: string;
+  readonly skillName?: string;
+  readonly slot?: SkillLifecycleSlot;
+  readonly recordId?: string;
+  readonly details?: Record<string, unknown>;
+} {
+  return {
+    code: diagnostic.code,
+    ...(diagnostic.conversationId ? { conversationId: diagnostic.conversationId } : {}),
+    ...(diagnostic.skillName ? { skillName: diagnostic.skillName } : {}),
+    ...(diagnostic.slot ? { slot: diagnostic.slot } : {}),
+    ...(diagnostic.recordId ? { recordId: diagnostic.recordId } : {}),
+    ...(diagnostic.details ? { details: diagnostic.details } : {}),
+  };
 }

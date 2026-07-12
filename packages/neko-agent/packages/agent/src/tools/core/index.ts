@@ -18,6 +18,11 @@ export {
   GetContextTool,
   createCoreMetaTools,
   type ISkillProvider,
+  type ExecutionModeActivationFailureCode,
+  type ExecutionModeActivationResult,
+  type SkillActivationProviderResult,
+  type SkillDeactivationProviderResult,
+  type SkillProviderFailureCode,
   type SkillProviderFactory,
   type SkillProviderMaybePromise,
 } from './meta-tools';

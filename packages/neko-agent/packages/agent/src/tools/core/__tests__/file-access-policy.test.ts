@@ -81,13 +81,17 @@ describe('createWorkspaceFileAccessPolicy', () => {
       ignoreRules: { gitignoreRules: ['ignored/', '*.secret'] },
     });
 
-    expect(policy.authorize('ignored/page.png', 'read')).toMatchObject({
+    expect(policy.authorize('ignored/page.png', 'read')).toEqual({
       allowed: false,
+      path: '/workspace/project/ignored/page.png',
       reason: 'ignored-workspace-path',
+      rule: 'ignored/',
     });
-    expect(policy.authorize('src/token.secret', 'read')).toMatchObject({
+    expect(policy.authorize('src/token.secret', 'read')).toEqual({
       allowed: false,
+      path: '/workspace/project/src/token.secret',
       reason: 'ignored-workspace-path',
+      rule: '*.secret',
     });
   });
 
@@ -113,8 +117,9 @@ describe('createNoWorkspaceFileAccessPolicy', () => {
   it('fails closed without an authorized workspace', () => {
     const policy = createNoWorkspaceFileAccessPolicy();
 
-    expect(policy.authorize('/workspace/project/src/story.md', 'read')).toMatchObject({
+    expect(policy.authorize('/workspace/project/src/story.md', 'read')).toEqual({
       allowed: false,
+      path: '/workspace/project/src/story.md',
       reason: 'missing-authorized-root',
     });
   });

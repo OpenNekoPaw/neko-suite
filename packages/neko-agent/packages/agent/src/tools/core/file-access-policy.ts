@@ -15,12 +15,17 @@ export interface CoreFileAccessPolicy {
   authorize(filePath: string, accessKind: FileAccessKind): CoreFileAccessDecision;
 }
 
-export interface CoreFileAccessDecision {
-  readonly allowed: boolean;
-  readonly path: string;
-  readonly reason?: CoreFileAccessDenialReason;
-  readonly message?: string;
-}
+export type CoreFileAccessDecision =
+  | {
+      readonly allowed: true;
+      readonly path: string;
+    }
+  | {
+      readonly allowed: false;
+      readonly path: string;
+      readonly reason: CoreFileAccessDenialReason;
+      readonly rule?: string;
+    };
 
 export type CoreFileAccessDenialReason =
   | 'missing-authorized-root'
@@ -66,7 +71,6 @@ class WorkspaceFileAccessPolicy implements CoreFileAccessPolicy {
         allowed: false,
         path: filePath,
         reason: 'relative-path-without-root',
-        message: `Path must be absolute or workspace-relative: ${filePath}`,
       };
     }
 
@@ -77,7 +81,6 @@ class WorkspaceFileAccessPolicy implements CoreFileAccessPolicy {
         allowed: false,
         path: resolved,
         reason: 'forbidden-unmanaged-path',
-        message: `Path is denied because it is in system temp, Downloads, or Desktop: ${resolved}`,
       };
     }
     if (rootDecision.reason === 'outside-authorized-roots') {
@@ -85,7 +88,6 @@ class WorkspaceFileAccessPolicy implements CoreFileAccessPolicy {
         allowed: false,
         path: resolved,
         reason: 'outside-authorized-roots',
-        message: `Path is outside authorized ${accessKind} roots: ${resolved}`,
       };
     }
 
@@ -97,7 +99,9 @@ class WorkspaceFileAccessPolicy implements CoreFileAccessPolicy {
           allowed: false,
           path: resolved,
           reason: 'ignored-workspace-path',
-          message: buildIgnoredPathMessage(resolved, ignoreDecision),
+          ...(ignoreDecision.reason === 'gitignore' && ignoreDecision.rule
+            ? { rule: ignoreDecision.rule }
+            : {}),
         };
       }
     }
@@ -110,12 +114,11 @@ class WorkspaceFileAccessPolicy implements CoreFileAccessPolicy {
 }
 
 class NoWorkspaceFileAccessPolicy implements CoreFileAccessPolicy {
-  authorize(filePath: string, accessKind: FileAccessKind): CoreFileAccessDecision {
+  authorize(filePath: string, _accessKind: FileAccessKind): CoreFileAccessDecision {
     return {
       allowed: false,
       path: filePath,
       reason: 'missing-authorized-root',
-      message: `Cannot ${accessKind} local files because no authorized workspace root is available.`,
     };
   }
 }
@@ -136,14 +139,4 @@ function toWorkspaceRelativePath(filePath: string, workspaceRoot: string): strin
   }
   const relativePath = path.relative(workspaceRoot, filePath);
   return relativePath && !relativePath.startsWith('..') ? relativePath : undefined;
-}
-
-function buildIgnoredPathMessage(
-  filePath: string,
-  decision: ReturnType<typeof shouldIgnoreWorkspaceFile>,
-): string {
-  if (decision.reason === 'gitignore' && decision.rule) {
-    return `Path is ignored by workspace .gitignore rule "${decision.rule}": ${filePath}`;
-  }
-  return `Path is ignored because it is in a managed workspace runtime or cache directory: ${filePath}`;
 }
