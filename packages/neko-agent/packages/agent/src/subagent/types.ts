@@ -4,9 +4,9 @@
  * SubAgent allows parent agents to spawn child agents for parallel task execution.
  */
 
+import type { ChildRunScope, ConversationRunScope } from '@neko-agent/types';
 import type {
   AgentConfig,
-  IAgentExecutor,
   ExecutorHooks,
   IService,
   IToolRegistry,
@@ -193,7 +193,9 @@ export interface SpecializedAgentPreset {
  * SubAgent execution result
  */
 export interface SubAgentResult {
-  /** SubAgent ID */
+  /** Complete immutable owner identity. */
+  scope: ChildRunScope;
+  /** Local SubAgent ID for presentation only. */
   id: string;
   /** Final status */
   status: SubAgentStatus;
@@ -233,6 +235,8 @@ export type SubAgentEventType =
 export interface SubAgentEvent {
   /** Event type */
   type: SubAgentEventType;
+  /** Complete immutable owner identity. */
+  scope: ChildRunScope;
   /** SubAgent ID */
   subAgentId: string;
   /** Parent agent ID */
@@ -279,6 +283,7 @@ export interface SubAgentExecutor {
 }
 
 export interface SubAgentCreateAgentContext {
+  scope: ChildRunScope;
   parentId: string;
   conversationId: string;
   subAgentId: string;
@@ -317,64 +322,37 @@ export interface SubAgentManagerDeps {
  * SubAgent manager interface
  */
 export interface ISubAgentManager {
-  /**
-   * Spawn a new SubAgent
-   * @param parentId Parent agent ID
-   * @param conversationId Conversation ID
-   * @param config SubAgent configuration
-   * @returns SubAgent ID
-   */
-  spawn(parentId: string, conversationId: string, config: SubAgentConfig): Promise<string>;
+  /** Spawn a SubAgent owned by the complete child-run scope. */
+  spawn(scope: ChildRunScope, config: SubAgentConfig): Promise<ChildRunScope>;
 
-  /**
-   * Spawn multiple SubAgents in parallel
-   */
+  /** Spawn multiple independently scoped SubAgents. */
   spawnBatch(
-    parentId: string,
-    conversationId: string,
-    configs: SubAgentConfig[],
-  ): Promise<string[]>;
+    entries: readonly { readonly scope: ChildRunScope; readonly config: SubAgentConfig }[],
+  ): Promise<ChildRunScope[]>;
 
-  /**
-   * Get SubAgent status
-   */
-  getStatus(subAgentId: string): SubAgentStatus | undefined;
+  /** Get SubAgent status through its complete owner scope. */
+  getStatus(scope: ChildRunScope): SubAgentStatus | undefined;
 
-  /**
-   * Get SubAgent result (blocks until complete or timeout)
-   */
-  getResult(subAgentId: string, timeout?: number): Promise<SubAgentResult>;
+  /** Get SubAgent result through its complete owner scope. */
+  getResult(scope: ChildRunScope, timeout?: number): Promise<SubAgentResult>;
 
-  /**
-   * Get multiple SubAgent results
-   */
-  getResults(subAgentIds: string[], timeout?: number): Promise<SubAgentResult[]>;
+  /** Get multiple SubAgent results through complete owner scopes. */
+  getResults(scopes: readonly ChildRunScope[], timeout?: number): Promise<SubAgentResult[]>;
 
-  /**
-   * Cancel a running SubAgent
-   */
-  cancel(subAgentId: string): void;
+  /** Cancel exactly one scoped SubAgent. */
+  cancel(scope: ChildRunScope): void;
 
-  /**
-   * Cancel all SubAgents for a parent
-   */
-  cancelAll(parentId: string): void;
+  /** Cancel all SubAgents owned by one conversation run. */
+  cancelRun(scope: ConversationRunScope): void;
 
-  /**
-   * List all SubAgents for a parent
-   */
-  listByParent(parentId: string): SubAgentConfig[];
+  /** List SubAgent configs owned by one conversation run. */
+  listByRun(scope: ConversationRunScope): SubAgentConfig[];
 
-  /**
-   * Subscribe to SubAgent events
-   * @returns Unsubscribe function
-   */
+  /** Subscribe to SubAgent events. */
   onEvent(callback: SubAgentEventListener): () => void;
 
-  /**
-   * Cleanup completed SubAgents for a parent
-   */
-  cleanup(parentId: string): void;
+  /** Cleanup terminal SubAgents owned by one conversation run. */
+  cleanupRun(scope: ConversationRunScope): void;
 }
 
 // =============================================================================

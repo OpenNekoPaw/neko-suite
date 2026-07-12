@@ -2,26 +2,26 @@ import { describe, expect, it, vi } from 'vitest';
 import { createCoordinateTool } from '../coordinate-tool';
 import type { CoordinateToolDeps } from '../types';
 import { ToolRegistry } from '../../../tools';
+import type { ChildRunScope } from '@neko-agent/types';
 
 function createDeps(): CoordinateToolDeps {
   return {
     subAgentManager: {
-      spawn: vi.fn(async (_parentId: string, _conversationId: string, config: { id: string }) => {
-        return config.id;
-      }),
+      spawn: vi.fn(async (scope: ChildRunScope) => scope),
       spawnBatch: vi.fn(),
       getStatus: vi.fn(),
-      getResult: vi.fn(async (subAgentId: string) => ({
-        id: subAgentId,
-        status: 'completed',
+      getResult: vi.fn(async (scope: ChildRunScope) => ({
+        scope,
+        id: scope.childRunId,
+        status: 'completed' as const,
         response: 'done',
       })),
       getResults: vi.fn(),
       cancel: vi.fn(),
-      cancelAll: vi.fn(),
-      listByParent: vi.fn(() => []),
+      cancelRun: vi.fn(),
+      listByRun: vi.fn(() => []),
       onEvent: vi.fn(() => () => {}),
-      cleanup: vi.fn(),
+      cleanupRun: vi.fn(),
     },
     contextBridge: {
       extractSummary: vi.fn(() => 'summary'),
@@ -40,8 +40,7 @@ describe('createCoordinateTool', () => {
       .toToolDefinitions(undefined, { locale: 'zh-CN' })
       .find((tool) => tool.function.name === 'coordinate')?.function;
     const parameters = definition?.parameters as
-      | { properties?: Record<string, { description?: string; items?: unknown }> }
-      | undefined;
+      { properties?: Record<string, { description?: string; items?: unknown }> } | undefined;
 
     expect(definition?.description).toContain('编排多个 SubAgent');
     expect(parameters?.properties?.description?.description).toBe('工作流描述。');
@@ -65,7 +64,7 @@ describe('createCoordinateTool', () => {
 
     expect(result).toEqual({
       success: false,
-      error: 'Missing conversationId for coordinate tool',
+      error: 'Missing or mismatched conversationId for coordinate tool',
     });
     expect(deps.subAgentManager.spawn).not.toHaveBeenCalled();
   });
@@ -84,14 +83,19 @@ describe('createCoordinateTool', () => {
         metadata: {
           parentAgentId: 'parent-1',
           conversationId: 'conv-1',
+          runId: 'run-1',
         },
       },
     );
 
     expect(result.success).toBe(true);
     expect(deps.subAgentManager.spawn).toHaveBeenCalledWith(
-      'parent-1',
-      'conv-1',
+      expect.objectContaining({
+        conversationId: 'conv-1',
+        runId: 'run-1',
+        parentRunId: 'parent-1',
+        childKind: 'subagent',
+      }),
       expect.objectContaining({
         id: expect.stringContaining('task-1'),
       }),
@@ -112,6 +116,7 @@ describe('createCoordinateTool', () => {
         metadata: {
           parentAgentId: 'parent-1',
           conversationId: 'conv-1',
+          runId: 'run-1',
           locale: 'zh-CN',
         },
       },
@@ -119,8 +124,12 @@ describe('createCoordinateTool', () => {
 
     expect(result.success).toBe(true);
     expect(deps.subAgentManager.spawn).toHaveBeenCalledWith(
-      'parent-1',
-      'conv-1',
+      expect.objectContaining({
+        conversationId: 'conv-1',
+        runId: 'run-1',
+        parentRunId: 'parent-1',
+        childKind: 'subagent',
+      }),
       expect.objectContaining({
         locale: 'zh-CN',
       }),

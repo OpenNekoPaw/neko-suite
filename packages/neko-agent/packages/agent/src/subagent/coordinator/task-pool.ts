@@ -110,12 +110,7 @@ export class TaskPool {
     if (!task) throw new Error(`Task not found: ${taskId}`);
 
     task.status = 'failed';
-    task.result = {
-      id: taskId,
-      status: 'failed',
-      error,
-      duration,
-    };
+    task.result = undefined;
 
     return {
       taskId,

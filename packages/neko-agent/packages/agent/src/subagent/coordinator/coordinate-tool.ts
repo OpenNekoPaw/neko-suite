@@ -16,6 +16,12 @@ import { Coordinator } from './coordinator';
 
 let coordinatorCounter = 0;
 
+function readNonEmptyString(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
 function generateCoordinatorId(): string {
   return `coord-${Date.now()}-${++coordinatorCounter}`;
 }
@@ -187,21 +193,21 @@ Dependency results are automatically passed to dependent tasks as context.`,
       }
 
       const metadata = options?.metadata ?? {};
-      const conversationId =
-        typeof metadata.conversationId === 'string' && metadata.conversationId.length > 0
-          ? metadata.conversationId
-          : undefined;
-      if (!conversationId) {
+      const conversationId = readNonEmptyString(metadata.conversationId);
+      const traceConversationId = readNonEmptyString(options?.trace?.conversationId);
+      if (!conversationId || (traceConversationId && traceConversationId !== conversationId)) {
         return {
           success: false,
-          error: 'Missing conversationId for coordinate tool',
+          error: 'Missing or mismatched conversationId for coordinate tool',
         };
       }
-      const parentAgentId =
-        typeof metadata.parentAgentId === 'string' && metadata.parentAgentId.length > 0
-          ? metadata.parentAgentId
-          : `agent-${conversationId}`;
-      const locale = typeof metadata.locale === 'string' ? metadata.locale : undefined;
+      const runId = readNonEmptyString(metadata.runId) ?? readNonEmptyString(options?.trace?.runId);
+      if (!runId) return { success: false, error: 'Missing runId for coordinate tool' };
+      const parentAgentId = readNonEmptyString(metadata.parentAgentId);
+      if (!parentAgentId) {
+        return { success: false, error: 'Missing parentAgentId for coordinate tool' };
+      }
+      const locale = readNonEmptyString(metadata.locale);
 
       // Convert tool args to TaskItems
       const taskItems: Omit<TaskItem, 'status'>[] = tasks.map((t) => ({
@@ -227,8 +233,8 @@ Dependency results are automatically passed to dependent tasks as context.`,
         {
           subAgentManager: deps.subAgentManager,
           contextBridge: deps.contextBridge,
-          parentAgentId,
-          conversationId,
+          runScope: { conversationId, runId },
+          parentRunId: parentAgentId,
         },
       );
 

@@ -961,6 +961,7 @@ export class AgentSession implements IAgentSession {
     const turnId = createAgentTurnId(this._config.conversationId ?? 'unknown', turnStartedAt);
     let trace = createAgentTraceContext({
       conversationId: this._config.conversationId,
+      runId: turnId,
       turnId,
       phase: 'session',
     });
@@ -1069,6 +1070,7 @@ export class AgentSession implements IAgentSession {
           ...context?.metadata,
           locale: context?.metadata?.['locale'] ?? this._config.locale,
           conversationId: trace.conversationId,
+          runId: trace.runId,
           turnId: trace.turnId,
           ...(activeSkill
             ? {

@@ -6,6 +6,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { Coordinator, createCoordinator } from '../coordinator';
 import type { CoordinatorConfig, CoordinatorDeps, CoordinatorEvent } from '../types';
 import type { SubAgentResult, SubAgentEvent } from '../../types';
+import type { ChildRunScope } from '@neko-agent/types';
 
 // =============================================================================
 // Mock Helpers
@@ -19,26 +20,25 @@ function createMockDeps(): CoordinatorDeps & { _eventCallbacks: EventCallback[] 
   return {
     _eventCallbacks: eventCallbacks,
     subAgentManager: {
-      spawn: vi
-        .fn()
-        .mockImplementation(async (_parentId: string, _convId: string, config: { id: string }) => {
-          return config.id;
-        }),
+      spawn: vi.fn().mockImplementation(async (scope: ChildRunScope) => scope),
       spawnBatch: vi.fn(),
       getStatus: vi.fn().mockReturnValue('completed'),
-      getResult: vi.fn().mockImplementation(async (subAgentId: string): Promise<SubAgentResult> => {
-        return {
-          id: subAgentId,
-          status: 'completed',
-          response: `Result for ${subAgentId}`,
-          duration: 1000,
-          iterations: 3,
-        };
-      }),
+      getResult: vi
+        .fn()
+        .mockImplementation(async (scope: ChildRunScope): Promise<SubAgentResult> => {
+          return {
+            scope,
+            id: scope.childRunId,
+            status: 'completed',
+            response: `Result for ${scope.childRunId}`,
+            duration: 1000,
+            iterations: 3,
+          };
+        }),
       getResults: vi.fn(),
       cancel: vi.fn(),
-      cancelAll: vi.fn(),
-      listByParent: vi.fn().mockReturnValue([]),
+      cancelRun: vi.fn(),
+      listByRun: vi.fn().mockReturnValue([]),
       onEvent: vi.fn().mockImplementation((cb: EventCallback) => {
         eventCallbacks.push(cb);
         return () => {
@@ -46,14 +46,14 @@ function createMockDeps(): CoordinatorDeps & { _eventCallbacks: EventCallback[] 
           if (idx >= 0) eventCallbacks.splice(idx, 1);
         };
       }),
-      cleanup: vi.fn(),
+      cleanupRun: vi.fn(),
     },
     contextBridge: {
       extractSummary: vi.fn().mockReturnValue('summary'),
       mergeResults: vi.fn().mockReturnValue([]),
     },
-    parentAgentId: 'parent-1',
-    conversationId: 'conv-1',
+    runScope: { conversationId: 'conv-1', runId: 'run-1' },
+    parentRunId: 'parent-1',
   };
 }
 
@@ -228,7 +228,7 @@ describe('Coordinator', () => {
       await collectEvents(createCoordinator(config, deps));
 
       const spawnCall = (deps.subAgentManager.spawn as ReturnType<typeof vi.fn>).mock.calls[0];
-      const subConfig = spawnCall?.[2];
+      const subConfig = spawnCall?.[1];
       expect(subConfig?.prompt).toContain('Context from Coordinator');
       expect(subConfig?.prompt).toContain('sci-fi video');
     });
@@ -241,7 +241,7 @@ describe('Coordinator', () => {
       await collectEvents(createCoordinator(config, deps));
 
       const spawnCall = (deps.subAgentManager.spawn as ReturnType<typeof vi.fn>).mock.calls[0];
-      const subConfig = spawnCall?.[2];
+      const subConfig = spawnCall?.[1];
       expect(subConfig?.prompt).toContain('## 协调器上下文');
       expect(subConfig?.prompt).toContain('## 任务');
       expect(subConfig?.prompt).not.toContain('## Context from Coordinator');
@@ -262,7 +262,7 @@ describe('Coordinator', () => {
         }
       }
 
-      expect(deps.subAgentManager.cancelAll).toHaveBeenCalledWith('parent-1');
+      expect(deps.subAgentManager.cancel).not.toHaveBeenCalled();
       // Should end with done event
       const doneEvent = events.find((e) => e.type === 'coordinator_done');
       expect(doneEvent).toBeDefined();
@@ -293,12 +293,15 @@ describe('Coordinator', () => {
     });
 
     it('should handle failed SubAgent results', async () => {
-      (deps.subAgentManager.getResult as ReturnType<typeof vi.fn>).mockResolvedValue({
-        id: 'test',
-        status: 'failed',
-        error: 'Agent crashed',
-        duration: 500,
-      });
+      (deps.subAgentManager.getResult as ReturnType<typeof vi.fn>).mockImplementation(
+        async (scope: ChildRunScope) => ({
+          scope,
+          id: scope.childRunId,
+          status: 'failed',
+          error: 'Agent crashed',
+          duration: 500,
+        }),
+      );
 
       const events = await collectEvents(createCoordinator(createConfig(), deps));
 

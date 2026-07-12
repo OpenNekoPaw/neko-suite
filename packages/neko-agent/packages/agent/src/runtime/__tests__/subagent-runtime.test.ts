@@ -65,6 +65,7 @@ describe('SubAgentRuntimeCoordinator', () => {
       {
         metadata: {
           conversationId: 'conv-b',
+          runId: 'run-b',
           parentAgentId: 'agent-conv-b',
         },
       },
@@ -109,6 +110,7 @@ describe('SubAgentRuntimeCoordinator', () => {
       {
         metadata: {
           conversationId: 'conv-zh',
+          runId: 'run-zh',
           parentAgentId: 'agent-conv-zh',
           locale: 'zh',
         },

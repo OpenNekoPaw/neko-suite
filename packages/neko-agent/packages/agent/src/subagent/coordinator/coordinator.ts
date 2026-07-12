@@ -10,6 +10,7 @@
  * - Concurrent worker dispatch with configurable limits
  */
 
+import { formatChildRunScope, type ChildRunScope } from '@neko-agent/types';
 import { getLogger } from '../../utils/logger';
 import type {
   CoordinatorConfig,
@@ -22,6 +23,7 @@ import type {
   TaskPoolProgress,
 } from './types';
 import { TaskPool } from './task-pool';
+import type { SubAgentConfig } from '../types';
 import { getSubAgentPromptLabels } from '../subagent-localization';
 
 const logger = getLogger('Coordinator');
@@ -45,6 +47,7 @@ export class Coordinator implements ICoordinator {
   private _pool: TaskPool;
   private _notifications: TaskNotification[] = [];
   private _cancelled = false;
+  private readonly _activeWorkers = new Map<string, { scope: ChildRunScope; taskId: string }>();
 
   // Confirmation gate
   private _confirmResolve: ((approved: boolean) => void) | null = null;
@@ -150,8 +153,9 @@ export class Coordinator implements ICoordinator {
 
   cancel(): void {
     this._cancelled = true;
-    // Cancel all running SubAgents
-    this._deps.subAgentManager.cancelAll(this._deps.parentAgentId);
+    for (const worker of this._activeWorkers.values()) {
+      this._deps.subAgentManager.cancel(worker.scope);
+    }
     // Unblock confirmation gate
     if (this._confirmResolve) {
       this._confirmResolve(false);
@@ -176,7 +180,7 @@ export class Coordinator implements ICoordinator {
     const taskTimeout = this._config.taskTimeout ?? DEFAULT_TASK_TIMEOUT;
 
     // Track active SubAgent → Task mapping
-    const activeAgents = new Map<string, string>(); // subAgentId → taskId
+    const activeAgents = this._activeWorkers;
 
     while (!this._pool.isAllDone() && !this._cancelled) {
       // Dispatch ready tasks up to concurrency limit
@@ -206,7 +210,7 @@ export class Coordinator implements ICoordinator {
         const completed = await this.waitForAnyCompletion(activeAgents, taskTimeout);
         if (completed) {
           this._notifications.push(completed.notification);
-          activeAgents.delete(completed.agentId);
+          activeAgents.delete(completed.agentKey);
 
           if (completed.notification.status === 'completed') {
             yield this.event('task_completed', {
@@ -250,7 +254,7 @@ export class Coordinator implements ICoordinator {
   private async dispatchTask(
     task: TaskItem,
     timeout: number,
-    activeAgents: Map<string, string>,
+    activeAgents: Map<string, { scope: ChildRunScope; taskId: string }>,
   ): Promise<void> {
     const modelTier = this._config.workerModelTier ?? 'balanced';
     const labels = getSubAgentPromptLabels(this._config.locale);
@@ -268,22 +272,24 @@ export class Coordinator implements ICoordinator {
     }
 
     try {
-      const subAgentId = await this._deps.subAgentManager.spawn(
-        this._deps.parentAgentId,
-        this._deps.conversationId,
-        {
-          id: `${this.id}-${task.id}`,
-          type: task.agentType,
-          description: task.description,
-          prompt,
-          runMode: 'background',
-          modelTier,
-          timeout,
-          ...(this._config.locale ? { locale: this._config.locale } : {}),
-        },
-      );
-
-      activeAgents.set(subAgentId, task.id);
+      const config: SubAgentConfig = {
+        id: `${this.id}-${task.id}`,
+        type: task.agentType,
+        description: task.description,
+        prompt,
+        runMode: 'background',
+        modelTier,
+        timeout,
+        ...(this._config.locale ? { locale: this._config.locale } : {}),
+      };
+      const scope: ChildRunScope = {
+        ...this._deps.runScope,
+        parentRunId: this._deps.parentRunId,
+        childRunId: config.id,
+        childKind: 'subagent',
+      };
+      await this._deps.subAgentManager.spawn(scope, config);
+      activeAgents.set(formatChildRunScope(scope), { scope, taskId: task.id });
       // Mark as running (SubAgent was spawned successfully)
       this._pool.markRunning(task.id);
     } catch (err) {
@@ -301,28 +307,27 @@ export class Coordinator implements ICoordinator {
   // ---------------------------------------------------------------------------
 
   private async waitForAnyCompletion(
-    activeAgents: Map<string, string>,
+    activeAgents: Map<string, { scope: ChildRunScope; taskId: string }>,
     timeout: number,
-  ): Promise<{ notification: TaskNotification; agentId: string } | undefined> {
-    const agentIds = Array.from(activeAgents.keys());
-    if (agentIds.length === 0) return undefined;
+  ): Promise<{ notification: TaskNotification; agentKey: string } | undefined> {
+    const workers = Array.from(activeAgents.entries());
+    if (workers.length === 0) return undefined;
 
     // Race all active agents for first completion
     try {
       const result = await Promise.race(
-        agentIds.map(async (agentId) => {
-          const subResult = await this._deps.subAgentManager.getResult(agentId, timeout);
-          return { agentId, subResult };
+        workers.map(async ([agentKey, worker]) => {
+          const subResult = await this._deps.subAgentManager.getResult(worker.scope, timeout);
+          return { agentKey, worker, subResult };
         }),
       );
 
-      const taskId = activeAgents.get(result.agentId);
-      if (!taskId) return undefined;
+      const taskId = result.worker.taskId;
 
       if (result.subResult.status === 'completed') {
         return {
           notification: this._pool.complete(taskId, result.subResult),
-          agentId: result.agentId,
+          agentKey: result.agentKey,
         };
       } else {
         return {
@@ -331,7 +336,7 @@ export class Coordinator implements ICoordinator {
             result.subResult.error ?? 'SubAgent failed',
             result.subResult.duration,
           ),
-          agentId: result.agentId,
+          agentKey: result.agentKey,
         };
       }
     } catch (err) {

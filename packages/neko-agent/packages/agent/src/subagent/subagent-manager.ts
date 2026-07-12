@@ -10,6 +10,13 @@
  */
 
 import { EventEmitter } from 'events';
+import {
+  formatChildRunScope,
+  validateChildRunScope,
+  validateConversationRunScope,
+  type ChildRunScope,
+  type ConversationRunScope,
+} from '@neko-agent/types';
 import type { AgentConfig } from '@neko/shared';
 import { getLogger } from '../utils/logger';
 import type {
@@ -126,9 +133,8 @@ export const SPECIALIZED_PRESETS: Readonly<Record<string, SpecializedAgentPreset
 // =============================================================================
 
 interface SubAgentInstance {
-  config: SubAgentConfig;
-  parentId: string;
-  conversationId: string;
+  readonly scope: ChildRunScope;
+  readonly config: SubAgentConfig;
   status: SubAgentStatus;
   executor?: SubAgentExecutor;
   result?: SubAgentResult;
@@ -151,182 +157,123 @@ interface SubAgentInstance {
  * Provides resource limits, event handling, and result aggregation.
  */
 export class SubAgentManager implements ISubAgentManager {
-  private instances = new Map<string, SubAgentInstance>();
-  private emitter = new EventEmitter();
+  private readonly instances = new Map<string, SubAgentInstance>();
+  private readonly emitter = new EventEmitter();
 
-  // Resource limits
   static readonly MAX_CONCURRENT_SUBAGENTS = 5;
   static readonly MAX_SUBAGENTS_PER_PARENT = 10;
-  static readonly DEFAULT_TIMEOUT = 5 * 60 * 1000; // 5 minutes
+  static readonly DEFAULT_TIMEOUT = 5 * 60 * 1000;
 
-  constructor(private deps: SubAgentManagerDeps) {
-    // Increase max listeners to prevent warnings with many subscribers
+  constructor(private readonly deps: SubAgentManagerDeps) {
     this.emitter.setMaxListeners(50);
   }
 
-  /**
-   * Spawn a new SubAgent
-   */
-  async spawn(parentId: string, conversationId: string, config: SubAgentConfig): Promise<string> {
-    // Check resource limits
-    this.checkLimits(parentId);
+  async spawn(scope: ChildRunScope, config: SubAgentConfig): Promise<ChildRunScope> {
+    const validatedScope = this.requireSubAgentScope(scope);
+    if (validatedScope.childRunId !== config.id) {
+      throw new Error(
+        `SubAgent scope/config mismatch: scope childRunId ${validatedScope.childRunId} does not match config id ${config.id}.`,
+      );
+    }
+    this.checkLimits(validatedScope);
 
-    // Create instance
+    const key = formatChildRunScope(validatedScope);
+    if (this.instances.has(key)) {
+      throw new Error(`SubAgent scope already exists: ${key}`);
+    }
+
     const instance: SubAgentInstance = {
+      scope: validatedScope,
       config,
-      parentId,
-      conversationId,
       status: 'pending',
       abortController: new AbortController(),
       resolvers: [],
     };
-    this.instances.set(config.id, instance);
+    this.instances.set(key, instance);
+    this.emit(this.createEvent(instance, 'spawned', this.toEventData(config, 'pending')));
 
-    // Emit spawned event
-    this.emit({
-      type: 'spawned',
-      subAgentId: config.id,
-      parentAgentId: parentId,
-      conversationId,
-      data: this.toEventData(config, 'pending'),
-      timestamp: Date.now(),
-    });
-
-    // Start execution asynchronously
     this.executeSubAgent(instance).catch((error) => {
-      logger.error('Execution error', { subAgentId: config.id, error });
+      logger.error('Execution error', { scope: key, error });
     });
-
-    return config.id;
+    return validatedScope;
   }
 
-  /**
-   * Spawn multiple SubAgents in parallel
-   */
   async spawnBatch(
-    parentId: string,
-    conversationId: string,
-    configs: SubAgentConfig[],
-  ): Promise<string[]> {
-    const ids: string[] = [];
-    for (const config of configs) {
-      const id = await this.spawn(parentId, conversationId, config);
-      ids.push(id);
-    }
-    return ids;
+    entries: readonly { readonly scope: ChildRunScope; readonly config: SubAgentConfig }[],
+  ): Promise<ChildRunScope[]> {
+    const scopes: ChildRunScope[] = [];
+    for (const entry of entries) scopes.push(await this.spawn(entry.scope, entry.config));
+    return scopes;
   }
 
-  /**
-   * Get SubAgent status
-   */
-  getStatus(subAgentId: string): SubAgentStatus | undefined {
-    return this.instances.get(subAgentId)?.status;
+  getStatus(scope: ChildRunScope): SubAgentStatus | undefined {
+    return this.instances.get(this.scopeKey(scope))?.status;
   }
 
-  /**
-   * Get SubAgent result (blocks until complete or timeout)
-   */
-  async getResult(subAgentId: string, timeout?: number): Promise<SubAgentResult> {
-    const instance = this.instances.get(subAgentId);
-    if (!instance) {
-      throw new Error(`SubAgent not found: ${subAgentId}`);
-    }
+  async getResult(scope: ChildRunScope, timeout?: number): Promise<SubAgentResult> {
+    const validatedScope = this.requireSubAgentScope(scope);
+    const key = formatChildRunScope(validatedScope);
+    const instance = this.instances.get(key);
+    if (!instance) throw new Error(`SubAgent not found: ${key}`);
+    if (instance.result) return instance.result;
 
-    // If already completed, return result immediately
-    if (instance.result) {
-      return instance.result;
-    }
-
-    // Wait for completion
     return new Promise((resolve, reject) => {
-      const effectiveTimeout = timeout || SubAgentManager.DEFAULT_TIMEOUT;
-
-      // Add resolver to instance
-      instance.resolvers.push({ resolve, reject });
-
-      // Setup timeout
-      const timeoutId = setTimeout(() => {
-        const idx = instance.resolvers.findIndex((r) => r.resolve === resolve);
-        if (idx >= 0) {
-          instance.resolvers.splice(idx, 1);
-        }
-        reject(new Error(`Timeout waiting for SubAgent: ${subAgentId}`));
-      }, effectiveTimeout);
-
-      // If result becomes available, clear timeout
-      const checkResult = () => {
-        if (instance.result) {
-          clearTimeout(timeoutId);
-          resolve(instance.result);
-        }
+      const effectiveTimeout = timeout ?? SubAgentManager.DEFAULT_TIMEOUT;
+      const resolveWithCleanup = (result: SubAgentResult): void => {
+        clearTimeout(timeoutId);
+        resolve(result);
       };
-
-      // Check immediately in case it completed between check and promise creation
-      checkResult();
+      instance.resolvers.push({ resolve: resolveWithCleanup, reject });
+      const timeoutId = setTimeout(() => {
+        const index = instance.resolvers.findIndex((entry) => entry.resolve === resolveWithCleanup);
+        if (index >= 0) instance.resolvers.splice(index, 1);
+        reject(new Error(`Timeout waiting for SubAgent: ${key}`));
+      }, effectiveTimeout);
+      if (instance.result) resolveWithCleanup(instance.result);
     });
   }
 
-  /**
-   * Get multiple SubAgent results
-   */
-  async getResults(subAgentIds: string[], timeout?: number): Promise<SubAgentResult[]> {
-    return Promise.all(subAgentIds.map((id) => this.getResult(id, timeout)));
+  async getResults(scopes: readonly ChildRunScope[], timeout?: number): Promise<SubAgentResult[]> {
+    return Promise.all(scopes.map((scope) => this.getResult(scope, timeout)));
   }
 
-  /**
-   * Cancel a running SubAgent
-   */
-  cancel(subAgentId: string): void {
-    const instance = this.instances.get(subAgentId);
-    if (instance && instance.status === 'running') {
+  cancel(scope: ChildRunScope): void {
+    const instance = this.instances.get(this.scopeKey(scope));
+    if (instance?.status === 'running') {
       instance.abortController?.abort();
       instance.executor?.abort();
     }
   }
 
-  /**
-   * Cancel all SubAgents for a parent
-   */
-  cancelAll(parentId: string): void {
-    for (const [id, instance] of this.instances) {
-      if (instance.parentId === parentId) {
-        this.cancel(id);
-      }
+  cancelRun(scope: ConversationRunScope): void {
+    const owner = this.requireRunScope(scope);
+    for (const instance of this.instances.values()) {
+      if (this.isOwnedByRun(instance.scope, owner)) this.cancel(instance.scope);
     }
   }
 
-  /**
-   * List all SubAgents for a parent
-   */
-  listByParent(parentId: string): SubAgentConfig[] {
+  listByRun(scope: ConversationRunScope): SubAgentConfig[] {
+    const owner = this.requireRunScope(scope);
     return Array.from(this.instances.values())
-      .filter((i) => i.parentId === parentId)
-      .map((i) => i.config);
+      .filter((instance) => this.isOwnedByRun(instance.scope, owner))
+      .map((instance) => instance.config);
   }
 
-  /**
-   * Subscribe to SubAgent events
-   */
   onEvent(callback: SubAgentEventListener): () => void {
     this.emitter.on('subagent', callback);
     return () => this.emitter.off('subagent', callback);
   }
 
-  /**
-   * Cleanup completed SubAgents for a parent
-   */
-  cleanup(parentId: string): void {
-    const toDelete: string[] = [];
-    for (const [id, instance] of this.instances) {
+  cleanupRun(scope: ConversationRunScope): void {
+    const owner = this.requireRunScope(scope);
+    for (const [key, instance] of this.instances) {
       if (
-        instance.parentId === parentId &&
-        ['completed', 'failed', 'cancelled'].includes(instance.status)
-      ) {
-        toDelete.push(id);
-      }
-    }
-    for (const id of toDelete) {
-      this.instances.delete(id);
+        this.isOwnedByRun(instance.scope, owner) &&
+        (instance.status === 'completed' ||
+          instance.status === 'failed' ||
+          instance.status === 'cancelled')
+      )
+        this.instances.delete(key);
     }
   }
 
@@ -337,18 +284,20 @@ export class SubAgentManager implements ISubAgentManager {
   /**
    * Check resource limits before spawning
    */
-  private checkLimits(parentId: string): void {
-    // Check per-parent limit
-    const parentSubAgents = this.listByParent(parentId);
-    if (parentSubAgents.length >= SubAgentManager.MAX_SUBAGENTS_PER_PARENT) {
+  private checkLimits(scope: ChildRunScope): void {
+    const parentCount = Array.from(this.instances.values()).filter(
+      (instance) =>
+        this.isOwnedByRun(instance.scope, scope) &&
+        instance.scope.parentRunId === scope.parentRunId,
+    ).length;
+    if (parentCount >= SubAgentManager.MAX_SUBAGENTS_PER_PARENT) {
       throw new Error(
         `Max SubAgents per parent reached: ${SubAgentManager.MAX_SUBAGENTS_PER_PARENT}`,
       );
     }
 
-    // Check concurrent limit
     const runningCount = Array.from(this.instances.values()).filter(
-      (i) => i.status === 'running',
+      (instance) => instance.status === 'running',
     ).length;
     if (runningCount >= SubAgentManager.MAX_CONCURRENT_SUBAGENTS) {
       throw new Error(
@@ -361,12 +310,15 @@ export class SubAgentManager implements ISubAgentManager {
    * Execute a SubAgent
    */
   private async executeSubAgent(instance: SubAgentInstance): Promise<void> {
-    const { config, parentId, conversationId, abortController } = instance;
+    const { scope, config, abortController } = instance;
+    const parentId = scope.parentRunId;
+    const conversationId = scope.conversationId;
     instance.status = 'running';
     instance.startTime = Date.now();
 
     this.emit({
       type: 'started',
+      scope,
       subAgentId: config.id,
       parentAgentId: parentId,
       conversationId,
@@ -374,6 +326,7 @@ export class SubAgentManager implements ISubAgentManager {
       timestamp: Date.now(),
     });
 
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
     try {
       const locale = config.locale;
       const labels = getSubAgentPromptLabels(locale);
@@ -428,6 +381,7 @@ export class SubAgentManager implements ISubAgentManager {
 
       // Create executor
       const executor = this.deps.createAgent(agentConfig, undefined, {
+        scope,
         parentId,
         conversationId,
         subAgentId: config.id,
@@ -450,6 +404,7 @@ export class SubAgentManager implements ISubAgentManager {
       const emitProgress = (progress: string): void => {
         this.emit({
           type: 'progress',
+          scope,
           subAgentId: config.id,
           parentAgentId: parentId,
           conversationId,
@@ -463,10 +418,9 @@ export class SubAgentManager implements ISubAgentManager {
       // Execute
       const result = await executor.execute(inputPrompt, { onProgress: emitProgress });
 
-      clearTimeout(timeoutId);
-
       // Build result
       instance.result = {
+        scope,
         id: config.id,
         status: 'completed',
         response: result.response,
@@ -477,6 +431,7 @@ export class SubAgentManager implements ISubAgentManager {
 
       this.emit({
         type: 'completed',
+        scope,
         subAgentId: config.id,
         parentAgentId: parentId,
         conversationId,
@@ -492,6 +447,7 @@ export class SubAgentManager implements ISubAgentManager {
 
       instance.status = isCancelled ? 'cancelled' : 'failed';
       instance.result = {
+        scope,
         id: config.id,
         status: instance.status,
         error: errorMessage,
@@ -500,6 +456,7 @@ export class SubAgentManager implements ISubAgentManager {
 
       this.emit({
         type: isCancelled ? 'cancelled' : 'failed',
+        scope,
         subAgentId: config.id,
         parentAgentId: parentId,
         conversationId,
@@ -509,6 +466,8 @@ export class SubAgentManager implements ISubAgentManager {
 
       // Resolve waiting promises (with the error result)
       this.resolveWaiters(instance);
+    } finally {
+      if (timeoutId) clearTimeout(timeoutId);
     }
   }
 
@@ -709,6 +668,47 @@ ${content}`;
       runId: config.runId,
       runStartedAt: config.runStartedAt,
     };
+  }
+
+  private createEvent(
+    instance: SubAgentInstance,
+    type: SubAgentEvent['type'],
+    data?: SubAgentEvent['data'],
+  ): SubAgentEvent {
+    return {
+      type,
+      scope: instance.scope,
+      subAgentId: instance.scope.childRunId,
+      parentAgentId: instance.scope.parentRunId,
+      conversationId: instance.scope.conversationId,
+      ...(data ? { data } : {}),
+      timestamp: Date.now(),
+    };
+  }
+
+  private scopeKey(scope: ChildRunScope): string {
+    return formatChildRunScope(this.requireSubAgentScope(scope));
+  }
+
+  private requireSubAgentScope(scope: ChildRunScope): ChildRunScope {
+    const validation = validateChildRunScope(scope);
+    if (!validation.ok) throw new Error(validation.diagnostic.message);
+    if (validation.scope.childKind !== 'subagent') {
+      throw new Error(
+        `SubAgentManager requires childKind=subagent: ${formatChildRunScope(validation.scope)}`,
+      );
+    }
+    return validation.scope;
+  }
+
+  private requireRunScope(scope: ConversationRunScope): ConversationRunScope {
+    const validation = validateConversationRunScope(scope);
+    if (!validation.ok) throw new Error(validation.diagnostic.message);
+    return validation.scope;
+  }
+
+  private isOwnedByRun(scope: ChildRunScope, owner: ConversationRunScope): boolean {
+    return scope.conversationId === owner.conversationId && scope.runId === owner.runId;
   }
 
   /**

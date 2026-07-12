@@ -14,6 +14,7 @@ import {
   type ToolCategory,
   type ToolExecuteOptions,
 } from '@neko/shared';
+import type { ChildRunScope } from '@neko-agent/types';
 import type {
   ISubAgentManager,
   SubAgentConfig,
@@ -52,6 +53,55 @@ function buildSubAgentToolResultMetadata(
     ...(config.parentMessageId ? { parentMessageId: config.parentMessageId } : {}),
     ...(config.parentToolCallId ? { parentToolCallId: config.parentToolCallId } : {}),
   };
+}
+
+interface SubAgentOwnerScope {
+  readonly conversationId: string;
+  readonly runId: string;
+  readonly parentRunId: string;
+}
+
+function requireSubAgentOwnerScope(options: ToolExecuteOptions | undefined): SubAgentOwnerScope {
+  const metadata = options?.metadata ?? {};
+  const metadataConversationId = readNonEmptyString(metadata.conversationId);
+  const traceConversationId = readNonEmptyString(options?.trace?.conversationId);
+  if (
+    metadataConversationId &&
+    traceConversationId &&
+    metadataConversationId !== traceConversationId
+  ) {
+    throw new Error(
+      `SubAgent owner mismatch: metadata conversation ${metadataConversationId} does not match trace conversation ${traceConversationId}.`,
+    );
+  }
+  const conversationId = metadataConversationId ?? traceConversationId;
+  if (!conversationId || conversationId === 'unknown') {
+    throw new Error('Missing conversationId for SubAgent task');
+  }
+
+  const metadataRunId = readNonEmptyString(metadata.runId);
+  const traceRunId = readNonEmptyString(options?.trace?.runId);
+  if (metadataRunId && traceRunId && metadataRunId !== traceRunId) {
+    throw new Error(
+      `SubAgent owner mismatch: metadata run ${metadataRunId} does not match trace run ${traceRunId}.`,
+    );
+  }
+  const runId = metadataRunId ?? traceRunId;
+  if (!runId) throw new Error('Missing runId for SubAgent task');
+
+  const parentRunId = readNonEmptyString(metadata.parentAgentId);
+  if (!parentRunId) throw new Error('Missing parentAgentId for SubAgent task');
+  return { conversationId, runId, parentRunId };
+}
+
+function createSubAgentScope(owner: SubAgentOwnerScope, childRunId: string): ChildRunScope {
+  return { ...owner, childRunId, childKind: 'subagent' };
+}
+
+function readNonEmptyString(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
 }
 
 // =============================================================================
@@ -216,13 +266,21 @@ Launch multiple SubAgents in a single turn for independent tasks:
         preset_options,
       } = typedArgs;
 
+      let owner: SubAgentOwnerScope;
+      try {
+        owner = requireSubAgentOwnerScope(options);
+      } catch (error) {
+        return { success: false, error: error instanceof Error ? error.message : String(error) };
+      }
+
       // Handle resume case
       if (resume) {
         logger.debug(
           'neko.agent.subagent.resume.request',
           withAgentTrace(trace, { subAgentId: resume }),
         );
-        const status = subAgentManager.getStatus(resume);
+        const resumeScope = createSubAgentScope(owner, resume);
+        const status = subAgentManager.getStatus(resumeScope);
         if (!status) {
           return {
             success: false,
@@ -233,7 +291,7 @@ Launch multiple SubAgents in a single turn for independent tasks:
         if (status === 'running') {
           // Wait for result
           try {
-            const result = await subAgentManager.getResult(resume);
+            const result = await subAgentManager.getResult(resumeScope);
             return {
               success: result.status === 'completed',
               data: result,
@@ -263,25 +321,10 @@ Launch multiple SubAgents in a single turn for independent tasks:
       }
 
       const metadata = options?.metadata ?? {};
-      const locale = typeof metadata.locale === 'string' ? metadata.locale : undefined;
-      const conversationId =
-        typeof metadata.conversationId === 'string' && metadata.conversationId.length > 0
-          ? metadata.conversationId
-          : undefined;
-      if (!conversationId) {
-        return {
-          success: false,
-          error: 'Missing conversationId for SubAgent task',
-        };
-      }
-      const parentId =
-        typeof metadata.parentAgentId === 'string' && metadata.parentAgentId.length > 0
-          ? metadata.parentAgentId
-          : `agent-${conversationId}`;
-      const parentMessageId =
-        typeof metadata.parentMessageId === 'string' ? metadata.parentMessageId : undefined;
-      const parentToolCallId =
-        typeof metadata.parentToolCallId === 'string' ? metadata.parentToolCallId : undefined;
+      const locale = readNonEmptyString(metadata.locale);
+      const parentId = owner.parentRunId;
+      const parentMessageId = readNonEmptyString(metadata.parentMessageId);
+      const parentToolCallId = readNonEmptyString(metadata.parentToolCallId);
 
       // Create SubAgent config
       const config: SubAgentConfig = {
@@ -314,7 +357,9 @@ Launch multiple SubAgents in a single turn for independent tasks:
             inheritContext: config.inheritContext === true,
           }),
         );
-        const subAgentId = await subAgentManager.spawn(parentId, conversationId, config);
+        const scope = createSubAgentScope(owner, config.id);
+        await subAgentManager.spawn(scope, config);
+        const subAgentId = scope.childRunId;
         const resultMetadata = buildSubAgentToolResultMetadata(parentId, config);
         logger.debug(
           'neko.agent.subagent.spawned',
@@ -330,6 +375,7 @@ Launch multiple SubAgents in a single turn for independent tasks:
           return {
             success: true,
             data: {
+              scope,
               subAgentId,
               ...resultMetadata,
               status: 'running',
@@ -339,7 +385,7 @@ Launch multiple SubAgents in a single turn for independent tasks:
         }
 
         // Foreground mode: wait for result
-        const result = await subAgentManager.getResult(subAgentId);
+        const result = await subAgentManager.getResult(scope);
         logger.debug(
           'neko.agent.subagent.completed',
           withAgentTrace(trace, {
@@ -443,7 +489,14 @@ export function createTaskOutputTool(subAgentManager: ISubAgentManager): Tool {
         };
       }
 
-      const status = subAgentManager.getStatus(task_id);
+      let scope: ChildRunScope;
+      try {
+        scope = createSubAgentScope(requireSubAgentOwnerScope(options), task_id);
+      } catch (error) {
+        return { success: false, error: error instanceof Error ? error.message : String(error) };
+      }
+
+      const status = subAgentManager.getStatus(scope);
       if (!status) {
         logger.debug(
           'neko.agent.subagent.output.missing',
@@ -478,7 +531,7 @@ export function createTaskOutputTool(subAgentManager: ISubAgentManager): Tool {
 
       // Blocking mode or task already complete
       try {
-        const result = await subAgentManager.getResult(task_id, timeout);
+        const result = await subAgentManager.getResult(scope, timeout);
         logger.debug(
           'neko.agent.subagent.output.result',
           withAgentTrace(trace, {

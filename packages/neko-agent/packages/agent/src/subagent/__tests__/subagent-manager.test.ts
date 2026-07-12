@@ -6,6 +6,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { SubAgentManager, SPECIALIZED_PRESETS } from '../subagent-manager';
 import type { SubAgentConfig, SubAgentManagerDeps, SubAgentEvent } from '../types';
 import type { ToolDefinition } from '@neko/shared';
+import type { ChildRunScope } from '@neko-agent/types';
 
 // =============================================================================
 // Mocks
@@ -96,6 +97,15 @@ function getCreatedAgentToolNames(deps: SubAgentManagerDeps): string[] {
   return agentConfig.tools.map((tool) => tool.function.name);
 }
 
+function subAgentScope(
+  childRunId: string,
+  conversationId = 'conv-1',
+  runId = 'run-1',
+  parentRunId = 'parent-1',
+): ChildRunScope {
+  return { conversationId, runId, parentRunId, childRunId, childKind: 'subagent' };
+}
+
 // =============================================================================
 // Tests
 // =============================================================================
@@ -114,12 +124,12 @@ describe('SubAgentManager', () => {
   });
 
   describe('spawn', () => {
-    it('should spawn a SubAgent and return its ID', async () => {
+    it('should spawn a SubAgent and return its complete scope', async () => {
       const config = createTestConfig({ id: 'test-agent-1' });
-      const id = await manager.spawn('parent-1', 'conv-1', config);
+      const scope = await manager.spawn(subAgentScope(config.id), config);
 
-      expect(id).toBe('test-agent-1');
-      expect(manager.getStatus('test-agent-1')).toBeDefined();
+      expect(scope).toEqual(subAgentScope('test-agent-1'));
+      expect(manager.getStatus(subAgentScope('test-agent-1'))).toBeDefined();
     });
 
     it('should emit spawned event', async () => {
@@ -127,7 +137,7 @@ describe('SubAgentManager', () => {
       manager.onEvent((event) => events.push(event));
 
       const config = createTestConfig({ id: 'test-agent-2' });
-      await manager.spawn('parent-1', 'conv-1', config);
+      await manager.spawn(subAgentScope(config.id), config);
 
       // Wait for async execution to start
       await new Promise((r) => setTimeout(r, 10));
@@ -141,12 +151,12 @@ describe('SubAgentManager', () => {
     it('should respect MAX_SUBAGENTS_PER_PARENT limit', async () => {
       // Spawn max agents
       for (let i = 0; i < SubAgentManager.MAX_SUBAGENTS_PER_PARENT; i++) {
-        await manager.spawn('parent-1', 'conv-1', createTestConfig({ id: `agent-${i}` }));
+        await manager.spawn(subAgentScope(`agent-${i}`), createTestConfig({ id: `agent-${i}` }));
       }
 
       // Next spawn should throw
       await expect(
-        manager.spawn('parent-1', 'conv-1', createTestConfig({ id: 'agent-overflow' })),
+        manager.spawn(subAgentScope('agent-overflow'), createTestConfig({ id: 'agent-overflow' })),
       ).rejects.toThrow('Max SubAgents per parent reached');
     });
 
@@ -155,7 +165,7 @@ describe('SubAgentManager', () => {
         id: 'code-search-agent',
         type: 'code-search',
       });
-      await manager.spawn('parent-1', 'conv-1', config);
+      await manager.spawn(subAgentScope(config.id), config);
 
       expect(deps.createAgent).toHaveBeenCalled();
       const agentConfig = (deps.createAgent as ReturnType<typeof vi.fn>).mock.calls[0]![0];
@@ -184,8 +194,8 @@ describe('SubAgentManager', () => {
         contextSummary: '父任务：分析中文分镜提示词',
       });
 
-      await manager.spawn('parent-1', 'conv-1', config);
-      await manager.getResult('localized-agent', 5000);
+      await manager.spawn(subAgentScope(config.id), config);
+      await manager.getResult(subAgentScope('localized-agent'), 5000);
 
       const agentConfig = (deps.createAgent as ReturnType<typeof vi.fn>).mock.calls[0]![0];
       const executor = (deps.createAgent as ReturnType<typeof vi.fn>).mock.results[0]!.value as {
@@ -215,8 +225,8 @@ describe('SubAgentManager', () => {
         modelTier: 'powerful',
       });
 
-      await manager.spawn('parent-1', 'conv-1', config);
-      await manager.getResult('model-resolver-agent', 5000);
+      await manager.spawn(subAgentScope(config.id), config);
+      await manager.getResult(subAgentScope('model-resolver-agent'), 5000);
 
       const agentConfig = (deps.createAgent as ReturnType<typeof vi.fn>).mock.calls[0]![0];
       expect(agentConfig.providerId).toBe('test-provider');
@@ -237,8 +247,11 @@ describe('SubAgentManager', () => {
       const managerWithoutResolver = new SubAgentManager(depsWithoutResolver);
       const config = createTestConfig({ id: 'missing-model-agent' });
 
-      await managerWithoutResolver.spawn('parent-1', 'conv-1', config);
-      const result = await managerWithoutResolver.getResult('missing-model-agent', 5000);
+      await managerWithoutResolver.spawn(subAgentScope(config.id), config);
+      const result = await managerWithoutResolver.getResult(
+        subAgentScope('missing-model-agent'),
+        5000,
+      );
 
       expect(result.status).toBe('failed');
       expect(result.error).toContain('SubAgent model tier "balanced" could not be resolved');
@@ -251,8 +264,8 @@ describe('SubAgentManager', () => {
         modelId: 'test-model',
       });
 
-      await manager.spawn('parent-1', 'conv-1', config);
-      const result = await manager.getResult('partial-model-agent', 5000);
+      await manager.spawn(subAgentScope(config.id), config);
+      const result = await manager.getResult(subAgentScope('partial-model-agent'), 5000);
 
       expect(result.status).toBe('failed');
       expect(result.error).toContain('requires both providerId and modelId');
@@ -267,8 +280,11 @@ describe('SubAgentManager', () => {
       const managerWithLegacyResolver = new SubAgentManager(depsWithLegacyResolver);
       const config = createTestConfig({ id: 'legacy-model-agent' });
 
-      await managerWithLegacyResolver.spawn('parent-1', 'conv-1', config);
-      const result = await managerWithLegacyResolver.getResult('legacy-model-agent', 5000);
+      await managerWithLegacyResolver.spawn(subAgentScope(config.id), config);
+      const result = await managerWithLegacyResolver.getResult(
+        subAgentScope('legacy-model-agent'),
+        5000,
+      );
 
       expect(result.status).toBe('failed');
       expect(result.error).toContain('must return providerId and modelId');
@@ -281,8 +297,8 @@ describe('SubAgentManager', () => {
         toolPolicy: { kind: 'none' },
       });
 
-      await manager.spawn('parent-1', 'conv-1', config);
-      await manager.getResult('tool-policy-none-agent', 5000);
+      await manager.spawn(subAgentScope(config.id), config);
+      await manager.getResult(subAgentScope('tool-policy-none-agent'), 5000);
 
       expect(getCreatedAgentToolNames(deps)).toEqual([]);
     });
@@ -293,8 +309,8 @@ describe('SubAgentManager', () => {
         toolPolicy: { kind: 'all' },
       });
 
-      await manager.spawn('parent-1', 'conv-1', config);
-      await manager.getResult('tool-policy-all-agent', 5000);
+      await manager.spawn(subAgentScope(config.id), config);
+      await manager.getResult(subAgentScope('tool-policy-all-agent'), 5000);
 
       expect(getCreatedAgentToolNames(deps)).toEqual(['read_file', 'write_file', 'grep']);
     });
@@ -305,8 +321,8 @@ describe('SubAgentManager', () => {
         toolPolicy: { kind: 'allow-list', tools: ['read_file'] },
       });
 
-      await manager.spawn('parent-1', 'conv-1', config);
-      await manager.getResult('tool-policy-allow-list-agent', 5000);
+      await manager.spawn(subAgentScope(config.id), config);
+      await manager.getResult(subAgentScope('tool-policy-allow-list-agent'), 5000);
 
       expect(getCreatedAgentToolNames(deps)).toEqual(['read_file']);
     });
@@ -318,8 +334,8 @@ describe('SubAgentManager', () => {
         toolPolicy: { kind: 'allow-list', tools: ['grep'] },
       });
 
-      await manager.spawn('parent-1', 'conv-1', config);
-      await manager.getResult('tool-policy-override-agent', 5000);
+      await manager.spawn(subAgentScope(config.id), config);
+      await manager.getResult(subAgentScope('tool-policy-override-agent'), 5000);
 
       expect(getCreatedAgentToolNames(deps)).toEqual(['grep']);
     });
@@ -330,8 +346,8 @@ describe('SubAgentManager', () => {
         type: 'general',
       });
 
-      await manager.spawn('parent-1', 'conv-1', config);
-      await manager.getResult('preset-tool-policy-agent', 5000);
+      await manager.spawn(subAgentScope(config.id), config);
+      await manager.getResult(subAgentScope('preset-tool-policy-agent'), 5000);
 
       expect(getCreatedAgentToolNames(deps)).toEqual(['read_file', 'write_file', 'grep']);
     });
@@ -352,8 +368,8 @@ describe('SubAgentManager', () => {
         type: 'external-domain-planner',
       });
 
-      await managerWithExternalPreset.spawn('parent-1', 'conv-1', config);
-      await managerWithExternalPreset.getResult('external-preset-agent', 5000);
+      await managerWithExternalPreset.spawn(subAgentScope(config.id), config);
+      await managerWithExternalPreset.getResult(subAgentScope('external-preset-agent'), 5000);
 
       const agentConfig = (deps.createAgent as ReturnType<typeof vi.fn>).mock.calls[0]![0];
       expect(agentConfig.systemPrompt).toContain('externally contributed planner');
@@ -368,8 +384,8 @@ describe('SubAgentManager', () => {
         type: 'missing-domain-planner',
       });
 
-      await manager.spawn('parent-1', 'conv-1', config);
-      const result = await manager.getResult('unknown-preset-agent', 5000);
+      await manager.spawn(subAgentScope(config.id), config);
+      const result = await manager.getResult(subAgentScope('unknown-preset-agent'), 5000);
 
       expect(result.status).toBe('failed');
       expect(result.error).toContain('Unknown SubAgent preset type "missing-domain-planner"');
@@ -385,26 +401,25 @@ describe('SubAgentManager', () => {
         createTestConfig({ id: 'batch-3' }),
       ];
 
-      const ids = await manager.spawnBatch('parent-1', 'conv-1', configs);
+      const scopes = await manager.spawnBatch(
+        configs.map((config) => ({ scope: subAgentScope(config.id), config })),
+      );
 
-      expect(ids).toHaveLength(3);
-      expect(ids).toContain('batch-1');
-      expect(ids).toContain('batch-2');
-      expect(ids).toContain('batch-3');
+      expect(scopes).toEqual(configs.map((config) => subAgentScope(config.id)));
     });
   });
 
   describe('getStatus', () => {
     it('should return undefined for non-existent SubAgent', () => {
-      expect(manager.getStatus('non-existent')).toBeUndefined();
+      expect(manager.getStatus(subAgentScope('non-existent'))).toBeUndefined();
     });
 
     it('should return correct status', async () => {
       const config = createTestConfig({ id: 'status-test' });
-      await manager.spawn('parent-1', 'conv-1', config);
+      await manager.spawn(subAgentScope(config.id), config);
 
       // Status should be defined (pending, running, or completed depending on timing)
-      const status = manager.getStatus('status-test');
+      const status = manager.getStatus(subAgentScope('status-test'));
       expect(status).toBeDefined();
       expect(['pending', 'running', 'completed']).toContain(status);
     });
@@ -413,9 +428,9 @@ describe('SubAgentManager', () => {
   describe('getResult', () => {
     it('should return result when SubAgent completes', async () => {
       const config = createTestConfig({ id: 'result-test' });
-      await manager.spawn('parent-1', 'conv-1', config);
+      await manager.spawn(subAgentScope(config.id), config);
 
-      const result = await manager.getResult('result-test', 5000);
+      const result = await manager.getResult(subAgentScope('result-test'), 5000);
 
       expect(result.id).toBe('result-test');
       expect(result.status).toBe('completed');
@@ -423,16 +438,21 @@ describe('SubAgentManager', () => {
     });
 
     it('should throw for non-existent SubAgent', async () => {
-      await expect(manager.getResult('non-existent')).rejects.toThrow('SubAgent not found');
+      await expect(manager.getResult(subAgentScope('non-existent'))).rejects.toThrow(
+        'SubAgent not found',
+      );
     });
   });
 
   describe('getResults', () => {
     it('should return results for multiple SubAgents', async () => {
-      await manager.spawn('parent-1', 'conv-1', createTestConfig({ id: 'multi-1' }));
-      await manager.spawn('parent-1', 'conv-1', createTestConfig({ id: 'multi-2' }));
+      await manager.spawn(subAgentScope('multi-1'), createTestConfig({ id: 'multi-1' }));
+      await manager.spawn(subAgentScope('multi-2'), createTestConfig({ id: 'multi-2' }));
 
-      const results = await manager.getResults(['multi-1', 'multi-2'], 5000);
+      const results = await manager.getResults(
+        [subAgentScope('multi-1'), subAgentScope('multi-2')],
+        5000,
+      );
 
       expect(results).toHaveLength(2);
       expect(results.map((r) => r.id)).toContain('multi-1');
@@ -453,19 +473,19 @@ describe('SubAgentManager', () => {
       (deps.createAgent as ReturnType<typeof vi.fn>).mockReturnValue(slowExecutor);
 
       const config = createTestConfig({ id: 'cancel-test' });
-      await manager.spawn('parent-1', 'conv-1', config);
+      await manager.spawn(subAgentScope(config.id), config);
 
       // Wait for it to start running
       await new Promise((r) => setTimeout(r, 50));
 
-      manager.cancel('cancel-test');
+      manager.cancel(subAgentScope('cancel-test'));
 
       expect(slowExecutor.abort).toHaveBeenCalled();
     });
   });
 
-  describe('cancelAll', () => {
-    it('should cancel all SubAgents for a parent', async () => {
+  describe('cancelRun', () => {
+    it('should cancel all SubAgents for one conversation run', async () => {
       const slowExecutor = {
         execute: vi
           .fn()
@@ -475,42 +495,97 @@ describe('SubAgentManager', () => {
       };
       (deps.createAgent as ReturnType<typeof vi.fn>).mockReturnValue(slowExecutor);
 
-      await manager.spawn('parent-1', 'conv-1', createTestConfig({ id: 'cancel-all-1' }));
-      await manager.spawn('parent-1', 'conv-1', createTestConfig({ id: 'cancel-all-2' }));
+      await manager.spawn(subAgentScope('cancel-all-1'), createTestConfig({ id: 'cancel-all-1' }));
+      await manager.spawn(subAgentScope('cancel-all-2'), createTestConfig({ id: 'cancel-all-2' }));
 
       await new Promise((r) => setTimeout(r, 50));
 
-      manager.cancelAll('parent-1');
+      manager.cancelRun({ conversationId: 'conv-1', runId: 'run-1' });
 
       // Both should have abort called
       expect(slowExecutor.abort).toHaveBeenCalledTimes(2);
     });
   });
 
-  describe('listByParent', () => {
-    it('should list SubAgents for a specific parent', async () => {
-      await manager.spawn('parent-1', 'conv-1', createTestConfig({ id: 'list-1' }));
-      await manager.spawn('parent-1', 'conv-1', createTestConfig({ id: 'list-2' }));
-      await manager.spawn('parent-2', 'conv-1', createTestConfig({ id: 'list-3' }));
+  describe('listByRun', () => {
+    it('should list only SubAgents for the specified conversation run', async () => {
+      await manager.spawn(subAgentScope('list-1'), createTestConfig({ id: 'list-1' }));
+      await manager.spawn(subAgentScope('list-2'), createTestConfig({ id: 'list-2' }));
+      await manager.spawn(
+        subAgentScope('list-other-run', 'conv-1', 'run-2', 'parent-1'),
+        createTestConfig({ id: 'list-other-run' }),
+      );
+      await manager.spawn(
+        subAgentScope('list-other-conversation', 'conv-2', 'run-1', 'parent-1'),
+        createTestConfig({ id: 'list-other-conversation' }),
+      );
 
-      const parent1Agents = manager.listByParent('parent-1');
-      const parent2Agents = manager.listByParent('parent-2');
-
-      expect(parent1Agents).toHaveLength(2);
-      expect(parent2Agents).toHaveLength(1);
+      expect(
+        manager.listByRun({ conversationId: 'conv-1', runId: 'run-1' }).map((config) => config.id),
+      ).toEqual(['list-1', 'list-2']);
     });
   });
 
-  describe('cleanup', () => {
+  describe('cleanupRun', () => {
     it('should remove completed SubAgents', async () => {
-      await manager.spawn('parent-1', 'conv-1', createTestConfig({ id: 'cleanup-1' }));
+      await manager.spawn(subAgentScope('cleanup-1'), createTestConfig({ id: 'cleanup-1' }));
 
       // Wait for completion
-      await manager.getResult('cleanup-1', 5000);
+      await manager.getResult(subAgentScope('cleanup-1'), 5000);
 
-      manager.cleanup('parent-1');
+      manager.cleanupRun({ conversationId: 'conv-1', runId: 'run-1' });
 
-      expect(manager.listByParent('parent-1')).toHaveLength(0);
+      expect(manager.listByRun({ conversationId: 'conv-1', runId: 'run-1' })).toHaveLength(0);
+    });
+  });
+
+  describe('scoped identity isolation', () => {
+    it('allows equal local child IDs in different runs without cross-read or cross-cancel', async () => {
+      const abortByConversation = new Map<string, ReturnType<typeof vi.fn>>();
+      (deps.createAgent as ReturnType<typeof vi.fn>).mockImplementation(
+        (_config: unknown, _service: unknown, context: { conversationId: string }) => {
+          const abort = vi.fn();
+          abortByConversation.set(context.conversationId, abort);
+          return {
+            execute: vi.fn(() => new Promise(() => {})),
+            abort,
+            getState: vi.fn().mockReturnValue('running'),
+          };
+        },
+      );
+
+      const scopeA = subAgentScope('shared-child', 'conv-a', 'run-a', 'parent-a');
+      const scopeB = subAgentScope('shared-child', 'conv-b', 'run-b', 'parent-b');
+      await manager.spawn(scopeA, createTestConfig({ id: 'shared-child' }));
+      await manager.spawn(scopeB, createTestConfig({ id: 'shared-child' }));
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      expect(manager.getStatus(scopeA)).toBe('running');
+      expect(manager.getStatus(scopeB)).toBe('running');
+
+      manager.cancel(scopeA);
+
+      expect(abortByConversation.get('conv-a')).toHaveBeenCalledTimes(1);
+      expect(abortByConversation.get('conv-b')).not.toHaveBeenCalled();
+      expect(manager.getStatus(scopeB)).toBe('running');
+    });
+
+    it('fails visibly for wrong child kind, scope/config mismatch, duplicate scope, and bare IDs', async () => {
+      const validScope = subAgentScope('scoped-agent');
+      await manager.spawn(validScope, createTestConfig({ id: 'scoped-agent' }));
+
+      expect(() => manager.getStatus({ ...validScope, childKind: 'task' })).toThrow(
+        'childKind=subagent',
+      );
+      await expect(
+        manager.spawn(subAgentScope('scope-id'), createTestConfig({ id: 'config-id' })),
+      ).rejects.toThrow('scope/config mismatch');
+      await expect(
+        manager.spawn(validScope, createTestConfig({ id: 'scoped-agent' })),
+      ).rejects.toThrow('already exists');
+      expect(() => manager.getStatus('scoped-agent' as never)).toThrow(
+        'requires non-empty conversationId and runId',
+      );
     });
   });
 
@@ -519,14 +594,14 @@ describe('SubAgentManager', () => {
       const events: SubAgentEvent[] = [];
       const unsubscribe = manager.onEvent((event) => events.push(event));
 
-      await manager.spawn('parent-1', 'conv-1', createTestConfig({ id: 'event-1' }));
+      await manager.spawn(subAgentScope('event-1'), createTestConfig({ id: 'event-1' }));
       await new Promise((r) => setTimeout(r, 10));
 
       const countBefore = events.length;
 
       unsubscribe();
 
-      await manager.spawn('parent-1', 'conv-1', createTestConfig({ id: 'event-2' }));
+      await manager.spawn(subAgentScope('event-2'), createTestConfig({ id: 'event-2' }));
       await new Promise((r) => setTimeout(r, 10));
 
       // Should not receive new events after unsubscribe
@@ -633,10 +708,10 @@ describe('SubAgentManager - Skill Injection', () => {
       skills: ['test-skill'],
     });
 
-    await manager.spawn('parent-1', 'conv-1', config);
+    await manager.spawn(subAgentScope(config.id), config);
 
     // Wait for execution
-    await manager.getResult('skill-inject-test', 5000);
+    await manager.getResult(subAgentScope('skill-inject-test'), 5000);
 
     expect(deps.createAgent).toHaveBeenCalled();
     const agentConfig = (deps.createAgent as ReturnType<typeof vi.fn>).mock.calls[0]![0];
@@ -653,8 +728,8 @@ describe('SubAgentManager - Skill Injection', () => {
       skills: ['disabled-skill'],
     });
 
-    await manager.spawn('parent-1', 'conv-1', config);
-    await manager.getResult('disabled-skill-test', 5000);
+    await manager.spawn(subAgentScope(config.id), config);
+    await manager.getResult(subAgentScope('disabled-skill-test'), 5000);
 
     const agentConfig = (deps.createAgent as ReturnType<typeof vi.fn>).mock.calls[0]![0];
 
@@ -668,8 +743,8 @@ describe('SubAgentManager - Skill Injection', () => {
       skills: ['nonexistent-skill'],
     });
 
-    await manager.spawn('parent-1', 'conv-1', config);
-    await manager.getResult('nonexistent-skill-test', 5000);
+    await manager.spawn(subAgentScope(config.id), config);
+    await manager.getResult(subAgentScope('nonexistent-skill-test'), 5000);
 
     const agentConfig = (deps.createAgent as ReturnType<typeof vi.fn>).mock.calls[0]![0];
 
@@ -708,8 +783,8 @@ describe('SubAgentManager - Skill Injection', () => {
       skills: ['skill-a', 'skill-b'],
     });
 
-    await manager.spawn('parent-1', 'conv-1', config);
-    await manager.getResult('multi-skill-test', 5000);
+    await manager.spawn(subAgentScope(config.id), config);
+    await manager.getResult(subAgentScope('multi-skill-test'), 5000);
 
     const agentConfig = (deps.createAgent as ReturnType<typeof vi.fn>).mock.calls[0]![0];
 
@@ -795,8 +870,8 @@ describe('SubAgentManager - ToolSkill Injection', () => {
       toolSkills: ['git-operations'],
     });
 
-    await manager.spawn('parent-1', 'conv-1', config);
-    await manager.getResult('toolskill-test', 5000);
+    await manager.spawn(subAgentScope(config.id), config);
+    await manager.getResult(subAgentScope('toolskill-test'), 5000);
 
     const agentConfig = (deps.createAgent as ReturnType<typeof vi.fn>).mock.calls[0]![0];
 
@@ -816,8 +891,8 @@ describe('SubAgentManager - ToolSkill Injection', () => {
       toolSkills: ['git-operations', 'file-editing'],
     });
 
-    await manager.spawn('parent-1', 'conv-1', config);
-    await manager.getResult('multi-toolskill-test', 5000);
+    await manager.spawn(subAgentScope(config.id), config);
+    await manager.getResult(subAgentScope('multi-toolskill-test'), 5000);
 
     expect(deps.toolSkillRegistry!.getActiveTools).toHaveBeenCalledWith([
       'git-operations',
@@ -832,8 +907,8 @@ describe('SubAgentManager - ToolSkill Injection', () => {
       toolSkills: ['git-operations', 'file-editing'],
     });
 
-    await manager.spawn('parent-1', 'conv-1', config);
-    await manager.getResult('tool-policy-none-with-toolskill-test', 5000);
+    await manager.spawn(subAgentScope(config.id), config);
+    await manager.getResult(subAgentScope('tool-policy-none-with-toolskill-test'), 5000);
 
     expect(getCreatedAgentToolNames(deps)).toEqual([]);
     expect(deps.toolSkillRegistry!.getActiveTools).toHaveBeenCalledWith([
@@ -852,8 +927,8 @@ describe('SubAgentManager - ToolSkill Injection', () => {
       toolSkills: ['git-operations'], // Should be ignored
     });
 
-    await manager.spawn('parent-1', 'conv-1', config);
-    const result = await manager.getResult('no-registry-test', 5000);
+    await manager.spawn(subAgentScope(config.id), config);
+    const result = await manager.getResult(subAgentScope('no-registry-test'), 5000);
 
     // Should complete without error
     expect(result.status).toBe('completed');

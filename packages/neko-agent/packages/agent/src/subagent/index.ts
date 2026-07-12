@@ -135,9 +135,9 @@ export interface SubAgentSystem {
  *   registerTools: true,
  * });
  *
- * // Use the manager
- * const id = await subagent.manager.spawn(parentId, convId, config);
- * const result = await subagent.manager.getResult(id);
+ * // Use the manager with the complete child-run owner scope
+ * const scope = await subagent.manager.spawn(childRunScope, config);
+ * const result = await subagent.manager.getResult(scope);
  *
  * // Cleanup
  * subagent.dispose();

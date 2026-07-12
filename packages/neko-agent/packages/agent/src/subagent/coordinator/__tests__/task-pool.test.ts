@@ -5,6 +5,7 @@
 import { describe, it, expect } from 'vitest';
 import { createTaskPool } from '../task-pool';
 import type { TaskItem } from '../types';
+import type { SubAgentResult } from '../../types';
 
 // =============================================================================
 // Helpers
@@ -17,6 +18,21 @@ function makeTask(overrides: Partial<TaskItem> = {}): TaskItem {
     prompt: 'Do something',
     agentType: 'general',
     status: 'pending',
+    ...overrides,
+  };
+}
+
+function subAgentResult(id: string, overrides: Partial<SubAgentResult> = {}): SubAgentResult {
+  return {
+    scope: {
+      conversationId: 'conv-1',
+      runId: 'run-1',
+      parentRunId: 'parent-1',
+      childRunId: id,
+      childKind: 'subagent',
+    },
+    id,
+    status: 'completed',
     ...overrides,
   };
 }
@@ -117,7 +133,7 @@ describe('TaskPool', () => {
 
       const dep = pool.claim('agent-1');
       pool.markRunning(dep!.id);
-      pool.complete(dep!.id, { id: 'dep', status: 'completed', response: 'done' });
+      pool.complete(dep!.id, subAgentResult('dep', { response: 'done' }));
 
       // Now child is ready
       const child = pool.claim('agent-2');
@@ -157,12 +173,10 @@ describe('TaskPool', () => {
       pool.add(makeTask({ id: 'task-1' }));
       pool.claim('agent-1');
 
-      const notification = pool.complete('task-1', {
-        id: 'task-1',
-        status: 'completed',
-        response: 'Done!',
-        duration: 1000,
-      });
+      const notification = pool.complete(
+        'task-1',
+        subAgentResult('task-1', { response: 'Done!', duration: 1000 }),
+      );
 
       expect(notification.taskId).toBe('task-1');
       expect(notification.status).toBe('completed');
@@ -172,9 +186,7 @@ describe('TaskPool', () => {
 
     it('should throw for unknown task', () => {
       const pool = createTaskPool();
-      expect(() => pool.complete('unknown', { id: 'x', status: 'completed' })).toThrow(
-        'Task not found',
-      );
+      expect(() => pool.complete('unknown', subAgentResult('x'))).toThrow('Task not found');
     });
   });
 
@@ -244,7 +256,7 @@ describe('TaskPool', () => {
       pool.add(makeTask({ id: 'c' }));
 
       pool.claim('agent-1'); // claims one (a by default since no priority)
-      pool.complete('a', { id: 'a', status: 'completed', response: 'ok' });
+      pool.complete('a', subAgentResult('a', { response: 'ok' }));
 
       const progress = pool.getProgress();
       expect(progress.total).toBe(3);
@@ -264,7 +276,7 @@ describe('TaskPool', () => {
       pool.add(makeTask({ id: 'b' }));
 
       pool.claim('agent-1');
-      pool.complete('a', { id: 'a', status: 'completed' });
+      pool.complete('a', subAgentResult('a'));
 
       pool.claim('agent-2');
       pool.fail('b', 'error');
@@ -278,7 +290,7 @@ describe('TaskPool', () => {
       pool.add(makeTask({ id: 'b' }));
 
       pool.claim('agent-1');
-      pool.complete('a', { id: 'a', status: 'completed' });
+      pool.complete('a', subAgentResult('a'));
 
       expect(pool.isAllDone()).toBe(false);
     });
@@ -289,7 +301,7 @@ describe('TaskPool', () => {
       const pool = createTaskPool();
       pool.add(makeTask({ id: 'a' }));
       pool.claim('agent-1');
-      pool.complete('a', { id: 'a', status: 'completed' });
+      pool.complete('a', subAgentResult('a'));
 
       pool.reset();
 
@@ -316,13 +328,13 @@ describe('TaskPool', () => {
       // Complete step-1 → step-2 unlocks
       pool.claim('agent-1');
       pool.markRunning('step-1');
-      pool.complete('step-1', { id: 'step-1', status: 'completed' });
+      pool.complete('step-1', subAgentResult('step-1'));
       expect(pool.getReady().map((t) => t.id)).toEqual(['step-2']);
 
       // Complete step-2 → step-3 unlocks
       pool.claim('agent-2');
       pool.markRunning('step-2');
-      pool.complete('step-2', { id: 'step-2', status: 'completed' });
+      pool.complete('step-2', subAgentResult('step-2'));
       expect(pool.getReady().map((t) => t.id)).toEqual(['step-3']);
     });
 
@@ -342,7 +354,7 @@ describe('TaskPool', () => {
 
       // Complete A → B and C unlock
       pool.claim('a1');
-      pool.complete('A', { id: 'A', status: 'completed' });
+      pool.complete('A', subAgentResult('A'));
       const ready = pool
         .getReady()
         .map((t) => t.id)
@@ -351,12 +363,12 @@ describe('TaskPool', () => {
 
       // Complete B → D still blocked by C
       pool.claim('a2');
-      pool.complete('B', { id: 'B', status: 'completed' });
+      pool.complete('B', subAgentResult('B'));
       expect(pool.getReady().map((t) => t.id)).toEqual(['C']);
 
       // Complete C → D unlocks
       pool.claim('a3');
-      pool.complete('C', { id: 'C', status: 'completed' });
+      pool.complete('C', subAgentResult('C'));
       expect(pool.getReady().map((t) => t.id)).toEqual(['D']);
     });
   });

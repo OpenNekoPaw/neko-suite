@@ -1,6 +1,8 @@
 import {
   buildSubAgentEventMessage,
+  formatChildRunScope,
   projectSubAgentEventToWorkItem,
+  validateChildRunScope,
   type SubAgentEventMessage,
   type SubAgentWorkItemEvent,
   type AgentLegacyCreationTrace,
@@ -27,9 +29,23 @@ class DefaultSubAgentEventRuntime implements SubAgentEventRuntime {
   projectForConversation(
     input: ProjectSubAgentEventForConversationInput,
   ): SubAgentEventMessage | null {
-    if (input.event.conversationId !== input.conversationId) {
-      return null;
+    const scopeResult = validateChildRunScope(input.event.scope);
+    if (!scopeResult.ok || scopeResult.scope.childKind !== 'subagent') {
+      throw new Error(
+        scopeResult.ok
+          ? `SubAgent event requires childKind subagent: ${formatChildRunScope(scopeResult.scope)}`
+          : scopeResult.diagnostic.message,
+      );
     }
+    const scope = scopeResult.scope;
+    if (
+      input.event.conversationId !== scope.conversationId ||
+      input.event.parentAgentId !== scope.parentRunId ||
+      input.event.subAgentId !== scope.childRunId
+    ) {
+      throw new Error(`SubAgent event owner mismatch: ${formatChildRunScope(scope)}`);
+    }
+    if (scope.conversationId !== input.conversationId) return null;
 
     const event = input.event satisfies SubAgentWorkItemEvent;
     return buildSubAgentEventMessage({

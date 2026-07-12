@@ -8,6 +8,7 @@
  * - Permission bridging (SubAgent confirmations route to parent UI)
  */
 
+import type { ConversationRunScope } from '@neko-agent/types';
 import type {
   SubAgentResult,
   SpecializedAgentType,
@@ -178,10 +179,10 @@ export interface CoordinatorDeps {
   subAgentManager: ISubAgentManager;
   /** Context bridge for parent-child context passing */
   contextBridge: IContextBridge;
-  /** Parent agent ID (for SubAgent spawning) */
-  parentAgentId: string;
-  /** Conversation ID (for SubAgent spawning) */
-  conversationId: string;
+  /** Complete owner of the coordinator's worker runs. */
+  runScope: ConversationRunScope;
+  /** Immediate parent run that owns worker SubAgents. */
+  parentRunId: string;
   /** Tool confirmation callback (bridges to parent session) */
   onConfirmTool?: (request: unknown) => Promise<boolean>;
 }

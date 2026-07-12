@@ -131,7 +131,7 @@ export class SubAgentRuntimeCoordinator {
   }
 
   private _resolveRuntime(
-    context: SubAgentCreateAgentContext | undefined,
+    context: { readonly conversationId: string } | undefined,
   ): RegisteredAgentSubAgentRuntime {
     const conversationId = context?.conversationId;
     if (!conversationId) {
@@ -226,11 +226,13 @@ export class SubAgentRuntimeCoordinator {
         let response = '';
         let iterations = 0;
         let success = true;
-        const parentAgentId = context?.subAgentId ?? `agent-${conversationId}`;
+        if (!context) throw new Error('SubAgent executor requires complete child-run scope');
+        const parentAgentId = context.scope.childRunId;
         for await (const event of session.execute(prompt, {
           workspaceRoot: runtime.workspaceRoot,
           metadata: {
             conversationId,
+            runId: context.scope.runId,
             parentAgentId,
           },
         })) {

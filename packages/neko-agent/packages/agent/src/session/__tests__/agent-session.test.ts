@@ -633,7 +633,7 @@ describe('AgentSession', () => {
       expect(doneEvents.length).toBe(1);
     });
 
-    it('passes ordinary chat turns to the executor without a durable run identity', async () => {
+    it('uses the turn ID as the isolated runtime run identity for ordinary chat turns', async () => {
       const session = new AgentSession(createConfig({ conversationId: 'conv-turn-trace' }));
       const steps: AgentStep[] = [{ type: 'think', content: 'Hello world', timestamp: Date.now() }];
       const mockExec = injectMockExecutor(session, steps);
@@ -657,7 +657,7 @@ describe('AgentSession', () => {
           turnId: expect.stringMatching(/^turn-conv-turn-trace-/),
         }),
       );
-      expect(options?.metadata).not.toHaveProperty('runId');
+      expect(options?.metadata?.runId).toBe(options?.metadata?.turnId);
       expect(options?.trace).toEqual(
         expect.objectContaining({
           conversationId: 'conv-turn-trace',
@@ -665,7 +665,7 @@ describe('AgentSession', () => {
           phase: 'session',
         }),
       );
-      expect(options?.trace).not.toHaveProperty('runId');
+      expect(options?.trace?.runId).toBe(options?.trace?.turnId);
     });
 
     it('does not leak an active durable workflow run into ordinary executor turn trace', async () => {
@@ -697,7 +697,7 @@ describe('AgentSession', () => {
           turnId: expect.stringMatching(/^turn-conv-workflow-trace-/),
         }),
       );
-      expect(options?.metadata).not.toHaveProperty('runId');
+      expect(options?.metadata?.runId).toBe(options?.metadata?.turnId);
       expect(options?.trace).toEqual(
         expect.objectContaining({
           conversationId: 'conv-workflow-trace',
@@ -705,7 +705,7 @@ describe('AgentSession', () => {
           phase: 'session',
         }),
       );
-      expect(options?.trace).not.toHaveProperty('runId');
+      expect(options?.trace?.runId).toBe(options?.trace?.turnId);
     });
   });
 

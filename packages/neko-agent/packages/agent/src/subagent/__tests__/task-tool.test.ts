@@ -5,6 +5,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createTaskTool, createTaskOutputTool, registerSubAgentTools } from '../task-tool';
 import type { ISubAgentManager, SubAgentStatus, SubAgentResult } from '../types';
+import { formatChildRunScope, type ChildRunScope } from '@neko-agent/types';
 import { ToolRegistry } from '../../tools';
 
 // =============================================================================
@@ -16,12 +17,13 @@ function createMockManager(): ISubAgentManager {
   const statuses = new Map<string, SubAgentStatus>();
 
   return {
-    spawn: vi.fn().mockImplementation(async (_parentId, _convId, config) => {
-      statuses.set(config.id, 'running');
-      // Simulate completion
+    spawn: vi.fn().mockImplementation(async (scope: ChildRunScope, config: { id: string }) => {
+      const key = formatChildRunScope(scope);
+      statuses.set(key, 'running');
       setTimeout(() => {
-        statuses.set(config.id, 'completed');
-        results.set(config.id, {
+        statuses.set(key, 'completed');
+        results.set(key, {
+          scope,
           id: config.id,
           status: 'completed',
           response: 'Task completed',
@@ -29,32 +31,35 @@ function createMockManager(): ISubAgentManager {
           iterations: 2,
         });
       }, 10);
-      return config.id;
+      return scope;
     }),
     spawnBatch: vi.fn(),
-    getStatus: vi.fn().mockImplementation((id) => statuses.get(id)),
-    getResult: vi.fn().mockImplementation(async (id) => {
-      // Wait for result to be available
-      await new Promise((r) => setTimeout(r, 50));
-      const result = results.get(id);
-      if (!result) {
-        throw new Error(`SubAgent not found: ${id}`);
-      }
+    getStatus: vi
+      .fn()
+      .mockImplementation((scope: ChildRunScope) => statuses.get(formatChildRunScope(scope))),
+    getResult: vi.fn().mockImplementation(async (scope: ChildRunScope) => {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      const result = results.get(formatChildRunScope(scope));
+      if (!result) throw new Error(`SubAgent not found: ${formatChildRunScope(scope)}`);
       return result;
     }),
     getResults: vi.fn(),
     cancel: vi.fn(),
-    cancelAll: vi.fn(),
-    listByParent: vi.fn().mockReturnValue([]),
+    cancelRun: vi.fn(),
+    listByRun: vi.fn().mockReturnValue([]),
     onEvent: vi.fn().mockReturnValue(() => {}),
-    cleanup: vi.fn(),
+    cleanupRun: vi.fn(),
   };
 }
 
 function executeWithRuntimeMetadata(
   tool: ReturnType<typeof createTaskTool>,
   args: Record<string, unknown>,
-  metadata: Record<string, unknown> = { parentAgentId: 'parent-1', conversationId: 'conv-1' },
+  metadata: Record<string, unknown> = {
+    parentAgentId: 'parent-1',
+    conversationId: 'conv-1',
+    runId: 'run-1',
+  },
 ) {
   return tool.execute(args, { metadata });
 }
@@ -178,6 +183,7 @@ describe('createTaskTool', () => {
           metadata: {
             parentAgentId: 'parent-1',
             conversationId: 'conv-1',
+            runId: 'run-1',
             parentMessageId: 'msg-1',
             parentToolCallId: 'tool-1',
           },
@@ -208,14 +214,19 @@ describe('createTaskTool', () => {
           metadata: {
             parentAgentId: 'parent-1',
             conversationId: 'conv-1',
+            runId: 'run-1',
             locale: 'zh-CN',
           },
         },
       );
 
       expect(manager.spawn).toHaveBeenCalledWith(
-        'parent-1',
-        'conv-1',
+        expect.objectContaining({
+          conversationId: 'conv-1',
+          runId: 'run-1',
+          parentRunId: 'parent-1',
+          childKind: 'subagent',
+        }),
         expect.objectContaining({
           locale: 'zh-CN',
         }),
@@ -253,13 +264,18 @@ describe('createTaskTool', () => {
         {
           parentAgentId: 'parent-1',
           conversationId: 'conv-1',
+          runId: 'run-1',
           parentToolCallId: 'tool-1',
         },
       );
 
       expect(manager.spawn).toHaveBeenCalledWith(
-        'parent-1',
-        'conv-1',
+        expect.objectContaining({
+          conversationId: 'conv-1',
+          runId: 'run-1',
+          parentRunId: 'parent-1',
+          childKind: 'subagent',
+        }),
         expect.objectContaining({
           parentToolCallId: 'tool-1',
         }),
@@ -277,13 +293,14 @@ describe('createTaskTool', () => {
       });
 
       // Get the spawned ID
-      const spawnedId = (manager.spawn as ReturnType<typeof vi.fn>).mock.results[0]!.value;
+      const spawnedScope = (await (manager.spawn as ReturnType<typeof vi.fn>).mock.results[0]!
+        .value) as ChildRunScope;
 
       // Resume it
-      const result = await tool.execute({
+      const result = await executeWithRuntimeMetadata(tool, {
         description: '',
         prompt: '',
-        resume: await spawnedId,
+        resume: spawnedScope.childRunId,
       });
 
       expect(result.success).toBe(true);
@@ -292,7 +309,7 @@ describe('createTaskTool', () => {
     it('should return error for non-existent resume', async () => {
       const tool = createTaskTool(manager);
 
-      const result = await tool.execute({
+      const result = await executeWithRuntimeMetadata(tool, {
         description: '',
         prompt: '',
         resume: 'non-existent-id',
@@ -300,6 +317,48 @@ describe('createTaskTool', () => {
 
       expect(result.success).toBe(false);
       expect(result.error).toContain('not found');
+    });
+
+    it('fails visibly when metadata and trace owners disagree', async () => {
+      const tool = createTaskTool(manager);
+
+      const conversationMismatch = await tool.execute(
+        { description: 'Test task', prompt: 'Do something' },
+        {
+          metadata: { parentAgentId: 'parent-1', conversationId: 'conv-a', runId: 'run-a' },
+          trace: { conversationId: 'conv-b', runId: 'run-a' },
+        },
+      );
+      const runMismatch = await tool.execute(
+        { description: 'Test task', prompt: 'Do something' },
+        {
+          metadata: { parentAgentId: 'parent-1', conversationId: 'conv-a', runId: 'run-a' },
+          trace: { conversationId: 'conv-a', runId: 'run-b' },
+        },
+      );
+
+      expect(conversationMismatch).toMatchObject({ success: false });
+      expect(conversationMismatch.error).toContain('owner mismatch');
+      expect(runMismatch).toMatchObject({ success: false });
+      expect(runMismatch.error).toContain('owner mismatch');
+      expect(manager.spawn).not.toHaveBeenCalled();
+    });
+
+    it('requires run and parent owner metadata', async () => {
+      const tool = createTaskTool(manager);
+
+      const missingRun = await tool.execute(
+        { description: 'Test task', prompt: 'Do something' },
+        { metadata: { parentAgentId: 'parent-1', conversationId: 'conv-1' } },
+      );
+      const missingParent = await tool.execute(
+        { description: 'Test task', prompt: 'Do something' },
+        { metadata: { conversationId: 'conv-1', runId: 'run-1' } },
+      );
+
+      expect(missingRun.error).toContain('Missing runId');
+      expect(missingParent.error).toContain('Missing parentAgentId');
+      expect(manager.spawn).not.toHaveBeenCalled();
     });
 
     it('should use specialized agent type', async () => {
@@ -312,7 +371,7 @@ describe('createTaskTool', () => {
       });
 
       expect(manager.spawn).toHaveBeenCalled();
-      const config = (manager.spawn as ReturnType<typeof vi.fn>).mock.calls[0]![2];
+      const config = (manager.spawn as ReturnType<typeof vi.fn>).mock.calls[0]![1];
       expect(config.type).toBe('code-search');
     });
 
@@ -325,14 +384,14 @@ describe('createTaskTool', () => {
         model: 'powerful',
       });
 
-      const config = (manager.spawn as ReturnType<typeof vi.fn>).mock.calls[0]![2];
+      const config = (manager.spawn as ReturnType<typeof vi.fn>).mock.calls[0]![1];
       expect(config.modelTier).toBe('powerful');
     });
 
     it('should return error for missing required args', async () => {
       const tool = createTaskTool(manager);
 
-      const result = await tool.execute({});
+      const result = await executeWithRuntimeMetadata(tool, {});
 
       expect(result.success).toBe(false);
       expect(result.error).toContain('Missing required');
@@ -364,12 +423,22 @@ describe('createTaskOutputTool', () => {
       // Setup a completed result
       (manager.getStatus as ReturnType<typeof vi.fn>).mockReturnValue('completed');
       (manager.getResult as ReturnType<typeof vi.fn>).mockResolvedValue({
+        scope: {
+          conversationId: 'conv-1',
+          runId: 'run-1',
+          parentRunId: 'parent-1',
+          childRunId: 'test-id',
+          childKind: 'subagent',
+        },
         id: 'test-id',
         status: 'completed',
         response: 'Done',
       });
 
-      const result = await tool.execute({ task_id: 'test-id' });
+      const result = await tool.execute(
+        { task_id: 'test-id' },
+        { metadata: { parentAgentId: 'parent-1', conversationId: 'conv-1', runId: 'run-1' } },
+      );
 
       expect(result.success).toBe(true);
       expect((result.data as SubAgentResult).status).toBe('completed');
@@ -385,10 +454,20 @@ describe('createTaskOutputTool', () => {
 
       (manager.getStatus as ReturnType<typeof vi.fn>).mockReturnValue('running');
 
-      const result = await tool.execute({ task_id: 'test-id', block: false });
+      const result = await tool.execute(
+        { task_id: 'test-id', block: false },
+        { metadata: { parentAgentId: 'parent-1', conversationId: 'conv-1', runId: 'run-1' } },
+      );
 
       expect(result.success).toBe(true);
       expect((result.data as Record<string, unknown>).status).toBe('running');
+      expect(manager.getStatus).toHaveBeenCalledWith({
+        conversationId: 'conv-1',
+        runId: 'run-1',
+        parentRunId: 'parent-1',
+        childRunId: 'test-id',
+        childKind: 'subagent',
+      });
     });
 
     it('should wait for result in blocking mode', async () => {
@@ -396,12 +475,22 @@ describe('createTaskOutputTool', () => {
 
       (manager.getStatus as ReturnType<typeof vi.fn>).mockReturnValue('running');
       (manager.getResult as ReturnType<typeof vi.fn>).mockResolvedValue({
+        scope: {
+          conversationId: 'conv-1',
+          runId: 'run-1',
+          parentRunId: 'parent-1',
+          childRunId: 'test-id',
+          childKind: 'subagent',
+        },
         id: 'test-id',
         status: 'completed',
         response: 'Done after waiting',
       });
 
-      const result = await tool.execute({ task_id: 'test-id', block: true });
+      const result = await tool.execute(
+        { task_id: 'test-id', block: true },
+        { metadata: { parentAgentId: 'parent-1', conversationId: 'conv-1', runId: 'run-1' } },
+      );
 
       expect(result.success).toBe(true);
       expect((result.data as SubAgentResult).response).toBe('Done after waiting');
@@ -412,7 +501,10 @@ describe('createTaskOutputTool', () => {
 
       (manager.getStatus as ReturnType<typeof vi.fn>).mockReturnValue(undefined);
 
-      const result = await tool.execute({ task_id: 'non-existent' });
+      const result = await tool.execute(
+        { task_id: 'non-existent' },
+        { metadata: { parentAgentId: 'parent-1', conversationId: 'conv-1', runId: 'run-1' } },
+      );
 
       expect(result.success).toBe(false);
       expect(result.error).toContain('not found');

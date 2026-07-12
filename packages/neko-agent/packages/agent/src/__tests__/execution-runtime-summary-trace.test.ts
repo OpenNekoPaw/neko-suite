@@ -6,6 +6,7 @@ import {
   createAgentTraceContext,
   type AgentContext,
 } from '@neko/shared';
+import type { ChildRunScope } from '@neko-agent/types';
 
 describe('agent runtime summary trace logs', () => {
   it('logs built-in creation stage activation, approval decisions, and subagent lifecycle summaries with trace', async () => {
@@ -68,10 +69,13 @@ describe('agent runtime summary trace logs', () => {
 
     const { createTaskTool } = await import('../subagent/task-tool');
     const subAgentManager = {
-      spawn: vi.fn(async () => 'subagent-1'),
-      spawnBatch: vi.fn(async () => ['subagent-1']),
-      getResult: vi.fn(async () => ({
-        id: 'subagent-1',
+      spawn: vi.fn(async (scope: ChildRunScope) => scope),
+      spawnBatch: vi.fn(async (entries: readonly { scope: ChildRunScope }[]) =>
+        entries.map((entry) => entry.scope),
+      ),
+      getResult: vi.fn(async (scope: ChildRunScope) => ({
+        scope,
+        id: scope.childRunId,
         status: 'completed' as const,
         response: 'ok',
         duration: 12,
@@ -80,9 +84,9 @@ describe('agent runtime summary trace logs', () => {
       getStatus: vi.fn(() => 'completed' as const),
       getResults: vi.fn(),
       cancel: vi.fn(),
-      cancelAll: vi.fn(),
-      listByParent: vi.fn(() => []),
-      cleanup: vi.fn(),
+      cancelRun: vi.fn(),
+      listByRun: vi.fn(() => []),
+      cleanupRun: vi.fn(),
       onEvent: vi.fn(() => () => {}),
     };
     const taskTool = createTaskTool(subAgentManager);
@@ -95,6 +99,7 @@ describe('agent runtime summary trace logs', () => {
       {
         metadata: {
           conversationId: 'conv-runtime-summary',
+          runId: 'run-runtime-summary',
           parentAgentId: 'agent-parent',
         },
         trace,
