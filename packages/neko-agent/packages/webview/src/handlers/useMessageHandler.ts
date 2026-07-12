@@ -35,7 +35,6 @@ import type {
 } from '@/components/ChatView/InputArea/types';
 import type { BoundActiveSkillIndicator } from './types';
 import type { ActivationProgressTimeline } from '@/presenters/activation-progress-presenter';
-import type { ActiveTurnTimelineState } from '@/presenters/active-turn-timeline-presenter';
 import type { MediaModelSelection } from '@/hooks/useUIState';
 import type { ConversationRenderCoordinator } from '@/render-lifecycle/conversation-render-coordinator';
 import {
@@ -43,16 +42,11 @@ import {
   ingestConversationRenderSnapshot,
 } from '@/render-lifecycle/conversation-render-state-adapter';
 import type { ExtensionToWebviewMessage } from './messages';
-import { AgentHostMessages, getAgentHostRuntimeAdapter } from '@/messages';
-import { readAgentTurnTimelineRecoveryRequests } from './timeline-recovery-state';
 import {
   createConversationRenderRuntimeLifecycle,
   type ConversationRenderRuntimeLifecycle,
 } from '@/render-lifecycle/conversation-render-runtime-lifecycle';
-import {
-  getAgentMarkdownSessionRegistry,
-  type AgentMarkdownSessionPublication,
-} from '@/markdown/agent-markdown-session-registry';
+import { getAgentMarkdownSessionRegistry } from '@/markdown/agent-markdown-session-registry';
 
 const logger = getLogger('MessageHandler');
 const FOREIGN_FEATURE_HOST_MESSAGE_TYPES = new Set([
@@ -161,10 +155,6 @@ export interface UseMessageHandlerProps {
  */
 export interface UseMessageHandlerReturn {
   handleMessage: (event: MessageEvent<ExtensionToWebviewMessage>) => void;
-  flushTimelineRendering: (conversationId?: string | null) => void;
-  commitTimelineMarkdownSnapshot: (
-    timeline: ActiveTurnTimelineState,
-  ) => AgentMarkdownSessionPublication;
   releaseTurnRendering: (conversationId: string, messageId: string) => void;
   disposeConversationRendering: (
     conversationId: string,
@@ -183,7 +173,6 @@ export function useMessageHandler(props: UseMessageHandlerProps): UseMessageHand
     markdown: markdownSessionRegistry,
   });
   const renderRuntime = renderRuntimeRef.current;
-  const timelineRenderScheduler = renderRuntime.scheduler;
   useEffect(() => {
     renderRuntime.attachComponent();
     const handleVisibilityChange = (): void => {
@@ -192,9 +181,6 @@ export function useMessageHandler(props: UseMessageHandlerProps): UseMessageHand
     const handlePageHide = (): void => renderRuntime.disposeRealm();
     document.addEventListener('visibilitychange', handleVisibilityChange);
     window.addEventListener('pagehide', handlePageHide);
-    for (const request of readAgentTurnTimelineRecoveryRequests(getAgentHostRuntimeAdapter())) {
-      AgentHostMessages.requestAgentTurnTimelineSnapshot(request);
-    }
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('pagehide', handlePageHide);
@@ -371,7 +357,6 @@ export function useMessageHandler(props: UseMessageHandlerProps): UseMessageHand
       forceUpdate: forceContextUpdate,
       isCurrentConversation,
       updateNonCurrentConversation,
-      timelineRenderScheduler,
       markdownSessionRegistry,
       conversationRenderCoordinator,
       releaseTurnRendering: renderRuntime.releaseTurn,
@@ -437,7 +422,6 @@ export function useMessageHandler(props: UseMessageHandlerProps): UseMessageHand
       forceContextUpdate,
       isCurrentConversation,
       updateNonCurrentConversation,
-      timelineRenderScheduler,
       markdownSessionRegistry,
       conversationRenderCoordinator,
       renderRuntime,
@@ -465,31 +449,8 @@ export function useMessageHandler(props: UseMessageHandlerProps): UseMessageHand
     [registry, context],
   );
 
-  const flushTimelineRendering = useCallback(
-    (conversationId?: string | null) => {
-      if (conversationId) {
-        timelineRenderScheduler.flushConversation(conversationId);
-        return;
-      }
-      timelineRenderScheduler.flushAll();
-    },
-    [timelineRenderScheduler],
-  );
-
-  const commitTimelineMarkdownSnapshot = useCallback(
-    (timeline: ActiveTurnTimelineState): AgentMarkdownSessionPublication =>
-      markdownSessionRegistry.commitTimelineSnapshot({
-        conversationId: timeline.conversationId,
-        messageId: timeline.messageId,
-        items: timeline.items,
-      }),
-    [markdownSessionRegistry],
-  );
-
   return {
     handleMessage,
-    flushTimelineRendering,
-    commitTimelineMarkdownSnapshot,
     releaseTurnRendering: renderRuntime.releaseTurn,
     disposeConversationRendering: renderRuntime.disposeConversation,
   };

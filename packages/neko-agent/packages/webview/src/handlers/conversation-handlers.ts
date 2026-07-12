@@ -104,7 +104,6 @@ const handleHistoryCleared: MessageHandler<'historyCleared'> = (
   const conversationId = message.conversationId;
   if (!conversationId) return;
 
-  context.timelineRenderScheduler?.discardConversation(conversationId);
   context.markdownSessionRegistry?.disposeConversation(conversationId);
   const projection = projectHistoryClearedConversation();
   updateConversation(context, conversationId, () => ({
@@ -145,7 +144,6 @@ const handleConversationLifecycleResult: MessageHandler<'conversationLifecycleRe
     if (context.disposeConversationRendering) {
       context.disposeConversationRendering(message.conversationId, 'conversation-delete');
     } else {
-      context.timelineRenderScheduler?.discardConversation(message.conversationId);
       context.markdownSessionRegistry?.disposeConversation(message.conversationId);
     }
     discardConversationSnapshotProjection({
@@ -317,7 +315,6 @@ function releaseReplacedActiveTurn(
     context.releaseTurnRendering(conversationId, previousMessageId);
     return;
   }
-  context.timelineRenderScheduler?.discardTurn(conversationId, previousMessageId);
   context.markdownSessionRegistry?.releaseTurn(conversationId, previousMessageId);
 }
 

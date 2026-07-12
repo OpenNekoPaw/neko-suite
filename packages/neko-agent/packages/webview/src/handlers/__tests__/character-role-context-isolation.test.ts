@@ -94,7 +94,6 @@ describe('character role context isolation', () => {
       queuedMessageCount: 0,
     });
     expect(harness.forceUpdateCount()).toBe(1);
-    expect(harness.flushedConversations()).toEqual([]);
   });
 
   it('caches a stale activeConversation response without changing active Tab metadata', () => {
@@ -240,7 +239,6 @@ describe('character role context isolation', () => {
       queuedMessageCount: 2,
     });
     expect(harness.activeConversationId()).toBe('conv-a');
-    expect(harness.flushedConversations()).toEqual([]);
   });
 
   it('keeps shared content untouched when the final Tab closes', () => {
@@ -325,7 +323,6 @@ interface ContextHarness {
   completedForegroundActivations(): string[];
   reconciliations(): readonly TabRuntimeReconciliation[];
   forceUpdateCount(): number;
-  flushedConversations(): readonly string[];
 }
 
 function createContextHarness(options: ContextHarnessOptions = {}): ContextHarness {
@@ -347,7 +344,6 @@ function createContextHarness(options: ContextHarnessOptions = {}): ContextHarne
   const conversationDiagnostics: AgentSessionDiagnosticMessage[] = [];
   const completedForegroundActivations: string[] = [];
   const reconciliations: TabRuntimeReconciliation[] = [];
-  const flushedConversations: string[] = [];
   const activeConversationIdRef = ref(activeConversationId);
   const streamingMessageIdRef = ref(streaming.streamingMessageId);
   const conversationMessagesRef = ref(new Map<string, Message[]>());
@@ -406,22 +402,6 @@ function createContextHarness(options: ContextHarnessOptions = {}): ContextHarne
     isTablessConversationViewRef: ref(false),
     pendingForegroundConversationActivationRef,
     tabStateRevisionRef: ref(0),
-    timelineRenderScheduler: {
-      enqueue: vi.fn(),
-      flushConversation: (conversationId: string) => flushedConversations.push(conversationId),
-      discardTurn: vi.fn(),
-      discardConversation: vi.fn(),
-      flushAll: vi.fn(),
-      dispose: vi.fn(),
-      metrics: () => ({
-        scheduledDeliveries: 0,
-        immediateDeliveries: 0,
-        renderCommits: 0,
-        maxPendingDeliveries: 0,
-        pendingDeliveries: 0,
-        disposed: false,
-      }),
-    },
     reconcileTabRenderRuntimes: (bindings, nextActiveTabId) => {
       reconciliations.push({ bindings, activeTabId: nextActiveTabId });
     },
@@ -518,7 +498,6 @@ function createContextHarness(options: ContextHarnessOptions = {}): ContextHarne
     completedForegroundActivations: () => completedForegroundActivations,
     reconciliations: () => reconciliations,
     forceUpdateCount: () => forceUpdateCount,
-    flushedConversations: () => flushedConversations,
   };
 }
 

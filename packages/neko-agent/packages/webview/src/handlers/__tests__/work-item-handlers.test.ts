@@ -30,7 +30,6 @@ import type { AgentWorkItemStore } from '@/components/AgentWorkItem';
 import type { PluginsAvailable } from '@/components/ChatView/SendToMenu';
 import type { MentionItem } from '@/components/ChatView/InputArea/types';
 import type { ProjectFileInfo } from '@/hooks/useConfigState';
-import { AgentHostMessages } from '@/messages';
 import { configHandlers } from '../config-handlers';
 import { conversationHandlers } from '../conversation-handlers';
 import { mediaHandlers } from '../media-handlers';
@@ -38,7 +37,6 @@ import { subAgentHandlers } from '../subagent-handlers';
 import { streamingHandlers } from '../streaming-handlers';
 import { taskHandlers } from '../task-handlers';
 import { timelineHandlers } from '../timeline-handlers';
-import { createTimelineRenderCommitScheduler } from '../timeline-render-commit-scheduler';
 import { MarkdownRenderer } from '@/components/ChatView/MessageContent/MarkdownRenderer';
 import { toolHandlers } from '../tool-handlers';
 import type { HandlerRegistration, MessageHandlerContext, StreamingState } from '../types';
@@ -584,76 +582,6 @@ describe('work item message handlers', () => {
     ]);
   });
 
-  it('flushes a pending Timeline text delivery before a compatibility streamText message renders', () => {
-    const frameCallbacks: Array<() => void> = [];
-    const scheduler = createTimelineRenderCommitScheduler({
-      request(callback) {
-        frameCallbacks.push(callback);
-        return frameCallbacks.length;
-      },
-      cancel() {},
-    });
-    const registry = getAgentMarkdownSessionRegistry();
-    registry.disposeAll();
-    const harness = createContextHarness({
-      activeConversationId: 'conv-a',
-      currentMessages: [],
-      timelineRenderScheduler: scheduler,
-      markdownSessionRegistry: registry,
-    });
-
-    try {
-      dispatch(
-        timelineHandlers,
-        timelineMessage([textTimelineItem('text-1', 1, 'Timeline text')]),
-        harness.context,
-      );
-      expect(scheduler.metrics().pendingDeliveries).toBe(1);
-
-      dispatch(
-        streamingHandlers,
-        {
-          type: 'streamText',
-          conversationId: 'conv-a',
-          messageId: 'msg-a',
-          content: 'Timeline text',
-        },
-        harness.context,
-      );
-
-      expect(scheduler.metrics().pendingDeliveries).toBe(0);
-      const block = harness.messages()[0]?.contentBlocks?.[0];
-      if (!block || block.type !== 'text') {
-        throw new Error('Expected Timeline-owned streaming text block.');
-      }
-      const timelineItemId = block.id;
-      if (timelineItemId !== 'text-1') {
-        throw new Error(`Expected Timeline item text-1, received ${String(timelineItemId)}.`);
-      }
-      const timelineContent = block.content;
-      if (timelineContent !== 'Timeline text') {
-        throw new Error(`Expected canonical Timeline text, received ${String(timelineContent)}.`);
-      }
-      expect(() =>
-        render(
-          createElement(MarkdownRenderer, {
-            content: timelineContent,
-            isStreaming: block.isStreaming,
-            sessionKey: createAgentMarkdownSessionKey({
-              conversationId: 'conv-a',
-              messageId: 'msg-a',
-              itemId: timelineItemId,
-            }),
-          }),
-        ),
-      ).not.toThrow();
-    } finally {
-      cleanup();
-      registry.disposeAll();
-      scheduler.dispose();
-    }
-  });
-
   it('ignores a late compatibility streamText after Timeline completion', () => {
     const registry = getAgentMarkdownSessionRegistry();
     registry.disposeAll();
@@ -802,10 +730,6 @@ describe('work item message handlers', () => {
       currentMessages: foregroundMessages,
       nonCurrentMessages: new Map([['conv-a', []]]),
     });
-    const requestSnapshot = vi
-      .spyOn(AgentHostMessages, 'requestAgentTurnTimelineSnapshot')
-      .mockImplementation(() => undefined);
-
     dispatch(
       timelineHandlers,
       timelineMessage([textTimelineItem('text-1', 1, 'a')]),
@@ -817,92 +741,16 @@ describe('work item message handlers', () => {
       harness.context,
     );
 
-    expect(requestSnapshot).toHaveBeenCalledTimes(1);
-    expect(requestSnapshot).toHaveBeenCalledWith(
-      expect.objectContaining({
-        conversationId: 'conv-a',
-        reason: 'revision-gap',
-        lastAppliedDeliveryRevision: 1,
-      }),
-    );
     expect(harness.messages()).toEqual(foregroundMessages);
     expect(harness.conversationStreaming().get('conv-a')?.activeTurnTimeline).toMatchObject({
       conversationId: 'conv-a',
       synchronization: 'suspended',
     });
     expect(harness.globalError()).toBeNull();
-
-    requestSnapshot.mockRestore();
-  });
-
-  it('requests one snapshot on a revision gap and resumes only after the snapshot', () => {
-    const harness = createContextHarness({ activeConversationId: 'conv-a', currentMessages: [] });
-    const requestSnapshot = vi
-      .spyOn(AgentHostMessages, 'requestAgentTurnTimelineSnapshot')
-      .mockImplementation(() => undefined);
-
-    dispatch(
-      timelineHandlers,
-      timelineMessage([textTimelineItem('text-1', 1, 'a')]),
-      harness.context,
-    );
-    dispatch(
-      timelineHandlers,
-      timelineMessage([{ ...textTimelineItem('text-1', 1, 'lost'), itemRevision: 2 }], 3),
-      harness.context,
-    );
-    dispatch(
-      timelineHandlers,
-      timelineMessage([{ ...textTimelineItem('text-1', 1, 'blocked'), itemRevision: 3 }], 4),
-      harness.context,
-    );
-
-    expect(requestSnapshot).toHaveBeenCalledTimes(1);
-    expect(requestSnapshot).toHaveBeenCalledWith(
-      expect.objectContaining({ reason: 'revision-gap', lastAppliedDeliveryRevision: 1 }),
-    );
-    expect(harness.messages()[0]?.content).toBe('a');
-    expect(harness.conversationStreaming().get('conv-a')?.activeTurnTimeline?.synchronization).toBe(
-      'suspended',
-    );
-    expect(harness.globalError()).toBeNull();
-
-    dispatch(
-      timelineHandlers,
-      {
-        ...timelineMessage([], 4),
-        batchKind: 'snapshot',
-        operations: [
-          {
-            operation: 'snapshot',
-            item: {
-              ...textTimelineItem('text-1', 1, 'authoritative'),
-              itemRevision: 3,
-            },
-          },
-        ],
-      },
-      harness.context,
-    );
-    dispatch(
-      timelineHandlers,
-      timelineMessage([{ ...textTimelineItem('text-1', 1, '!'), itemRevision: 4 }], 5),
-      harness.context,
-    );
-
-    expect(harness.conversationStreaming().get('conv-a')?.activeTurnTimeline?.synchronization).toBe(
-      'synchronized',
-    );
-    expect(harness.messages()[0]?.content).toBe('authoritative!');
-    requestSnapshot.mockRestore();
   });
 
   it('projects snapshot-unavailable diagnostics without discarding the last good source', () => {
     const harness = createContextHarness({ activeConversationId: 'conv-a', currentMessages: [] });
-    const requestSnapshot = vi
-      .spyOn(AgentHostMessages, 'requestAgentTurnTimelineSnapshot')
-      .mockImplementation(() => undefined);
-
     dispatch(
       timelineHandlers,
       timelineMessage([textTimelineItem('text-1', 1, 'retained')]),
@@ -934,7 +782,6 @@ describe('work item message handlers', () => {
       'unavailable',
     );
     expect(harness.globalError()).toContain('turn-snapshot-unavailable');
-    requestSnapshot.mockRestore();
   });
 
   it('does not publish a background snapshot-unavailable diagnostic into the foreground tab', () => {
@@ -2597,7 +2444,6 @@ interface ContextHarnessOptions {
   nonCurrentMessages?: Map<string, Message[]>;
   currentStreaming?: StreamingState;
   nonCurrentStreaming?: Map<string, StreamingState>;
-  timelineRenderScheduler?: NonNullable<MessageHandlerContext['timelineRenderScheduler']>;
   markdownSessionRegistry?: NonNullable<MessageHandlerContext['markdownSessionRegistry']>;
 }
 
@@ -2758,8 +2604,6 @@ function createContextHarness(options: ContextHarnessOptions): ContextHarness {
     forceUpdate: () => undefined,
     isCurrentConversation: (conversationId?: string) =>
       conversationId === activeConversationIdRef.current,
-    timelineRenderScheduler:
-      options.timelineRenderScheduler ?? createImmediateTimelineRenderScheduler(),
     markdownSessionRegistry:
       options.markdownSessionRegistry ?? createAgentMarkdownSessionRegistry(),
     conversationRenderCoordinator: new ConversationRenderCoordinator(),
@@ -2813,37 +2657,6 @@ function createContextHarness(options: ContextHarnessOptions): ContextHarness {
     mentionItems: () => mentionItems,
     queuedEditRequest: () => queuedEditRequest,
     globalError: () => globalError,
-  };
-}
-
-function createImmediateTimelineRenderScheduler(): NonNullable<
-  MessageHandlerContext['timelineRenderScheduler']
-> {
-  let renderCommits = 0;
-  let disposed = false;
-  return {
-    enqueue(message, commit): void {
-      if (disposed) throw new Error('Test Timeline scheduler is disposed.');
-      commit([message]);
-      renderCommits += 1;
-    },
-    flushConversation(): void {},
-    discardTurn(): void {},
-    discardConversation(): void {},
-    flushAll(): void {},
-    dispose(): void {
-      disposed = true;
-    },
-    metrics() {
-      return {
-        scheduledDeliveries: 0,
-        immediateDeliveries: renderCommits,
-        renderCommits,
-        maxPendingDeliveries: 0,
-        pendingDeliveries: 0,
-        disposed,
-      };
-    },
   };
 }
 

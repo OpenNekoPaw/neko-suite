@@ -19,7 +19,6 @@ import type {
   AgentSessionDiagnosticMessage,
 } from '@neko-agent/types';
 import type { ActiveTurnTimelineState } from '@/presenters/active-turn-timeline-presenter';
-import type { TimelineRenderCommitScheduler } from './timeline-render-commit-scheduler';
 import type { AgentMarkdownSessionRegistry } from '@/markdown/agent-markdown-session-registry';
 import type { ActivationProgressTimeline } from '@/presenters/activation-progress-presenter';
 import type { MediaModelSelection } from '@/hooks/useUIState';
@@ -163,8 +162,6 @@ export interface ContextManagementContext {
 
 /** Routing helpers for current/non-current conversation updates */
 export interface HelperContext {
-  /** Required canonical Timeline frame scheduler. Missing ownership is a contract error. */
-  timelineRenderScheduler?: TimelineRenderCommitScheduler;
   /** Required canonical message/item-scoped normalized Markdown session owner. */
   markdownSessionRegistry?: AgentMarkdownSessionRegistry;
   /** Canonical Webview-local owner for conversation render snapshots and activation. */

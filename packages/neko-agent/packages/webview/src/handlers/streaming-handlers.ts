@@ -199,9 +199,6 @@ function shouldIgnoreCompatibilityStream(
   conversationId: string | undefined,
   messageId: string | undefined,
 ): boolean {
-  if (conversationId) {
-    context.timelineRenderScheduler?.flushConversation(conversationId);
-  }
   return hasTimelineOwnershipForMessage({ context, conversationId, messageId });
 }
 

@@ -1,7 +1,6 @@
 import type { AgentTurnTimelineItem } from '@neko-agent/types';
 import { flushSync } from 'react-dom';
 import type { AgentMarkdownSessionPublication } from '@/markdown/agent-markdown-session-registry';
-import { AgentHostMessages, getAgentHostRuntimeAdapter } from '@/messages';
 import {
   applyAgentTurnTimelineDiagnostic,
   applyAgentTurnTimelineMessage,
@@ -11,10 +10,6 @@ import {
 import { upsertWorkItemsForConversation } from '@/presenters/work-item-state-presenter';
 import type { AgentTurnTimelineDiagnostic, AgentTurnTimelineMessage } from './messages';
 import { updateConversation } from './message-updater';
-import {
-  persistAgentTurnTimelineRecovery,
-  removeAgentTurnTimelineRecovery,
-} from './timeline-recovery-state';
 import { defineHandler } from './types';
 import type { HandlerRegistration, MessageHandler, MessageHandlerContext } from './types';
 
@@ -22,20 +17,13 @@ const handleAgentTurnTimeline: MessageHandler<'agentTurnTimeline'> = (
   message: AgentTurnTimelineMessage,
   context,
 ) => {
-  const scheduler = context.timelineRenderScheduler;
-  if (!scheduler) {
-    throw new Error('Agent Timeline handler requires the canonical render commit scheduler.');
-  }
-  scheduler.enqueue(message, (messages) => applyTimelineMessagesToConversation(messages, context));
+  applyTimelineMessagesToConversation([message], context);
 };
 
 const handleAgentTurnTimelineDiagnostic: MessageHandler<'agentTurnTimelineDiagnostic'> = (
   diagnostic: AgentTurnTimelineDiagnostic,
   context,
 ) => {
-  if (diagnostic.conversationId) {
-    context.timelineRenderScheduler?.flushConversation(diagnostic.conversationId);
-  }
   let unavailableTimelineState: ReturnType<typeof applyAgentTurnTimelineDiagnostic>['state'] = null;
   updateConversation(
     context,
@@ -53,9 +41,6 @@ const handleAgentTurnTimelineDiagnostic: MessageHandler<'agentTurnTimelineDiagno
       return { messages, activeTurnTimeline: result.state };
     },
   );
-  if (unavailableTimelineState) {
-    removeAgentTurnTimelineRecovery(getAgentHostRuntimeAdapter(), unavailableTimelineState);
-  }
   const belongsToForegroundConversation =
     !diagnostic.conversationId ||
     context.activeConversationIdRef.current === diagnostic.conversationId;
@@ -79,7 +64,6 @@ function applyTimelineMessagesToConversation(
   }
   let markdownPublication: AgentMarkdownSessionPublication | undefined;
   let projectedWorkItems: ReturnType<typeof projectActiveTurnTimelineWorkItems> = [];
-  let snapshotRequest: ReturnType<typeof applyAgentTurnTimelineMessage>['snapshotRequest'];
   const diagnostics: Array<{ readonly code: string; readonly message: string }> = [];
   let timelineState: ReturnType<typeof applyAgentTurnTimelineMessage>['state'] = null;
   const acceptedTimelineDeliveries: AgentTurnTimelineMessage[] = [];
@@ -100,7 +84,6 @@ function applyTimelineMessagesToConversation(
           activeState = projection.state;
           timelineState = projection.state;
           diagnostics.push(...projection.diagnostics);
-          snapshotRequest ??= projection.snapshotRequest;
           if (projection.diagnostics.length === 0) {
             acceptedDeliveries += 1;
             acceptedTimelineDeliveries.push(delivery);
@@ -126,9 +109,6 @@ function applyTimelineMessagesToConversation(
 
   // External-store publication must follow the synchronous React props commit.
   markdownPublication?.publish();
-  if (timelineState) {
-    persistAgentTurnTimelineRecovery(getAgentHostRuntimeAdapter(), timelineState);
-  }
   const foregroundDiagnostics = diagnostics.filter(
     (diagnostic) =>
       !(
@@ -141,9 +121,6 @@ function applyTimelineMessagesToConversation(
     context.activeConversationIdRef.current === firstDelivery.conversationId
   ) {
     context.setGlobalError(formatTimelineDiagnostics(foregroundDiagnostics));
-  }
-  if (snapshotRequest) {
-    AgentHostMessages.requestAgentTurnTimelineSnapshot(snapshotRequest);
   }
   if (projectedWorkItems.length > 0) {
     context.setWorkItemsByConversation((previous) =>
