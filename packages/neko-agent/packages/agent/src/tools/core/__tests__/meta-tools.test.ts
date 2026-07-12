@@ -70,6 +70,10 @@ describe('core meta tools', () => {
       allowedTools: ['bash'],
     }));
     const tool = new ActivateSkillTool();
+    expect(tool.description).toContain('copy an exact registeredSkills.name');
+    expect(tool.description).toContain('never construct or guess a skill name');
+    tool.setRegisteredSkillNames(['storyboard', 'review']);
+    expect(tool.parameters.properties.skillName?.enum).toEqual(['storyboard', 'review']);
     tool.setSkillProvider({
       listSkills: vi.fn(),
       getActiveSkill: vi.fn(),

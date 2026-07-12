@@ -1724,10 +1724,17 @@ describe('AgentSession', () => {
       });
 
       const capturedSystemPrompts: string[] = [];
-      vi.mocked(service.chatStream).mockImplementation(async function* (messages) {
+      const capturedSkillNameEnums: unknown[] = [];
+      vi.mocked(service.chatStream).mockImplementation(async function* (messages, options) {
         const systemMessage = messages.find((message) => message.role === 'system');
         capturedSystemPrompts.push(
           typeof systemMessage?.content === 'string' ? systemMessage.content : '',
+        );
+        const activateSkillDefinition = options?.tools?.find(
+          (tool) => tool.function.name === 'ActivateSkill',
+        );
+        capturedSkillNameEnums.push(
+          activateSkillDefinition?.function.parameters.properties?.['skillName']?.enum,
         );
         if (capturedSystemPrompts.length === 1) {
           yield* responseToStream(
@@ -1751,6 +1758,10 @@ describe('AgentSession', () => {
 
       expect(activateSkill).toHaveBeenCalledOnce();
       expect(capturedSystemPrompts).toHaveLength(2);
+      expect(capturedSystemPrompts[0]).toContain('# Available Skills');
+      expect(capturedSystemPrompts[0]).toContain('**storyboard**');
+      expect(capturedSystemPrompts[0]).not.toContain('comic-to-storyboard');
+      expect(capturedSkillNameEnums[0]).toEqual(['storyboard']);
       expect(capturedSystemPrompts[0]).not.toContain('imagePrompt, videoPrompt');
       expect(capturedSystemPrompts[1]).toContain(skillPrompt);
     });

@@ -60,8 +60,15 @@ import {
   type StageActivationDecision,
   type Task,
 } from '@neko-agent/types';
-import type { SkillInjection, IStagePersonaBinding, IStageGuardian, IToolGuard } from '../skill';
+import type {
+  SkillInjection,
+  IStagePersonaBinding,
+  IStageGuardian,
+  IToolGuard,
+  SkillPromptEntry,
+} from '../skill';
 import {
+  buildSkillAwareSystemPrompt,
   createToolGuard,
   SkillInjectionCoordinator,
   StageTracker,
@@ -177,6 +184,15 @@ const SESSION_SYSTEM_PROMPT_REFRESH_HOOK_NAME = 'session-system-prompt-refresh';
 
 function getAgentSessionLogger() {
   return getLogger('AgentSession');
+}
+
+function isPromiseLike<T>(value: T | Promise<T>): value is Promise<T> {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'then' in value &&
+    typeof value.then === 'function'
+  );
 }
 
 // =============================================================================
@@ -300,6 +316,8 @@ export class AgentSession implements IAgentSession {
 
   // Meta tools (for ISkillProvider wiring)
   private _metaTools: Tool[] = [];
+  private _skillPromptEntries: readonly SkillPromptEntry[] = [];
+  private _skillCatalogProjectionVersion = 0;
 
   // State
   private _history: ChatMessage[] = [];
@@ -772,8 +790,8 @@ export class AgentSession implements IAgentSession {
     }
 
     // Update system prompt in history if changed
-    if (config.systemPrompt !== undefined) {
-      this._promptRuntime.setBasePrompt(config.systemPrompt);
+    if (config.systemPrompt !== undefined || config.locale !== undefined) {
+      this._promptRuntime.setBasePrompt(this._buildSkillAwareBasePrompt());
     }
 
     this._rebuildValidationCoordinator();
@@ -797,6 +815,47 @@ export class AgentSession implements IAgentSession {
    */
   setSkillProvider(provider: ISkillProvider): void {
     this._wireMetaToolCapabilityProvider(this._createCapabilityProvider(provider));
+    this._projectSkillCatalogPrompt(provider);
+  }
+
+  private _projectSkillCatalogPrompt(provider: ISkillProvider): void {
+    const projectionVersion = ++this._skillCatalogProjectionVersion;
+    const skills = provider.listSkills();
+    if (isPromiseLike(skills)) {
+      void skills
+        .then((resolved) => this._applySkillCatalogPrompt(resolved, projectionVersion))
+        .catch((error: unknown) => {
+          logger.error('Failed to project Skill catalog into the AgentSession prompt', { error });
+        });
+      return;
+    }
+    this._applySkillCatalogPrompt(skills, projectionVersion);
+  }
+
+  private _applySkillCatalogPrompt(
+    skills: readonly import('../tools/core/meta-tools').SkillContextSummary[],
+    projectionVersion: number,
+  ): void {
+    if (this._disposed || projectionVersion !== this._skillCatalogProjectionVersion) return;
+    this._skillPromptEntries = skills.map((skill) => ({
+      name: skill.name,
+      ...(skill.description ? { description: skill.description } : {}),
+    }));
+    for (const tool of this._metaTools) {
+      if (tool instanceof ActivateSkillTool) {
+        tool.setRegisteredSkillNames(this._skillPromptEntries.map((skill) => skill.name));
+      }
+    }
+    this._promptRuntime.setBasePrompt(this._buildSkillAwareBasePrompt());
+    this._syncSystemPrompt();
+  }
+
+  private _buildSkillAwareBasePrompt(): string {
+    return buildSkillAwareSystemPrompt({
+      basePrompt: this._config.systemPrompt,
+      skills: this._skillPromptEntries,
+      locale: this._config.locale,
+    });
   }
 
   private _wireMetaToolCapabilityProvider(provider: ISkillProvider): void {

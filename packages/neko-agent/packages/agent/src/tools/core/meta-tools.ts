@@ -433,40 +433,50 @@ export class CreateSkillTool extends BuiltinTool {
 export class ActivateSkillTool extends BuiltinTool {
   readonly name = 'ActivateSkill';
   readonly description =
-    'Activate a skill after ordinary Agent understanding confirms it is needed. Do not use keyword matching alone. Briefly state the activation reason before calling this tool. Use slot=domainSkill for the main task domain, and slot=referenceSkill for supplemental capability guidance such as Canvas authoring so the current domain skill stays active.';
-  readonly parameters: ToolParameters = {
-    type: 'object',
-    properties: {
-      skillName: {
-        type: 'string',
-        description: 'Name of the skill to activate',
+    'Activate a currently registered skill after ordinary Agent understanding confirms it is needed. Before calling, inspect GetContext in the current conversation and copy an exact registeredSkills.name; never construct or guess a skill name from the source modality, workflow stage, or task wording. Briefly state the activation reason before calling this tool. Use slot=domainSkill for the main task domain, and slot=referenceSkill for supplemental capability guidance such as Canvas authoring so the current domain skill stays active.';
+  get parameters(): ToolParameters {
+    return {
+      type: 'object',
+      properties: {
+        skillName: {
+          type: 'string',
+          ...(this._registeredSkillNames.length > 0
+            ? { enum: [...this._registeredSkillNames] }
+            : {}),
+          description: 'Exact registered skill name to activate',
+        },
+        reason: {
+          type: 'string',
+          description:
+            'Concise reason based on the current conversation and gathered context, explaining why this skill is needed now.',
+        },
+        slot: {
+          type: 'string',
+          enum: [
+            'domainSkill',
+            'referenceSkill',
+            'promptChainSkill',
+            'ephemeralSkill',
+            'stagePersona',
+          ],
+          description:
+            'Optional lifecycle slot. Defaults to domainSkill. Use referenceSkill for supplemental guidance that must coexist with the active domain skill.',
+        },
       },
-      reason: {
-        type: 'string',
-        description:
-          'Concise reason based on the current conversation and gathered context, explaining why this skill is needed now.',
-      },
-      slot: {
-        type: 'string',
-        enum: [
-          'domainSkill',
-          'referenceSkill',
-          'promptChainSkill',
-          'ephemeralSkill',
-          'stagePersona',
-        ],
-        description:
-          'Optional lifecycle slot. Defaults to domainSkill. Use referenceSkill for supplemental guidance that must coexist with the active domain skill.',
-      },
-    },
-    required: ['skillName', 'reason'],
-  };
+      required: ['skillName', 'reason'],
+    };
+  }
   readonly category: ToolCategory = 'system';
 
   private _skillProvider?: ISkillProvider;
+  private _registeredSkillNames: readonly string[] = [];
 
   setSkillProvider(provider: ISkillProvider): void {
     this._skillProvider = provider;
+  }
+
+  setRegisteredSkillNames(names: readonly string[]): void {
+    this._registeredSkillNames = [...new Set(names)];
   }
 
   async execute(args: Record<string, unknown>, options?: ToolExecuteOptions): Promise<ToolResult> {
