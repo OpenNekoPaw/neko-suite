@@ -76,11 +76,11 @@
 - [x] 7.1 Implement or adapt `.nks` ProjectQuality facade for schema/version, resources, layer/frame integrity, revision, preview, and export readiness.
 - [x] 7.2 Implement or adapt `.nkv` ProjectQuality facade for media refs, clip ranges, tracks, timeline revision, subtitles/audio/output settings, preview, and export readiness.
 - [x] 7.3 Implement or adapt `.nka` ProjectQuality facade for sources, routing/track mix, duration, loudness/peak readiness, revision, and final-mix preview.
-- [ ] 7.4 Implement or adapt `.nkp` ProjectQuality facade for source refs, parameters, motions, expressions, physics/tracking mappings, adapter availability, and runtime preview.
-- [ ] 7.5 Implement or adapt `.nkm` ProjectQuality facade for scene graph, assets, camera/light/timeline, profile/runtime adapter availability, and render preview.
-- [ ] 7.6 Add save/reopen and headless validation tests proving validators use explicit project targets and current durable revisions without active Webview state.
-- [ ] 7.7 Add unknown/future schema, missing asset, illegal cache/runtime identity, graph/timeline corruption, and validator-unavailable fail-visible tests for each applicable format.
-- [ ] 7.8 Add quality orchestration adapters that consume owning facade evidence without importing or duplicating format parsers.
+- [x] 7.4 Implement or adapt `.nkp` ProjectQuality facade for source refs, parameters, motions, expressions, physics/tracking mappings, adapter availability, and runtime preview.
+- [x] 7.5 Implement or adapt `.nkm` ProjectQuality facade for scene graph, assets, camera/light/timeline, profile/runtime adapter availability, and render preview.
+- [x] 7.6 Add save/reopen and headless validation tests proving validators use explicit project targets and current durable revisions without active Webview state.
+- [x] 7.7 Add unknown/future schema, missing asset, illegal cache/runtime identity, graph/timeline corruption, and validator-unavailable fail-visible tests for each applicable format.
+- [x] 7.8 Add quality orchestration adapters that consume owning facade evidence without importing or duplicating format parsers.
 
 ## 8. Media Production, Preflight, Export, and Deliverable Verification
 

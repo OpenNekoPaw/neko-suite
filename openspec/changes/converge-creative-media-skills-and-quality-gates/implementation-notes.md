@@ -1145,3 +1145,54 @@ pnpm --dir packages/neko-types exec vitest --run   src/types/__tests__/project-c
 - 上述输出没有恢复本 change 已删除的 path-only Quality API 或 expired creative Skill 成功路径。
 
 正式架构文档中的 IDC 示例已改为 `media-production` + `media-production/from-comic`，避免已接受文档继续把过期阶段 Skill 作为当前入口。历史 `docs/superpowers/` 实施快照保留原始名称，仅作为带日期的历史记录，不作为运行时或 canonical 架构事实来源。
+
+
+## 23. `.nkp/.nkm` ProjectQuality 与中央 facade 编排收敛（2026-07-12）
+
+任务 7.4–7.8 已完成。`.nkp` 与 `.nkm` 的项目质量检查由 owning package 暴露 `ProjectQualityFacade`，中央 Quality 编排只消费 facade 返回的 evidence，不导入、复制或旁路调用任何 `.nk*` parser/codec。
+
+- `.nkp` facade 以显式 project target 和 durable file source 为输入，支持无 Webview 的 save/reopen 检查；覆盖 source/runtime/cache identity、layer/mesh/skin、skeleton parent/cycle、IK/path/spring、blendshape、control driver 与 animation reference，并通过可注入 preview/runtime/export adapter 暴露能力可用性。
+- `.nkm` facade 同样支持显式 target、headless save/reopen 与 durable revision；覆盖 source/runtime/cache identity、`2d`/`3d`/`live` profile consistency、scene node/tile/camera、live actor/route、animation clip/channel/keyframe、camera transform/FOV，并通过 render/runtime/export adapter 返回可诊断结果。
+- 两类 facade 均以内容 digest 构造 durable revision（`nkp:<contentDigest>` / `nkm:<contentDigest>`），拒绝 stale revision；snapshot 使用稳定 `ResourceRef`，不得把 cache、render、Webview 或 session-only identity 当作持久项目身份。
+- unknown/future schema、missing asset、非法 cache/runtime identity、graph/timeline corruption、stale revision 与 adapter unavailable 均 fail-visible，不通过默认值、活动 Webview 状态或旧格式 fallback 返回成功。
+- Agent Extension 的中央 `ProjectQualityFacadeResolver` 按 project kind 解析 Sketch、Cut、Audio、Model 与 Puppet owning extension；项目目标依次请求 validation、snapshot、runtime probe 和 export readiness，再转换为 canonical structural/technical/policy evidence 交给 `QualityGateRuntime` 聚合。
+- project target 不经过 content materializer；owning extension 或 facade 缺失时返回 `quality-project-facade-unavailable`。poison test 证明中央编排未导入 `nkpProjectFormatCodec`、`nkmProjectFormatCodec`、`nksProjectFormatCodec`、`nkvProjectFormatCodec` 或 `nkaProjectFormatCodec`。
+
+相关代码提交：
+
+```text
+a4122161b feat(quality): add puppet and model project facades
+c0c3bf0e3 feat(quality): route project review through owning facades
+```
+
+本轮验证：
+
+```bash
+pnpm --dir packages/neko-types exec vitest run \
+  src/types/__tests__/creative-media-contracts.test.ts
+# 1 file, 10 tests passed
+
+pnpm --dir packages/neko-puppet exec vitest run \
+  packages/extension/src/PuppetProjectQualityFacade.test.ts
+# 1 file, 5 tests passed
+
+pnpm --dir packages/neko-model exec vitest run \
+  packages/extension/src/services/ModelProjectQualityFacade.test.ts
+# 1 file, 4 tests passed
+
+pnpm --dir packages/neko-agent exec vitest run \
+  packages/extension/src/tools/__tests__/projectQualityOrchestration.test.ts \
+  packages/extension/src/tools/__tests__/qualityCapabilityProvider.test.ts \
+  packages/extension/src/tools/__tests__/capabilityProviders.test.ts
+# 3 files, 12 tests passed
+
+pnpm --dir packages/neko-puppet/packages/extension run build
+pnpm --dir packages/neko-model/packages/extension run build
+pnpm --dir packages/neko-agent run compile:extension
+# passed
+
+git diff --check
+# passed
+```
+
+独立执行 `pnpm exec tsc -p packages/neko-puppet/packages/extension/tsconfig.json --noEmit` 仍会被该包既有 `moduleResolution` 无法解析 `@neko/shared` exports 的问题及其级联错误阻塞；本批以实际 package build 和聚焦测试作为 facade 路径验证，未将该既有问题误报为新 facade 的成功门禁。
