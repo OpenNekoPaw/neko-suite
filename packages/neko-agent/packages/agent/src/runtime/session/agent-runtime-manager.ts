@@ -10,6 +10,7 @@ import {
   type ManagedAgentRuntime,
 } from './agent-runtime-pool';
 import { SubAgentRuntimeCoordinator } from '../subagent-runtime';
+import type { ConversationRuntimeContext } from './conversation-runtime-context';
 import type {
   AgentRunnerEventSource,
   AgentPendingMessageItem,
@@ -73,7 +74,9 @@ export interface AgentRuntimeManagerOptions<TAgent extends AgentRuntimeManagerAg
 
 export interface AgentRuntimeManager<TAgent extends AgentRuntimeManagerAgent> {
   getOrCreate(conversationId: string): TAgent;
+  getOrCreateContext(conversationId: string): ConversationRuntimeContext<TAgent>;
   get(conversationId: string): TAgent | undefined;
+  getContext(conversationId: string): ConversationRuntimeContext<TAgent> | undefined;
   isRunning(conversationId: string): boolean;
   hasRunningAgents(): boolean;
   getRunningConversations(): string[];
@@ -106,10 +109,7 @@ export interface AgentRuntimeManager<TAgent extends AgentRuntimeManagerAgent> {
   nextMessageQueueSnapshotVersion(conversationId: string): number;
   getContextTokenCount(conversationId: string): number;
   compressContext(conversationId: string): Promise<AgentRuntimeCompressionResult>;
-  applySkillLifecycleProjection(
-    conversationId: string,
-    projection: SkillLifecycleProjection,
-  ): void;
+  applySkillLifecycleProjection(conversationId: string, projection: SkillLifecycleProjection): void;
   applySkillInjection(conversationId: string, injection: SkillInjection, skill?: Skill): void;
   getActiveSkill(conversationId: string): Skill | undefined;
   clearActiveSkill(conversationId: string): void;
@@ -150,8 +150,16 @@ class DefaultAgentRuntimeManager<
     return this.pool.getOrCreate(conversationId);
   }
 
+  getOrCreateContext(conversationId: string): ConversationRuntimeContext<TAgent> {
+    return this.pool.getOrCreateContext(conversationId);
+  }
+
   get(conversationId: string): TAgent | undefined {
     return this.pool.get(conversationId);
+  }
+
+  getContext(conversationId: string): ConversationRuntimeContext<TAgent> | undefined {
+    return this.pool.getContext(conversationId);
   }
 
   isRunning(conversationId: string): boolean {
@@ -171,7 +179,11 @@ class DefaultAgentRuntimeManager<
   }
 
   remove(conversationId: string): void {
-    this.pool.remove(conversationId);
+    try {
+      this.pool.remove(conversationId);
+    } finally {
+      this.messageQueueSnapshotVersions.delete(conversationId);
+    }
   }
 
   cancel(conversationId: string): void {
@@ -296,6 +308,7 @@ class DefaultAgentRuntimeManager<
   dispose(): void {
     this.pool.dispose();
     this.agentDisposables.clear();
+    this.messageQueueSnapshotVersions.clear();
     if (this.disposeSubAgentRuntime) {
       this.subAgentRuntime.dispose();
     }

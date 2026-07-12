@@ -1,7 +1,11 @@
-export interface ManagedAgentRuntime {
+import {
+  createConversationRuntimeContext,
+  type ConversationRuntimeContext,
+  type ManagedConversationRuntimeSession,
+} from './conversation-runtime-context';
+
+export interface ManagedAgentRuntime extends ManagedConversationRuntimeSession {
   isRunning(): boolean;
-  cancel(): void;
-  dispose(): void;
 }
 
 export type AgentRuntimePoolPressureEvent =
@@ -25,7 +29,7 @@ export interface AgentRuntimePoolOptions<TAgent extends ManagedAgentRuntime> {
 }
 
 export class AgentRuntimePool<TAgent extends ManagedAgentRuntime> {
-  private readonly _agents = new Map<string, TAgent>();
+  private readonly _contexts = new Map<string, ConversationRuntimeContext<TAgent>>();
   private readonly _accessOrder: string[] = [];
   private readonly _defaultMaxAgents: number;
   private readonly _absoluteMaxAgents: number;
@@ -38,46 +42,59 @@ export class AgentRuntimePool<TAgent extends ManagedAgentRuntime> {
   }
 
   get size(): number {
-    return this._agents.size;
+    return this._contexts.size;
   }
 
   getOrCreate(conversationId: string): TAgent {
-    const existing = this._agents.get(conversationId);
+    return this.getOrCreateContext(conversationId).session;
+  }
+
+  getOrCreateContext(conversationId: string): ConversationRuntimeContext<TAgent> {
+    assertConversationId(conversationId);
+    const existing = this._contexts.get(conversationId);
     if (existing) {
       this._updateAccessOrder(conversationId);
       return existing;
     }
 
     this._evictIfNeeded();
-    const agent = this._options.createAgent(conversationId);
-    this._agents.set(conversationId, agent);
+    const context = createConversationRuntimeContext({
+      conversationId,
+      session: this._options.createAgent(conversationId),
+    });
+    context.markReady();
+    this._contexts.set(conversationId, context);
     this._updateAccessOrder(conversationId);
-    return agent;
+    return context;
   }
 
   get(conversationId: string): TAgent | undefined {
-    const agent = this._agents.get(conversationId);
-    if (agent) {
+    return this.getContext(conversationId)?.session;
+  }
+
+  getContext(conversationId: string): ConversationRuntimeContext<TAgent> | undefined {
+    const context = this._contexts.get(conversationId);
+    if (context) {
       this._updateAccessOrder(conversationId);
     }
-    return agent;
+    return context;
   }
 
   isRunning(conversationId: string): boolean {
-    return this._agents.get(conversationId)?.isRunning() ?? false;
+    return this._contexts.get(conversationId)?.session.isRunning() ?? false;
   }
 
   hasRunningAgents(): boolean {
-    for (const agent of this._agents.values()) {
-      if (agent.isRunning()) return true;
+    for (const context of this._contexts.values()) {
+      if (context.session.isRunning()) return true;
     }
     return false;
   }
 
   getRunningConversations(): string[] {
     const running: string[] = [];
-    for (const [conversationId, agent] of this._agents) {
-      if (agent.isRunning()) {
+    for (const [conversationId, context] of this._contexts) {
+      if (context.session.isRunning()) {
         running.push(conversationId);
       }
     }
@@ -85,44 +102,75 @@ export class AgentRuntimePool<TAgent extends ManagedAgentRuntime> {
   }
 
   getAllConversations(): string[] {
-    return Array.from(this._agents.keys());
+    return Array.from(this._contexts.keys());
   }
 
-  values(): IterableIterator<TAgent> {
-    return this._agents.values();
+  *values(): IterableIterator<TAgent> {
+    for (const context of this._contexts.values()) {
+      yield context.session;
+    }
   }
 
   remove(conversationId: string): void {
-    const agent = this._agents.get(conversationId);
-    if (!agent) return;
+    const context = this._contexts.get(conversationId);
+    if (!context) return;
 
-    agent.cancel();
-    this._options.onRemove?.(conversationId, agent);
-    agent.dispose();
-    this._agents.delete(conversationId);
-    this._removeAccessOrder(conversationId);
-    this._shrinkIfIdle();
+    let removalError: unknown;
+    try {
+      this._options.onRemove?.(conversationId, context.session);
+    } catch (error) {
+      removalError = error;
+    }
+
+    let disposalError: unknown;
+    try {
+      context.dispose();
+    } catch (error) {
+      disposalError = error;
+    } finally {
+      this._contexts.delete(conversationId);
+      this._removeAccessOrder(conversationId);
+      this._shrinkIfIdle();
+    }
+
+    if (removalError !== undefined && disposalError !== undefined) {
+      throw new AggregateError(
+        [removalError, disposalError],
+        `Conversation runtime ${conversationId} failed during removal.`,
+      );
+    }
+    if (removalError !== undefined) throw removalError;
+    if (disposalError !== undefined) throw disposalError;
   }
 
   cancel(conversationId: string): void {
-    this._agents.get(conversationId)?.cancel();
+    this._contexts.get(conversationId)?.cancel();
   }
 
   cancelAll(): void {
-    for (const agent of this._agents.values()) {
-      agent.cancel();
+    for (const context of this._contexts.values()) {
+      context.cancel();
     }
   }
 
   dispose(): void {
-    for (const conversationId of Array.from(this._agents.keys())) {
-      this.remove(conversationId);
+    const errors: unknown[] = [];
+    for (const conversationId of Array.from(this._contexts.keys())) {
+      try {
+        this.remove(conversationId);
+      } catch (error) {
+        errors.push(error);
+      }
     }
     this._accessOrder.length = 0;
+    if (errors.length === 1) throw errors[0];
+    if (errors.length > 1) {
+      throw new AggregateError(errors, 'Multiple conversation runtimes failed to dispose.');
+    }
   }
 
   private _evictIfNeeded(): void {
-    while (this._agents.size >= this._maxAgents) {
+    while (this._contexts.size >= this._maxAgents) {
       const evictId = this._findLeastRecentlyUsedIdleAgent();
       if (evictId) {
         this.remove(evictId);
@@ -149,8 +197,8 @@ export class AgentRuntimePool<TAgent extends ManagedAgentRuntime> {
 
   private _findLeastRecentlyUsedIdleAgent(): string | undefined {
     for (const conversationId of this._accessOrder) {
-      const agent = this._agents.get(conversationId);
-      if (agent && !agent.isRunning()) {
+      const context = this._contexts.get(conversationId);
+      if (context && !context.session.isRunning()) {
         return conversationId;
       }
     }
@@ -170,8 +218,14 @@ export class AgentRuntimePool<TAgent extends ManagedAgentRuntime> {
   }
 
   private _shrinkIfIdle(): void {
-    if (this._maxAgents > this._defaultMaxAgents && this._agents.size <= this._defaultMaxAgents) {
+    if (this._maxAgents > this._defaultMaxAgents && this._contexts.size <= this._defaultMaxAgents) {
       this._maxAgents = this._defaultMaxAgents;
     }
+  }
+}
+
+function assertConversationId(conversationId: string): void {
+  if (conversationId.trim().length === 0) {
+    throw new Error('conversationId is required for an Agent runtime pool.');
   }
 }

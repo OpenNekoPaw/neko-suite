@@ -17,6 +17,29 @@ class TestAgent implements ManagedAgentRuntime {
 }
 
 describe('AgentRuntimePool', () => {
+  it('rejects missing ownership before creating or evicting runtime state', () => {
+    const createAgent = vi.fn(() => new TestAgent());
+    const pool = new AgentRuntimePool({ maxAgents: 1, createAgent });
+    const existing = pool.getOrCreateContext('conv-a');
+
+    expect(() => pool.getOrCreateContext(' ')).toThrow(/conversationId is required/);
+    expect(createAgent).toHaveBeenCalledTimes(1);
+    expect(pool.getContext('conv-a')).toBe(existing);
+  });
+
+  it('owns one ready runtime context per conversation', () => {
+    const pool = new AgentRuntimePool({ createAgent: () => new TestAgent() });
+
+    const contextA = pool.getOrCreateContext('conv-a');
+    const contextB = pool.getOrCreateContext('conv-b');
+
+    expect(contextA).toBe(pool.getOrCreateContext('conv-a'));
+    expect(contextA).not.toBe(contextB);
+    expect(contextA.conversationId).toBe('conv-a');
+    expect(contextA.lifecycle).toBe('ready');
+    expect(contextB.lifecycle).toBe('ready');
+  });
+
   it('reuses agents by conversationId', () => {
     const createAgent = vi.fn(() => new TestAgent());
     const pool = new AgentRuntimePool({ createAgent });
@@ -64,6 +87,68 @@ describe('AgentRuntimePool', () => {
       maxAgents: 2,
       absoluteMaxAgents: 2,
     });
+  });
+
+  it('disposes only the removed conversation context', () => {
+    const pool = new AgentRuntimePool({ createAgent: () => new TestAgent() });
+    const contextA = pool.getOrCreateContext('conv-a');
+    const contextB = pool.getOrCreateContext('conv-b');
+
+    pool.remove('conv-a');
+
+    expect(contextA.lifecycle).toBe('disposed');
+    expect(contextA.session.cancel).toHaveBeenCalledOnce();
+    expect(contextA.session.dispose).toHaveBeenCalledOnce();
+    expect(contextB.lifecycle).toBe('ready');
+    expect(contextB.session.cancel).not.toHaveBeenCalled();
+    expect(contextB.session.dispose).not.toHaveBeenCalled();
+    expect(pool.getContext('conv-b')).toBe(contextB);
+  });
+
+  it('removes a failed runtime context without corrupting another conversation', () => {
+    const pool = new AgentRuntimePool({
+      createAgent: (conversationId) => {
+        const agent = new TestAgent();
+        if (conversationId === 'conv-a') {
+          agent.cancel.mockImplementation(() => {
+            throw new Error('cancel failed');
+          });
+        }
+        return agent;
+      },
+    });
+    const contextA = pool.getOrCreateContext('conv-a');
+    const contextB = pool.getOrCreateContext('conv-b');
+
+    expect(() => pool.remove('conv-a')).toThrow('cancel failed');
+
+    expect(contextA.lifecycle).toBe('disposed');
+    expect(pool.getContext('conv-a')).toBeUndefined();
+    expect(pool.getContext('conv-b')).toBe(contextB);
+    expect(contextB.lifecycle).toBe('ready');
+  });
+
+  it('continues disposing independent conversations when one runtime fails', () => {
+    const pool = new AgentRuntimePool({
+      createAgent: (conversationId) => {
+        const agent = new TestAgent();
+        if (conversationId === 'conv-a') {
+          agent.dispose.mockImplementation(() => {
+            throw new Error('dispose failed');
+          });
+        }
+        return agent;
+      },
+    });
+    const contextA = pool.getOrCreateContext('conv-a');
+    const contextB = pool.getOrCreateContext('conv-b');
+
+    expect(() => pool.dispose()).toThrow('dispose failed');
+
+    expect(contextA.lifecycle).toBe('disposed');
+    expect(contextB.lifecycle).toBe('disposed');
+    expect(contextB.session.dispose).toHaveBeenCalledOnce();
+    expect(pool.size).toBe(0);
   });
 
   it('cancels one running conversation without touching another running conversation', () => {

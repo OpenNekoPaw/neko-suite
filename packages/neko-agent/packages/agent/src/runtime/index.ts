@@ -118,6 +118,13 @@ export {
 } from './session/agent-runtime-pool';
 
 export {
+  createConversationRuntimeContext,
+  type ConversationRuntimeContext,
+  type ConversationRuntimeLifecycle,
+  type ManagedConversationRuntimeSession,
+} from './session/conversation-runtime-context';
+
+export {
   AgentMessageQueueOperationError,
   createAgentConversationMessageQueue,
   createAgentRuntimeSessionMessageQueuePort,

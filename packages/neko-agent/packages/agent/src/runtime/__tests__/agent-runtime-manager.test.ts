@@ -116,6 +116,25 @@ function makeMessage(content: string): ChatMessage {
 }
 
 describe('AgentRuntimeManager', () => {
+  it('exposes one ready conversation context and disposes only its owned state', () => {
+    const manager = createAgentRuntimeManager({
+      createAgent: ({ conversationId }) => new MockAgent(conversationId),
+    });
+    const contextA = manager.getOrCreateContext('conversation-a');
+    const contextB = manager.getOrCreateContext('conversation-b');
+
+    expect(contextA).toBe(manager.getOrCreateContext('conversation-a'));
+    expect(contextA.lifecycle).toBe('ready');
+    expect(contextB.lifecycle).toBe('ready');
+
+    manager.remove('conversation-a');
+
+    expect(contextA.lifecycle).toBe('disposed');
+    expect(contextB.lifecycle).toBe('ready');
+    expect(manager.getContext('conversation-a')).toBeUndefined();
+    expect(manager.getContext('conversation-b')).toBe(contextB);
+  });
+
   it('owns pool lifecycle and bridges agent start/stop events by conversation', () => {
     const starts: string[] = [];
     const stops: string[] = [];
@@ -251,6 +270,9 @@ describe('AgentRuntimeManager', () => {
     expect(manager.nextMessageQueueSnapshotVersion('conversation-1')).toBe(2);
     expect(manager.nextMessageQueueSnapshotVersion('conversation-2')).toBe(1);
     expect(manager.nextMessageQueueSnapshotVersion('conversation-1')).toBe(3);
+
+    manager.remove('conversation-1');
+    expect(manager.nextMessageQueueSnapshotVersion('conversation-1')).toBe(1);
   });
 
   it('keeps concurrent conversation runner events, queues, Skills, and cancellation isolated', () => {
