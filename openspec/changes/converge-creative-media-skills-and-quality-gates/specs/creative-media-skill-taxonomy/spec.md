@@ -26,6 +26,12 @@ The Skill catalog SHALL distinguish canonical Skills from source profiles, opera
 - **THEN** it SHALL register against the canonical `storyboard` Skill contract
 - **AND** callers SHALL NOT require a new hard-coded Skill-name branch.
 
+#### Scenario: Agent selects a Skill after source analysis
+- **WHEN** the Agent finishes reading comic, document, or image evidence and decides a production Skill is required
+- **THEN** the live AgentSession prompt SHALL expose the current registered Skill catalog
+- **AND** the Agent SHALL select an exact registered identity rather than constructing a source-specific Skill name
+- **AND** a removed identity SHALL NOT be attempted before or instead of the canonical Skill.
+
 ### Requirement: Skill content does not own runtime tool protocols
 Canonical creative Skill content SHALL contain creative methods, task judgment, profile selection guidance, and output semantics. Tool names, parameter schemas, polling/task protocols, path protocols, Webview messages, and owning package authoring details MUST remain in machine-readable metadata, capability prompts, tool schemas, or runtime catalogs.
 

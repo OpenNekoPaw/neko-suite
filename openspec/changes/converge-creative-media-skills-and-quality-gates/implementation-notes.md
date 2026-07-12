@@ -1506,3 +1506,37 @@ pnpm --dir packages/neko-agent run compile:extension
 git diff --check
 # passed
 ```
+
+## 29. Live Skill Catalog Projection and Comic Storyboard Evaluation（2026-07-13）
+
+任务 9.5a 已完成。`AgentSession` 现在把当前 `ISkillProvider` 的注册结果投影到既有 `buildSkillAwareSystemPrompt`，并把同一组精确名称写入 `ActivateSkill.skillName` 的动态 enum。漫画、文档或图片来源不再允许模型根据 modality 或 workflow stage 猜测 Skill 名；builtin、project 和 personal Skill 仍共用同一 live catalog，不增加 alias、matcher 或第二套 Skill registry。
+
+### Canonical path 与旧路径约束
+
+- `setSkillProvider()` 是目录投影的唯一入口；异步 provider 使用 projection version 拒绝陈旧结果覆盖新目录。
+- system prompt 展示注册 Skill 的精确名称与描述，`ActivateSkill` schema 只接受当前目录名称。
+- `skill-activation-attempts-only` 检查全部 `ActivateSkill` 调用，而非只检查最终 active Skill；因此先尝试 `comic-to-storyboard` 失败、再回退 `storyboard` 也会使 case 失败。
+- 未恢复 `comic-to-storyboard` runtime export、alias 或兼容成功路径；旧 identity 仍只允许出现在迁移文档和负向测试中。
+
+### 真实 Agent evaluation 证据
+
+执行模型为 `nekoapi-chat/gpt-5.5`，运行入口为从当前源码重建的 `packages/neko-agent/neko`。
+
+```bash
+node scripts/agent-eval/protocol-smoke.mjs \
+  --manifest scripts/agent-eval/scenarios/creative-workflows.scenarios.json \
+  --case comic-description-canonical-storyboard-skill
+# passed: observed Skill activation attempts = ["storyboard"]
+# output: one scene, two shots, two shot-level imagePrompt values,
+# and one scene-level videoPrompt aggregating both ordered beats
+
+node scripts/agent-eval/protocol-smoke.mjs \
+  --manifest scripts/agent-eval/scenarios/creative-workflows.scenarios.json \
+  --case blame-epub-canonical-storyboard-skill
+# passed: ReadDocument/content access and image analysis evidence observed
+# observed Skill activation attempts = ["storyboard"]
+# output contains scene, shot, imagePrompt, and videoPrompt;
+# comic-to-storyboard and the retired generic 制作提示词 column are absent
+```
+
+BLAME case 实际读取并分析 EPUB 前 10 页，产出 6 个 scene、13 个 shot。每个 shot 保留独立 `imagePrompt`，每个 scene 仅首个 shot 承载汇总该场有序动作、运镜、声音和总时长的 `videoPrompt`。首次运行遇到 provider 连续空响应并被 runner 正确判为 runtime failure；重试后全部 8 项 deterministic assertions 通过，未用空结果或 fallback 伪装成功。

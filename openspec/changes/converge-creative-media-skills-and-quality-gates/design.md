@@ -50,6 +50,8 @@
 
 `comic-to-storyboard`、`image-to-shot` 等来源差异成为 profile；AnimationPlan、Cut payload、generated shot assembly 和 export package 成为 typed workflow stage/artifact builder；实际 mutation 仍由 capability catalog 中的 owning operation 执行。
 
+AgentSession 必须把当前注册表中的 enabled Skill 名称和描述投影到实时 system prompt，且 `ActivateSkill` 只能把运行时目录中出现的精确名称视为可选择 identity。读取漫画、文档或图片后不得根据来源语义自行构造 `comic-to-*`、`*-to-storyboard` 等名称；来源差异仍由 canonical Skill 内部 profile 表达。该目录投影复用既有 `buildSkillAwareSystemPrompt`，不增加 alias、Skill 或第二套 matcher。
+
 ```mermaid
 flowchart LR
     U[User intent] --> S[Canonical Skill]
