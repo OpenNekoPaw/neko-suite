@@ -52,6 +52,9 @@ describe('canonical creative media Skill content boundaries', () => {
       expect(storyboard?.content).toMatch(/scene-level|scene 级/);
       expect(storyboard?.content).toMatch(/Never collapse|禁止把图片与视频意图合并/);
       expect(storyboard?.content).toMatch(/multiple resources|匹配多个资源/);
+      expect(storyboard?.content).toContain('`scenes[] -> shots[]`');
+      expect(storyboard?.content).toMatch(/scene as a container|scene 保持为容器/);
+      expect(storyboard?.content).toMatch(/never flatten|禁止把 canonical Storyboard 压平/);
     },
   );
 

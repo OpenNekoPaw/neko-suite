@@ -88,6 +88,7 @@ Turn a prompt, prose, script, document, comic, ordered image sequence, or existi
 
 ## Review table and prompt invariants
 
+- The canonical artifact is nested \`scenes[] -> shots[]\`: a scene owns its ordered shots, and a scene cell in a review table never replaces the scene record. Shot media references remain shot facts.
 - A reviewable Storyboard keeps distinct \`scene\`, \`shot\`, \`source\`, \`imagePrompt\`, \`videoPrompt\`, \`duration\`, and \`dialogue\` semantics. Never collapse image and video intent into one generic generation-prompt column.
 - \`imagePrompt\` is shot-level and only describes an executable image generation or edit task. Include subject/appearance, scene, composition, style/light, reference role, preserved details, ordered edit steps when applicable, and constraints.
 - \`videoPrompt\` is scene-level. Write at most one per scene, normally on its first shot, and aggregate the ordered shot beats, subject motion, camera transitions, environmental change, dialogue/audio or silence, total duration, reference roles, and constraints.
@@ -108,7 +109,7 @@ Turn a prompt, prose, script, document, comic, ordered image sequence, or existi
 - Scene video prompts cover source/reference roles, characters and emotion, ordered or time-coded action beats, camera transitions, environmental change/effects, dialogue/narration/SFX or silence, pacing, total duration, and constraints. Long scenes should use explicit beat or time segments instead of an overloaded paragraph.
 - When a reference image is directly usable and no image operation is intended, leave \`imagePrompt\` empty instead of inventing edit work.
 
-Finish the single reviewable Storyboard projection before any requested Canvas handoff. The visible review projection is not a substitute for durable Canvas authoring, and Canvas authoring cannot replace the initial Storyboard review. Existing-storyboard refinement always creates a new revision when intent or ordering changes.
+Finish the single reviewable Storyboard projection before any requested Canvas handoff. The visible review projection is not a substitute for durable Canvas authoring, and Canvas authoring cannot replace the initial Storyboard review. A Canvas projection keeps each scene as a container and each shot as its owned child while preserving revision, prompt intent, and stable image/media references; never flatten a canonical Storyboard into a gallery or asset list. Existing-storyboard refinement always creates a new revision when intent or ordering changes.
 `;
 
 const storyboardZhCnContent = `# 分镜
@@ -125,6 +126,7 @@ const storyboardZhCnContent = `# 分镜
 
 ## 审阅表与提示词不变量
 
+- canonical 产物必须保持 \`scenes[] -> shots[]\` 嵌套：scene 拥有按顺序排列的 shots，审阅表中的 scene 单元格不能替代 scene 记录；shot 的媒体引用始终属于该 shot。
 - 可审阅分镜必须保持 \`scene\`、\`shot\`、\`source\`、\`imagePrompt\`、\`videoPrompt\`、\`duration\`、\`dialogue\` 的独立语义；禁止把图片与视频意图合并成一个笼统的“生成提示词”列。
 - \`imagePrompt\` 是 shot 级字段，只描述可执行的图片生成或编辑任务；应包含主体/人物外观、场景、构图、风格与光影、参考素材用途、必须保留的细节、必要时按顺序排列的编辑步骤，以及约束。
 - \`videoPrompt\` 是 scene 级字段；每个 scene 最多一个，通常写在第一条 shot，并汇总按镜号排列的动作节拍、主体运动、运镜连接、环境变化、对白/音频或无声、总时长、参考素材用途和约束。
@@ -145,7 +147,7 @@ const storyboardZhCnContent = `# 分镜
 - scene 视频提示词覆盖来源/参考用途、人物与情绪、按镜号或时间段排列的动作节拍、运镜连接、环境变化/特效、对白/旁白/音效或无声、节奏、总时长和约束；长 scene 应使用明确节拍或时间段，不能堆成过载段落。
 - 参考图可直接使用且没有图片处理意图时，\`imagePrompt\` 应留空，不得为了填表编造编辑任务。
 
-用户要求 Canvas 交付时，也必须先完成唯一的可审阅 Storyboard 投影。可见审阅投影不能冒充持久 Canvas authoring，Canvas authoring 也不能替代首次分镜审阅。已有分镜一旦改变意图或顺序，必须创建新修订版。
+用户要求 Canvas 交付时，也必须先完成唯一的可审阅 Storyboard 投影。可见审阅投影不能冒充持久 Canvas authoring，Canvas authoring 也不能替代首次分镜审阅。Canvas 投影必须把 scene 保持为容器、shot 保持为其子节点，并保留 revision、提示词意图和稳定图片/媒体引用；禁止把 canonical Storyboard 压平成图库或素材列表。已有分镜一旦改变意图或顺序，必须创建新修订版。
 `;
 
 const imageContent = `# Image
