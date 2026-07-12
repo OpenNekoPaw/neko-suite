@@ -89,7 +89,7 @@ describe('AgentTaskResultObservationCoordinator', () => {
     expect(autoResumeAgent).not.toHaveBeenCalled();
   });
 
-  it('returns a diagnostic for unowned task results', async () => {
+  it('returns a diagnostic for invalid task owner scopes', async () => {
     const onDiagnostic = vi.fn();
     const coordinator = createAgentTaskResultObservationCoordinator({
       recorder: {
@@ -99,14 +99,16 @@ describe('AgentTaskResultObservationCoordinator', () => {
     });
 
     const result = await coordinator.handleTerminalTask({
-      task: createTask({ lifecycle: undefined }),
+      task: createTask({ scope: { ...taskScope('task-1'), runId: '' } }),
       source: 'task-manager',
     });
 
     expect(result).toMatchObject({
       status: 'diagnostic',
       diagnostic: {
-        code: 'missing-owner-conversation',
+        code: 'invalid-owner-scope',
+        conversationId: 'conv-1',
+        runId: '',
         taskId: 'task-1',
       },
     });
@@ -133,7 +135,7 @@ describe('AgentTaskResultObservationCoordinator', () => {
     expect(result).toMatchObject({
       status: 'diagnostic',
       diagnostic: {
-        code: 'run-lease-mismatch',
+        code: 'owner-scope-mismatch',
         conversationId: 'conv-1',
         runId: 'run-1',
         taskId: 'task-1',

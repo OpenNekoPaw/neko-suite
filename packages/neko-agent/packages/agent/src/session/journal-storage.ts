@@ -38,11 +38,6 @@ export class JournalStorage {
     return path.join(this._baseDir, `${conversationId}.jsonl`);
   }
 
-  /** Get sidechain journal path for a SubAgent */
-  getSubAgentJournalPath(conversationId: string, subAgentId: string): string {
-    return path.join(this._baseDir, `${conversationId}_sub_${subAgentId}.jsonl`);
-  }
-
   /** List all conversation IDs with journals */
   async listJournals(): Promise<string[]> {
     try {

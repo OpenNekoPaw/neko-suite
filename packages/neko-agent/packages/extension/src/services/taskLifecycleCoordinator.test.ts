@@ -40,6 +40,17 @@ describe('TaskLifecycleCoordinator', () => {
     coordinator.dispose();
   });
 
+  it('uses task.scope as owner authority when lifecycle owner metadata conflicts', () => {
+    const task = createTask('task-1', 'conv-1', 'token-active', 'cancel-with-agent', 'conv-2');
+
+    expect(
+      shouldCancelForInterruption(task, { conversationId: 'conv-1', reason: 'user-stop' }),
+    ).toBe(true);
+    expect(
+      shouldCancelForInterruption(task, { conversationId: 'conv-2', reason: 'user-stop' }),
+    ).toBe(false);
+  });
+
   it('keeps interruption policy as shared task metadata, not coordinator defaults', () => {
     expect(
       shouldCancelForInterruption(
@@ -61,6 +72,7 @@ function createTask(
   conversationId: string,
   costPhase: Task['lifecycle']['costPhase'],
   interruptPolicy: Task['lifecycle']['interruptPolicy'],
+  lifecycleOwnerConversationId = conversationId,
 ): Task {
   return {
     scope: taskScope(id, conversationId),
@@ -72,7 +84,7 @@ function createTask(
     createdAt: 1,
     updatedAt: 2,
     lifecycle: {
-      ownerConversationId: conversationId,
+      ownerConversationId: lifecycleOwnerConversationId,
       runMode: 'foreground',
       costPhase,
       interruptPolicy,

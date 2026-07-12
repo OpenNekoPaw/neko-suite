@@ -344,43 +344,6 @@ export interface IAgentExecutor {
 // - Slash Commands: Explicit /command triggers with argument interpolation
 
 /**
- * SubAgent configuration
- */
-export interface SubAgentConfig extends AgentConfig {
-  /** Parent agent context */
-  parentContext?: AgentContext;
-  /** Inherited tools from parent */
-  inheritTools?: boolean;
-  /** Context isolation level */
-  isolation?: 'full' | 'shared' | 'inherit';
-}
-
-/**
- * SubAgent manager interface
- */
-export interface ISubAgentManager {
-  /**
-   * Spawn a sub-agent
-   */
-  spawn(config: SubAgentConfig): IAgentExecutor;
-
-  /**
-   * Get active sub-agents
-   */
-  list(): IAgentExecutor[];
-
-  /**
-   * Terminate a sub-agent
-   */
-  terminate(agentId: string): void;
-
-  /**
-   * Terminate all sub-agents
-   */
-  terminateAll(): void;
-}
-
-/**
  * Agent runtime configuration
  */
 export interface AgentRuntimeConfig {
@@ -434,11 +397,6 @@ export interface IAgentRuntime {
    * Tool registry (always available)
    */
   readonly tools: IToolRegistry;
-
-  /**
-   * SubAgent manager (always available)
-   */
-  readonly subAgents: ISubAgentManager;
 
   /**
    * Platform instance (optional - only in integrated mode)

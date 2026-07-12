@@ -208,8 +208,8 @@ export class AgentTaskResultObservationRuntime {
     if (!group.expectedTaskIds || group.expectedTaskIds.length === 0) {
       this.emitDiagnostic({
         code: 'invalid-task-group',
-        conversationId: task.lifecycle?.ownerConversationId,
-        runId: task.lifecycle?.ownerRunId,
+        conversationId: task.scope.conversationId,
+        runId: task.scope.runId,
         taskId: task.id,
         message: `Task group ${group.taskGroupId} wait-all delivery requires explicit expectedTaskIds.`,
       });
@@ -218,7 +218,11 @@ export class AgentTaskResultObservationRuntime {
     const terminalTasks = (
       await Promise.all(TERMINAL_TASK_STATUSES.map((status) => this.options.tasks.list(status)))
     ).flat();
-    const terminalIds = new Set(terminalTasks.map((item) => item.id));
+    const terminalIds = new Set(
+      terminalTasks
+        .filter((item) => hasSameTaskOwnerScope(item.scope, task.scope))
+        .map((item) => item.id),
+    );
     const allExpectedTerminal = group.expectedTaskIds.every((taskId) => terminalIds.has(taskId));
     return allExpectedTerminal ? undefined : { kind: 'append-observation' };
   }
@@ -283,6 +287,15 @@ export class AgentTaskResultObservationRuntime {
   ): boolean {
     return this.options.shouldObserveTaskManagerTerminalTask?.(input) ?? true;
   }
+}
+
+function hasSameTaskOwnerScope(left: TaskRunScope, right: TaskRunScope): boolean {
+  return (
+    left.conversationId === right.conversationId &&
+    left.runId === right.runId &&
+    left.parentRunId === right.parentRunId &&
+    left.childKind === right.childKind
+  );
 }
 
 export function createAgentTaskResultObservationRuntime(

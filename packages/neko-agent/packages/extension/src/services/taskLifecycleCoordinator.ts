@@ -22,15 +22,10 @@ export interface TaskLifecycleCancelPort {
   cancel(scope: TaskRunScope): Promise<unknown>;
 }
 
-export interface SubAgentLifecycleCancelPort {
-  cancelConversation?(conversationId: string, reason: string): void | Promise<void>;
-}
-
 export interface TaskLifecycleCoordinatorOptions {
   readonly interruptions: TaskLifecycleInterruptionSource;
   readonly tasks: TaskLifecycleQueryPort;
   readonly taskCancellation: TaskLifecycleCancelPort;
-  readonly subAgents?: SubAgentLifecycleCancelPort;
 }
 
 /**
@@ -56,11 +51,9 @@ export class TaskLifecycleCoordinator implements vscode.Disposable {
     const tasks = await this.options.tasks.list();
     const cancelTargets = tasks.filter((task) => shouldCancelForInterruption(task, event));
 
-    await Promise.allSettled([
-      ...cancelTargets.map((task) => this.options.taskCancellation.cancel(task.scope)),
-      this.options.subAgents?.cancelConversation?.(event.conversationId, event.reason) ??
-        Promise.resolve(),
-    ]);
+    await Promise.allSettled(
+      cancelTargets.map((task) => this.options.taskCancellation.cancel(task.scope)),
+    );
   }
 }
 
@@ -69,7 +62,7 @@ export function shouldCancelForInterruption(
   event: TaskLifecycleInterruptionEvent,
 ): boolean {
   const lifecycle = task.lifecycle;
-  if (!lifecycle || lifecycle.ownerConversationId !== event.conversationId) {
+  if (!lifecycle || task.scope.conversationId !== event.conversationId) {
     return false;
   }
   if (task.status !== 'pending' && task.status !== 'running') {

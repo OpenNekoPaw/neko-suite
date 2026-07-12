@@ -111,21 +111,25 @@ describe('task result observation', () => {
     expect(decision.followUpRequest.prompt).toContain('Do not use the task id');
   });
 
-  it('rejects unowned terminal tasks', () => {
-    const task = createTask({ lifecycle: undefined });
+  it('uses the task scope as authority when lifecycle owner metadata is absent', () => {
+    const observation = normalizeAgentTaskResultObservation({
+      task: createTask({ lifecycle: undefined }),
+      source: 'task-manager',
+    });
 
-    expect(() =>
-      normalizeAgentTaskResultObservation({
-        task,
-        source: 'task-manager',
-      }),
-    ).toThrowError(AgentTaskResultObservationError);
+    expect(observation).toMatchObject({
+      conversationId: 'conv-1',
+      runId: 'run-1',
+      taskId: 'task-1',
+    });
   });
 
-  it('rejects terminal tasks without a run lease', () => {
+  it('does not let conflicting lifecycle metadata rebind the task owner', () => {
     const task = createTask({
       lifecycle: {
-        ownerConversationId: 'conv-1',
+        ownerConversationId: 'conv-other',
+        ownerRunId: 'run-other',
+        ownerRunStartedAt: 101,
         runMode: 'background',
         costPhase: 'idle',
         interruptPolicy: 'detach-and-continue',
@@ -133,12 +137,41 @@ describe('task result observation', () => {
       },
     });
 
+    expect(normalizeAgentTaskResultObservation({ task, source: 'task-manager' })).toMatchObject({
+      conversationId: 'conv-1',
+      runId: 'run-1',
+      runStartedAt: 101,
+    });
+  });
+
+  it('rejects invalid task owner scopes visibly', () => {
+    const task = createTask({
+      scope: { ...taskScope('task-1'), runId: '' },
+    });
+
+    expect(() =>
+      normalizeAgentTaskResultObservation({ task, source: 'task-manager' }),
+    ).toThrowError(
+      expect.objectContaining<Partial<AgentTaskResultObservationError>>({
+        code: 'invalid-owner-scope',
+      }),
+    );
+  });
+
+  it('rejects terminal event scopes that do not match the task owner scope', () => {
+    const task = createTask();
+
     expect(() =>
       normalizeAgentTaskResultObservation({
         task,
         source: 'task-manager',
+        scope: { ...task.scope, runId: 'run-other' },
       }),
-    ).toThrowError(/run lease/);
+    ).toThrowError(
+      expect.objectContaining<Partial<AgentTaskResultObservationError>>({
+        code: 'owner-scope-mismatch',
+      }),
+    );
   });
 
   it('rejects local paths as durable result refs', () => {

@@ -177,6 +177,62 @@ describe('AgentTaskResultObservationRuntime', () => {
     runtime.dispose();
   });
 
+  it('does not let an equal local task ID from another owner scope satisfy wait-all', async () => {
+    const group = {
+      taskGroupId: 'group-1',
+      resultDeliveryPolicy: 'wait-all' as const,
+      expectedTaskIds: ['task-1', 'task-2'],
+    };
+    const first = createTaskWithAutoResumePolicy({ id: 'task-1', group });
+    const sameLocalIdInOtherConversation = createTaskWithAutoResumePolicy({
+      id: 'task-2',
+      conversationId: 'conv-2',
+      runId: 'run-2',
+      group,
+    });
+    const second = createTaskWithAutoResumePolicy({ id: 'task-2', group });
+    const terminalTasks: Task[] = [first, sameLocalIdInOtherConversation];
+    const tasks: AgentTaskResultObservationRuntimeTaskPort = {
+      onTerminalTask: () => () => undefined,
+      list: vi.fn(async () => terminalTasks),
+    };
+    const recordTaskResultObservation = vi.fn(async (input) =>
+      input.deliveryPolicy?.kind === 'append-observation'
+        ? {
+            observationRecorded: true,
+            evidenceRecorded: true,
+            followUpRecorded: false,
+            eventIds: ['event-1'],
+            deliveryDecision: { kind: 'append-observation' as const },
+          }
+        : createAutoResumeRecord(input),
+    );
+    const dispatchIdleAgentTurn = vi.fn(async () => undefined);
+    const runtime = createAgentTaskResultObservationRuntime({
+      tasks,
+      agents: {
+        get: () => ({ recordTaskResultObservation }),
+        isRunning: () => false,
+      },
+      continuation: { dispatchIdleAgentTurn },
+    });
+
+    await runtime.handleTerminalTask(first);
+
+    expect(recordTaskResultObservation.mock.calls[0]?.[0].deliveryPolicy).toEqual({
+      kind: 'append-observation',
+    });
+    expect(dispatchIdleAgentTurn).not.toHaveBeenCalled();
+
+    terminalTasks.push(second);
+    await runtime.handleTerminalTask(second);
+
+    expect(dispatchIdleAgentTurn).toHaveBeenCalledWith(
+      expect.objectContaining({ conversationId: 'conv-1', runId: 'run-1', taskId: 'task-2' }),
+    );
+    runtime.dispose();
+  });
+
   it('does not infer task groups when explicit group metadata is missing', async () => {
     const first = createTaskWithAutoResumePolicy({ id: 'task-1' });
     const second = createTaskWithAutoResumePolicy({ id: 'task-2' });
@@ -208,11 +264,16 @@ describe('AgentTaskResultObservationRuntime', () => {
   });
 });
 
-function taskScope(childRunId: string): TaskRunScope {
+function taskScope(
+  childRunId: string,
+  conversationId = 'conv-1',
+  runId = 'run-1',
+  parentRunId = runId,
+): TaskRunScope {
   return {
-    conversationId: 'conv-1',
-    runId: 'run-1',
-    parentRunId: 'run-1',
+    conversationId,
+    runId,
+    parentRunId,
     childRunId,
     childKind: 'task',
   };
@@ -221,12 +282,17 @@ function taskScope(childRunId: string): TaskRunScope {
 function createTaskWithAutoResumePolicy(
   options: {
     readonly id?: string;
+    readonly conversationId?: string;
+    readonly runId?: string;
+    readonly parentRunId?: string;
     readonly group?: NonNullable<Task['lifecycle']>['resultDeliveryGroup'];
   } = {},
 ): Task {
   const id = options.id ?? 'task-1';
+  const conversationId = options.conversationId ?? 'conv-1';
+  const runId = options.runId ?? 'run-1';
   return {
-    scope: taskScope(id),
+    scope: taskScope(id, conversationId, runId, options.parentRunId),
     id,
     type: 'image_generation',
     status: 'completed',
@@ -243,8 +309,8 @@ function createTaskWithAutoResumePolicy(
     createdAt: 10,
     updatedAt: 20,
     lifecycle: {
-      ownerConversationId: 'conv-1',
-      ownerRunId: 'run-1',
+      ownerConversationId: conversationId,
+      ownerRunId: runId,
       ownerRunStartedAt: 101,
       runMode: 'background',
       costPhase: 'idle',

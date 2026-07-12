@@ -34,12 +34,6 @@ describe('JournalStorage', () => {
       expect(path).toContain('conv-123.jsonl');
       expect(path).toContain('/tmp/journals');
     });
-
-    it('should compute SubAgent sidechain path', () => {
-      const storage = new JournalStorage('/tmp/journals', createMockFsOps());
-      const path = storage.getSubAgentJournalPath('conv-123', 'sub-1');
-      expect(path).toContain('conv-123_sub_sub-1.jsonl');
-    });
   });
 
   describe('listJournals', () => {

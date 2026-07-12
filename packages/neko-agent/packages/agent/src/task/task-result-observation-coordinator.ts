@@ -220,8 +220,8 @@ export class AgentTaskResultObservationCoordinator {
     if (error instanceof AgentTaskResultObservationError) {
       return {
         code: error.code,
-        conversationId: task.lifecycle?.ownerConversationId,
-        runId: readDiagnosticRunId(task, error),
+        conversationId: task.scope.conversationId,
+        runId: task.scope.runId,
         taskId: task.id,
         message: error.message,
         error,
@@ -230,8 +230,8 @@ export class AgentTaskResultObservationCoordinator {
 
     return {
       code: 'recording-failed',
-      conversationId: task.lifecycle?.ownerConversationId,
-      runId: task.lifecycle?.ownerRunId,
+      conversationId: task.scope.conversationId,
+      runId: task.scope.runId,
       taskId: task.id,
       message: 'Failed to record Agent task-result observation',
       error,
@@ -243,22 +243,4 @@ export function createAgentTaskResultObservationCoordinator(
   options: AgentTaskResultObservationCoordinatorOptions,
 ): AgentTaskResultObservationCoordinator {
   return new AgentTaskResultObservationCoordinator(options);
-}
-
-function readDiagnosticRunId(
-  task: Task,
-  error: AgentTaskResultObservationError,
-): string | undefined {
-  if (
-    error.code === 'run-lease-mismatch' &&
-    typeof error.details?.['eventLease'] === 'object' &&
-    error.details['eventLease'] !== null
-  ) {
-    const eventLease = error.details['eventLease'] as Record<string, unknown>;
-    return typeof eventLease['runId'] === 'string'
-      ? eventLease['runId']
-      : task.lifecycle?.ownerRunId;
-  }
-
-  return task.lifecycle?.ownerRunId;
 }

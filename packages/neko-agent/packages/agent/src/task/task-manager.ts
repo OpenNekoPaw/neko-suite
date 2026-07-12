@@ -675,10 +675,7 @@ export class TaskManager implements IRuntimeTaskManager {
     if (options.replayExisting) {
       for (const task of this.tasks.values()) {
         if (isTerminalStatus(task.status)) {
-          const event = this._toTerminalEvent(task);
-          if (event) {
-            callback(event);
-          }
+          callback(this._toTerminalEvent(task));
         }
       }
     }
@@ -900,9 +897,6 @@ export class TaskManager implements IRuntimeTaskManager {
     }
 
     const event = this._toTerminalEvent(task);
-    if (!event) {
-      return;
-    }
 
     for (const callback of this.terminalCallbacks) {
       try {
@@ -913,18 +907,8 @@ export class TaskManager implements IRuntimeTaskManager {
     }
   }
 
-  private _toTerminalEvent(task: Task): TaskTerminalEvent | null {
-    const scope = task.scope;
-    if (!scope) {
-      logger.warn('Skipping terminal task observer event without run lease', {
-        taskId: task.id,
-        conversationId: task.lifecycle?.ownerConversationId,
-        status: task.status,
-      });
-      return null;
-    }
-
-    return { task, scope };
+  private _toTerminalEvent(task: Task): TaskTerminalEvent {
+    return { task, scope: task.scope };
   }
 
   private removeCompletionWaiter(key: string, waiter: CompletionWaiter): void {

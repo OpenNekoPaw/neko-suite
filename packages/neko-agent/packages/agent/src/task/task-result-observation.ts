@@ -12,17 +12,15 @@ import type {
   EvidenceSource,
   PerceptionEvidence,
   Task,
-  TaskRunLease,
   TaskRunScope,
   TaskStatus,
 } from '@neko/shared';
-import { extractTaskRunLease, isResourceRef } from '@neko/shared';
+import { isResourceRef, validateChildRunScope } from '@neko/shared';
 
 export type AgentTaskResultObservationDiagnosticCode =
   | 'task-not-terminal'
-  | 'missing-owner-conversation'
-  | 'missing-owner-run'
-  | 'run-lease-mismatch'
+  | 'invalid-owner-scope'
+  | 'owner-scope-mismatch'
   | 'malformed-result-ref'
   | 'unsafe-result-ref'
   | 'invalid-delivery-policy';
@@ -88,24 +86,8 @@ export function normalizeAgentTaskResultObservation(
   const task = input.task;
   assertTerminalTaskStatus(task.status, task.id);
 
-  const ownerConversationId = task.lifecycle?.ownerConversationId?.trim();
-  if (!ownerConversationId) {
-    throw new AgentTaskResultObservationError(
-      'missing-owner-conversation',
-      `Task ${task.id} does not have an owning Agent conversation`,
-      { taskId: task.id },
-    );
-  }
-
-  const lease = extractTaskRunLease(task);
-  if (!lease) {
-    throw new AgentTaskResultObservationError(
-      'missing-owner-run',
-      `Task ${task.id} does not have an owning Agent run lease`,
-      { taskId: task.id, conversationId: ownerConversationId },
-    );
-  }
-  assertTaskRunScopeMatches(task, input.scope);
+  const taskScope = requireTaskOwnerScope(task);
+  assertTaskRunScopeMatches(taskScope, task.id, input.scope);
 
   const outputData = task.output?.data;
   const resultRefs = normalizeAgentTaskResultRefs([
@@ -116,10 +98,17 @@ export function normalizeAgentTaskResultObservation(
   const error = task.error ?? task.output?.error;
 
   return {
-    id: createAgentTaskResultObservationId(lease.conversationId, lease.runId, task.id, status),
-    conversationId: lease.conversationId,
-    runId: lease.runId,
-    ...(lease.runStartedAt !== undefined ? { runStartedAt: lease.runStartedAt } : {}),
+    id: createAgentTaskResultObservationId(
+      taskScope.conversationId,
+      taskScope.runId,
+      task.id,
+      status,
+    ),
+    conversationId: taskScope.conversationId,
+    runId: taskScope.runId,
+    ...(typeof task.lifecycle?.ownerRunStartedAt === 'number'
+      ? { runStartedAt: task.lifecycle.ownerRunStartedAt }
+      : {}),
     taskId: task.id,
     source: input.source,
     taskType: task.type,
@@ -139,7 +128,7 @@ export function normalizeAgentChildRunResultObservation(
 ): AgentTaskResultObservation {
   if (input.scope.childRunId !== input.childId) {
     throw new AgentTaskResultObservationError(
-      'run-lease-mismatch',
+      'owner-scope-mismatch',
       `Child run scope ${input.scope.childRunId} cannot authorize result ${input.childId}`,
       { scope: input.scope, childId: input.childId },
     );
@@ -338,11 +327,33 @@ function assertTerminalTaskStatus(
   });
 }
 
-function assertTaskRunScopeMatches(task: Task, eventScope: TaskRunScope | undefined): void {
+function requireTaskOwnerScope(task: Task): TaskRunScope {
+  const scopeResult = validateChildRunScope(task.scope);
+  if (!scopeResult.ok) {
+    throw new AgentTaskResultObservationError(
+      'invalid-owner-scope',
+      `Task ${task.id} does not have a valid owner scope`,
+      { taskId: task.id, diagnostic: scopeResult.diagnostic },
+    );
+  }
+  if (scopeResult.scope.childKind !== 'task' || scopeResult.scope.childRunId !== task.id) {
+    throw new AgentTaskResultObservationError(
+      'owner-scope-mismatch',
+      `Task ${task.id} does not match its owner scope`,
+      { taskId: task.id, taskScope: scopeResult.scope },
+    );
+  }
+  return task.scope;
+}
+
+function assertTaskRunScopeMatches(
+  taskScope: TaskRunScope,
+  taskId: string,
+  eventScope: TaskRunScope | undefined,
+): void {
   if (!eventScope) {
     return;
   }
-  const taskScope = task.scope;
   if (
     taskScope.conversationId === eventScope.conversationId &&
     taskScope.runId === eventScope.runId &&
@@ -354,9 +365,9 @@ function assertTaskRunScopeMatches(task: Task, eventScope: TaskRunScope | undefi
   }
 
   throw new AgentTaskResultObservationError(
-    'run-lease-mismatch',
-    `Task ${task.id} terminal event scope does not match the task owner scope`,
-    { taskId: task.id, taskScope, eventScope },
+    'owner-scope-mismatch',
+    `Task ${taskId} terminal event scope does not match the task owner scope`,
+    { taskId, taskScope, eventScope },
   );
 }
 

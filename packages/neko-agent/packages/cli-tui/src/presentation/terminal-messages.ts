@@ -356,11 +356,10 @@ export const CLI_TERMINAL_MESSAGES_EN = {
     'Failed to deliver media task progress: {taskId}: {detail}',
   'agent.terminal.runtime.taskObservation.notTerminal':
     'Task result cannot be recorded because task {taskId} is not terminal.',
-  'agent.terminal.runtime.taskObservation.missingConversation':
-    'Task {taskId} has no owning Agent conversation.',
-  'agent.terminal.runtime.taskObservation.missingRun': 'Task {taskId} has no owning Agent run.',
-  'agent.terminal.runtime.taskObservation.runLeaseMismatch':
-    'Task {taskId} does not belong to the active Agent run.',
+  'agent.terminal.runtime.taskObservation.invalidOwnerScope':
+    'Task {taskId} has an invalid owner scope.',
+  'agent.terminal.runtime.taskObservation.ownerScopeMismatch':
+    'Task {taskId} result belongs to a different owner scope.',
   'agent.terminal.runtime.taskObservation.malformedResultRef':
     'Task {taskId} contains a malformed result reference.',
   'agent.terminal.runtime.taskObservation.unsafeResultRef':
@@ -1200,11 +1199,9 @@ export const CLI_TERMINAL_MESSAGES_ZH_CN = {
     '传递媒体任务进度失败：{taskId}：{detail}',
   'agent.terminal.runtime.taskObservation.notTerminal':
     '任务 {taskId} 尚未结束，无法记录任务结果。',
-  'agent.terminal.runtime.taskObservation.missingConversation':
-    '任务 {taskId} 没有所属的 Agent 对话。',
-  'agent.terminal.runtime.taskObservation.missingRun': '任务 {taskId} 没有所属的 Agent 运行。',
-  'agent.terminal.runtime.taskObservation.runLeaseMismatch':
-    '任务 {taskId} 不属于当前 Agent 运行。',
+  'agent.terminal.runtime.taskObservation.invalidOwnerScope': '任务 {taskId} 的所有者作用域无效。',
+  'agent.terminal.runtime.taskObservation.ownerScopeMismatch':
+    '任务 {taskId} 的结果属于另一个所有者作用域。',
   'agent.terminal.runtime.taskObservation.malformedResultRef':
     '任务 {taskId} 包含格式错误的结果引用。',
   'agent.terminal.runtime.taskObservation.unsafeResultRef': '任务 {taskId} 包含不安全的结果引用。',

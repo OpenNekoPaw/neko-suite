@@ -149,23 +149,6 @@ export function createTaskLifecycleMetadata(
   };
 }
 
-export function extractTaskRunLease(input: {
-  readonly lifecycle?: Partial<TaskLifecycleMetadata> | null;
-}): TaskRunLease | null {
-  const conversationId = input.lifecycle?.ownerConversationId?.trim();
-  const runId = input.lifecycle?.ownerRunId?.trim();
-  if (!conversationId || !runId) {
-    return null;
-  }
-
-  const runStartedAt = input.lifecycle?.ownerRunStartedAt;
-  return {
-    conversationId,
-    runId,
-    ...(typeof runStartedAt === 'number' ? { runStartedAt } : {}),
-  };
-}
-
 /**
  * Task input
  */
@@ -253,7 +236,7 @@ export interface ITaskManager {
   /** Submit a new task */
   submit(input: TaskInput, owner: TaskRunOwnerScope): Promise<TaskRunScope>;
 
-  /** Get task by ID */
+  /** Get a task through its complete owner scope. */
   get(scope: TaskRunScope): Promise<Task | undefined>;
 
   /** Cancel a task */

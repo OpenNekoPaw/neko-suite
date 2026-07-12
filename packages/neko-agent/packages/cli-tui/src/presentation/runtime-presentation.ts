@@ -158,12 +158,10 @@ export function presentTaskResultObservationDiagnostic(
   switch (diagnostic.code) {
     case 'task-not-terminal':
       return context.t('agent.terminal.runtime.taskObservation.notTerminal', { taskId });
-    case 'missing-owner-conversation':
-      return context.t('agent.terminal.runtime.taskObservation.missingConversation', { taskId });
-    case 'missing-owner-run':
-      return context.t('agent.terminal.runtime.taskObservation.missingRun', { taskId });
-    case 'run-lease-mismatch':
-      return context.t('agent.terminal.runtime.taskObservation.runLeaseMismatch', { taskId });
+    case 'invalid-owner-scope':
+      return context.t('agent.terminal.runtime.taskObservation.invalidOwnerScope', { taskId });
+    case 'owner-scope-mismatch':
+      return context.t('agent.terminal.runtime.taskObservation.ownerScopeMismatch', { taskId });
     case 'malformed-result-ref':
       return context.t('agent.terminal.runtime.taskObservation.malformedResultRef', { taskId });
     case 'unsafe-result-ref':

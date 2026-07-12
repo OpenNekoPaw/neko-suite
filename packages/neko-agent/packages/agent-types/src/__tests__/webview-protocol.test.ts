@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createResourceFingerprint, createResourceRef } from '@neko/shared';
+import { createResourceFingerprint, createResourceRef, type TaskRunScope } from '@neko/shared';
 import {
   buildAmbientCanvasUpdateMessage,
   buildAgentPhaseMessage,
@@ -216,20 +216,30 @@ describe('webview protocol parser', () => {
     });
   });
 
-  it('preserves optional displayed result refs on task view actions', () => {
+  it('requires the complete Task run scope and preserves optional displayed result refs', () => {
+    const scope = taskScope('task-1');
     expect(
       parseWebviewToExtensionMessage({
         type: 'viewTaskResult',
-        conversationId: 'conv-1',
-        taskId: 'task-1',
+        taskScope: scope,
         resultRef: 'generated-assets/asset-1.png',
       }),
     ).toEqual({
       type: 'viewTaskResult',
-      conversationId: 'conv-1',
-      taskId: 'task-1',
+      taskScope: scope,
       resultRef: 'generated-assets/asset-1.png',
     });
+  });
+
+  it('rejects legacy Task action identities even when conversationId is present', () => {
+    expect(
+      parseWebviewToExtensionMessage({
+        type: 'cancelTask',
+        conversationId: 'conv-1',
+        taskId: 'task-1',
+      }),
+    ).toBeNull();
+    expect(parseWebviewToExtensionMessage({ type: 'cancelTask', taskId: 'task-1' })).toBeNull();
   });
 
   it('rejects message queue commands without required explicit scope', () => {
@@ -736,5 +746,15 @@ function makeTimelineTextItem(input: {
     },
     createdAt: 1777392000000 + input.sequence,
     updatedAt: 1777392000000 + input.sequence,
+  };
+}
+
+function taskScope(childRunId: string): TaskRunScope {
+  return {
+    conversationId: 'conv-1',
+    runId: 'run-1',
+    parentRunId: 'run-1',
+    childRunId,
+    childKind: 'task',
   };
 }

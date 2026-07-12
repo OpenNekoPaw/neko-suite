@@ -10,7 +10,7 @@ import {
   WEBVIEW_TO_EXTENSION_MESSAGE_TYPES,
   type WebviewToExtensionMessage,
 } from '@neko-agent/types';
-import type { AgentCapabilityLifecycleDescriptor } from '@neko/shared';
+import type { AgentCapabilityLifecycleDescriptor, TaskRunScope } from '@neko/shared';
 import { CONFIG_BRIDGE_MESSAGE_TYPES } from '../../services/configBridge';
 import { sendGeneratedAssetToPlugin } from '../../services/pluginTransferBridge';
 
@@ -417,19 +417,23 @@ describe('handleChatWebviewMessage', () => {
     expect(deps.embodyCharacter?.exit).toHaveBeenCalledWith('embody-session-1');
   });
 
-  it('rejects task actions without an explicit conversationId', () => {
+  it('routes Task actions with the complete owner scope unchanged', () => {
     const deps = createDeps();
+    const scope = taskScope('task-1');
 
+    handleChatWebviewMessage({ type: 'cancelTask', taskScope: scope }, deps);
+    handleChatWebviewMessage({ type: 'retryTask', taskScope: scope }, deps);
     handleChatWebviewMessage(
-      { type: 'cancelTask', taskId: 'task-1' } as WebviewToExtensionMessage,
+      { type: 'viewTaskResult', taskScope: scope, resultRef: 'generated-assets/result.png' },
       deps,
     );
 
-    expect(deps.taskHandler.handleCancelTask).not.toHaveBeenCalled();
-    expect(deps.webview.postMessage).toHaveBeenCalledWith({
-      type: 'globalError',
-      message: 'Cannot cancelTask without an explicit conversationId.',
-    });
+    expect(deps.taskHandler.handleCancelTask).toHaveBeenCalledWith(deps.webview, scope);
+    expect(deps.taskHandler.handleRetryTask).toHaveBeenCalledWith(deps.webview, scope);
+    expect(deps.taskHandler.handleViewTaskResult).toHaveBeenCalledWith(
+      scope,
+      'generated-assets/result.png',
+    );
   });
 
   it('routes ordinary conversation switches through atomic activation', () => {
@@ -1747,5 +1751,15 @@ function createCanonicalStoryboardHandoffFixture() {
         ],
       },
     ],
+  };
+}
+
+function taskScope(childRunId: string): TaskRunScope {
+  return {
+    conversationId: 'conv-1',
+    runId: 'run-1',
+    parentRunId: 'run-1',
+    childRunId,
+    childKind: 'task',
   };
 }

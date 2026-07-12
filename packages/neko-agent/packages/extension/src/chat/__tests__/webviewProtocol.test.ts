@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { parseSendMessageWebviewMessage, parseWebviewToExtensionMessage } from '@neko-agent/types';
+import type { TaskRunScope } from '@neko/shared';
 
 describe('parseSendMessageWebviewMessage', () => {
   it('accepts explicit conversation and model refs', () => {
@@ -125,14 +126,14 @@ describe('parseWebviewToExtensionMessage', () => {
     ).toBeNull();
   });
 
-  it('accepts conversation-scoped task actions', () => {
+  it('accepts Task actions only with a complete run scope', () => {
+    const scope = taskScope('task-1');
     expect(
       parseWebviewToExtensionMessage({
         type: 'cancelTask',
-        taskId: 'task-1',
-        conversationId: 'conv-1',
+        taskScope: scope,
       }),
-    ).toEqual({ type: 'cancelTask', taskId: 'task-1', conversationId: 'conv-1' });
+    ).toEqual({ type: 'cancelTask', taskScope: scope });
   });
 
   it('accepts conversation-scoped message queue commands', () => {
@@ -202,6 +203,13 @@ describe('parseWebviewToExtensionMessage', () => {
     expect(
       parseWebviewToExtensionMessage({
         type: 'cancelTask',
+        taskId: 'task-1',
+      }),
+    ).toBeNull();
+    expect(
+      parseWebviewToExtensionMessage({
+        type: 'cancelTask',
+        conversationId: 'conv-1',
         taskId: 'task-1',
       }),
     ).toBeNull();
@@ -536,5 +544,15 @@ function createCanonicalStoryboardHandoffFixture() {
         ],
       },
     ],
+  };
+}
+
+function taskScope(childRunId: string): TaskRunScope {
+  return {
+    conversationId: 'conv-1',
+    runId: 'run-1',
+    parentRunId: 'run-1',
+    childRunId,
+    childKind: 'task',
   };
 }
