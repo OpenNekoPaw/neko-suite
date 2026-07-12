@@ -167,7 +167,6 @@ export const iterationPersonaSkill: Skill = {
     TOOL_NAMES_SYSTEM.LIST_DIRECTORY,
     TOOL_NAMES_SYSTEM.GLOB,
     TOOL_NAMES_QUALITY.QUALITY_CHECK,
-    TOOL_NAMES_QUALITY.QUALITY_CHECK_CONSISTENCY,
   ],
   icon: '♻',
   source: 'builtin',

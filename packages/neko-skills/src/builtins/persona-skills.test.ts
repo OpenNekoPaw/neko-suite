@@ -61,7 +61,7 @@ describe('Creation stage persona skills', () => {
     // read tool — and must not have timeline-edit tools.
     const iterationOnly = [...iterationTools].filter((t) => !creationTools.has(t));
     expect(iterationOnly.length).toBeGreaterThan(0);
-    expect(iterationTools.has(TOOL_NAMES.QUALITY_CHECK_CONSISTENCY)).toBe(true);
+    expect(iterationTools.has(TOOL_NAMES.QUALITY_CHECK)).toBe(true);
   });
 
   it('iteration-persona description mentions ConsistencyReport and partial rerun', () => {

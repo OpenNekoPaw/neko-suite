@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { TOOL_NAMES_PERCEPTION } from '@neko/shared';
+import { TOOL_NAMES_PERCEPTION, TOOL_NAMES_QUALITY } from '@neko/shared';
 import * as builtinExports from './index';
 
 import {
@@ -85,6 +85,12 @@ describe('@neko/skills builtins', () => {
     for (const exportName of removedExports) {
       expect(Object.hasOwn(builtinExports, exportName), exportName).toBe(false);
     }
+  });
+
+  it('publishes only the canonical QualityCheck tool identity', () => {
+    expect(TOOL_NAMES_QUALITY).toEqual({ QUALITY_CHECK: 'QualityCheck' });
+    expect(Object.values(TOOL_NAMES_QUALITY)).not.toContain('QualityRepairCheck');
+    expect(Object.values(TOOL_NAMES_QUALITY)).not.toContain('QualityCheckConsistency');
   });
 
   it('registers canonical creative skills once and keeps profiles and stages out of the peer catalog', () => {
