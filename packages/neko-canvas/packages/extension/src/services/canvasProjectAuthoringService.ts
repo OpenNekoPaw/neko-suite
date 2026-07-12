@@ -5,6 +5,7 @@ import {
   assertNoRuntimeResourceIdentity,
   createDefaultProjectFormatCodecRegistry,
   createEmptyCanvasData,
+  hashStableValue,
   nkcSourcePathPolicy,
   planCanvasBlockUpdate,
   planCanvasAgentContentApplication,
@@ -119,10 +120,7 @@ export class CanvasProjectAuthoringService {
     request: CanvasHeadlessApplyOperationsRequest & { readonly fallbackTitle?: string },
   ): Promise<CanvasHeadlessApplyOperationsResult> {
     return this.withMutation(request.target, request.fallbackTitle, (canvasData) => {
-      const nextCanvasData = applyCanvasHeadlessAuthoringOperations(
-        canvasData,
-        request.operations,
-      );
+      const nextCanvasData = applyCanvasHeadlessAuthoringOperations(canvasData, request.operations);
       return {
         canvasData: nextCanvasData,
         result: {
@@ -356,7 +354,10 @@ export class CanvasProjectAuthoringService {
   private async withMutation<TResult extends CanvasHeadlessAuthoringResultBase>(
     target: CanvasHeadlessAuthoringTarget | undefined,
     fallbackTitle: string | undefined,
-    mutate: (canvasData: CanvasData) => { readonly canvasData: CanvasData; readonly result: TResult },
+    mutate: (canvasData: CanvasData) => {
+      readonly canvasData: CanvasData;
+      readonly result: TResult;
+    },
   ): Promise<TResult> {
     const loaded = await this.loadTarget(target, fallbackTitle);
     const mutation = mutate(loaded.canvasData);
@@ -366,11 +367,18 @@ export class CanvasProjectAuthoringService {
     if (loaded.target.reveal) {
       await this.options.canvasEditorProvider.revealCanvasDocument(loaded.uri);
     }
+    const contentDigest = hashStableValue(mutation.canvasData);
     return {
       ...mutation.result,
       documentUri: loaded.uri.toString(),
       target: loaded.target,
       diagnostics: mutation.result.diagnostics,
+      projectRef: {
+        domain: 'canvas',
+        documentUri: loaded.uri.toString(),
+        projectRevision: `nkc:${contentDigest}`,
+        contentDigest,
+      },
     };
   }
 
@@ -541,7 +549,10 @@ function assertCanvasDocumentUri(uri: vscode.Uri): void {
   }
 }
 
-function createStoryboardCanvasTitle(payload: { readonly creativeScope?: { readonly title?: string }; readonly sourceScriptUri?: string }): string {
+function createStoryboardCanvasTitle(payload: {
+  readonly creativeScope?: { readonly title?: string };
+  readonly sourceScriptUri?: string;
+}): string {
   const scopeTitle = payload.creativeScope?.title?.trim();
   if (scopeTitle) return sanitizeCanvasFileName(scopeTitle).slice(0, 80);
   if (payload.sourceScriptUri) {
@@ -594,11 +605,15 @@ function sanitizeCanvasFileName(value: string): string {
     .trim();
 }
 
-function formatDiagnostics(diagnostics: readonly { readonly code?: string; readonly message: string }[]): string {
+function formatDiagnostics(
+  diagnostics: readonly { readonly code?: string; readonly message: string }[],
+): string {
   if (diagnostics.length === 0) {
     return 'unknown error';
   }
-  return diagnostics.map((diagnostic) => `${diagnostic.code ?? 'diagnostic'}: ${diagnostic.message}`).join('; ');
+  return diagnostics
+    .map((diagnostic) => `${diagnostic.code ?? 'diagnostic'}: ${diagnostic.message}`)
+    .join('; ');
 }
 
 function emptyResolvedTarget(): ResolvedCanvasHeadlessAuthoringTarget {

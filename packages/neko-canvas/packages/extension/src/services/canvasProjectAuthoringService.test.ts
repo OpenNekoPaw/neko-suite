@@ -185,6 +185,12 @@ describe('CanvasProjectAuthoringService', () => {
     });
 
     expect(result.documentUri).toBe('file:///workspace/project/Atomic Batch.nkc');
+    expect(result.projectRef).toMatchObject({
+      domain: 'canvas',
+      documentUri: 'file:///workspace/project/Atomic Batch.nkc',
+      projectRevision: expect.stringMatching(/^nkc:/),
+      contentDigest: expect.any(String),
+    });
     expect(result.canvasData?.nodes).toHaveLength(1);
     const reopened = loadNkc(
       new TextDecoder().decode(vscodeMockState.files.get('/workspace/project/Atomic Batch.nkc')),
@@ -293,7 +299,9 @@ describe('CanvasProjectAuthoringService', () => {
 
     expect(result.documentUri).toBe('file:///workspace/project/Active.nkc');
     expect(result.nodeId).toBeDefined();
-    const saved = readJsonFile('/workspace/project/Active.nkc') as { nodes?: Array<{ type?: string }> };
+    const saved = readJsonFile('/workspace/project/Active.nkc') as {
+      nodes?: Array<{ type?: string }>;
+    };
     expect(saved.nodes?.[0]?.type).toBe('text');
     expect(vscodeMockState.files.has('/workspace/project/Agent Canvas.nkc')).toBe(false);
   });
@@ -325,7 +333,9 @@ describe('CanvasProjectAuthoringService', () => {
     });
 
     expect(result.documentUri).toBe('file:///workspace/project/Explicit.nkc');
-    const explicit = loadNkc(new TextDecoder().decode(vscodeMockState.files.get(explicitUri.fsPath)));
+    const explicit = loadNkc(
+      new TextDecoder().decode(vscodeMockState.files.get(explicitUri.fsPath)),
+    );
     const active = loadNkc(new TextDecoder().decode(vscodeMockState.files.get(activeUri.fsPath)));
     expect(explicit.data.nodes).toHaveLength(1);
     expect(active.data.nodes).toHaveLength(0);
