@@ -183,6 +183,67 @@ describe('TabRenderRuntimeRegistry', () => {
     expect(storeB.getSnapshot().visibility).toBe('visible');
   });
 
+  it('preserves Tab-owned input, attachments, configuration, focus, and scroll during rapid activation churn', () => {
+    const registry = createTabRenderRuntimeRegistry();
+    const bindings = [
+      { tabId: 'tab-a', conversationId: 'conv-a' },
+      { tabId: 'tab-b', conversationId: 'conv-b' },
+      { tabId: 'tab-c', conversationId: 'conv-c' },
+    ] as const;
+    registry.reconcile(bindings, 'tab-a');
+
+    const runtimeA = registry.require('tab-a');
+    const runtimeB = registry.require('tab-b');
+    const runtimeC = registry.require('tab-c');
+
+    runtimeA.store.updateState((state) => ({
+      inputValue: 'draft-a',
+      attachedFiles: [{ id: 'asset-a', name: 'a.png', type: 'image', data: 'data-a' }],
+      selectedModel: 'model-a',
+      generationParams: { ...state.generationParams, resolution: '4K' },
+      llmConfig: { ...state.llmConfig, reasoningPreset: 'deep' },
+      composition: { isComposing: true },
+      focus: { target: 'input', requestRevision: 3 },
+      viewport: { followMode: 'detached', anchorMessageId: 'message-a', anchorOffset: 12 },
+    }));
+    runtimeB.store.updateState((state) => ({
+      inputValue: 'draft-b',
+      attachedFiles: [{ id: 'asset-b', name: 'b.wav', type: 'audio', data: 'data-b' }],
+      selectedModel: 'model-b',
+      generationParams: { ...state.generationParams, resolution: '1080p' },
+      llmConfig: { ...state.llmConfig, verbosityPreset: 'verbose' },
+      focus: { target: 'input', requestRevision: 7 },
+      viewport: { followMode: 'detached', anchorMessageId: 'message-b', anchorOffset: 24 },
+    }));
+    runtimeC.store.updateState((state) => ({
+      inputValue: 'draft-c',
+      selectedModel: 'model-c',
+      llmConfig: { ...state.llmConfig, creativityPreset: 'precise' },
+      viewport: { followMode: 'follow-tail' },
+    }));
+
+    const stateA = runtimeA.store.getSnapshot().state;
+    const stateB = runtimeB.store.getSnapshot().state;
+    const stateC = runtimeC.store.getSnapshot().state;
+    const activationOrder = ['tab-b', 'tab-c', 'tab-a', 'tab-c', 'tab-b', 'tab-a'] as const;
+
+    for (let cycle = 0; cycle < 20; cycle += 1) {
+      for (const activeTabId of activationOrder) {
+        registry.reconcile(bindings, activeTabId);
+      }
+    }
+
+    expect(registry.require('tab-a')).toBe(runtimeA);
+    expect(registry.require('tab-b')).toBe(runtimeB);
+    expect(registry.require('tab-c')).toBe(runtimeC);
+    expect(runtimeA.store.getSnapshot().state).toEqual(stateA);
+    expect(runtimeB.store.getSnapshot().state).toEqual(stateB);
+    expect(runtimeC.store.getSnapshot().state).toEqual(stateC);
+    expect(runtimeA.store.getSnapshot().visibility).toBe('visible');
+    expect(runtimeB.store.getSnapshot().visibility).toBe('hidden');
+    expect(runtimeC.store.getSnapshot().visibility).toBe('hidden');
+  });
+
   it('queries every independent Tab runtime attached to one conversation', () => {
     const registry = createTabRenderRuntimeRegistry();
     registry.reconcile(

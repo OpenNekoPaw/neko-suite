@@ -32,7 +32,7 @@
 - [x] 4.3 Refactor `ConversationController` into a Tab host that renders keyed `ConversationTabRuntimeView` subtrees and changes visibility only.
 - [x] 4.4 Add bounded retention for inactive clean historical component trees while retaining independent stores and projection replicas.
 - [x] 4.5 Remove conversation save/restore effects, foreground shared component rebinding, and active-conversation UI fallbacks.
-- [ ] 4.6 Add concurrent/rapid-switch regression tests for input, attachment, configuration, Markdown, Timeline/projection, focus, and scroll isolation.
+- [x] 4.6 Add concurrent/rapid-switch regression tests for input, attachment, configuration, Markdown, Timeline/projection, focus, and scroll isolation.
 
 ## 5. Independent TUI Application and Session Runtimes
 

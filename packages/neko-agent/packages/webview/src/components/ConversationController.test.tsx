@@ -1005,6 +1005,77 @@ describe('ConversationController entry state', () => {
     expect(screen.getByTestId('workspace-viewport').textContent).toBe('detached:anchor-tab-a:25');
   });
 
+  it('keeps concurrent Timeline and Markdown projections isolated during rapid Tab switching', () => {
+    vi.clearAllMocks();
+    render(<ConversationController {...createProps()} />);
+
+    act(() => {
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          data: {
+            type: 'tabState',
+            tabState: {
+              openTabs: [
+                { id: 'tab-a', title: 'Chat A', conversationId: 'conv-a' },
+                { id: 'tab-b', title: 'Chat B', conversationId: 'conv-b' },
+              ],
+              activeTabId: 'tab-a',
+            },
+          },
+        }),
+      );
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          data: timelineSnapshotMessage('conv-a', 'message-a', 'stream **A**'),
+        }),
+      );
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          data: timelineSnapshotMessage('conv-b', 'message-b', 'stream **B**'),
+        }),
+      );
+    });
+
+    const workspaceA = screen.getByTestId('workspace-runtime-tab-a');
+    const workspaceB = screen.getByTestId('workspace-runtime-tab-b');
+    const instanceA = workspaceA.getAttribute('data-instance-id');
+    const instanceB = workspaceB.getAttribute('data-instance-id');
+
+    for (let cycle = 0; cycle < 12; cycle += 1) {
+      fireEvent.click(screen.getByRole('button', { name: 'Switch Chat B' }));
+      expect(screen.getByTestId('workspace-messages').textContent).toBe('stream **B**');
+      expect(screen.getByTestId('workspace-messages-tab-a').textContent).toBe('stream **A**');
+      fireEvent.click(screen.getByRole('button', { name: 'Switch Chat A' }));
+      expect(screen.getByTestId('workspace-messages').textContent).toBe('stream **A**');
+      expect(screen.getByTestId('workspace-messages-tab-b').textContent).toBe('stream **B**');
+    }
+
+    expect(screen.getByTestId('workspace-runtime-tab-a')).toBe(workspaceA);
+    expect(screen.getByTestId('workspace-runtime-tab-b')).toBe(workspaceB);
+    expect(workspaceA.getAttribute('data-instance-id')).toBe(instanceA);
+    expect(workspaceB.getAttribute('data-instance-id')).toBe(instanceB);
+
+    const registry = getAgentMarkdownSessionRegistry();
+    expect(
+      registry.getSnapshot(
+        createAgentMarkdownSessionKey({
+          conversationId: 'conv-a',
+          messageId: 'message-a',
+          itemId: 'text-1',
+        }),
+      ),
+    ).toMatchObject({ source: 'stream **A**', isFinal: false });
+    expect(
+      registry.getSnapshot(
+        createAgentMarkdownSessionKey({
+          conversationId: 'conv-b',
+          messageId: 'message-b',
+          itemId: 'text-1',
+        }),
+      ),
+    ).toMatchObject({ source: 'stream **B**', isFinal: false });
+  });
+
   it('does not mutate cached Markdown streaming state when an ordinary Tab becomes visible', () => {
     vi.clearAllMocks();
     render(<ConversationController {...createProps()} />);
