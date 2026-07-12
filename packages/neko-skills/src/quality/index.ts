@@ -44,8 +44,6 @@ export type {
   QualityReviewEvidenceInput,
   QualityReviewEvidenceResult,
   QualityReviewEvidenceSummary,
-  QualityReviewEvaluationSummary,
-  QualityReviewValidationPayload,
 } from './quality-review-validation';
 
 export * from './quality-gate-runtime';

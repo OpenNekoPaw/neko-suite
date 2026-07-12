@@ -1,70 +1,39 @@
-import type {
-  AgentToolResultFeedbackAdapter as AgentToolResultValidationAdapter,
-  AgentToolResultFeedbackAdapterInput as AgentToolResultValidationAdapterInput,
-  AgentToolReviewFeedbackSignal as AgentToolReviewValidationSignal,
-  AudioTechnicalMetrics,
-  ConsistencyReport,
-  PerceptionEvidence,
-  QualityIssue,
-  VideoTechnicalMetrics,
-} from '@neko/shared';
 import {
-  CHARACTER_INCONSISTENCY_FAIL_SCORE,
-  normalizeQualityConsistencyPayload,
-  normalizeQualityReviewPayload,
-  type QualityConsistencyReportForNormalization,
-  type QualityEvidenceSceneTimeRange,
-  type QualityEvidenceTimeRange,
-  STYLE_DRIFT_COLOR_POP_THRESHOLD,
+  MEDIA_QUALITY_CONTRACT_VERSION,
+  QUALITY_EVALUATOR_CLASSES,
+  QUALITY_TARGET_KINDS,
+  isResourceRef,
+  validateQualityGateResult,
+  type AgentToolResultFeedbackAdapter as AgentToolResultValidationAdapter,
+  type AgentToolResultFeedbackAdapterInput as AgentToolResultValidationAdapterInput,
+  type AgentToolReviewFeedbackSignal as AgentToolReviewValidationSignal,
+  type PerceptionEvidence,
+  type QualityDiagnostic,
+  type QualityGateResult,
+  type QualityGateVerdict,
 } from '@neko/shared';
-
-export interface QualityReviewEvaluationSummary {
-  readonly index: number;
-  readonly passed: boolean;
-  readonly finalScore: number;
-  readonly issues?: readonly QualityIssue[];
-  readonly remediations?: readonly unknown[];
-  readonly timeRange?: QualityEvidenceTimeRange;
-  readonly finalPath?: string;
-  readonly attempts?: number;
-  readonly audioMetrics?: AudioTechnicalMetrics;
-  readonly videoMetrics?: VideoTechnicalMetrics;
-}
-
-export interface QualityReviewRecommendation {
-  readonly sceneIndex: number;
-  readonly text: string;
-  readonly source: 'remediation' | 'suggested-action';
-}
-
-export interface QualityReviewValidationPayload {
-  readonly totalScenes: number;
-  readonly passed: number;
-  readonly failed: number;
-  readonly evaluations: readonly QualityReviewEvaluationSummary[];
-}
 
 export interface QualityReviewEvidenceInput {
-  readonly payload: QualityReviewValidationPayload;
+  readonly gateResult: QualityGateResult;
   readonly toolCallId: string;
-  readonly toolName: 'QualityCheck' | 'QualityRepairCheck' | 'QualityCheckConsistency';
-  readonly mode?: 'analysis' | 'repair' | 'consistency';
-  readonly locale?: string;
   readonly observedAt: number;
+  readonly locale?: string;
   readonly runId?: string;
   readonly observationId?: string;
-  readonly sceneTimeRanges?: readonly QualityEvidenceSceneTimeRange[];
-  readonly consistencyReport?: QualityConsistencyReportForNormalization;
-  readonly adapterDiagnostics?: readonly string[];
+  readonly contractDiagnostics?: readonly QualityDiagnostic[];
 }
 
 export interface QualityReviewEvidenceSummary {
-  readonly totalScenes: number;
-  readonly passed: number;
-  readonly failed: number;
-  readonly failingSceneIndexes: readonly number[];
-  readonly remediationCount: number;
-  readonly recommendations: readonly QualityReviewRecommendation[];
+  readonly verdict: QualityGateVerdict;
+  readonly effectiveVerdict: QualityGateVerdict;
+  readonly targetId: string;
+  readonly targetKind: QualityGateResult['target']['kind'];
+  readonly evidenceCount: number;
+  readonly staleEvidenceCount: number;
+  readonly missingEvaluatorClasses: QualityGateResult['missingEvaluatorClasses'];
+  readonly diagnosticCount: number;
+  readonly repairActionCount: number;
+  readonly contractValid: boolean;
 }
 
 export interface QualityReviewEvidenceResult {
@@ -82,321 +51,196 @@ export function createQualityReviewValidationAdapter(): AgentToolResultValidatio
 export function createQualityReviewValidationSignal(
   input: AgentToolResultValidationAdapterInput,
 ): AgentToolReviewValidationSignal | null {
-  const sceneTimeRanges = readSceneTimeRangesFromToolArguments(input.toolArguments);
-
-  if (input.toolName === 'QualityCheck' || input.toolName === 'QualityRepairCheck') {
-    if (!isQualityCheckValidationPayload(input.result.data)) {
-      return null;
-    }
-
-    const mode = input.toolName === 'QualityRepairCheck' ? 'repair' : 'analysis';
-    const review = createQualityReviewEvidence({
-      payload: input.result.data,
-      toolCallId: input.toolCallId,
-      toolName: input.toolName,
-      mode,
-      observedAt: input.observedAt,
-      ...(input.locale ? { locale: input.locale } : {}),
-      ...(input.runId ? { runId: input.runId } : {}),
-      ...(sceneTimeRanges.length > 0 ? { sceneTimeRanges } : {}),
-    });
-
-    return createToolReviewSignal(input, review, mode);
-  }
-
-  if (input.toolName !== 'QualityCheckConsistency' || !isConsistencyReportLike(input.result.data)) {
+  if (
+    input.toolName !== 'QualityCheck' ||
+    !input.result.success ||
+    !isCanonicalQualityGateResult(input.result.data)
+  ) {
     return null;
   }
 
-  const { report: consistencyReport, diagnostics: adapterDiagnostics } =
-    normalizeConsistencyReportForValidation(input.result.data);
-  const payload = createQualityReviewPayloadFromConsistencyReport(
-    consistencyReport,
-    input.toolArguments,
-  );
+  const validation = validateQualityGateResult(input.result.data);
   const review = createQualityReviewEvidence({
-    payload,
-    consistencyReport,
+    gateResult: input.result.data,
     toolCallId: input.toolCallId,
-    toolName: 'QualityCheckConsistency',
-    mode: 'consistency',
     observedAt: input.observedAt,
     ...(input.locale ? { locale: input.locale } : {}),
     ...(input.runId ? { runId: input.runId } : {}),
-    ...(sceneTimeRanges.length > 0 ? { sceneTimeRanges } : {}),
-    ...(adapterDiagnostics.length > 0 ? { adapterDiagnostics } : {}),
+    ...(validation.diagnostics.length > 0 ? { contractDiagnostics: validation.diagnostics } : {}),
   });
 
-  return createToolReviewSignal(input, review, 'consistency');
+  return createToolReviewSignal(input, review);
 }
 
 export function createQualityReviewEvidence(
   input: QualityReviewEvidenceInput,
 ): QualityReviewEvidenceResult {
-  const evidenceId = createQualityReviewEvidenceId(input);
-  const failingSceneIndexes = input.payload.evaluations
-    .filter((evaluation) => !evaluation.passed)
-    .map((evaluation) => evaluation.index);
-  const recommendations = input.payload.evaluations.flatMap(toQualityReviewRecommendations);
-  const remediationCount = recommendations.length;
-  const normalizedReview = normalizeQualityReviewPayload({
-    payload: input.payload,
-    evidenceId,
-    toolName: input.toolName,
-    toolCallId: input.toolCallId,
-    ...(input.runId ? { runId: input.runId } : {}),
-    ...(input.sceneTimeRanges ? { sceneTimeRanges: input.sceneTimeRanges } : {}),
-  });
-  const normalizedConsistency =
-    input.consistencyReport !== undefined
-      ? normalizeQualityConsistencyPayload({
-          report: input.consistencyReport,
-          evidenceId,
-          toolName: input.toolName,
-          toolCallId: input.toolCallId,
-          ...(input.runId ? { runId: input.runId } : {}),
-          ...(input.sceneTimeRanges ? { sceneTimeRanges: input.sceneTimeRanges } : {}),
-        })
-      : null;
+  const contractDiagnostics = input.contractDiagnostics ?? [];
+  const contractValid = !contractDiagnostics.some((item) => item.severity === 'error');
+  const effectiveVerdict = contractValid ? input.gateResult.verdict : 'fail';
   const summary: QualityReviewEvidenceSummary = {
-    totalScenes: input.payload.totalScenes,
-    passed: input.payload.passed,
-    failed: input.payload.failed,
-    failingSceneIndexes,
-    remediationCount,
-    recommendations,
+    verdict: input.gateResult.verdict,
+    effectiveVerdict,
+    targetId: input.gateResult.target.targetId,
+    targetKind: input.gateResult.target.kind,
+    evidenceCount: input.gateResult.evidenceIds.length,
+    staleEvidenceCount: input.gateResult.staleEvidenceIds.length,
+    missingEvaluatorClasses: input.gateResult.missingEvaluatorClasses,
+    diagnosticCount: input.gateResult.diagnostics.length + contractDiagnostics.length,
+    repairActionCount: input.gateResult.repairPlan?.actions.length ?? 0,
+    contractValid,
   };
 
-  return {
-    summary,
-    evidence: {
-      id: evidenceId,
-      source: 'tool',
-      summary: formatQualityReviewEvidenceSummary(
-        summary,
-        input.mode ?? 'analysis',
-        input.locale,
-      ),
-      confidence: calculateQualityReviewConfidence(summary),
-      toolName: input.toolName,
-      ...(input.observationId ? { observationId: input.observationId } : {}),
-      data: {
-        kind: 'quality-review',
-        mode: input.mode ?? 'analysis',
-        toolCallId: input.toolCallId,
-        runId: input.runId,
-        totalScenes: summary.totalScenes,
-        passed: summary.passed,
-        failed: summary.failed,
-        failingSceneIndexes: summary.failingSceneIndexes,
-        remediationCount: summary.remediationCount,
-        recommendations: summary.recommendations,
-        ...(input.adapterDiagnostics && input.adapterDiagnostics.length > 0
-          ? { adapterDiagnostics: input.adapterDiagnostics }
-          : {}),
-        ...createNormalizedQualityEvidenceData(normalizedReview, normalizedConsistency),
-      },
-      createdAt: input.observedAt,
-      status: 'active',
+  const evidence: PerceptionEvidence = {
+    id: `quality-gate:${input.runId ?? 'runless'}:${input.toolCallId}`,
+    source: 'tool',
+    summary: formatQualityGateSummary(summary, input.locale),
+    confidence: qualityGateConfidence(summary),
+    toolName: 'QualityCheck',
+    ...(input.observationId ? { observationId: input.observationId } : {}),
+    data: {
+      kind: 'quality-gate',
+      toolCallId: input.toolCallId,
+      ...(input.runId ? { runId: input.runId } : {}),
+      qualityGateResult: input.gateResult,
+      ...(contractDiagnostics.length > 0 ? { contractDiagnostics } : {}),
     },
+    createdAt: input.observedAt,
+    status: 'active',
   };
-}
 
-function createNormalizedQualityEvidenceData(
-  review: ReturnType<typeof normalizeQualityReviewPayload>,
-  consistency: ReturnType<typeof normalizeQualityConsistencyPayload> | null,
-): Record<string, unknown> {
-  const data: Record<string, unknown> = {};
-  if (review.issues.length > 0) {
-    data['normalizedIssueIds'] = review.issues.map((issue) => issue.id);
-    data['normalizedIssues'] = review.issues;
-  }
-  if (review.sourceIssues.length > 0) {
-    data['sourceIssues'] = review.sourceIssues;
-  }
-
-  const diagnostics = [...review.diagnostics, ...(consistency?.diagnostics ?? [])];
-  if (diagnostics.length > 0) {
-    data['normalizationDiagnostics'] = diagnostics;
-  }
-
-  if (consistency && consistency.continuityEdgeCandidates.length > 0) {
-    data['continuityEdgeCandidateIds'] = consistency.continuityEdgeCandidates.map(
-      (edge) => edge.id,
-    );
-    data['continuityEdgeCandidates'] = consistency.continuityEdgeCandidates;
-  }
-
-  return data;
-}
-
-function toQualityReviewRecommendations(
-  evaluation: QualityReviewEvaluationSummary,
-): readonly QualityReviewRecommendation[] {
-  return (evaluation.remediations ?? [])
-    .map((remediation) => formatQualityReviewRecommendation(remediation))
-    .filter((text): text is string => text !== null)
-    .map((text) => ({
-      sceneIndex: evaluation.index,
-      text,
-      source: 'remediation' as const,
-    }));
-}
-
-function formatQualityReviewRecommendation(value: unknown): string | null {
-  if (typeof value === 'string') {
-    const trimmed = value.trim();
-    return trimmed.length > 0 ? trimmed : null;
-  }
-
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
-    return null;
-  }
-
-  const candidate = value as Record<string, unknown>;
-  for (const key of ['recommendation', 'recommendedNextStep', 'summary', 'description', 'action']) {
-    const text = candidate[key];
-    if (typeof text === 'string' && text.trim().length > 0) {
-      return text.trim();
-    }
-  }
-
-  return JSON.stringify(candidate);
+  return { evidence, summary };
 }
 
 function createToolReviewSignal(
   input: AgentToolResultValidationAdapterInput,
   review: QualityReviewEvidenceResult,
-  mode: NonNullable<QualityReviewEvidenceInput['mode']>,
 ): AgentToolReviewValidationSignal {
+  const status = review.summary.effectiveVerdict === 'pass' ? 'passed' : 'failed';
   const locale = normalizeQualityReviewLocale(input.locale);
-  const status = review.summary.failed > 0 ? 'failed' : 'passed';
-  const failingSceneIndexes = [...review.summary.failingSceneIndexes];
-  const metadata: Record<string, unknown> = {
-    mode,
-    totalScenes: review.summary.totalScenes,
-    passed: review.summary.passed,
-    failed: review.summary.failed,
-    failingSceneIndexes,
-    remediationCount: review.summary.remediationCount,
-  };
+  const gateResult = review.evidence.data;
 
   return {
     kind: 'tool-review',
     observedAt: input.observedAt,
     toolCallId: input.toolCallId,
-    toolName: input.toolName,
+    toolName: 'QualityCheck',
     status,
     summary: review.evidence.summary,
     ...(status === 'failed'
       ? {
-          repairGuidance: createQualityRepairGuidance(
-            input.toolName,
-            review.summary,
-            mode,
-            locale,
-          ),
-          escalationMessage: createQualityEscalationMessage(input.runId, locale),
-          repeatKey: `quality-review:${input.runId ?? 'runless'}:${input.toolName}`,
+          repairGuidance: createQualityGateGuidance(review.summary, gateResult, locale),
+          escalationMessage: createQualityGateEscalation(review.summary, input.runId, locale),
+          repeatKey: `quality-gate:${input.runId ?? 'runless'}:${review.summary.targetId}`,
         }
       : {}),
     ...(input.runId ? { runId: input.runId } : {}),
     evidence: review.evidence,
-    metadata,
+    metadata: {
+      verdict: review.summary.verdict,
+      effectiveVerdict: review.summary.effectiveVerdict,
+      targetId: review.summary.targetId,
+      targetKind: review.summary.targetKind,
+      evidenceCount: review.summary.evidenceCount,
+      staleEvidenceCount: review.summary.staleEvidenceCount,
+      missingEvaluatorClasses: [...review.summary.missingEvaluatorClasses],
+      diagnosticCount: review.summary.diagnosticCount,
+      repairActionCount: review.summary.repairActionCount,
+      contractValid: review.summary.contractValid,
+    },
   };
 }
 
-function createQualityRepairGuidance(
-  toolName: string,
+function createQualityGateGuidance(
   summary: QualityReviewEvidenceSummary,
-  mode: NonNullable<QualityReviewEvidenceInput['mode']>,
+  evidenceData: unknown,
   locale: QualityReviewLocale,
 ): string {
-  const scenes =
-    summary.failingSceneIndexes.length > 0 ? summary.failingSceneIndexes.join(', ') : 'unknown';
-  if (locale === 'zh') {
-    if (mode === 'repair') {
-      return (
-        `复查来自 ${toolName} 的质量修复尝试。` +
-        `聚焦场景 ${scenes}，并在继续修复前验证 ${summary.remediationCount} 条建议修复步骤。`
-      );
-    }
-
-    return (
-      '修复未通过的质量检查结果。' +
-      `聚焦场景 ${scenes}，并按需应用 ${summary.remediationCount} 条建议修复步骤。`
-    );
+  const gateResult = readGateResultFromEvidenceData(evidenceData);
+  if (!summary.contractValid) {
+    return locale === 'zh'
+      ? '拒绝此无效的质量 Gate 结果；修复 QualityGateResult 契约后重新运行 QualityCheck。'
+      : 'Reject this invalid quality Gate result; repair the QualityGateResult contract and rerun QualityCheck.';
   }
 
-  if (mode === 'repair') {
-    return (
-      `Review the quality repair attempt from ${toolName}. ` +
-      `Focus on scene(s) ${scenes} and verify ` +
-      `${summary.remediationCount} suggested remediation step(s) before any further repair.`
-    );
+  if (summary.effectiveVerdict === 'manual-review') {
+    const missing = formatMissingEvaluators(summary.missingEvaluatorClasses, locale);
+    return locale === 'zh'
+      ? `完成策略要求的人工审查${missing}，在获得明确批准前不得将 Gate 视为通过。`
+      : `Complete the policy-required manual review${missing}; do not treat the Gate as passed without explicit approval.`;
   }
 
-  return (
-    'Repair the failing quality-check result. ' +
-    `Focus on scene(s) ${scenes} and apply ` +
-    `${summary.remediationCount} suggested remediation step(s) as needed.`
-  );
+  const actions = gateResult?.repairPlan?.actions ?? [];
+  if (actions.length > 0) {
+    const instructions = actions.map((action) => action.instruction).join(' ');
+    return locale === 'zh'
+      ? `由所属能力按修复计划处理目标 ${summary.targetId}，创建新 revision，使旧证据失效，然后重新运行 QualityCheck。计划：${instructions}`
+      : `Use the owning capability to repair target ${summary.targetId}, create a new revision, invalidate prior evidence, and rerun QualityCheck. Plan: ${instructions}`;
+  }
+
+  const diagnostics = gateResult?.diagnostics.map((item) => item.message).join(' ') ?? '';
+  return locale === 'zh'
+    ? `解决目标 ${summary.targetId} 的阻断诊断，然后重新运行 QualityCheck。${diagnostics}`
+    : `Resolve the blocking diagnostics for target ${summary.targetId}, then rerun QualityCheck. ${diagnostics}`;
 }
 
-function createQualityEscalationMessage(
+function createQualityGateEscalation(
+  summary: QualityReviewEvidenceSummary,
   runId: string | undefined,
   locale: QualityReviewLocale,
 ): string {
-  if (locale === 'zh') {
-    return (
-      `运行 ${runId ?? 'unknown-run'} 的质量检查持续失败。` +
-      '请询问用户是接受当前输出，还是调整目标质量标准。'
-    );
+  if (summary.effectiveVerdict === 'manual-review') {
+    return locale === 'zh'
+      ? `运行 ${runId ?? 'unknown-run'} 需要人工质量判定；请请求明确批准或补齐缺失评估证据。`
+      : `Run ${runId ?? 'unknown-run'} requires a human quality decision; request explicit approval or obtain the missing evaluator evidence.`;
   }
-
-  return (
-    `Quality check keeps failing for run ${runId ?? 'unknown-run'}. ` +
-    'Ask the user whether to accept the current output or revise the target quality bar.'
-  );
+  return locale === 'zh'
+    ? `运行 ${runId ?? 'unknown-run'} 的质量 Gate 未通过；不要绕过 Gate 或复用旧 revision 的证据。`
+    : `The quality Gate failed for run ${runId ?? 'unknown-run'}; do not bypass the Gate or reuse evidence from the prior revision.`;
 }
 
-function createQualityReviewEvidenceId(input: QualityReviewEvidenceInput): string {
-  return `quality-review:${input.runId ?? 'runless'}:${input.toolCallId}`;
-}
-
-function formatQualityReviewEvidenceSummary(
+function formatQualityGateSummary(
   summary: QualityReviewEvidenceSummary,
-  mode: 'analysis' | 'repair' | 'consistency',
-  locale?: string,
+  locale: string | undefined,
 ): string {
   const normalizedLocale = normalizeQualityReviewLocale(locale);
-  const label =
-    mode === 'repair'
-      ? 'QualityRepairReview repair attempt'
-      : mode === 'consistency'
-        ? 'QualityConsistencyReview'
-        : 'QualityReview';
-  if (normalizedLocale === 'zh') {
-    if (summary.failed === 0) {
-      return `${label} 通过 ${summary.passed}/${summary.totalScenes} 个场景。`;
-    }
-
-    return (
-      `${label} 未通过 ${summary.failed}/${summary.totalScenes} 个场景：` +
-      `场景 ${summary.failingSceneIndexes.join(', ')}；` +
-      `有 ${summary.remediationCount} 条修复提示。`
-    );
+  if (!summary.contractValid) {
+    return normalizedLocale === 'zh'
+      ? `目标 ${summary.targetId} 的 QualityGateResult 契约无效，不能判定为通过。`
+      : `QualityGateResult for target ${summary.targetId} is invalid and cannot pass.`;
   }
 
-  if (summary.failed === 0) {
-    return `${label} passed ${summary.passed}/${summary.totalScenes} scene(s).`;
+  if (summary.effectiveVerdict === 'pass') {
+    return normalizedLocale === 'zh'
+      ? `目标 ${summary.targetId} 的质量 Gate 已通过，使用 ${summary.evidenceCount} 条当前证据。`
+      : `Quality Gate passed for target ${summary.targetId} with ${summary.evidenceCount} current evidence item(s).`;
   }
 
-  return (
-    `${label} failed ${summary.failed}/${summary.totalScenes} scene(s): ` +
-    `scene(s) ${summary.failingSceneIndexes.join(', ')}; ` +
-    `${summary.remediationCount} remediation hint(s) available.`
-  );
+  if (summary.effectiveVerdict === 'manual-review') {
+    const missing = formatMissingEvaluators(summary.missingEvaluatorClasses, normalizedLocale);
+    return normalizedLocale === 'zh'
+      ? `目标 ${summary.targetId} 的质量 Gate 需要人工审查${missing}。`
+      : `Quality Gate requires manual review for target ${summary.targetId}${missing}.`;
+  }
+
+  return normalizedLocale === 'zh'
+    ? `目标 ${summary.targetId} 的质量 Gate 未通过：${summary.staleEvidenceCount} 条过期证据，${summary.diagnosticCount} 条诊断，${summary.repairActionCount} 个修复动作。`
+    : `Quality Gate failed for target ${summary.targetId}: ${summary.staleEvidenceCount} stale evidence item(s), ${summary.diagnosticCount} diagnostic(s), and ${summary.repairActionCount} repair action(s).`;
+}
+
+function formatMissingEvaluators(
+  missingEvaluatorClasses: QualityGateResult['missingEvaluatorClasses'],
+  locale: QualityReviewLocale,
+): string {
+  if (missingEvaluatorClasses.length === 0) return '';
+  const names = missingEvaluatorClasses.join(', ');
+  return locale === 'zh' ? `（缺少评估器：${names}）` : ` (missing evaluator classes: ${names})`;
+}
+
+function qualityGateConfidence(summary: QualityReviewEvidenceSummary): number {
+  if (!summary.contractValid || summary.effectiveVerdict === 'fail') return 0;
+  if (summary.effectiveVerdict === 'manual-review') return 0.5;
+  return 1;
 }
 
 type QualityReviewLocale = 'en' | 'zh';
@@ -405,207 +249,141 @@ function normalizeQualityReviewLocale(locale: string | undefined): QualityReview
   return locale?.trim().toLowerCase().startsWith('zh') ? 'zh' : 'en';
 }
 
-function calculateQualityReviewConfidence(summary: QualityReviewEvidenceSummary): number {
-  if (summary.totalScenes <= 0) {
-    return 0;
-  }
-  return summary.passed / summary.totalScenes;
+function readGateResultFromEvidenceData(value: unknown): QualityGateResult | null {
+  if (!isRecord(value)) return null;
+  const gateResult = value['qualityGateResult'];
+  return isCanonicalQualityGateResult(gateResult) ? gateResult : null;
 }
 
-function isQualityCheckValidationPayload(value: unknown): value is QualityReviewValidationPayload {
-  if (typeof value !== 'object' || value === null) {
-    return false;
-  }
+function isCanonicalQualityGateResult(value: unknown): value is QualityGateResult {
+  if (!isRecord(value) || !isRecord(value['target']) || !isRecord(value['policy'])) return false;
+  const target = value['target'];
+  const policy = value['policy'];
+  const repairPlan = value['repairPlan'];
 
-  const candidate = value as Record<string, unknown>;
   return (
-    isFiniteNumber(candidate['totalScenes']) &&
-    isFiniteNumber(candidate['passed']) &&
-    isFiniteNumber(candidate['failed']) &&
-    Array.isArray(candidate['evaluations']) &&
-    candidate['evaluations'].every(isQualityCheckEvaluationSummary)
+    value['version'] === MEDIA_QUALITY_CONTRACT_VERSION &&
+    typeof value['gateResultId'] === 'string' &&
+    isQualityGateVerdict(value['verdict']) &&
+    Array.isArray(value['evidenceIds']) &&
+    value['evidenceIds'].every((item) => typeof item === 'string') &&
+    Array.isArray(value['staleEvidenceIds']) &&
+    value['staleEvidenceIds'].every((item) => typeof item === 'string') &&
+    Array.isArray(value['missingEvaluatorClasses']) &&
+    value['missingEvaluatorClasses'].every(isQualityEvaluatorClass) &&
+    Array.isArray(value['diagnostics']) &&
+    value['diagnostics'].every(isQualityDiagnostic) &&
+    typeof value['createdAt'] === 'string' &&
+    isQualityTargetLike(target) &&
+    typeof policy['policyId'] === 'string' &&
+    typeof policy['policyVersion'] === 'string' &&
+    Array.isArray(policy['requiredProfiles']) &&
+    policy['requiredProfiles'].every((item) => typeof item === 'string') &&
+    (repairPlan === undefined || isQualityRepairPlanLike(repairPlan))
   );
 }
 
-function isQualityCheckEvaluationSummary(value: unknown): value is QualityReviewEvaluationSummary {
-  if (typeof value !== 'object' || value === null) {
-    return false;
-  }
-
-  const candidate = value as Record<string, unknown>;
+function isQualityTargetLike(value: Record<string, unknown>): boolean {
+  const hasResourceRef = value['resourceRef'] !== undefined;
+  const hasProjectRef = value['projectRef'] !== undefined;
   return (
-    isFiniteNumber(candidate['index']) &&
-    typeof candidate['passed'] === 'boolean' &&
-    isFiniteNumber(candidate['finalScore']) &&
-    (candidate['remediations'] === undefined || Array.isArray(candidate['remediations']))
+    value['version'] === MEDIA_QUALITY_CONTRACT_VERSION &&
+    typeof value['targetId'] === 'string' &&
+    typeof value['kind'] === 'string' &&
+    QUALITY_TARGET_KINDS.some((kind) => kind === value['kind']) &&
+    hasResourceRef !== hasProjectRef &&
+    (!hasResourceRef || isResourceRef(value['resourceRef'])) &&
+    (!hasProjectRef || isQualityProjectRefLike(value['projectRef'])) &&
+    (value['revision'] === undefined || typeof value['revision'] === 'string') &&
+    (value['contentDigest'] === undefined || typeof value['contentDigest'] === 'string') &&
+    (value['mediaRange'] === undefined || isMediaRangeLike(value['mediaRange'])) &&
+    (value['expectedIntent'] === undefined || isRecord(value['expectedIntent'])) &&
+    (value['lineage'] === undefined ||
+      (Array.isArray(value['lineage']) && value['lineage'].every(isQualityLineageRefLike)))
   );
 }
 
-function isConsistencyReportLike(value: unknown): value is Record<string, unknown> {
+function isQualityProjectRefLike(value: unknown): boolean {
   return (
     isRecord(value) &&
-    isFiniteNumber(value['overallConsistency']) &&
-    Array.isArray(value['styleDrift'])
+    isQualityProjectDomain(value['domain']) &&
+    typeof value['documentUri'] === 'string' &&
+    typeof value['projectRevision'] === 'string' &&
+    (value['contentDigest'] === undefined || typeof value['contentDigest'] === 'string')
   );
 }
 
-function normalizeConsistencyReportForValidation(value: Record<string, unknown>): {
-  readonly report: ConsistencyReport;
-  readonly diagnostics: readonly string[];
-} {
-  const diagnostics: string[] = [];
-  const overallConsistency =
-    typeof value['overallConsistency'] === 'number' ? value['overallConsistency'] : 0;
-  const characterConsistency = Array.isArray(value['characterConsistency'])
-    ? value['characterConsistency']
-    : [];
-  if (!Array.isArray(value['characterConsistency'])) {
-    diagnostics.push('missing-characterConsistency');
-  }
-
-  const aestheticScore = isFiniteNumber(value['aestheticScore']) ? value['aestheticScore'] : 0;
-  if (!isFiniteNumber(value['aestheticScore'])) {
-    diagnostics.push('missing-aestheticScore');
-  }
-
-  const recommendations = Array.isArray(value['recommendations'])
-    ? value['recommendations'].filter((entry): entry is string => typeof entry === 'string')
-    : [];
-  if (!Array.isArray(value['recommendations'])) {
-    diagnostics.push('missing-recommendations');
-  }
-
-  return {
-    report: {
-      overallConsistency,
-      styleDrift: value['styleDrift'] as ConsistencyReport['styleDrift'],
-      characterConsistency: characterConsistency as ConsistencyReport['characterConsistency'],
-      aestheticScore,
-      recommendations,
-    },
-    diagnostics,
-  };
+function isQualityLineageRefLike(value: unknown): boolean {
+  if (!isRecord(value) || typeof value['relation'] !== 'string') return false;
+  const hasResourceRef = value['resourceRef'] !== undefined;
+  const hasProjectRef = value['projectRef'] !== undefined;
+  return (
+    hasResourceRef !== hasProjectRef &&
+    (!hasResourceRef || isResourceRef(value['resourceRef'])) &&
+    (!hasProjectRef || isQualityProjectRefLike(value['projectRef'])) &&
+    (value['revision'] === undefined || typeof value['revision'] === 'string')
+  );
 }
 
-function createQualityReviewPayloadFromConsistencyReport(
-  report: ConsistencyReport,
-  toolArguments: Record<string, unknown> | undefined,
-): QualityReviewValidationPayload {
-  const sceneIndexes = readSceneIndexesFromToolArguments(toolArguments);
-  const failedSceneIndexes = new Set<number>();
-  for (const drift of report.styleDrift) {
-    if (drift.driftScore > STYLE_DRIFT_COLOR_POP_THRESHOLD) {
-      failedSceneIndexes.add(drift.fromScene);
-      failedSceneIndexes.add(drift.toScene);
-    }
-  }
-  for (const character of report.characterConsistency ?? []) {
-    for (const appearance of character.appearances) {
-      if (appearance.score < CHARACTER_INCONSISTENCY_FAIL_SCORE) {
-        failedSceneIndexes.add(appearance.sceneIndex);
-      }
-    }
-  }
-
-  const indexes =
-    sceneIndexes.length > 0
-      ? sceneIndexes
-      : [...failedSceneIndexes].sort((left, right) => left - right);
-  const evaluations = indexes.map((index) => ({
-    index,
-    passed: !failedSceneIndexes.has(index),
-    finalScore: report.overallConsistency,
-    remediations:
-      failedSceneIndexes.has(index) && report.recommendations.length > 0
-        ? report.recommendations
-        : undefined,
-  }));
-
-  const failed = evaluations.filter((evaluation) => !evaluation.passed).length;
-  return {
-    totalScenes: evaluations.length,
-    passed: evaluations.length - failed,
-    failed,
-    evaluations,
-  };
+function isMediaRangeLike(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    typeof value['startSeconds'] === 'number' &&
+    typeof value['endSeconds'] === 'number'
+  );
 }
 
-function readSceneTimeRangesFromToolArguments(
-  toolArguments: Record<string, unknown> | undefined,
-): QualityEvidenceSceneTimeRange[] {
-  if (!toolArguments) return [];
-  const scenes = toolArguments['scenes'];
-  if (!Array.isArray(scenes)) return [];
-
-  const ranges: QualityEvidenceSceneTimeRange[] = [];
-  for (let index = 0; index < scenes.length; index++) {
-    const scene = scenes[index];
-    if (!isRecord(scene)) continue;
-    const sceneIndex = readSceneIndex(scene, index);
-    const timeRange = readToolArgumentTimeRange(scene);
-    if (sceneIndex !== null && timeRange) {
-      ranges.push({ sceneIndex, timeRange });
-    }
-  }
-  return ranges;
+function isQualityProjectDomain(value: unknown): boolean {
+  return (
+    value === 'sketch' ||
+    value === 'canvas' ||
+    value === 'cut' ||
+    value === 'audio' ||
+    value === 'model' ||
+    value === 'puppet' ||
+    value === 'story'
+  );
 }
 
-function readSceneIndexesFromToolArguments(
-  toolArguments: Record<string, unknown> | undefined,
-): number[] {
-  if (!toolArguments) return [];
-  const scenes = toolArguments['scenes'];
-  if (!Array.isArray(scenes)) return [];
-  return scenes
-    .map((scene, index) => (isRecord(scene) ? readSceneIndex(scene, index) : null))
-    .filter((sceneIndex): sceneIndex is number => sceneIndex !== null);
+function isQualityRepairPlanLike(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    typeof value['planId'] === 'string' &&
+    typeof value['requiresNewRevision'] === 'boolean' &&
+    Array.isArray(value['actions']) &&
+    value['actions'].every(
+      (action) =>
+        isRecord(action) &&
+        typeof action['owner'] === 'string' &&
+        typeof action['targetId'] === 'string' &&
+        Array.isArray(action['issueIds']) &&
+        action['issueIds'].every((item) => typeof item === 'string') &&
+        typeof action['instruction'] === 'string',
+    )
+  );
 }
 
-function readSceneIndex(scene: Record<string, unknown>, defaultIndex: number): number | null {
-  const explicit = scene['index'] ?? scene['sceneIndex'];
-  if (typeof explicit === 'number' && Number.isFinite(explicit)) return Math.floor(explicit);
-  return defaultIndex;
+function isQualityDiagnostic(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    typeof value['code'] === 'string' &&
+    (value['severity'] === 'info' ||
+      value['severity'] === 'warning' ||
+      value['severity'] === 'error') &&
+    typeof value['message'] === 'string'
+  );
 }
 
-function readToolArgumentTimeRange(
-  scene: Record<string, unknown>,
-): QualityEvidenceTimeRange | null {
-  const direct = readTimeRangeLike(scene['timeRange']);
-  if (direct) return direct;
-  const start = scene['start'] ?? scene['startTime'];
-  const end = scene['end'] ?? scene['endTime'];
-  const fromScalar = readTimeRangeScalars(start, end);
-  if (fromScalar) return fromScalar;
-  const duration = scene['duration'];
-  if (typeof duration === 'number' && Number.isFinite(duration) && duration >= 0) {
-    return { start: 0, end: duration };
-  }
-  return null;
+function isQualityGateVerdict(value: unknown): value is QualityGateVerdict {
+  return value === 'pass' || value === 'fail' || value === 'manual-review';
 }
 
-function readTimeRangeLike(value: unknown): QualityEvidenceTimeRange | null {
-  if (!isRecord(value)) return null;
-  return readTimeRangeScalars(value['start'], value['end']);
-}
-
-function readTimeRangeScalars(start: unknown, end: unknown): QualityEvidenceTimeRange | null {
-  if (
-    typeof start !== 'number' ||
-    typeof end !== 'number' ||
-    !Number.isFinite(start) ||
-    !Number.isFinite(end) ||
-    start < 0 ||
-    end < start
-  ) {
-    return null;
-  }
-  return { start, end };
+function isQualityEvaluatorClass(
+  value: unknown,
+): value is QualityGateResult['missingEvaluatorClasses'][number] {
+  return QUALITY_EVALUATOR_CLASSES.some((evaluatorClass) => evaluatorClass === value);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function isFiniteNumber(value: unknown): value is number {
-  return typeof value === 'number' && Number.isFinite(value);
 }
