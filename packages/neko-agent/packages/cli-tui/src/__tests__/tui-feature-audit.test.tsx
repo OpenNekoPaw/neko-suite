@@ -14,7 +14,8 @@
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
-import { render } from 'ink-testing-library';
+import { buildAgentTerminalHelpSemantic, type CommandContext } from '@neko/agent';
+import { render as renderInk } from 'ink-testing-library';
 import { Box } from 'ink';
 
 import { MessageItem } from '../components/ChatView/MessageItem';
@@ -25,7 +26,11 @@ import { StatusBar } from '../components/StatusBar/StatusBar';
 import { InputEditor } from '../components/Input/InputEditor';
 import { ChatView } from '../components/ChatView/ChatView';
 import { ToolApprovalPanel } from '../components/ToolApproval/ToolApprovalPanel';
-import { SlashCommandMenu, TUI_COMMANDS } from '../components/Input/SlashCommandMenu';
+import { SlashCommandMenu } from '../components/Input/SlashCommandMenu';
+import { createTuiSlashCommandCatalog } from '../core/slash-command-catalog';
+import { AgentTerminalPresentationProvider } from '../presentation/react-context';
+import { presentHelpCommand } from '../presentation/resource-command-presentation';
+import { createTestAgentTerminalPresentation } from '../presentation/testing';
 
 import { useAgentStore } from '../stores/agent-store';
 import { useConversationStore } from '../stores/conversation-store';
@@ -35,6 +40,17 @@ import type { Message, TodoItem } from '../types/state';
 import { DEFAULT_CLI_CONFIG } from '../core/types';
 
 // ─── Test Config (mirrors .neko/config.toml) ────────────────────────
+
+const TEST_PRESENTATION = createTestAgentTerminalPresentation('en');
+const TEST_TUI_COMMANDS = createTuiSlashCommandCatalog(undefined, TEST_PRESENTATION);
+
+function render(node: React.ReactElement): ReturnType<typeof renderInk> {
+  return renderInk(
+    <AgentTerminalPresentationProvider value={TEST_PRESENTATION}>
+      {node}
+    </AgentTerminalPresentationProvider>,
+  );
+}
 
 const TEST_CONFIG = {
   ...DEFAULT_CLI_CONFIG,
@@ -83,16 +99,15 @@ describe('1. Claude Code Visual Style', () => {
     console.log('[Style] User prompt:\n', frame);
   });
 
-  it('status bar shows model + mode + shortcuts (Claude Code style)', () => {
+  it('status bar shows model, mode, media, and context usage', () => {
     const { lastFrame } = render(<StatusBar />);
     const frame = lastFrame()!;
     // Model from config
     expect(frame).toContain('gpt-5.3-codex');
     // Execution mode
     expect(frame).toContain('auto');
-    // Keyboard shortcuts
-    expect(frame).toContain('Esc:cancel');
-    expect(frame).toContain('^L:clear');
+    expect(frame).toContain('media:none');
+    expect(frame).toContain('ctx:0/?');
     console.log('[Style] StatusBar:\n', frame);
   });
 
@@ -249,9 +264,9 @@ describe('4. Agent Execution Progress', () => {
     useAgentStore.getState().setRunning();
     useAgentStore.getState().setIteration(3, 10);
 
-    const { lastFrame } = render(<StatusBar />);
+    const { lastFrame } = render(<ChatView />);
     const frame = lastFrame()!;
-    expect(frame).toContain('3/10');
+    expect(frame).toContain('Processing (3/10)');
     expect(frame).toMatch(/[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏]/); // spinner
     console.log('[Progress] Iteration:\n', frame);
   });
@@ -266,9 +281,8 @@ describe('4. Agent Execution Progress', () => {
 
     const { lastFrame } = render(<StatusBar />);
     const frame = lastFrame()!;
-    expect(frame).toContain('50.0K');
-    // Progress bar characters
-    expect(frame).toMatch(/[█░]/);
+    expect(frame).toContain('ctx:45.0K/?');
+    expect(frame).not.toContain('50.0K');
     console.log('[Progress] Token usage:\n', frame);
   });
 
@@ -280,12 +294,13 @@ describe('4. Agent Execution Progress', () => {
     console.log('[Progress] Streaming cursor:\n', frame);
   });
 
-  it('shows error state in status bar', () => {
+  it('keeps execution errors out of persistent status chrome', () => {
     useAgentStore.getState().setError(new Error('Rate limit exceeded'));
     const { lastFrame } = render(<StatusBar />);
     const frame = lastFrame()!;
-    expect(frame).toContain('error');
-    console.log('[Progress] Error state:\n', frame);
+    expect(frame).toContain('agent:auto');
+    expect(frame).not.toContain('Rate limit exceeded');
+    console.log('[Progress] Status chrome after error:\n', frame);
   });
 });
 
@@ -373,45 +388,45 @@ describe('5. Model Configuration Display', () => {
 describe('6. Slash Command System', () => {
   beforeEach(resetStores);
 
-  it('/help generates categorized command list', async () => {
-    const { generateCliHelpText } = await import('@neko/agent');
-
-    const helpText = generateCliHelpText();
-    expect(helpText).toContain('Available Commands');
-    expect(helpText).toContain('/help');
-    expect(helpText).toContain('/status');
-    expect(helpText).toContain('/clear');
-    expect(helpText).toContain('/config');
-    console.log('[Help] Generated text:\n', helpText);
+  it('/help generates categorized command list through the TUI Presenter', () => {
+    const projection = presentHelpCommand(
+      buildAgentTerminalHelpSemantic({} as CommandContext),
+      TEST_PRESENTATION,
+    );
+    expect(projection.kind).toBe('output');
+    if (projection.kind !== 'output') return;
+    expect(projection.output).toContain('Available Commands');
+    expect(projection.output).toContain('/help');
+    expect(projection.output).toContain('/status');
+    expect(projection.output).toContain('/clear');
+    expect(projection.output).toContain('/config');
+    console.log('[Help] Generated text:\n', projection.output);
   });
 
-  it('slash command menu renders with TUI_COMMANDS (max 8 visible)', () => {
+  it('slash command menu renders with TEST_TUI_COMMANDS (max 8 visible)', () => {
     const { lastFrame } = render(
       <SlashCommandMenu
-        commands={TUI_COMMANDS}
+        commands={TEST_TUI_COMMANDS}
         filter=""
         onSelect={() => {}}
         onDismiss={() => {}}
       />,
     );
     const frame = lastFrame()!;
-    // First 8 commands are visible
-    expect(frame).toContain('/help');
-    expect(frame).toContain('/clear');
-    expect(frame).toContain('/compact');
-    expect(frame).toContain('/config');
-    expect(frame).toContain('/plan');
-    expect(frame).toContain('/auto');
-    expect(frame).toContain('/ask');
-    // Items 9-10 (status, exit) are truncated
-    expect(frame).toContain('... 2 more');
+    for (const command of TEST_TUI_COMMANDS.slice(0, 8)) {
+      expect(frame).toContain(`/${command.name}`);
+    }
+    for (const command of TEST_TUI_COMMANDS.slice(8)) {
+      expect(frame).not.toContain(`/${command.name} `);
+    }
+    expect(frame).toContain(`... ${TEST_TUI_COMMANDS.length - 8} more`);
     console.log('[Commands] Full menu (8 visible + 2 more):\n', frame);
   });
 
   it('slash command menu filters by input', () => {
     const { lastFrame } = render(
       <SlashCommandMenu
-        commands={TUI_COMMANDS}
+        commands={TEST_TUI_COMMANDS}
         filter="/co"
         onSelect={() => {}}
         onDismiss={() => {}}
@@ -461,8 +476,8 @@ describe('6. Slash Command System', () => {
     expect(useAgentStore.getState().executionMode).toBe('ask');
   });
 
-  it('TUI_COMMANDS includes all expected commands', () => {
-    const names = TUI_COMMANDS.map((c) => c.name);
+  it('TEST_TUI_COMMANDS includes all expected commands', () => {
+    const names = TEST_TUI_COMMANDS.map((c) => c.name);
     expect(names).toContain('help');
     expect(names).toContain('clear');
     expect(names).toContain('compact');
@@ -690,7 +705,7 @@ describe('9. Full Conversation Flow', () => {
     // Status bar
     expect(frame).toContain('gpt-5.3-codex');
     expect(frame).toContain('4/10');
-    expect(frame).toContain('15.5K');
+    expect(frame).toContain('ctx:12.0K/?');
 
     console.log('═══ Full Agent Session ═══\n', frame);
   });

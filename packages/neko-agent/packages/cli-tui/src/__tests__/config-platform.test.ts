@@ -183,14 +183,17 @@ describe.skipIf(!hasRealConfig)('config.ts — Real ~/.neko/config.toml', () => 
       const config = loadConfig('/tmp/test');
       const result = validateConfig(config);
       expect(result.valid).toBe(true);
-      expect(result.errors).toHaveLength(0);
+      expect(result.diagnostics).toHaveLength(0);
     });
 
     it('fails when apiKey is missing', () => {
       const config = { ...DEFAULT_CLI_CONFIG, providerRequiresApiKey: true, apiKey: undefined };
       const result = validateConfig(config);
       expect(result.valid).toBe(false);
-      expect(result.errors[0]).toContain('API key not found');
+      expect(result.diagnostics[0]).toEqual({
+        code: 'missing-api-key',
+        providerId: config.provider,
+      });
     });
 
     it('allows local providers without an API key', () => {
@@ -203,21 +206,21 @@ describe.skipIf(!hasRealConfig)('config.ts — Real ~/.neko/config.toml', () => 
       };
       const result = validateConfig(config);
       expect(result.valid).toBe(true);
-      expect(result.errors).toHaveLength(0);
+      expect(result.diagnostics).toHaveLength(0);
     });
 
     it('fails for invalid temperature', () => {
       const config = { ...DEFAULT_CLI_CONFIG, apiKey: 'k', temperature: 3 };
       const result = validateConfig(config);
       expect(result.valid).toBe(false);
-      expect(result.errors[0]).toContain('Temperature');
+      expect(result.diagnostics[0]).toEqual({ code: 'invalid-temperature', value: 3 });
     });
 
     it('fails for invalid maxTokens', () => {
       const config = { ...DEFAULT_CLI_CONFIG, apiKey: 'k', maxTokens: -1 };
       const result = validateConfig(config);
       expect(result.valid).toBe(false);
-      expect(result.errors[0]).toContain('maxTokens');
+      expect(result.diagnostics[0]).toEqual({ code: 'invalid-max-tokens', value: -1 });
     });
 
     it('fails for invalid outputFormat', () => {
@@ -228,7 +231,7 @@ describe.skipIf(!hasRealConfig)('config.ts — Real ~/.neko/config.toml', () => 
       };
       const result = validateConfig(config);
       expect(result.valid).toBe(false);
-      expect(result.errors[0]).toContain('outputFormat');
+      expect(result.diagnostics[0]).toEqual({ code: 'invalid-output-format', value: 'xml' });
     });
   });
 

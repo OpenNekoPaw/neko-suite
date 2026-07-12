@@ -13,21 +13,43 @@ import React from 'react';
 import { render } from 'ink';
 import { Command } from 'commander';
 import { createFileConversationStorage } from '@neko/agent';
-import { loadConfig, validateConfig, listProviders, getProviderModels } from './core/config';
+import {
+  CliConfigLoadError,
+  loadConfig,
+  validateConfig,
+  listProviders,
+  getProviderModels,
+} from './core/config';
 import type { CLIConfig } from './core/types';
 import { formatExperimentReport, runExperiment, type ExperimentSuiteName } from './core/experiment';
-import { resolveCliWorkDir } from './core/cli-workdir';
+import { CliWorkDirError, resolveCliWorkDir } from './core/cli-workdir';
 import { joinPromptParts, resolveDefaultCliInvocation } from './core/cli-invocation';
 import {
   assertCanonicalTuiConversationId,
   isCanonicalTuiConversationId,
+  TuiConversationIdError,
 } from './core/tui-conversation-id';
-import { formatTuiLabel, getTuiLabels } from './core/tui-locale';
+import {
+  createNodeTerminalInvocationContextFromArgv,
+  type AgentTerminalInvocationContext,
+} from './core/node-locale-bootstrap';
 import { App } from './components/App';
 import { detectCapabilities } from './utils/terminal';
 import { TuiDebugAutomationSessionManager } from './core/debug-automation/session-manager';
 import { runTuiDebugAutomationJsonLineServer } from './core/debug-automation/stdio';
 import chalk from 'chalk';
+import { presentConfigCommand } from './presentation/config-history-presentation';
+import { presentTuiConversationIdDiagnostic } from './presentation/conversation-presentation';
+import {
+  configureLocalizedCommander,
+  LocalizedCliCommand,
+  presentCliProcessDiagnostic,
+  presentCliWorkDirDiagnostic,
+  presentConfigLoadDiagnostic,
+  presentConfigValidation,
+  presentExperimentFailure,
+  presentExperimentStart,
+} from './presentation/cli-process-presentation';
 
 export type CliCommandRuntimeClass = 'interactive-tui' | 'validation' | 'utility';
 
@@ -48,25 +70,37 @@ export function classifyCliCommandRuntime(commandName: string | undefined): CliC
   }
 }
 
-function addWorkDirOptions(command: Command): Command {
+function addWorkDirOptions(command: Command, terminal: AgentTerminalInvocationContext): Command {
+  const { t } = terminal.presentation;
   return command
-    .option('-C, --cd <dir>', 'Working directory for workspace config and file tools')
-    .option('--cwd <dir>', 'Working directory for workspace config and file tools')
-    .option('--work-dir <dir>', 'Working directory for workspace config and file tools');
+    .option('-C, --cd <dir>', t('agent.terminal.commander.option.workDir'))
+    .option('--cwd <dir>', t('agent.terminal.commander.option.workDir'))
+    .option('--work-dir <dir>', t('agent.terminal.commander.option.workDir'));
 }
 
-function addInteractiveOptions(command: Command): Command {
+function addInteractiveOptions(
+  command: Command,
+  terminal: AgentTerminalInvocationContext,
+): Command {
+  const { t } = terminal.presentation;
   return command
-    .option('-p, --provider <provider>', 'AI provider (anthropic, openai, deepseek)')
-    .option('-m, --model <model>', 'Model ID')
-    .option('-k, --api-key <key>', 'API key')
-    .option('-v, --verbose', 'Enable verbose output');
+    .option('-p, --provider <provider>', t('agent.terminal.commander.option.provider'))
+    .option('-m, --model <model>', t('agent.terminal.commander.option.model'))
+    .option('-k, --api-key <key>', t('agent.terminal.commander.option.apiKey'))
+    .option('-v, --verbose', t('agent.terminal.commander.option.verbose'));
 }
 
-function addResumeOption(command: Command): Command {
+function addLocaleOptions(command: Command, terminal: AgentTerminalInvocationContext): Command {
+  const { t } = terminal.presentation;
+  return command
+    .option('--ui-locale <preference>', t('agent.terminal.commander.option.uiLocale'))
+    .option('--prompt-locale <preference>', t('agent.terminal.commander.option.promptLocale'));
+}
+
+function addResumeOption(command: Command, terminal: AgentTerminalInvocationContext): Command {
   return command.option(
     '-r, --resume [id]',
-    'Resume a previous conversation (omit id to continue the most recent)',
+    terminal.presentation.t('agent.terminal.commander.option.resume'),
   );
 }
 
@@ -80,207 +114,301 @@ function withGlobalOptions(
   };
 }
 
-export function createCliProgram(): Command {
-  const program = new Command();
+export function createCliProgram(terminal: AgentTerminalInvocationContext): Command {
+  const { t } = terminal.presentation;
+  const program = configureLocalizedCommander(
+    new LocalizedCliCommand(terminal.presentation),
+    terminal.presentation,
+  );
 
-  addResumeOption(addInteractiveOptions(addWorkDirOptions(program)));
+  addResumeOption(
+    addLocaleOptions(
+      addInteractiveOptions(addWorkDirOptions(program, terminal), terminal),
+      terminal,
+    ),
+    terminal,
+  );
   program
     .name('neko')
     .usage('[options] [prompt...]\n       neko [options] <command> [args]')
-    .description('Neko AI Agent — Professional Terminal UI')
-    .version('0.0.1')
-    .argument('[prompt...]', 'Optional user prompt to start the session')
+    .description(t('agent.terminal.commander.program.description'))
+    .version('0.0.1', '-V, --version', t('agent.terminal.commander.versionOption'))
+    .argument('[prompt...]', t('agent.terminal.commander.argument.initialPrompt'))
     .action(async (promptParts: string[] | undefined, opts: Record<string, unknown>) => {
-      await runCliAction(() => handleDefault(promptParts ?? [], opts, program));
+      await runCliAction(() => handleDefault(promptParts ?? [], opts, program, terminal), terminal);
     });
 
   addResumeOption(
-    addInteractiveOptions(
-      addWorkDirOptions(
-        program
-          .command('interactive')
-          .alias('i')
-          .description('Start interactive TUI mode')
-          .argument('[workDir]', 'Working directory for workspace config and file tools')
-          .argument('[prompt...]', 'Optional user prompt to submit after startup'),
+    addLocaleOptions(
+      addInteractiveOptions(
+        addWorkDirOptions(
+          program
+            .command('interactive')
+            .alias('i')
+            .description(t('agent.terminal.commander.command.interactive'))
+            .argument('[workDir]', t('agent.terminal.commander.argument.workDir'))
+            .argument('[prompt...]', t('agent.terminal.commander.argument.startupPrompt')),
+          terminal,
+        ),
+        terminal,
       ),
+      terminal,
     ),
+    terminal,
   ).action(
     async (
       workDir: string | undefined,
       promptParts: string[] | undefined,
       opts: Record<string, unknown>,
     ) => {
-      await runCliAction(() =>
-        handleInteractive({
-          ...opts,
-          positionalWorkDir: workDir,
-          prompt: joinPromptParts(promptParts),
-          program,
-        }),
+      await runCliAction(
+        () =>
+          handleInteractive(
+            {
+              ...opts,
+              positionalWorkDir: workDir,
+              prompt: joinPromptParts(promptParts),
+              program,
+            },
+            terminal,
+          ),
+        terminal,
       );
     },
   );
 
-  addInteractiveOptions(
-    addWorkDirOptions(
-      program
-        .command('experiment')
-        .description('Run ablation experiments and write JSON/Markdown reports')
-        .argument('<prompt...>', 'Prompt to use for every experiment variant')
-        .option('-s, --suite <suite>', 'Suite (standard, group, parameter)', 'standard')
-        .option('-r, --repetitions <n>', 'Repetitions per variant', '1')
-        .option('-t, --timeout <ms>', 'Timeout per variant in milliseconds')
-        .option('-o, --output-dir <dir>', 'Output directory (default: .neko/experiments)')
-        .option('-i, --isolation <mode>', 'Isolation mode (none, metadata-only, workspace-root)'),
+  addLocaleOptions(
+    addInteractiveOptions(
+      addWorkDirOptions(
+        program
+          .command('experiment')
+          .description(t('agent.terminal.commander.command.experiment'))
+          .argument('<prompt...>', t('agent.terminal.commander.argument.experimentPrompt'))
+          .option('-s, --suite <suite>', t('agent.terminal.commander.option.suite'), 'standard')
+          .option('-r, --repetitions <n>', t('agent.terminal.commander.option.repetitions'), '1')
+          .option('-t, --timeout <ms>', t('agent.terminal.commander.option.timeout'))
+          .option('-o, --output-dir <dir>', t('agent.terminal.commander.option.outputDir'))
+          .option('-i, --isolation <mode>', t('agent.terminal.commander.option.isolation')),
+        terminal,
+      ),
+      terminal,
     ),
+    terminal,
   ).action(async (promptParts: string[], opts: Record<string, unknown>) => {
-    await runCliAction(() => handleExperiment(joinRequiredPromptParts(promptParts), opts, program));
+    await runCliAction(
+      () =>
+        handleExperiment(joinRequiredPromptParts(promptParts, terminal), opts, program, terminal),
+      terminal,
+    );
   });
 
-  addInteractiveOptions(
-    addWorkDirOptions(
-      program
-        .command('resume')
-        .description('Resume a previous interactive session')
-        .argument('[id]', 'Conversation id to resume; omit to continue the most recent')
-        .argument('[prompt...]', 'Optional prompt to submit after resume')
-        .option('--last', 'Continue the most recent conversation'),
+  addLocaleOptions(
+    addInteractiveOptions(
+      addWorkDirOptions(
+        program
+          .command('resume')
+          .description(t('agent.terminal.commander.command.resume'))
+          .argument('[id]', t('agent.terminal.commander.argument.resumeId'))
+          .argument('[prompt...]', t('agent.terminal.commander.argument.resumePrompt'))
+          .option('--last', t('agent.terminal.commander.option.last')),
+        terminal,
+      ),
+      terminal,
     ),
+    terminal,
   ).action(
     async (
       id: string | undefined,
       promptParts: string[] | undefined,
       opts: Record<string, unknown>,
     ) => {
-      await runCliAction(() => handleResumeCommand(id, promptParts, opts, program));
+      await runCliAction(
+        () => handleResumeCommand(id, promptParts, opts, program, terminal),
+        terminal,
+      );
     },
   );
 
-  program
-    .command('completion')
-    .description('Generate shell completion scripts')
-    .argument('[shell]', 'Shell type (bash, zsh, fish)', 'zsh')
-    .action((shell: string) => {
-      runSyncCliAction(() => {
-        console.log(generateCompletionScript(parseCompletionShell(shell)));
-      });
-    });
+  addLocaleOptions(
+    program
+      .command('completion')
+      .description(t('agent.terminal.commander.command.completion'))
+      .argument('[shell]', t('agent.terminal.commander.argument.shell'), 'zsh'),
+    terminal,
+  ).action((shell: string) => {
+    runSyncCliAction(() => {
+      console.log(generateCompletionScript(parseCompletionShell(shell, terminal)));
+    }, terminal);
+  });
 
-  registerConfigCommands(program);
-  registerDebugCommands(program);
+  registerConfigCommands(program, terminal);
+  registerDebugCommands(program, terminal);
   return program;
 }
 
-async function runCliAction(action: () => Promise<void>): Promise<void> {
+async function runCliAction(
+  action: () => Promise<void>,
+  terminal: AgentTerminalInvocationContext,
+): Promise<void> {
   try {
     await action();
   } catch (error) {
-    failCli(error);
+    failCli(error, terminal);
   }
 }
 
-function runSyncCliAction(action: () => void): void {
+function runSyncCliAction(action: () => void, terminal: AgentTerminalInvocationContext): void {
   try {
     action();
   } catch (error) {
-    failCli(error);
+    failCli(error, terminal);
   }
 }
 
-function failCli(error: unknown): never {
-  console.error(chalk.red(error instanceof Error ? error.message : String(error)));
+function failCli(error: unknown, terminal: AgentTerminalInvocationContext): never {
+  const message =
+    error instanceof CliWorkDirError
+      ? presentCliWorkDirDiagnostic(error.diagnostic, terminal.presentation)
+      : error instanceof TuiConversationIdError
+        ? presentTuiConversationIdDiagnostic(error.diagnostic, terminal.presentation)
+        : error instanceof Error
+          ? error.message
+          : String(error);
+  console.error(chalk.red(message));
   process.exit(1);
 }
 
-function registerConfigCommands(program: Command): void {
-  const configCmd = program.command('config').description('Manage configuration');
+function registerConfigCommands(program: Command, terminal: AgentTerminalInvocationContext): void {
+  const { t } = terminal.presentation;
+  const configCmd = program
+    .command('config')
+    .description(t('agent.terminal.commander.command.config'));
+  const addConfigWorkDirOptions = (command: Command): Command =>
+    addLocaleOptions(
+      command
+        .option('-C, --cwd <dir>', t('agent.terminal.commander.option.workspaceConfigWorkDir'))
+        .option('--work-dir <dir>', t('agent.terminal.commander.option.workspaceConfigWorkDir')),
+      terminal,
+    );
 
-  configCmd
-    .command('show')
-    .description('Show current configuration')
-    .option('-C, --cwd <dir>', 'Working directory for workspace config')
-    .option('--work-dir <dir>', 'Working directory for workspace config')
-    .action((opts: Record<string, unknown>) => {
-      runSyncCliAction(() => {
-        const workDir = resolveCliWorkDir(withGlobalOptions(program, opts));
-        const config = loadConfig(workDir);
-        console.log(chalk.bold('\nCurrent Configuration:\n'));
-        console.log(`  Provider:    ${config.provider}`);
-        console.log(`  Model:       ${config.model}`);
-        console.log(
-          `  API Key:     ${config.apiKey ? '***' + config.apiKey.slice(-4) : chalk.red('Not set')}`,
-        );
-        console.log(`  Base URL:    ${config.baseUrl ?? 'Default'}`);
-        console.log(`  Max Output Tokens: ${config.maxTokens}`);
-        console.log(`  Temperature: ${config.temperature}`);
-        console.log(`  Work Dir:    ${config.workDir}`);
-        console.log(`  MCP Servers: ${config.mcpServers.length}`);
-        console.log('');
-      });
-    });
+  addConfigWorkDirOptions(
+    configCmd.command('show').description(t('agent.terminal.commander.command.configShow')),
+  ).action((opts: Record<string, unknown>) => {
+    runSyncCliAction(() => {
+      const workDir = resolveCliWorkDir(withGlobalOptions(program, opts));
+      const config = loadHumanConfig(workDir, {}, terminal);
+      writeTerminalProjection(
+        presentConfigCommand(
+          {
+            kind: 'status',
+            surface: 'process',
+            config: {
+              provider: config.provider,
+              model: config.model,
+              ...(config.apiKey ? { maskedApiKey: `***${config.apiKey.slice(-4)}` } : {}),
+              ...(config.baseUrl ? { baseUrl: config.baseUrl } : {}),
+              maxOutputTokens: config.maxTokens,
+              temperature: config.temperature,
+              verbose: config.verbose,
+              outputFormat: config.outputFormat,
+              workDir: config.workDir,
+              mcpServerCount: config.mcpServers.length,
+            },
+          },
+          terminal.presentation,
+        ),
+      );
+    }, terminal);
+  });
 
-  configCmd
-    .command('providers')
-    .description('List available providers')
-    .option('-C, --cwd <dir>', 'Working directory for workspace config')
-    .option('--work-dir <dir>', 'Working directory for workspace config')
-    .action((opts: Record<string, unknown>) => {
-      runSyncCliAction(() => {
-        const workDir = resolveCliWorkDir(withGlobalOptions(program, opts));
-        const providers = listProviders(workDir);
-        console.log(chalk.bold('\nAvailable Providers:\n'));
-        for (const p of providers) {
-          const keyStatus = p.hasApiKey ? chalk.green('✓') : chalk.red('✗');
-          console.log(`  ${chalk.cyan(p.id)} (${p.displayName})`);
-          console.log(`    Type: ${p.type}`);
-          console.log(`    API Key: ${keyStatus}`);
-          console.log(`    Models: ${p.models.length > 0 ? p.models.join(', ') : '(none)'}`);
-          console.log('');
-        }
-      });
-    });
+  addConfigWorkDirOptions(
+    configCmd
+      .command('providers')
+      .description(t('agent.terminal.commander.command.configProviders')),
+  ).action((opts: Record<string, unknown>) => {
+    runSyncCliAction(() => {
+      const workDir = resolveCliWorkDir(withGlobalOptions(program, opts));
+      writeTerminalProjection(
+        presentConfigCommand(
+          {
+            kind: 'providers',
+            providers: listProviders(workDir).map((provider) => ({
+              id: provider.id,
+              displayName: provider.displayName,
+              type: provider.type,
+              hasApiKey: provider.hasApiKey,
+              models: provider.models,
+            })),
+          },
+          terminal.presentation,
+        ),
+      );
+    }, terminal);
+  });
 
-  configCmd
-    .command('models')
-    .description('List available models for current provider')
-    .option('-C, --cwd <dir>', 'Working directory for workspace config')
-    .option('--work-dir <dir>', 'Working directory for workspace config')
-    .option('-p, --provider <provider>', 'Provider to list models for')
-    .action((opts: Record<string, unknown>) => {
-      runSyncCliAction(() => {
-        const workDir = resolveCliWorkDir(withGlobalOptions(program, opts));
-        const config = loadConfig(workDir);
-        const providerId = (opts['provider'] as string) ?? config.provider;
-        const models = getProviderModels(providerId, workDir);
-        if (models.length === 0) {
-          console.error(chalk.red(`No models configured for provider: ${providerId}`));
-          process.exit(1);
-        }
-        console.log(chalk.bold(`\nModels for ${providerId}:\n`));
-        for (const m of models) {
-          const marker = m === config.model ? chalk.green('* ') : '  ';
-          console.log(`  ${marker}${m}`);
-        }
-        console.log('\n  (* = current model)\n');
-      });
-    });
+  addConfigWorkDirOptions(
+    configCmd
+      .command('models')
+      .description(t('agent.terminal.commander.command.configModels'))
+      .option('-p, --provider <provider>', t('agent.terminal.commander.option.configProvider')),
+  ).action((opts: Record<string, unknown>) => {
+    runSyncCliAction(() => {
+      const workDir = resolveCliWorkDir(withGlobalOptions(program, opts));
+      const config = loadHumanConfig(workDir, {}, terminal);
+      const providerId = typeof opts['provider'] === 'string' ? opts['provider'] : config.provider;
+      const models = getProviderModels(providerId, workDir);
+      writeTerminalProjection(
+        models.length === 0
+          ? presentConfigCommand(
+              { kind: 'diagnostic', code: 'models-empty', providerId },
+              terminal.presentation,
+            )
+          : presentConfigCommand(
+              {
+                kind: 'models',
+                providerId,
+                currentModelId: config.model,
+                models,
+              },
+              terminal.presentation,
+            ),
+      );
+    }, terminal);
+  });
 }
 
-function registerDebugCommands(program: Command): void {
+function writeTerminalProjection(projection: ReturnType<typeof presentConfigCommand>): void {
+  if (projection.kind === 'output') {
+    console.log(projection.output);
+    return;
+  }
+  if (projection.kind === 'error') {
+    console.error(chalk.red(projection.error));
+    process.exit(1);
+  }
+  throw new Error(`Unexpected config process projection: ${projection.kind}`);
+}
+
+function registerDebugCommands(program: Command, terminal: AgentTerminalInvocationContext): void {
+  const { t } = terminal.presentation;
   const debugCmd = program
     .command('debug')
-    .description('Local developer automation and diagnostics');
+    .description(t('agent.terminal.commander.command.debug'));
 
-  addInteractiveOptions(
-    addWorkDirOptions(
-      debugCmd
-        .command('automation')
-        .description('Start local developer automation protocol for the complete TUI session')
-        .option('--stdio', 'Use newline-delimited JSON over stdio'),
+  addLocaleOptions(
+    addInteractiveOptions(
+      addWorkDirOptions(
+        debugCmd
+          .command('automation')
+          .description(t('agent.terminal.commander.command.debugAutomation'))
+          .option('--stdio', t('agent.terminal.commander.option.stdio')),
+        terminal,
+      ),
+      terminal,
     ),
+    terminal,
   ).action(async (opts: Record<string, unknown>) => {
-    await runCliAction(() => handleDebugAutomation(opts, program));
+    await runCliAction(() => handleDebugAutomation(opts, program, terminal), terminal);
   });
 }
 
@@ -292,6 +420,7 @@ async function handleDefault(
   promptParts: readonly string[],
   opts: Record<string, unknown>,
   program: Command,
+  terminal: AgentTerminalInvocationContext,
 ): Promise<void> {
   const invocation = resolveDefaultCliInvocation(promptParts);
   const mergedOpts = {
@@ -301,22 +430,28 @@ async function handleDefault(
   };
 
   if (opts['resume'] !== undefined) {
-    await handleResume({
-      ...mergedOpts,
-      resumeId: typeof opts['resume'] === 'string' ? opts['resume'] : undefined,
-      useLast: opts['resume'] === true,
-      program,
-    });
+    await handleResume(
+      {
+        ...mergedOpts,
+        resumeId: typeof opts['resume'] === 'string' ? opts['resume'] : undefined,
+        useLast: opts['resume'] === true,
+        program,
+      },
+      terminal,
+    );
     return;
   }
 
-  await handleInteractive({ ...mergedOpts, program });
+  await handleInteractive({ ...mergedOpts, program }, terminal);
 }
 
 /**
  * Handle interactive TUI mode
  */
-async function handleInteractive(opts: Record<string, unknown>): Promise<void> {
+async function handleInteractive(
+  opts: Record<string, unknown>,
+  terminal: AgentTerminalInvocationContext,
+): Promise<void> {
   const overrides: Partial<CLIConfig> = {};
   if (typeof opts['provider'] === 'string') overrides.provider = opts['provider'];
   if (typeof opts['model'] === 'string') overrides.model = opts['model'];
@@ -325,62 +460,85 @@ async function handleInteractive(opts: Record<string, unknown>): Promise<void> {
 
   const program = readProgramOption(opts);
   const initialPrompt = typeof opts['prompt'] === 'string' ? opts['prompt'] : undefined;
-  const workDir = resolveCliWorkDir(withGlobalOptions(program, opts));
-  const config = loadConfig(workDir, overrides);
-
-  const validation = validateConfig(config);
-  if (!validation.valid) {
-    console.error(chalk.red('Configuration errors:'));
-    for (const error of validation.errors) {
-      console.error(chalk.red(`  • ${error}`));
-    }
-    console.error(chalk.gray('\nSet your API key:'));
-    console.error(chalk.gray('  export ANTHROPIC_API_KEY=sk-ant-...'));
-    console.error(chalk.gray('  # or'));
-    console.error(chalk.gray('  update ~/.neko/config.toml'));
-    process.exit(1);
-  }
+  const invocationOptions = withGlobalOptions(program, opts);
+  const workDir = resolveCliWorkDir(invocationOptions);
 
   const resumeFlag = opts['resume'];
   if (resumeFlag !== undefined) {
-    await handleResume({
-      ...opts,
-      resumeId: typeof resumeFlag === 'string' ? resumeFlag : undefined,
-      useLast: resumeFlag === true,
-      prompt: initialPrompt,
-      program,
-    });
+    await handleResume(
+      {
+        ...opts,
+        resumeId: typeof resumeFlag === 'string' ? resumeFlag : undefined,
+        useLast: resumeFlag === true,
+        prompt: initialPrompt,
+        program,
+      },
+      terminal,
+    );
     return;
   }
 
-  await renderTuiSession({ config, initialPrompt });
+  const config = loadHumanConfig(workDir, overrides, terminal);
+
+  const validation = validateConfig(config);
+  if (!validation.valid) {
+    for (const line of presentConfigValidation(validation.diagnostics, terminal.presentation, {
+      includeApiKeyHint: true,
+    })) {
+      console.error(chalk.red(line));
+    }
+    process.exit(1);
+  }
+
+  await renderTuiSession({ config, initialPrompt, terminal });
+}
+
+function loadHumanConfig(
+  workDir: string,
+  overrides: Partial<CLIConfig>,
+  terminal: AgentTerminalInvocationContext,
+): CLIConfig {
+  try {
+    return loadConfig(workDir, overrides);
+  } catch (error) {
+    if (error instanceof CliConfigLoadError) {
+      throw new Error(presentConfigLoadDiagnostic(error.diagnostic, terminal.presentation));
+    }
+    throw error;
+  }
 }
 
 async function renderTuiSession(input: {
   readonly config: CLIConfig;
   readonly initialPrompt?: string;
   readonly resumeConversationId?: string;
+  readonly terminal: AgentTerminalInvocationContext;
 }): Promise<void> {
-  const { config, initialPrompt, resumeConversationId } = input;
+  const { config, initialPrompt, resumeConversationId, terminal } = input;
   const capabilities = detectCapabilities();
   if (!capabilities.supportsColor) {
     chalk.level = 0;
   }
 
-  const labels = getTuiLabels();
+  const { t } = terminal.presentation;
   console.log(chalk.cyan.bold('\n  Neko Agent'));
-  console.log(chalk.gray(`  ${labels.chrome.model}: ${config.model}`));
-  console.log(chalk.gray(`  ${labels.chrome.workDir}: ${config.workDir}`));
+  console.log(chalk.gray(`  ${t('agent.terminal.startup.model', { modelId: config.model })}`));
+  console.log(chalk.gray(`  ${t('agent.terminal.startup.workDir', { path: config.workDir })}`));
   console.log(
-    chalk.gray(`  ${labels.chrome.mode}:  ${formatTuiLabel(labels.executionModes, 'auto')}`),
+    chalk.gray(
+      `  ${t('agent.terminal.startup.mode', {
+        executionMode: t('agent.terminal.value.executionMode.auto'),
+      })}`,
+    ),
   );
-  console.log(chalk.gray(`  ${labels.chrome.startupHelp}\n`));
+  console.log(chalk.gray(`  ${t('agent.terminal.startup.help')}\n`));
 
   const { waitUntilExit } = render(
     <App
       config={config}
       initialPrompt={initialPrompt}
       resumeConversationId={resumeConversationId}
+      terminal={terminal}
     />,
   );
   await waitUntilExit();
@@ -391,20 +549,27 @@ async function handleResumeCommand(
   promptParts: readonly string[] | undefined,
   opts: Record<string, unknown>,
   program: Command,
+  terminal: AgentTerminalInvocationContext,
 ): Promise<void> {
   const last = opts['last'] === true;
   const promptFromParts = joinPromptParts(promptParts);
   const prompt = last && id && !promptFromParts ? id : promptFromParts;
   const resumeId = last ? undefined : id;
-  await handleResume({
-    ...opts,
-    resumeId,
-    prompt,
-    program,
-  });
+  await handleResume(
+    {
+      ...opts,
+      resumeId,
+      prompt,
+      program,
+    },
+    terminal,
+  );
 }
 
-async function handleResume(opts: Record<string, unknown>): Promise<void> {
+async function handleResume(
+  opts: Record<string, unknown>,
+  terminal: AgentTerminalInvocationContext,
+): Promise<void> {
   const overrides: Partial<CLIConfig> = {};
   if (typeof opts['provider'] === 'string') overrides.provider = opts['provider'];
   if (typeof opts['model'] === 'string') overrides.model = opts['model'];
@@ -412,13 +577,15 @@ async function handleResume(opts: Record<string, unknown>): Promise<void> {
   if (opts['verbose']) overrides.verbose = true;
 
   const program = readProgramOption(opts);
-  const workDir = resolveCliWorkDir(withGlobalOptions(program, opts));
-  const config = loadConfig(workDir, overrides);
+  const invocationOptions = withGlobalOptions(program, opts);
+  const workDir = resolveCliWorkDir(invocationOptions);
+  const config = loadHumanConfig(workDir, overrides, terminal);
   const validation = validateConfig(config);
   if (!validation.valid) {
-    console.error(chalk.red('Configuration errors:'));
-    for (const error of validation.errors) {
-      console.error(chalk.red(`  • ${error}`));
+    for (const line of presentConfigValidation(validation.diagnostics, terminal.presentation, {
+      includeApiKeyHint: false,
+    })) {
+      console.error(chalk.red(line));
     }
     process.exit(1);
   }
@@ -426,12 +593,13 @@ async function handleResume(opts: Record<string, unknown>): Promise<void> {
   const resumeId =
     typeof opts['resumeId'] === 'string' && opts['resumeId'].trim().length > 0
       ? opts['resumeId']
-      : await resolveLatestResumeId(config.workDir);
+      : await resolveLatestResumeId(config.workDir, terminal);
   const canonicalResumeId = assertCanonicalTuiConversationId(resumeId);
   await renderTuiSession({
     config,
     resumeConversationId: canonicalResumeId,
     initialPrompt: typeof opts['prompt'] === 'string' ? opts['prompt'] : undefined,
+    terminal,
   });
 }
 
@@ -439,33 +607,44 @@ async function handleExperiment(
   prompt: string,
   opts: Record<string, unknown>,
   program: Command,
+  terminal: AgentTerminalInvocationContext,
 ): Promise<void> {
   const workDir = resolveCliWorkDir(withGlobalOptions(program, opts));
-  const config = loadConfig(workDir, {
-    provider: opts['provider'] as string | undefined,
-    model: opts['model'] as string | undefined,
-    apiKey: opts['apiKey'] as string | undefined,
-  });
+  const config = loadHumanConfig(
+    workDir,
+    {
+      provider: opts['provider'] as string | undefined,
+      model: opts['model'] as string | undefined,
+      apiKey: opts['apiKey'] as string | undefined,
+    },
+    terminal,
+  );
 
   const validation = validateConfig(config);
   if (!validation.valid) {
-    console.error(chalk.red('Configuration errors:'));
-    for (const error of validation.errors) {
-      console.error(chalk.red(`  • ${error}`));
+    for (const line of presentConfigValidation(validation.diagnostics, terminal.presentation, {
+      includeApiKeyHint: false,
+    })) {
+      console.error(chalk.red(line));
     }
     process.exit(1);
   }
 
-  const suite = parseExperimentSuite(opts['suite']);
-  const repetitions = parsePositiveInteger(opts['repetitions'], 'repetitions');
-  const timeout = opts['timeout'] ? parsePositiveInteger(opts['timeout'], 'timeout') : undefined;
-  const isolation = parseIsolationMode(opts['isolation']);
+  const suite = parseExperimentSuite(opts['suite'], terminal);
+  const repetitions = parsePositiveInteger(opts['repetitions'], '--repetitions', terminal);
+  const timeout = opts['timeout']
+    ? parsePositiveInteger(opts['timeout'], '--timeout', terminal)
+    : undefined;
+  const isolation = parseIsolationMode(opts['isolation'], terminal);
 
-  console.log(chalk.cyan.bold('\nRunning ablation experiment'));
-  console.log(chalk.gray(`  Suite:       ${suite}`));
-  console.log(chalk.gray(`  Repetitions: ${repetitions}`));
-  console.log(chalk.gray(`  Model:       ${config.model}`));
-  console.log(chalk.gray(`  WorkDir:     ${config.workDir}`));
+  const experimentStart = presentExperimentStart(
+    { suite, repetitions, modelId: config.model, workDir: config.workDir },
+    terminal.presentation,
+  );
+  console.log(chalk.cyan.bold(`\n${experimentStart[0]}`));
+  for (const line of experimentStart.slice(1)) {
+    console.log(chalk.gray(line));
+  }
 
   try {
     const { result } = await runExperiment({
@@ -482,7 +661,8 @@ async function handleExperiment(
     console.log(formatExperimentReport(result));
     process.exit(0);
   } catch (error) {
-    console.error(chalk.red(error instanceof Error ? error.message : String(error)));
+    const detail = error instanceof Error ? error.message : String(error);
+    console.error(chalk.red(presentExperimentFailure(detail, terminal.presentation)));
     process.exit(1);
   }
 }
@@ -490,9 +670,12 @@ async function handleExperiment(
 async function handleDebugAutomation(
   opts: Record<string, unknown>,
   program: Command,
+  terminal: AgentTerminalInvocationContext,
 ): Promise<void> {
   if (opts['stdio'] !== true) {
-    throw new Error('debug automation requires --stdio.');
+    throw new Error(
+      presentCliProcessDiagnostic({ code: 'debug-stdio-required' }, terminal.presentation),
+    );
   }
   const workDir = resolveCliWorkDir(withGlobalOptions(program, opts));
   const manager = new TuiDebugAutomationSessionManager({
@@ -512,37 +695,63 @@ async function handleDebugAutomation(
   }
 }
 
-function parseExperimentSuite(value: unknown): ExperimentSuiteName {
+function parseExperimentSuite(
+  value: unknown,
+  terminal: AgentTerminalInvocationContext,
+): ExperimentSuiteName {
   if (value === 'standard' || value === 'group' || value === 'parameter') {
     return value;
   }
-  throw new Error(`Invalid suite: ${String(value)}. Expected standard, group, or parameter.`);
+  throw new Error(
+    presentCliProcessDiagnostic(
+      { code: 'invalid-experiment-suite', value: String(value) },
+      terminal.presentation,
+    ),
+  );
 }
 
 function parseIsolationMode(
   value: unknown,
+  terminal: AgentTerminalInvocationContext,
 ): 'none' | 'metadata-only' | 'workspace-root' | undefined {
   if (value === undefined) return undefined;
   if (value === 'none' || value === 'metadata-only' || value === 'workspace-root') {
     return value;
   }
   throw new Error(
-    `Invalid isolation mode: ${String(value)}. Expected none, metadata-only, or workspace-root.`,
+    presentCliProcessDiagnostic(
+      { code: 'invalid-isolation-mode', value: String(value) },
+      terminal.presentation,
+    ),
   );
 }
 
-function parsePositiveInteger(value: unknown, label: string): number {
+function parsePositiveInteger(
+  value: unknown,
+  option: '--repetitions' | '--timeout',
+  terminal: AgentTerminalInvocationContext,
+): number {
   const parsed = Number.parseInt(String(value), 10);
   if (!Number.isFinite(parsed) || parsed <= 0) {
-    throw new Error(`Invalid ${label}: ${String(value)}. Expected a positive integer.`);
+    throw new Error(
+      presentCliProcessDiagnostic(
+        { code: 'invalid-positive-integer', option, value: String(value) },
+        terminal.presentation,
+      ),
+    );
   }
   return parsed;
 }
 
-function joinRequiredPromptParts(parts: readonly string[] | undefined): string {
+function joinRequiredPromptParts(
+  parts: readonly string[] | undefined,
+  terminal: AgentTerminalInvocationContext,
+): string {
   const prompt = joinPromptParts(parts);
   if (!prompt) {
-    throw new Error('Prompt is required.');
+    throw new Error(
+      presentCliProcessDiagnostic({ code: 'prompt-required' }, terminal.presentation),
+    );
   }
   return prompt;
 }
@@ -555,7 +764,10 @@ function readProgramOption(opts: Record<string, unknown>): Command {
   return program;
 }
 
-async function resolveLatestResumeId(workDir: string): Promise<string> {
+async function resolveLatestResumeId(
+  workDir: string,
+  terminal: AgentTerminalInvocationContext,
+): Promise<string> {
   const storage = createFileConversationStorage(workDir);
   try {
     const conversations = await storage.list();
@@ -563,7 +775,9 @@ async function resolveLatestResumeId(workDir: string): Promise<string> {
       isCanonicalTuiConversationId(conversation.id),
     );
     if (!latest) {
-      throw new Error(`No canonical saved conversations found for workDir: ${workDir}`);
+      throw new Error(
+        presentCliProcessDiagnostic({ code: 'resume-not-found', workDir }, terminal.presentation),
+      );
     }
     return latest.id;
   } finally {
@@ -573,11 +787,16 @@ async function resolveLatestResumeId(workDir: string): Promise<string> {
 
 type CompletionShell = 'bash' | 'zsh' | 'fish';
 
-function parseCompletionShell(value: string): CompletionShell {
+function parseCompletionShell(
+  value: string,
+  terminal: AgentTerminalInvocationContext,
+): CompletionShell {
   if (value === 'bash' || value === 'zsh' || value === 'fish') {
     return value;
   }
-  throw new Error(`Invalid shell: ${value}. Expected bash, zsh, or fish.`);
+  throw new Error(
+    presentCliProcessDiagnostic({ code: 'invalid-completion-shell', value }, terminal.presentation),
+  );
 }
 
 function generateCompletionScript(shell: CompletionShell): string {
@@ -663,11 +882,24 @@ ${COMPLETION_OPTIONS.map((option) =>
 `;
 
 const cliEntrypointName = process.argv[1]?.split(/[\\/]/).pop();
+export function runCliEntrypoint(argv: readonly string[] = process.argv): void {
+  let terminal: AgentTerminalInvocationContext;
+  try {
+    terminal = createNodeTerminalInvocationContextFromArgv(argv);
+  } catch (error) {
+    if (!(error instanceof Error)) throw error;
+    console.error(chalk.red(error.message));
+    process.exitCode = 1;
+    return;
+  }
+  void createCliProgram(terminal).parseAsync(argv);
+}
+
 if (
   cliEntrypointName === 'cli.tsx' ||
   cliEntrypointName === 'cli.js' ||
   cliEntrypointName === 'neko' ||
   cliEntrypointName === 'nekoagent'
 ) {
-  void createCliProgram().parseAsync(process.argv);
+  runCliEntrypoint();
 }

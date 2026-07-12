@@ -1,5 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CLIConfig } from '../core/types';
+import {
+  presentExperimentFailure,
+  presentExperimentStart,
+} from '../presentation/cli-process-presentation';
+import { createTestAgentTerminalInvocationContext } from '../presentation/testing';
 
 const runAll = vi.fn();
 const createStandardAblationSuite = vi.fn(() => [
@@ -22,9 +27,15 @@ const loadProjectMemory = vi.fn(async () => undefined);
 const createCLIPlatform = vi.fn(() => ({ service: makeService() }));
 const createCLITaskManager = vi.fn(() => ({ id: 'task-manager' }));
 const loadTuiSessionSkills = vi.fn(async () => []);
+const createAgentCapabilityRuntimeRegistries = vi.fn(() => ({
+  artifactProfileRegistry: { id: 'artifact-profile-registry' },
+  creationProfileRegistry: { id: 'creation-profile-registry' },
+  providerExpressionProfileRegistry: { id: 'provider-expression-profile-registry' },
+}));
 
 vi.mock('@neko/agent/runtime', () => ({
   buildAgentSessionConfigWithRuntime,
+  createAgentCapabilityRuntimeRegistries,
   createNodeArtifactStore: vi.fn(() => ({ id: 'artifact-store' })),
 }));
 
@@ -54,6 +65,8 @@ vi.mock('@neko/agent', () => ({
   },
   createSystemPromptBuilder: vi.fn(() => ({
     loadAgentsFile,
+    buildAgentsOverlay: vi.fn(() => null),
+    buildBaseOnly: vi.fn(() => 'system prompt'),
     build: vi.fn(() => 'system prompt'),
   })),
   getDefaultPersonalPath: vi.fn(() => '/home/user/.neko/AGENTS.md'),
@@ -177,21 +190,61 @@ describe('CLI experiment runner', () => {
     );
   });
 
-  it('formats report with output files', async () => {
-    const { formatExperimentReport } = await import('../core/experiment');
+  it('localizes the experiment failure wrapper while preserving detail', () => {
+    const detail = 'Provider X: upstream timeout';
 
-    const report = formatExperimentReport({
-      name: 'experiment',
-      startedAt: 'start',
-      completedAt: 'end',
-      taskPrompt: 'prompt',
+    expect(
+      presentExperimentFailure(detail, createTestAgentTerminalInvocationContext('en').presentation),
+    ).toBe('Experiment failed: Provider X: upstream timeout');
+    expect(
+      presentExperimentFailure(
+        detail,
+        createTestAgentTerminalInvocationContext('zh-cn').presentation,
+      ),
+    ).toBe('实验失败：Provider X: upstream timeout');
+  });
+
+  it('keeps report-domain Markdown unchanged while terminal progress is localized', async () => {
+    const { formatExperimentReport } = await import('../core/experiment');
+    const result = {
+      name: 'experiment-original',
+      startedAt: 'start-original',
+      completedAt: 'end-original',
+      taskPrompt: 'prompt-original',
       variants: [],
       comparison: [],
-      outputFiles: [{ kind: 'markdown', path: '/tmp/comparison.md' }],
-    });
+      outputFiles: [{ kind: 'markdown' as const, path: '/tmp/原文-comparison.md' }],
+    };
 
-    expect(report).toContain('# experiment');
-    expect(report).toContain('| Variant | Avg Tokens |');
-    expect(report).toContain('- markdown: /tmp/comparison.md');
+    const reportBeforePresentation = formatExperimentReport(result);
+    const enProgress = presentExperimentStart(
+      {
+        suite: 'standard',
+        repetitions: 2,
+        modelId: 'model/原文',
+        workDir: '/workspace/原文',
+      },
+      createTestAgentTerminalInvocationContext('en').presentation,
+    );
+    const zhProgress = presentExperimentStart(
+      {
+        suite: 'standard',
+        repetitions: 2,
+        modelId: 'model/原文',
+        workDir: '/workspace/原文',
+      },
+      createTestAgentTerminalInvocationContext('zh-cn').presentation,
+    );
+    const reportAfterPresentation = formatExperimentReport(result);
+
+    expect(enProgress[0]).toBe('Running ablation experiment');
+    expect(zhProgress[0]).toBe('正在运行消融实验');
+    expect(enProgress.join('\n')).toContain('model/原文');
+    expect(zhProgress.join('\n')).toContain('model/原文');
+    expect(reportAfterPresentation).toBe(reportBeforePresentation);
+    expect(reportAfterPresentation).toContain('# experiment-original');
+    expect(reportAfterPresentation).toContain('| Variant | Avg Tokens |');
+    expect(reportAfterPresentation).toContain('- markdown: /tmp/原文-comparison.md');
+    expect(reportAfterPresentation).not.toContain('正在运行消融实验');
   });
 });

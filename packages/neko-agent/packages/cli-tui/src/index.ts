@@ -117,8 +117,4 @@ export { useTimer, formatDuration } from './hooks/useTimer';
 export { useKeyboard } from './hooks/useKeyboard';
 export { useTerminalSize } from './hooks/useTerminalSize';
 export { useSlashCommands } from './hooks/useSlashCommands';
-export {
-  SlashCommandMenu,
-  TUI_COMMANDS,
-  type SlashCommandOption,
-} from './components/Input/SlashCommandMenu';
+export { SlashCommandMenu, type SlashCommandOption } from './components/Input/SlashCommandMenu';

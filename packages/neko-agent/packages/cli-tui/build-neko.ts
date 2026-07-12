@@ -6,8 +6,12 @@
  *
  * Output: packages/neko-agent/neko
  */
-import { existsSync, readFileSync, renameSync, readdirSync, statSync } from 'fs';
+import { existsSync, readFileSync, renameSync, statSync } from 'fs';
 import { dirname, isAbsolute, join, resolve } from 'path';
+import {
+  findInstalledPackageRoot,
+  findUnambiguousPnpmPackageRoot,
+} from './src/standalone-package-resolution';
 
 const outdir = resolve(import.meta.dir, '../../');
 const stubPath = resolve(import.meta.dir, 'src/stubs/react-devtools-core.ts');
@@ -75,7 +79,7 @@ const result = await Bun.build({
             return { path: workspacePath, namespace: 'file' };
           }
 
-          const packagePath = resolveRootPnpmPackage(args.path);
+          const packagePath = resolveInstalledPackage(args.path, args.importer, args.resolveDir);
           if (packagePath) {
             return { path: packagePath, namespace: 'file' };
           }
@@ -161,13 +165,20 @@ function resolveWorkspacePackage(specifier: string): string | undefined {
   return resolvePackageExport(packageRoot, subpath);
 }
 
-function resolveRootPnpmPackage(specifier: string): string | undefined {
+function resolveInstalledPackage(
+  specifier: string,
+  importer: string,
+  resolveDirectory: string,
+): string | undefined {
   if (specifier.startsWith('.') || specifier.startsWith('/') || specifier.startsWith('node:')) {
     return undefined;
   }
   const packageName = readPackageName(specifier);
   if (!packageName) return undefined;
-  const packageRoot = findRootPnpmPackageRoot(packageName);
+  const startDirectory = importer ? dirname(importer) : resolveDirectory;
+  const packageRoot =
+    findInstalledPackageRoot(packageName, startDirectory) ??
+    findUnambiguousPnpmPackageRoot(packageName, rootPnpmStore);
   if (!packageRoot) return undefined;
   const subpath = specifier.slice(packageName.length).replace(/^\//, '');
   return resolvePackageExport(packageRoot, subpath);
@@ -191,20 +202,6 @@ function resolvePackageExport(packageRoot: string, subpath: string): string | un
   }
   const entry = readPackageEntry(packageJson) ?? 'index.js';
   return resolveFileCandidate(resolve(packageRoot, entry));
-}
-
-function findRootPnpmPackageRoot(packageName: string): string | undefined {
-  if (!existsSync(rootPnpmStore)) return undefined;
-  const escapedName = packageName.replace('/', '+');
-  const matches = readdirSync(rootPnpmStore)
-    .filter((entry) => entry === packageName || entry.startsWith(`${escapedName}@`))
-    .sort()
-    .reverse();
-  for (const match of matches) {
-    const root = resolve(rootPnpmStore, match, 'node_modules', packageName);
-    if (existsSync(resolve(root, 'package.json'))) return root;
-  }
-  return undefined;
 }
 
 function readPackageName(specifier: string): string | undefined {

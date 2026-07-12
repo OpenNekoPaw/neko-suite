@@ -8,7 +8,7 @@
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
-import { render } from 'ink-testing-library';
+import { render as renderInk } from 'ink-testing-library';
 import { Box } from 'ink';
 
 // Components under test (leaf-first — no heavy hooks)
@@ -28,8 +28,20 @@ import { useConfigStore } from '../stores/config-store';
 
 import type { Message, TodoItem } from '../types/state';
 import { DEFAULT_CLI_CONFIG } from '../core/types';
+import { AgentTerminalPresentationProvider } from '../presentation/react-context';
+import { createTestAgentTerminalPresentation } from '../presentation/testing';
 
 // ─── Helpers ────────────────────────────────────────────────────────
+
+const TEST_PRESENTATION = createTestAgentTerminalPresentation('en');
+
+function render(node: React.ReactElement): ReturnType<typeof renderInk> {
+  return renderInk(
+    <AgentTerminalPresentationProvider value={TEST_PRESENTATION}>
+      {node}
+    </AgentTerminalPresentationProvider>,
+  );
+}
 
 /** Reset all stores to initial state */
 function resetStores(): void {
@@ -260,7 +272,7 @@ describe('Component Snapshots (ink-testing-library)', () => {
       console.log('MessageItem (full assistant):\n', frame);
     });
 
-    it('renders streaming assistant message with cursor', () => {
+    it('renders streaming assistant message content', () => {
       const msg = assistantMsg('');
       const { lastFrame } = render(
         <MessageItem
@@ -271,8 +283,7 @@ describe('Component Snapshots (ink-testing-library)', () => {
         />,
       );
       const frame = lastFrame();
-      expect(frame).toContain('Let me check the ');
-      expect(frame).toContain('▋');
+      expect(frame).toContain('Let me check the');
       console.log('MessageItem (streaming):\n', frame);
     });
 
@@ -317,9 +328,9 @@ describe('Component Snapshots (ink-testing-library)', () => {
       const frame = lastFrame();
       expect(frame).toContain('gpt-5.3-codex');
       expect(frame).toContain('auto');
-      expect(frame).toContain('idle');
-      // No INSERT indicator (removed)
-      expect(frame).toContain('Esc:cancel');
+      expect(frame).toContain('agent:auto');
+      expect(frame).toContain('media:none');
+      expect(frame).toContain('ctx:0/?');
       console.log('StatusBar (idle):\n', frame);
     });
 
@@ -336,9 +347,8 @@ describe('Component Snapshots (ink-testing-library)', () => {
       const frame = lastFrame();
       expect(frame).toContain('gpt-5.3-codex');
       expect(frame).toContain('auto');
-      expect(frame).toContain('3/10');
-      // Token usage shown in formatted form (1.6K)
-      expect(frame).toContain('1.6K');
+      expect(frame).toContain('ctx:1.2K/?');
+      expect(frame).not.toContain('3/10');
       console.log('StatusBar (running):\n', frame);
     });
 
@@ -347,7 +357,8 @@ describe('Component Snapshots (ink-testing-library)', () => {
 
       const { lastFrame } = render(<StatusBar />);
       const frame = lastFrame();
-      expect(frame).toContain('error');
+      expect(frame).toContain('agent:auto');
+      expect(frame).not.toContain('API timeout');
       console.log('StatusBar (error):\n', frame);
     });
 
@@ -460,8 +471,7 @@ describe('Component Snapshots (ink-testing-library)', () => {
       const { lastFrame } = render(<ChatView />);
       const frame = lastFrame();
       expect(frame).toContain('Explain this code');
-      expect(frame).toContain('This code implements a ');
-      expect(frame).toContain('▋'); // streaming cursor
+      expect(frame).toContain('This code implements a');
       console.log('ChatView (streaming):\n', frame);
     });
   });
@@ -491,7 +501,7 @@ describe('Component Snapshots (ink-testing-library)', () => {
       const frame = lastFrame();
       expect(frame).toContain('Hello neko!');
       expect(frame).toContain('Hello! How can I help you');
-      expect(frame).toContain('Type a message');
+      expect(frame).toContain('>');
       expect(frame).toContain('gpt-5.3-codex');
       // No INSERT indicator (removed)
       console.log('═══ Full Layout (idle) ═══\n', frame);
@@ -531,7 +541,8 @@ describe('Component Snapshots (ink-testing-library)', () => {
       expect(frame).toContain('Tool Approval Required');
       expect(frame).toContain('rm -rf /tmp/neko-*');
       expect(frame).toContain('[y]');
-      expect(frame).toContain('1/5');
+      expect(frame).toContain('agent:auto');
+      expect(frame).toContain('ctx:0/?');
       console.log('═══ Full Layout (tool approval) ═══\n', frame);
     });
 
@@ -581,9 +592,9 @@ describe('Component Snapshots (ink-testing-library)', () => {
       expect(frame).toContain('[ ]');
       expect(frame).toContain('Go ahead');
       expect(frame).toContain('Starting the refactor');
-      expect(frame).toContain('▋');
-      // Token usage shown in formatted form (6.2K)
-      expect(frame).toContain('6.2K');
+      expect(frame).toContain('Generating');
+      expect(frame).toMatch(/[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏]/);
+      expect(frame).toContain('ctx:5.0K/?');
       console.log('═══ Full Layout (multi-turn + todos + streaming) ═══\n', frame);
     });
   });

@@ -23,7 +23,7 @@ import {
   InstalledRegistry,
   InstallTargetRegistry,
 } from '@neko/market-core';
-import type { SlashCommandResult } from '../core/slash-commands';
+import type { MarketCommandSemanticResult } from '../presentation/market-presentation';
 
 // ============================================================================
 // Setup
@@ -76,7 +76,9 @@ async function getInstallManager(): Promise<InstallManager> {
 // Handler
 // ============================================================================
 
-export async function handleMarketCommand(args: string[]): Promise<SlashCommandResult> {
+export async function handleMarketCommandSemantic(
+  args: string[],
+): Promise<MarketCommandSemanticResult> {
   const subcommand = args[0]?.toLowerCase();
 
   switch (subcommand) {
@@ -91,179 +93,136 @@ export async function handleMarketCommand(args: string[]): Promise<SlashCommandR
     case 'uninstall':
       return handleUninstall(args.slice(1));
     default:
-      return showHelp();
+      return { kind: 'help' };
   }
 }
 
-// ============================================================================
-// Subcommands
-// ============================================================================
-
-async function handleSearch(args: string[]): Promise<SlashCommandResult> {
+async function handleSearch(args: string[]): Promise<MarketCommandSemanticResult> {
   const query = args.join(' ');
-  if (!query) {
-    return { handled: true, continueExecution: true, error: 'Usage: /market search <query>' };
-  }
+  if (!query) return { kind: 'diagnostic', code: 'search-usage' };
 
   try {
     const result = await getClient().search({ text: query, types: ['skill'] });
-    if (result.items.length === 0) {
-      return {
-        handled: true,
-        continueExecution: true,
-        output: `\nNo results for "${query}"\n`,
-      };
-    }
-
-    const lines = ['', `Search results for "${query}" (${result.total} total):`, ''];
-    for (const item of result.items.slice(0, 10)) {
-      const state =
-        item.installState === 'installed'
-          ? ' [installed]'
-          : item.installState === 'update-available'
-            ? ' [update available]'
-            : '';
-      lines.push(`  ${item.manifest.name}  v${item.manifest.version}${state}`);
-      if (item.manifest.description) {
-        lines.push(`    ${item.manifest.description}`);
-      }
-      lines.push(`    ID: ${item.id}`);
-      lines.push('');
-    }
-    if (result.hasMore) {
-      lines.push(`  … and ${result.total - result.items.length} more`);
-    }
-
-    return { handled: true, continueExecution: true, output: lines.join('\n') };
+    const items = result.items.slice(0, 10).map((item) => ({
+      id: item.id,
+      name: item.manifest.name,
+      version: item.manifest.version,
+      ...(item.manifest.distribution?.description
+        ? { description: item.manifest.distribution?.description }
+        : {}),
+      ...(item.installState === 'installed' || item.installState === 'update-available'
+        ? { installState: item.installState }
+        : {}),
+    }));
+    return {
+      kind: 'search-results',
+      query,
+      total: result.total,
+      items,
+      remainingCount: result.hasMore ? Math.max(0, result.total - result.items.length) : 0,
+    };
   } catch (error) {
-    return { handled: true, continueExecution: true, error: `Search failed: ${String(error)}` };
+    return operationFailed('search', error);
   }
 }
 
-async function handleInstall(args: string[]): Promise<SlashCommandResult> {
+async function handleInstall(args: string[]): Promise<MarketCommandSemanticResult> {
   const packageId = args[0];
-  if (!packageId) {
-    return { handled: true, continueExecution: true, error: 'Usage: /market install <package-id>' };
-  }
+  if (!packageId) return { kind: 'diagnostic', code: 'install-usage' };
 
   const version = args[1] ?? 'latest';
-  const manager = await getInstallManager();
-
-  const lines = [''];
-  lines.push(`Installing ${packageId}@${version}…`);
-
-  let lastPhase = '';
-  const result = await manager.install(packageId, version, (progress) => {
-    if (progress.phase !== lastPhase) {
-      lastPhase = progress.phase;
-      lines.push(`  ${progress.phase}… ${progress.percent}%`);
-    }
-  });
-
-  if (result.success) {
-    lines.push(`✓ Installed ${packageId} → ${result.installedPath ?? 'done'}`);
-  } else {
-    lines.push(`✗ Install failed: ${result.error}`);
-  }
-  lines.push('');
-
-  return { handled: true, continueExecution: true, output: lines.join('\n') };
-}
-
-async function handleList(): Promise<SlashCommandResult> {
-  const manager = await getInstallManager();
-  const installed = await manager.listInstalled();
-
-  if (installed.length === 0) {
-    return {
-      handled: true,
-      continueExecution: true,
-      output: '\nNo packages installed. Use "/market search" to find packages.\n',
-    };
-  }
-
-  const lines = ['', `Installed packages (${installed.length}):`, ''];
-  for (const pkg of installed) {
-    lines.push(`  ${pkg.packageId}  v${pkg.version}  [${pkg.type}]`);
-    lines.push(`    Path: ${pkg.installedPath}`);
-    lines.push('');
-  }
-
-  return { handled: true, continueExecution: true, output: lines.join('\n') };
-}
-
-async function handleUpdate(args: string[]): Promise<SlashCommandResult> {
-  const targetId = args[0];
-  const manager = await getInstallManager();
-  const updates = await manager.checkUpdates();
-
-  const targets = targetId ? updates.filter((u) => u.packageId === targetId) : updates;
-
-  if (targets.length === 0) {
-    const msg = targetId
-      ? `No updates available for "${targetId}"`
-      : 'All packages are up to date.';
-    return { handled: true, continueExecution: true, output: `\n${msg}\n` };
-  }
-
-  const lines = ['', `Updating ${targets.length} package${targets.length !== 1 ? 's' : ''}…`, ''];
-
-  for (const update of targets) {
-    lines.push(
-      `  Updating ${update.packageId} (${update.currentVersion} → ${update.latestVersion})…`,
-    );
-    const result = await manager.install(update.packageId, update.latestVersion);
-    if (result.success) {
-      lines.push(`  ✓ Updated ${update.packageId}`);
-    } else {
-      lines.push(`  ✗ Failed: ${result.error}`);
-    }
-  }
-
-  lines.push('');
-  return { handled: true, continueExecution: true, output: lines.join('\n') };
-}
-
-async function handleUninstall(args: string[]): Promise<SlashCommandResult> {
-  const packageId = args[0];
-  if (!packageId) {
-    return {
-      handled: true,
-      continueExecution: true,
-      error: 'Usage: /market uninstall <package-id>',
-    };
-  }
-
-  const manager = await getInstallManager();
   try {
-    await manager.uninstall(packageId);
+    const manager = await getInstallManager();
+    const phases: { phase: string; percent: number }[] = [];
+    let lastPhase = '';
+    const result = await manager.install(packageId, version, (progress) => {
+      if (progress.phase !== lastPhase) {
+        lastPhase = progress.phase;
+        phases.push({ phase: progress.phase, percent: progress.percent });
+      }
+    });
     return {
-      handled: true,
-      continueExecution: true,
-      output: `\n✓ Uninstalled ${packageId}\n`,
+      kind: 'install-result',
+      packageId,
+      version,
+      phases,
+      success: result.success,
+      ...(result.installedPath ? { installedPath: result.installedPath } : {}),
+      ...(result.error ? { detail: result.error } : {}),
     };
   } catch (error) {
-    return {
-      handled: true,
-      continueExecution: true,
-      error: `Uninstall failed: ${String(error)}`,
-    };
+    return operationFailed('install', error);
   }
 }
 
-function showHelp(): SlashCommandResult {
-  const lines = [
-    '',
-    'Neko Marketplace — CLI Commands:',
-    '',
-    '  /market search <query>       Search for packages',
-    '  /market install <id>         Install a package',
-    '  /market install <id> <ver>   Install a specific version',
-    '  /market list                 List installed packages',
-    '  /market update               Update all installed packages',
-    '  /market update <id>          Update a specific package',
-    '  /market uninstall <id>       Uninstall a package',
-    '',
-  ];
-  return { handled: true, continueExecution: true, output: lines.join('\n') };
+async function handleList(): Promise<MarketCommandSemanticResult> {
+  try {
+    const manager = await getInstallManager();
+    const installed = await manager.listInstalled();
+    return {
+      kind: 'installed',
+      packages: installed.map((item) => ({
+        packageId: item.packageId,
+        version: item.version,
+        type: item.type,
+        installedPath: item.installedPath,
+      })),
+    };
+  } catch (error) {
+    return operationFailed('list', error);
+  }
+}
+
+async function handleUpdate(args: string[]): Promise<MarketCommandSemanticResult> {
+  const packageId = args[0];
+  try {
+    const manager = await getInstallManager();
+    const available = await manager.checkUpdates();
+    const targets = packageId
+      ? available.filter((update) => update.packageId === packageId)
+      : available;
+    if (targets.length === 0) {
+      return { kind: 'updates-current', ...(packageId ? { packageId } : {}) };
+    }
+
+    const updates = [];
+    for (const update of targets) {
+      const result = await manager.install(update.packageId, update.latestVersion);
+      updates.push({
+        packageId: update.packageId,
+        currentVersion: update.currentVersion,
+        latestVersion: update.latestVersion,
+        success: result.success,
+        ...(result.error ? { detail: result.error } : {}),
+      });
+    }
+    return { kind: 'updates', updates };
+  } catch (error) {
+    return operationFailed('update', error);
+  }
+}
+
+async function handleUninstall(args: string[]): Promise<MarketCommandSemanticResult> {
+  const packageId = args[0];
+  if (!packageId) return { kind: 'diagnostic', code: 'uninstall-usage' };
+
+  try {
+    const manager = await getInstallManager();
+    await manager.uninstall(packageId);
+    return { kind: 'uninstalled', packageId };
+  } catch (error) {
+    return operationFailed('uninstall', error);
+  }
+}
+
+function operationFailed(
+  operation: 'search' | 'install' | 'list' | 'update' | 'uninstall',
+  error: unknown,
+): MarketCommandSemanticResult {
+  return {
+    kind: 'diagnostic',
+    code: 'operation-failed',
+    operation,
+    detail: error instanceof Error ? error.message : String(error),
+  };
 }
