@@ -1,4 +1,41 @@
-import type { AgentTurnTimelineItem, AgentTurnTimelineOperation } from '@neko-agent/types';
+import type {
+  AgentTurnTimelineCompletion,
+  AgentTurnTimelineItem,
+  AgentTurnTimelineOperation,
+} from './agent-turn-timeline';
+
+export interface ConversationTurnProjection {
+  readonly turnId: string;
+  readonly messageId: string;
+  readonly items: readonly AgentTurnTimelineItem[];
+  readonly completion?: AgentTurnTimelineCompletion;
+}
+
+export interface ConversationProjectionSnapshot {
+  readonly conversationId: string;
+  readonly projectionVersion: number;
+  readonly turns: readonly ConversationTurnProjection[];
+}
+
+export interface ConversationProjectionUpdate {
+  readonly type: 'agentTurnTimelineUpdate';
+  readonly conversationId: string;
+  readonly turnId: string;
+  readonly messageId: string;
+  readonly operations: readonly AgentTurnTimelineOperation[];
+  readonly completion?: AgentTurnTimelineCompletion;
+}
+
+export interface ConversationProjectionPatch {
+  readonly type: 'conversationProjectionPatch';
+  readonly conversationId: string;
+  readonly baseProjectionVersion: number;
+  readonly projectionVersion: number;
+  readonly turnId: string;
+  readonly messageId: string;
+  readonly operations: readonly AgentTurnTimelineOperation[];
+  readonly completion?: AgentTurnTimelineCompletion;
+}
 
 export function applyAgentTurnProjectionOperations(
   items: Map<string, AgentTurnTimelineItem>,
@@ -15,7 +52,7 @@ export function applyAgentTurnProjectionOperations(
     const current = items.get(item.itemId);
     if (!current) {
       assertSequenceAvailable(items, item);
-      items.set(item.itemId, cloneValue(item));
+      items.set(item.itemId, cloneAgentTurnProjectionItem(item));
       continue;
     }
 
@@ -25,12 +62,12 @@ export function applyAgentTurnProjectionOperations(
       items.set(item.itemId, appendTextItem(current, item));
       continue;
     }
-    items.set(item.itemId, cloneValue(item));
+    items.set(item.itemId, cloneAgentTurnProjectionItem(item));
   }
 }
 
 export function cloneAgentTurnProjectionItem(item: AgentTurnTimelineItem): AgentTurnTimelineItem {
-  return cloneValue(item);
+  return structuredClone(item);
 }
 
 function applyCompletion(
@@ -64,7 +101,7 @@ function appendTextItem(
 ): AgentTurnTimelineItem {
   if (current.kind === 'assistant_text' && item.kind === 'assistant_text') {
     assertSourceGeneration(current, item);
-    return cloneValue({
+    return structuredClone({
       ...item,
       createdAt: current.createdAt,
       sequence: current.sequence,
@@ -76,7 +113,7 @@ function appendTextItem(
   }
   if (current.kind === 'thinking' && item.kind === 'thinking') {
     assertSourceGeneration(current, item);
-    return cloneValue({
+    return structuredClone({
       ...item,
       createdAt: current.createdAt,
       sequence: current.sequence,
@@ -143,8 +180,4 @@ function assertSequenceAvailable(
       );
     }
   }
-}
-
-function cloneValue<T>(value: T): T {
-  return structuredClone(value);
 }

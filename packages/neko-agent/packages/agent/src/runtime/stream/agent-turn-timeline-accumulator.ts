@@ -9,7 +9,7 @@ import type {
 } from '@neko-agent/types';
 import type { AgentEvent } from '../../session/types';
 import { applyToolResultBackfillToResult } from '../tool-result-backfill';
-import type { ConversationProjectionUpdate } from '../projection/conversation-projection-store';
+import type { ConversationProjectionUpdate } from '@neko-agent/types';
 import {
   AGENT_ERROR_WITHOUT_DETAIL_CODE,
   readAgentEventErrorCode,

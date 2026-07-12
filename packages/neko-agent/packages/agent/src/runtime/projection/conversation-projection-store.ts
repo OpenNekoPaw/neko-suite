@@ -1,45 +1,14 @@
 import type {
   AgentTurnTimelineCompletion,
   AgentTurnTimelineItem,
-  AgentTurnTimelineOperation,
+  ConversationProjectionPatch,
+  ConversationProjectionSnapshot,
+  ConversationProjectionUpdate,
 } from '@neko-agent/types';
 import {
   applyAgentTurnProjectionOperations,
   cloneAgentTurnProjectionItem,
-} from './agent-turn-projection';
-
-export interface ConversationTurnProjection {
-  readonly turnId: string;
-  readonly messageId: string;
-  readonly items: readonly AgentTurnTimelineItem[];
-  readonly completion?: AgentTurnTimelineCompletion;
-}
-
-export interface ConversationProjectionSnapshot {
-  readonly conversationId: string;
-  readonly projectionVersion: number;
-  readonly turns: readonly ConversationTurnProjection[];
-}
-
-export interface ConversationProjectionUpdate {
-  readonly type: 'agentTurnTimelineUpdate';
-  readonly conversationId: string;
-  readonly turnId: string;
-  readonly messageId: string;
-  readonly operations: readonly AgentTurnTimelineOperation[];
-  readonly completion?: AgentTurnTimelineCompletion;
-}
-
-export interface ConversationProjectionPatch {
-  readonly type: 'conversationProjectionPatch';
-  readonly conversationId: string;
-  readonly baseProjectionVersion: number;
-  readonly projectionVersion: number;
-  readonly turnId: string;
-  readonly messageId: string;
-  readonly operations: readonly AgentTurnTimelineOperation[];
-  readonly completion?: AgentTurnTimelineCompletion;
-}
+} from '@neko-agent/types';
 
 export type ConversationProjectionListener = (patch: ConversationProjectionPatch) => void;
 

@@ -37,6 +37,16 @@ export type {
   ProjectionSnapshotFrame,
 } from './projection-attachment';
 export { isSameProjectionAttachment } from './projection-attachment';
+export type {
+  ConversationProjectionPatch,
+  ConversationProjectionSnapshot,
+  ConversationProjectionUpdate,
+  ConversationTurnProjection,
+} from './conversation-projection';
+export {
+  applyAgentTurnProjectionOperations,
+  cloneAgentTurnProjectionItem,
+} from './conversation-projection';
 
 // Message protocol
 export type {

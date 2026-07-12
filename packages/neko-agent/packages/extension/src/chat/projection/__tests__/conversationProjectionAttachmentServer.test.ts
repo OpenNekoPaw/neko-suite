@@ -1,14 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
 import type {
   AgentTurnTimelineAssistantTextItem,
+  ConversationProjectionPatch,
+  ConversationProjectionSnapshot,
   ProjectionAttachmentHostFrame,
   ProjectionAttachmentKey,
 } from '@neko-agent/types';
-import {
-  createConversationProjectionStore,
-  type ConversationProjectionPatch,
-  type ConversationProjectionSnapshot,
-} from '@neko/agent/runtime';
+import { createConversationProjectionStore } from '@neko/agent/runtime';
 import { createConversationProjectionAttachmentServer } from '../conversationProjectionAttachmentServer';
 
 type HostFrame = ProjectionAttachmentHostFrame<

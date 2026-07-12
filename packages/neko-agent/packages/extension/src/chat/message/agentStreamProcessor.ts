@@ -26,7 +26,6 @@ import {
   type IPerceptionPipeline,
   type AgentTurnTimelineAccumulator,
   type ConversationProjectionStore,
-  type ConversationTurnProjection,
 } from '@neko/agent/runtime';
 import type { AgentContentAccessRuntime } from '@neko/agent/runtime';
 import type { AgentEvent } from '@neko/agent';
@@ -43,6 +42,7 @@ import {
   type AgentTurnTimelineMessage,
   type AgentTurnTimelineSnapshotRequest,
   type ContentBlock,
+  type ConversationTurnProjection,
   type Message,
 } from '@neko-agent/types';
 import type { ConversationBridge } from '../conversationBridge';
