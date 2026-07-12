@@ -118,6 +118,12 @@ export {
 } from './session/agent-runtime-pool';
 
 export {
+  createConversationProjectionOperationBuffer,
+  isCoalescibleConversationProjectionOperation,
+  type ConversationProjectionOperationBuffer,
+} from './projection/conversation-projection-operation-buffer';
+
+export {
   createConversationProjectionStore,
   type ConversationProjectionListener,
   type ConversationProjectionPatch,

@@ -5,6 +5,11 @@ import type {
   AgentTurnTimelineOperation,
 } from '@neko-agent/types';
 import { buildAgentTurnTimelineMessage } from '@neko-agent/types';
+import {
+  createConversationProjectionOperationBuffer,
+  isCoalescibleConversationProjectionOperation,
+  type ConversationProjectionOperationBuffer,
+} from '@neko/agent/runtime';
 
 export interface AgentTimelineDeliveryPort {
   postMessage(message: AgentTurnTimelineMessage): Promise<boolean>;
@@ -94,8 +99,8 @@ const SYSTEM_TIMER: AgentTimelineDeliveryTimer = {
 export class AgentTimelineDeliveryChannel {
   private readonly policy: AgentTimelineDeliveryPolicy;
   private readonly timer: AgentTimelineDeliveryTimer;
-  private pendingOperations: AgentTurnTimelineOperation[] = [];
-  private pendingTextBytes = 0;
+  private readonly operationBuffer: ConversationProjectionOperationBuffer =
+    createConversationProjectionOperationBuffer();
   private pendingSince: number | undefined;
   private timerHandle: unknown | undefined;
   private deliveryRevision = 0;
@@ -144,8 +149,8 @@ export class AgentTimelineDeliveryChannel {
       }
       if (containsAppend(message.operations)) this.acceptedFirstAppend = true;
       if (
-        this.pendingTextBytes >= this.policy.maxPendingTextBytes ||
-        this.pendingOperations.length >= this.policy.maxPendingOperations
+        this.operationBuffer.textBytes >= this.policy.maxPendingTextBytes ||
+        this.operationBuffer.operationCount >= this.policy.maxPendingOperations
       ) {
         return this.flushPending();
       }
@@ -191,8 +196,8 @@ export class AgentTimelineDeliveryChannel {
   metrics(): AgentTimelineDeliveryMetrics {
     return {
       ...this.mutableMetrics,
-      pendingOperations: this.pendingOperations.length,
-      pendingTextBytes: this.pendingTextBytes,
+      pendingOperations: this.operationBuffer.operationCount,
+      pendingTextBytes: this.operationBuffer.textBytes,
       timerScheduled: this.timerHandle !== undefined,
       accepting: this.accepting,
       disposed: this.disposed,
@@ -211,45 +216,22 @@ export class AgentTimelineDeliveryChannel {
 
   private bufferOperation(operation: AgentTurnTimelineOperation): void {
     if (this.pendingSince === undefined) this.pendingSince = this.timer.now();
-    if (isLatestValueProgress(operation)) {
-      const index = this.pendingOperations.findIndex(
-        (candidate) =>
-          isLatestValueProgress(candidate) && candidate.item.itemId === operation.item.itemId,
-      );
-      if (index >= 0) {
-        this.pendingOperations[index] = operation;
-      } else {
-        this.pendingOperations.push(operation);
-      }
-    } else if (operation.operation === 'append') {
-      const previous = this.pendingOperations.at(-1);
-      const merged = previous ? mergeCompatibleAppends(previous, operation) : undefined;
-      if (merged) {
-        this.pendingOperations[this.pendingOperations.length - 1] = merged;
-      } else {
-        this.pendingOperations.push(operation);
-      }
-      this.pendingTextBytes += byteLength(operation.item.payload.content);
-    } else {
-      this.pendingOperations.push(operation);
-    }
+    this.operationBuffer.push(operation);
     this.mutableMetrics.pendingBytesHighWaterMark = Math.max(
       this.mutableMetrics.pendingBytesHighWaterMark,
-      this.pendingTextBytes,
+      this.operationBuffer.textBytesHighWaterMark,
     );
     this.mutableMetrics.pendingOperationsHighWaterMark = Math.max(
       this.mutableMetrics.pendingOperationsHighWaterMark,
-      this.pendingOperations.length,
+      this.operationBuffer.operationCountHighWaterMark,
     );
   }
 
   private flushPending(): Promise<AgentTimelineDeliveryResult> {
     this.cancelTimer();
-    if (this.pendingOperations.length === 0) return this.deliveryTail;
-    const operations = coalesceAdjacentAppends(this.pendingOperations);
+    if (this.operationBuffer.operationCount === 0) return this.deliveryTail;
+    const operations = this.operationBuffer.drain();
     const pendingSince = this.pendingSince;
-    this.pendingOperations = [];
-    this.pendingTextBytes = 0;
     this.pendingSince = undefined;
     return this.queueDelivery(operations, undefined, pendingSince);
   }
@@ -335,114 +317,12 @@ function isCoalescibleBatch(message: AgentTimelineDeliveryInput): boolean {
   return (
     message.completion === undefined &&
     message.operations.length > 0 &&
-    message.operations.every(
-      (operation) => operation.operation === 'append' || isLatestValueProgress(operation),
-    )
-  );
-}
-
-function isLatestValueProgress(
-  operation: AgentTurnTimelineOperation,
-): operation is Extract<AgentTurnTimelineOperation, { readonly operation: 'upsert' }> {
-  return (
-    operation.operation === 'upsert' &&
-    (operation.item.kind === 'task' || operation.item.kind === 'media') &&
-    operation.item.status === 'pending'
+    message.operations.every(isCoalescibleConversationProjectionOperation)
   );
 }
 
 function containsAppend(operations: readonly AgentTurnTimelineOperation[]): boolean {
   return operations.some((operation) => operation.operation === 'append');
-}
-
-function mergeCompatibleAppends(
-  previous: AgentTurnTimelineOperation,
-  operation: Extract<AgentTurnTimelineOperation, { readonly operation: 'append' }>,
-): Extract<AgentTurnTimelineOperation, { readonly operation: 'append' }> | undefined {
-  if (
-    previous.operation !== 'append' ||
-    previous.item.itemId !== operation.item.itemId ||
-    previous.item.kind !== operation.item.kind ||
-    previous.item.payload.sourceGeneration !== operation.item.payload.sourceGeneration
-  ) {
-    return undefined;
-  }
-  if (previous.item.kind === 'assistant_text' && operation.item.kind === 'assistant_text') {
-    return {
-      operation: 'append',
-      item: {
-        ...operation.item,
-        createdAt: previous.item.createdAt,
-        sequence: previous.item.sequence,
-        payload: {
-          ...operation.item.payload,
-          content: previous.item.payload.content + operation.item.payload.content,
-        },
-      },
-    };
-  }
-  if (previous.item.kind === 'thinking' && operation.item.kind === 'thinking') {
-    return {
-      operation: 'append',
-      item: {
-        ...operation.item,
-        createdAt: previous.item.createdAt,
-        sequence: previous.item.sequence,
-        payload: {
-          ...operation.item.payload,
-          content: previous.item.payload.content + operation.item.payload.content,
-        },
-      },
-    };
-  }
-  return undefined;
-}
-
-function coalesceAdjacentAppends(
-  operations: readonly AgentTurnTimelineOperation[],
-): AgentTurnTimelineOperation[] {
-  const result: AgentTurnTimelineOperation[] = [];
-  for (const operation of operations) {
-    const previous = result.at(-1);
-    if (
-      operation.operation === 'append' &&
-      previous?.operation === 'append' &&
-      previous.item.itemId === operation.item.itemId &&
-      previous.item.kind === operation.item.kind &&
-      previous.item.payload.sourceGeneration === operation.item.payload.sourceGeneration
-    ) {
-      if (previous.item.kind === 'assistant_text' && operation.item.kind === 'assistant_text') {
-        result[result.length - 1] = {
-          operation: 'append',
-          item: {
-            ...operation.item,
-            createdAt: previous.item.createdAt,
-            sequence: previous.item.sequence,
-            payload: {
-              ...operation.item.payload,
-              content: previous.item.payload.content + operation.item.payload.content,
-            },
-          },
-        };
-      } else if (previous.item.kind === 'thinking' && operation.item.kind === 'thinking') {
-        result[result.length - 1] = {
-          operation: 'append',
-          item: {
-            ...operation.item,
-            createdAt: previous.item.createdAt,
-            sequence: previous.item.sequence,
-            payload: {
-              ...operation.item.payload,
-              content: previous.item.payload.content + operation.item.payload.content,
-            },
-          },
-        };
-      }
-      continue;
-    }
-    result.push(operation);
-  }
-  return result;
 }
 
 function byteLength(value: string): number {
