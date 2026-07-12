@@ -24,3 +24,10 @@ export {
   type MediaProductionWorkflowRecoveryPort,
   type MediaProductionWorkflowStableReference,
 } from './workflow-recovery-coordinator';
+
+export {
+  MediaProductionPreExportGateOrchestrator,
+  type MediaProductionPreExportGateOrchestratorOptions,
+  type MediaProductionPreExportGatePort,
+  type MediaProductionPreExportGateRequest,
+} from './pre-export-gate-orchestrator';

@@ -8,6 +8,7 @@ import {
   getNextMediaProductionStage,
   resumeMediaProductionWorkflow,
   startMediaProductionStage,
+  setMediaProductionPreExportPlan,
   setMediaProductionProjectAuthoringPlan,
   validateMediaProductionWorkflowRun,
   type MediaProductionResourceArtifactRef,
@@ -249,5 +250,85 @@ describe('media production workflow contract', () => {
         },
       }),
     ).toThrow('explicit file or new target');
+  });
+
+  it('persists a revision-bound pre-export policy and rejects incomplete or late plans', () => {
+    const policy = {
+      version: 1 as const,
+      policyId: 'media-production.pre-export',
+      policyVersion: '2026-07-12',
+      requiredProfiles: [
+        'project-integrity',
+        'required-assets',
+        'timeline-final-cut',
+        'audio',
+        'subtitles',
+        'output-framing',
+        'required-approvals',
+      ],
+      requiredEvaluatorClasses: ['structural', 'technical', 'policy'] as const,
+      blockingSeverities: ['error', 'critical'] as const,
+      allowManualReview: true,
+      allowManualOverride: false,
+      requireCurrentEvidence: true,
+    };
+    const planned = setMediaProductionPreExportPlan({
+      state: createRun(),
+      updatedAt: '2026-07-12T00:00:01.000Z',
+      plan: {
+        version: 1,
+        projectArtifactId: 'cut-project-1',
+        requiredAssetArtifactIds: ['approved-shot-1'],
+        outputProfileId: 'deliverable.video.master',
+        policy,
+      },
+    });
+
+    expect(planned.preExportPlan).toEqual({
+      version: 1,
+      projectArtifactId: 'cut-project-1',
+      requiredAssetArtifactIds: ['approved-shot-1'],
+      outputProfileId: 'deliverable.video.master',
+      policy,
+    });
+    expect(validateMediaProductionWorkflowRun(planned)).toEqual({ ok: true, diagnostics: [] });
+
+    expect(() =>
+      setMediaProductionPreExportPlan({
+        state: createRun(),
+        updatedAt: '2026-07-12T00:00:01.000Z',
+        plan: {
+          version: 1,
+          projectArtifactId: 'cut-project-1',
+          requiredAssetArtifactIds: ['approved-shot-1', 'approved-shot-1'],
+          outputProfileId: 'deliverable.video.master',
+          policy: { ...policy, requiredProfiles: [] },
+        },
+      }),
+    ).toThrow('required asset ids must be non-empty and unique');
+
+    const running = startMediaProductionStage({
+      state: {
+        ...planned,
+        stages: planned.stages.map((stage) =>
+          stage.stageId === 'pre-export-gate' ? { ...stage, status: 'pending' as const } : stage,
+        ),
+      },
+      stageId: 'source-normalization',
+      startedAt: '2026-07-12T00:00:02.000Z',
+    });
+    const lateState = {
+      ...running,
+      stages: running.stages.map((stage) =>
+        stage.stageId === 'pre-export-gate' ? { ...stage, status: 'running' as const } : stage,
+      ),
+    };
+    expect(() =>
+      setMediaProductionPreExportPlan({
+        state: lateState,
+        updatedAt: '2026-07-12T00:00:03.000Z',
+        plan: planned.preExportPlan!,
+      }),
+    ).toThrow('only be set while pre-export-gate is pending');
   });
 });

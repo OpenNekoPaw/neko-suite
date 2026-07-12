@@ -1,6 +1,9 @@
 import type { GeneratedAssetRevisionRef } from './generated-asset-lifecycle';
 import {
+  MEDIA_QUALITY_CONTRACT_VERSION,
+  QUALITY_EVALUATOR_CLASSES,
   validateQualityTarget,
+  type QualityGatePolicy,
   type QualityGateVerdict,
   type QualityProjectRef,
   type QualityTarget,
@@ -45,6 +48,8 @@ export type MediaProductionWorkflowDiagnosticCode =
   | 'missing-authoring-target'
   | 'authoring-capability-unavailable'
   | 'invalid-authoring-result'
+  | 'missing-pre-export-plan'
+  | 'invalid-quality-gate-result'
   | 'asset-not-approved';
 
 export interface MediaProductionWorkflowDiagnostic {
@@ -117,6 +122,14 @@ export interface MediaProductionProjectAuthoringPlan {
   readonly handoffs: readonly MediaProductionProjectAuthoringHandoff[];
 }
 
+export interface MediaProductionPreExportPlan {
+  readonly version: 1;
+  readonly projectArtifactId: string;
+  readonly requiredAssetArtifactIds: readonly string[];
+  readonly outputProfileId: string;
+  readonly policy: QualityGatePolicy;
+}
+
 export interface MediaProductionStageState {
   readonly stageId: MediaProductionStageId;
   readonly status: MediaProductionStageStatus;
@@ -133,6 +146,7 @@ export interface MediaProductionWorkflowRunState {
   readonly sourceProfileId: string;
   readonly sourceRefs: readonly MediaProductionWorkflowSourceRef[];
   readonly projectAuthoringPlan?: MediaProductionProjectAuthoringPlan;
+  readonly preExportPlan?: MediaProductionPreExportPlan;
   readonly status: MediaProductionRunStatus;
   readonly stages: readonly MediaProductionStageState[];
   readonly createdAt: string;
@@ -202,6 +216,38 @@ export function setMediaProductionProjectAuthoringPlan(input: {
         ...handoff,
         target: { ...handoff.target },
       })),
+    },
+    updatedAt: input.updatedAt,
+  };
+  assertCanonicalState(next);
+  return next;
+}
+
+export function setMediaProductionPreExportPlan(input: {
+  readonly state: MediaProductionWorkflowRunState;
+  readonly plan: MediaProductionPreExportPlan;
+  readonly updatedAt: string;
+}): MediaProductionWorkflowRunState {
+  assertIsoTimestamp(input.updatedAt, 'updatedAt');
+  const diagnostics = validatePreExportPlan(input.plan);
+  if (diagnostics.length > 0) {
+    throw new Error(diagnostics.map((diagnostic) => diagnostic.message).join(' '));
+  }
+  const stage = input.state.stages.find((candidate) => candidate.stageId === 'pre-export-gate');
+  if (!stage || stage.status !== 'pending') {
+    throw new Error('Pre-export plan can only be set while pre-export-gate is pending.');
+  }
+  const next: MediaProductionWorkflowRunState = {
+    ...input.state,
+    preExportPlan: {
+      ...input.plan,
+      requiredAssetArtifactIds: [...input.plan.requiredAssetArtifactIds],
+      policy: {
+        ...input.plan.policy,
+        requiredProfiles: [...input.plan.policy.requiredProfiles],
+        requiredEvaluatorClasses: [...input.plan.policy.requiredEvaluatorClasses],
+        blockingSeverities: [...input.plan.policy.blockingSeverities],
+      },
     },
     updatedAt: input.updatedAt,
   };
@@ -483,6 +529,9 @@ export function validateMediaProductionWorkflowRun(
   if (state.projectAuthoringPlan) {
     diagnostics.push(...validateProjectAuthoringPlan(state.projectAuthoringPlan));
   }
+  if (state.preExportPlan) {
+    diagnostics.push(...validatePreExportPlan(state.preExportPlan));
+  }
   if (state.stages.length !== MEDIA_PRODUCTION_STAGE_IDS.length) {
     diagnostics.push({
       code: 'invalid-workflow-state',
@@ -575,6 +624,85 @@ function validateProjectAuthoringPlan(
       }
     }
   });
+  return diagnostics;
+}
+
+function validatePreExportPlan(
+  plan: MediaProductionPreExportPlan,
+): MediaProductionWorkflowDiagnostic[] {
+  const diagnostics: MediaProductionWorkflowDiagnostic[] = [];
+  if (
+    plan.version !== 1 ||
+    !plan.projectArtifactId.trim() ||
+    !ARTIFACT_PROFILE_ID_PATTERN.test(plan.outputProfileId)
+  ) {
+    diagnostics.push({
+      code: 'invalid-workflow-state',
+      severity: 'error',
+      message: 'Pre-export plan requires version 1, a project artifact, and output profile.',
+      stageId: 'pre-export-gate',
+      path: ['preExportPlan'],
+    });
+  }
+  const assetIds = new Set<string>();
+  if (plan.requiredAssetArtifactIds.length === 0) {
+    diagnostics.push({
+      code: 'invalid-workflow-state',
+      severity: 'error',
+      message: 'Pre-export plan requires at least one required asset artifact id.',
+      stageId: 'pre-export-gate',
+      path: ['preExportPlan', 'requiredAssetArtifactIds'],
+    });
+  }
+  plan.requiredAssetArtifactIds.forEach((artifactId, index) => {
+    if (!artifactId.trim() || assetIds.has(artifactId)) {
+      diagnostics.push({
+        code: 'invalid-workflow-state',
+        severity: 'error',
+        message: 'Pre-export required asset ids must be non-empty and unique.',
+        stageId: 'pre-export-gate',
+        path: ['preExportPlan', 'requiredAssetArtifactIds', index],
+      });
+    }
+    assetIds.add(artifactId);
+  });
+  const policy = plan.policy;
+  const requiredProfiles = new Set<string>();
+  const policyHasInvalidProfile = policy.requiredProfiles.some((profileId) => {
+    const invalid = !ARTIFACT_PROFILE_ID_PATTERN.test(profileId) || requiredProfiles.has(profileId);
+    requiredProfiles.add(profileId);
+    return invalid;
+  });
+  const evaluatorClasses = new Set(policy.requiredEvaluatorClasses);
+  const blockingSeverities = new Set(policy.blockingSeverities);
+  const supportedSeverities = new Set(['info', 'warning', 'error', 'critical']);
+  if (
+    policy.version !== MEDIA_QUALITY_CONTRACT_VERSION ||
+    !policy.policyId.trim() ||
+    !policy.policyVersion.trim() ||
+    policy.requiredProfiles.length === 0 ||
+    policyHasInvalidProfile ||
+    policy.requiredEvaluatorClasses.length === 0 ||
+    evaluatorClasses.size !== policy.requiredEvaluatorClasses.length ||
+    policy.requiredEvaluatorClasses.some(
+      (evaluatorClass) => !QUALITY_EVALUATOR_CLASSES.includes(evaluatorClass),
+    ) ||
+    policy.blockingSeverities.length === 0 ||
+    blockingSeverities.size !== policy.blockingSeverities.length ||
+    policy.blockingSeverities.some((severity) => !supportedSeverities.has(severity)) ||
+    (policy.minimumConfidence !== undefined &&
+      (!Number.isFinite(policy.minimumConfidence) ||
+        policy.minimumConfidence < 0 ||
+        policy.minimumConfidence > 1))
+  ) {
+    diagnostics.push({
+      code: 'invalid-workflow-state',
+      severity: 'error',
+      message: 'Pre-export plan requires a complete canonical versioned Quality Gate policy.',
+      stageId: 'pre-export-gate',
+      path: ['preExportPlan', 'policy'],
+    });
+  }
   return diagnostics;
 }
 
