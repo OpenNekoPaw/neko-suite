@@ -264,6 +264,7 @@ const handleQueuedMessageEditRequested: MessageHandler<'queuedMessageEditRequest
   applyMessageQueueSnapshot(message.snapshot, context);
   context.setGlobalError(null);
   context.requestQueuedMessageEdit?.({
+    tabId: message.tabId,
     conversationId: message.conversationId,
     item: message.item,
   });

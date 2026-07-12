@@ -365,63 +365,58 @@ describe('ChatWorkspace pending send', () => {
     expect(onInitialEntryPromptMenuRequestConsumed).toHaveBeenCalledWith(2);
   });
 
-  it('restores a queued edit request into an empty composer', () => {
-    const onQueuedEditRequestConsumed = vi.fn();
-    render(
-      <ChatWorkspace
-        {...createProps({
-          queuedEditRequest: {
-            id: 7,
-            conversationId: 'conv-1',
-            item: {
-              id: 'queued-1',
-              conversationId: 'conv-1',
-              content: '重新整理这条消息',
-              createdAt: 1,
-              source: 'composer',
-            },
-          },
-          onQueuedEditRequestConsumed,
-        })}
-      />,
-    );
+  it('restores a queued edit from its owning Tab store into an empty composer', () => {
+    const runtime = createTabRenderRuntime({ tabId: 'tab-1', conversationId: 'conv-1' });
+    runtime.store.updateState({
+      queuedEdit: {
+        requestId: 7,
+        item: {
+          id: 'queued-1',
+          conversationId: 'conv-1',
+          content: '重新整理这条消息',
+          createdAt: 1,
+          source: 'composer',
+        },
+      },
+    });
+
+    render(<ChatWorkspace {...createProps({ tabRenderStore: runtime.store })} />);
 
     expect(screen.getByTestId('input-value').textContent).toBe('重新整理这条消息');
-    expect(onQueuedEditRequestConsumed).toHaveBeenCalledWith(7);
+    expect(runtime.store.getSnapshot().state.queuedEdit).toBeNull();
   });
 
-  it('does not overwrite an existing composer draft for queued edit restore', () => {
-    const onQueuedEditRequestConsumed = vi.fn();
-    const onQueuedEditConflict = vi.fn();
+  it('keeps an existing draft and records a Tab-local diagnostic for queued edit conflict', () => {
+    const runtime = createTabRenderRuntime({ tabId: 'tab-1', conversationId: 'conv-1' });
+    runtime.store.updateState({
+      queuedEdit: {
+        requestId: 7,
+        item: {
+          id: 'queued-1',
+          conversationId: 'conv-1',
+          content: '被移除的排队消息',
+          createdAt: 1,
+          source: 'composer',
+        },
+      },
+    });
+
     render(
       <ChatWorkspace
         {...createProps({
+          tabRenderStore: runtime.store,
           initialInputRequest: { id: 1, messageText: '已有草稿' },
-          queuedEditRequest: {
-            id: 7,
-            conversationId: 'conv-1',
-            item: {
-              id: 'queued-1',
-              conversationId: 'conv-1',
-              content: '被移除的排队消息',
-              createdAt: 1,
-              source: 'composer',
-            },
-          },
-          onQueuedEditRequestConsumed,
-          onQueuedEditConflict,
         })}
       />,
     );
 
     expect(screen.getByTestId('input-value').textContent).toBe('已有草稿');
-    expect(onQueuedEditConflict).toHaveBeenCalledWith(
-      expect.objectContaining({
-        conversationId: 'conv-1',
-        item: expect.objectContaining({ id: 'queued-1' }),
-      }),
-    );
-    expect(onQueuedEditRequestConsumed).toHaveBeenCalledWith(7);
+    expect(runtime.store.getSnapshot().state.queuedEdit).toBeNull();
+    expect(runtime.store.getSnapshot().state.diagnostics.at(-1)).toMatchObject({
+      code: 'queued-edit-draft-conflict',
+      conversationId: 'conv-1',
+      tabId: 'tab-1',
+    });
   });
 
   it('routes queued message controls through the VSCode message facade', () => {
@@ -432,7 +427,7 @@ describe('ChatWorkspace pending send', () => {
     fireEvent.click(getByTestId('cancel-queued'));
     expect(vscodeMocks.cancelQueuedMessage).toHaveBeenCalledWith('conv-1', 'queued-1');
     fireEvent.click(getByTestId('edit-queued'));
-    expect(vscodeMocks.editQueuedMessage).toHaveBeenCalledWith('conv-1', 'queued-1');
+    expect(vscodeMocks.editQueuedMessage).toHaveBeenCalledWith('tab-1', 'conv-1', 'queued-1');
   });
 
   it('keeps prompt mode in its owning Tab store while switching', () => {
@@ -773,6 +768,7 @@ function createProps(overrides: Partial<ChatWorkspaceProps> = {}): ChatWorkspace
       React.SetStateAction<Array<{ nodeId: string; type: string; summary: string }>>
     >,
     onNewChat: noop,
+    queuedEditDraftConflictMessage: 'Queued edit draft conflict',
     ...overrides,
   };
 }

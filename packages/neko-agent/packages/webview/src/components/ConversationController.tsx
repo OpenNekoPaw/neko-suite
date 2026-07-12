@@ -29,7 +29,6 @@ import {
   type ExtensionToWebviewMessage,
   SettingsState,
   AgentState,
-  AgentQueuedMessageItem,
   type AgentSessionDiagnosticMessage,
   Message,
   OpenTab,
@@ -350,11 +349,6 @@ export function ConversationController({
   } | null>(null);
   const [entryPromptMenu, setEntryPromptMenu] = useState<EntryPromptMenu | null>(null);
   const nextQueuedEditRequestIdRef = useRef(0);
-  const [queuedEditRequest, setQueuedEditRequest] = useState<{
-    id: number;
-    conversationId: string;
-    item: AgentQueuedMessageItem;
-  } | null>(null);
 
   // ---- Context chips & ambient nodes ----
   const [contextChipsByConversation, setContextChipsByConversation] = useState<
@@ -857,11 +851,18 @@ export function ConversationController({
     },
     completeForegroundConversationActivation,
     requestQueuedMessageEdit: (request) => {
+      const runtime = tabRenderRuntimeRegistry.require(request.tabId);
+      if (runtime.conversationId !== request.conversationId) {
+        throw new Error(
+          `Queued edit Tab ${request.tabId} belongs to ${runtime.conversationId}, not ${request.conversationId}.`,
+        );
+      }
       nextQueuedEditRequestIdRef.current += 1;
-      setQueuedEditRequest({
-        id: nextQueuedEditRequestIdRef.current,
-        conversationId: request.conversationId,
-        item: request.item,
+      runtime.store.updateState({
+        queuedEdit: {
+          requestId: nextQueuedEditRequestIdRef.current,
+          item: request.item,
+        },
       });
     },
     requestConfigSnapshot,
@@ -1648,13 +1649,7 @@ export function ConversationController({
             onInitialInputRequestConsumed={handleInitialInputRequestConsumed}
             initialEntryPromptMenuRequest={initialEntryPromptMenuRequest}
             onInitialEntryPromptMenuRequestConsumed={handleInitialEntryPromptMenuRequestConsumed}
-            queuedEditRequest={queuedEditRequest}
-            onQueuedEditRequestConsumed={(id) => {
-              setQueuedEditRequest((current) => (current?.id === id ? null : current));
-            }}
-            onQueuedEditConflict={() => {
-              setGlobalError(t('chat.input.queueEditDraftConflict'));
-            }}
+            queuedEditDraftConflictMessage={t('chat.input.queueEditDraftConflict')}
             onSessionDiagnostic={reportConversationDiagnostic}
           />
         ) : null

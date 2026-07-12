@@ -206,14 +206,61 @@ describe('webview protocol parser', () => {
     expect(
       parseWebviewToExtensionMessage({
         type: 'editQueuedMessage',
+        tabId: 'tab-1',
         conversationId: 'conv-1',
         queueItemId: 'queue-1',
       }),
     ).toEqual({
       type: 'editQueuedMessage',
+      tabId: 'tab-1',
       conversationId: 'conv-1',
       queueItemId: 'queue-1',
     });
+  });
+
+  it('correlates queued edit responses to the requesting Tab', () => {
+    expect(
+      buildQueuedMessageEditRequestedMessage({
+        tabId: 'tab-1',
+        conversationId: 'conv-1',
+        item: {
+          id: 'queue-1',
+          conversationId: 'conv-1',
+          content: 'continue',
+          createdAt: 1,
+          source: 'composer',
+        },
+        snapshot: {
+          conversationId: 'conv-1',
+          pendingCount: 0,
+          version: 2,
+          items: [],
+        },
+      }),
+    ).toMatchObject({
+      type: 'queuedMessageEditRequested',
+      tabId: 'tab-1',
+      conversationId: 'conv-1',
+    });
+    expect(() =>
+      buildQueuedMessageEditRequestedMessage({
+        tabId: '',
+        conversationId: 'conv-1',
+        item: {
+          id: 'queue-1',
+          conversationId: 'conv-1',
+          content: 'continue',
+          createdAt: 1,
+          source: 'composer',
+        },
+        snapshot: {
+          conversationId: 'conv-1',
+          pendingCount: 0,
+          version: 2,
+          items: [],
+        },
+      }),
+    ).toThrow('queuedMessageEditRequested requires non-empty tabId');
   });
 
   it('requires the complete Task run scope and preserves optional displayed result refs', () => {
@@ -259,6 +306,14 @@ describe('webview protocol parser', () => {
     expect(
       parseWebviewToExtensionMessage({
         type: 'editQueuedMessage',
+        conversationId: 'conv-1',
+        queueItemId: 'queue-1',
+      }),
+    ).toBeNull();
+    expect(
+      parseWebviewToExtensionMessage({
+        type: 'editQueuedMessage',
+        tabId: 'tab-1',
         conversationId: 'conv-1',
         queueItemId: '',
       }),

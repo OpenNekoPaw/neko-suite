@@ -391,11 +391,12 @@ describe('ConversationMessageHandler', () => {
   });
 
   it('removes a queued message for re-edit and sends the removed item content', () => {
-    handler.handleEditQueuedMessage(webview as any, 'conv-a', 'queue-1');
+    handler.handleEditQueuedMessage(webview as any, 'tab-a', 'conv-a', 'queue-1');
 
     expect(agentManager.removePendingMessage).toHaveBeenCalledWith('conv-a', 'queue-1');
     expect(webview.postMessage).toHaveBeenCalledWith({
       type: 'queuedMessageEditRequested',
+      tabId: 'tab-a',
       conversationId: 'conv-a',
       item: {
         id: 'queue-1',

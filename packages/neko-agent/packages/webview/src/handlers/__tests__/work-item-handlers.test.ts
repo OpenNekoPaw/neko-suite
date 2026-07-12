@@ -1888,6 +1888,7 @@ describe('work item message handlers', () => {
       streamingHandlers,
       {
         type: 'queuedMessageEditRequested',
+        tabId: 'tab-a',
         conversationId: 'conv-a',
         item: {
           id: 'runtime-1',
@@ -1910,6 +1911,7 @@ describe('work item message handlers', () => {
     expect(harness.streaming().queuedMessages).toEqual([]);
     expect(harness.messages()).toEqual([]);
     expect(harness.queuedEditRequest()).toEqual({
+      tabId: 'tab-a',
       conversationId: 'conv-a',
       item: expect.objectContaining({ id: 'runtime-1', content: '重新编辑我' }),
     });
@@ -2610,6 +2612,7 @@ interface ContextHarness {
   projectFiles(): ProjectFileInfo[];
   mentionItems(): MentionItem[];
   queuedEditRequest(): {
+    tabId: string;
     conversationId: string;
     item: AgentQueuedMessageItem;
   } | null;
@@ -2618,7 +2621,11 @@ interface ContextHarness {
 
 function createContextHarness(options: ContextHarnessOptions): ContextHarness {
   let messages = options.currentMessages ?? [];
-  let queuedEditRequest: { conversationId: string; item: AgentQueuedMessageItem } | null = null;
+  let queuedEditRequest: {
+    tabId: string;
+    conversationId: string;
+    item: AgentQueuedMessageItem;
+  } | null = null;
   let globalError: string | null = null;
   let streaming: StreamingState & { queuedMessageCount: number } = {
     isThinking: false,

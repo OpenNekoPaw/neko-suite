@@ -204,7 +204,14 @@ export interface GetMessageQueueWebviewMessage {
 }
 
 export interface QueuedMessageActionWebviewMessage {
-  type: 'promoteQueuedMessage' | 'cancelQueuedMessage' | 'editQueuedMessage';
+  type: 'promoteQueuedMessage' | 'cancelQueuedMessage';
+  conversationId: string;
+  queueItemId: string;
+}
+
+export interface EditQueuedMessageWebviewMessage {
+  type: 'editQueuedMessage';
+  tabId: string;
   conversationId: string;
   queueItemId: string;
 }
@@ -495,6 +502,7 @@ export type WebviewToExtensionMessage =
   | ActivateConversationWebviewMessage
   | GetMessageQueueWebviewMessage
   | QueuedMessageActionWebviewMessage
+  | EditQueuedMessageWebviewMessage
   | DeleteConversationWebviewMessage
   | ConversationLifecycleWebviewMessage
   | EmptyWebviewMessage
@@ -675,6 +683,7 @@ export interface MessageQueueSnapshotMessage {
 
 export interface QueuedMessageEditRequestedMessage {
   type: 'queuedMessageEditRequested';
+  tabId: string;
   conversationId: string;
   item: AgentQueuedMessageItem;
   snapshot: AgentMessageQueueSnapshot;
@@ -726,7 +735,8 @@ export type AgentSessionDiagnosticCode =
   | 'terminal-webview-delivery-unavailable'
   | 'conversation-durability-failed'
   | 'stale-tab-state-revision'
-  | 'invalid-conversation-activation';
+  | 'invalid-conversation-activation'
+  | 'queued-edit-draft-conflict';
 
 export interface AgentSessionDiagnosticMessage {
   type: 'sessionDiagnostic';
@@ -1250,7 +1260,6 @@ const TASK_ACTION_MESSAGE_TYPES: readonly TaskActionWebviewMessage['type'][] = [
 const QUEUED_MESSAGE_ACTION_TYPES: readonly QueuedMessageActionWebviewMessage['type'][] = [
   'promoteQueuedMessage',
   'cancelQueuedMessage',
-  'editQueuedMessage',
 ];
 export const WEBVIEW_TO_EXTENSION_MESSAGE_TYPES = [
   'sendMessage',
@@ -1491,10 +1500,12 @@ export function buildMessageQueueSnapshotMessage(
 }
 
 export function buildQueuedMessageEditRequestedMessage(input: {
+  readonly tabId: string;
   readonly conversationId: string;
   readonly item: AgentQueuedMessageItem;
   readonly snapshot: AgentMessageQueueSnapshot;
 }): QueuedMessageEditRequestedMessage {
+  const tabId = requireBuilderTabId(input.tabId, 'queuedMessageEditRequested');
   const conversationId = requireBuilderConversationId(
     input.conversationId,
     'queuedMessageEditRequested',
@@ -1505,6 +1516,7 @@ export function buildQueuedMessageEditRequestedMessage(input: {
   }
   return {
     type: 'queuedMessageEditRequested',
+    tabId,
     conversationId,
     item: cloneAgentQueuedMessageItem(input.item, conversationId, 'queuedMessageEditRequested'),
     snapshot,
@@ -1883,6 +1895,9 @@ export function parseWebviewToExtensionMessage(raw: unknown): WebviewToExtension
   if (type === 'getMessageQueue') {
     const conversationId = requiredString(raw.conversationId);
     return conversationId ? { type, conversationId } : null;
+  }
+  if (type === 'editQueuedMessage') {
+    return parseEditQueuedMessage(raw);
   }
   if (isQueuedMessageActionType(type)) {
     return parseQueuedMessageActionMessage(type, raw);
@@ -2341,6 +2356,17 @@ function parseTaskActionMessage(
     taskScope: scopeResult.scope as TaskRunScope,
     ...(resultRef ? { resultRef } : {}),
   };
+}
+
+function parseEditQueuedMessage(
+  raw: Record<string, unknown>,
+): EditQueuedMessageWebviewMessage | null {
+  const tabId = requiredString(raw.tabId);
+  const conversationId = requiredString(raw.conversationId);
+  const queueItemId = requiredString(raw.queueItemId);
+  return tabId && conversationId && queueItemId
+    ? { type: 'editQueuedMessage', tabId, conversationId, queueItemId }
+    : null;
 }
 
 function parseQueuedMessageActionMessage(
@@ -3675,6 +3701,13 @@ function nonNegativeInteger(value: unknown): number | null {
 
 function requiredString(value: unknown): string | null {
   return isNonEmptyString(value) ? value : null;
+}
+
+function requireBuilderTabId(value: unknown, messageType: string): string {
+  if (!isNonEmptyString(value)) {
+    throw new Error(`${messageType} requires non-empty tabId`);
+  }
+  return value;
 }
 
 function requireBuilderConversationId(value: unknown, messageType: string): string {

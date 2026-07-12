@@ -165,6 +165,9 @@ vi.mock('@/components/ChatWorkspace', () => ({
             .map((diagnostic) => diagnostic.message)
             .join('|')}
         </span>
+        <span data-testid="workspace-queued-edit">
+          {tabRenderSnapshot.snapshot.state.queuedEdit?.item.content ?? ''}
+        </span>
         <span data-testid="workspace-tab-conversation">
           {props.activeTabConversationId ?? 'none'}
         </span>
@@ -1187,6 +1190,53 @@ describe('ConversationController entry state', () => {
     expect(screen.getByTestId('workspace-diagnostics').textContent).toContain(
       'Conversation A only.',
     );
+  });
+
+  it('routes queued edit responses to the exact requesting Tab runtime', () => {
+    vi.clearAllMocks();
+    render(<ConversationController {...createProps()} />);
+    const openTabs = [
+      { id: 'tab-a', title: 'Chat A', conversationId: 'conv-a' },
+      { id: 'tab-b', title: 'Chat B', conversationId: 'conv-a' },
+    ];
+
+    act(() => {
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          data: { type: 'tabState', tabState: { openTabs, activeTabId: 'tab-b' } },
+        }),
+      );
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          data: {
+            type: 'queuedMessageEditRequested',
+            tabId: 'tab-a',
+            conversationId: 'conv-a',
+            item: {
+              id: 'queue-a',
+              conversationId: 'conv-a',
+              content: 'Tab A queued edit',
+              createdAt: 10,
+              source: 'composer',
+            },
+            snapshot: {
+              conversationId: 'conv-a',
+              pendingCount: 0,
+              version: 2,
+              items: [],
+            },
+          },
+        }),
+      );
+    });
+
+    expect(screen.getByTestId('workspace-queued-edit').textContent).toBe('');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Switch Chat A' }));
+    expect(screen.getByTestId('workspace-queued-edit').textContent).toBe('Tab A queued edit');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Switch Chat B' }));
+    expect(screen.getByTestId('workspace-queued-edit').textContent).toBe('');
   });
 
   it('keeps activation rejection diagnostics scoped to the requested conversation', () => {

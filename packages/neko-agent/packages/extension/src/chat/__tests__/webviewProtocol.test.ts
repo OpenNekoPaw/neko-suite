@@ -171,11 +171,13 @@ describe('parseWebviewToExtensionMessage', () => {
     expect(
       parseWebviewToExtensionMessage({
         type: 'editQueuedMessage',
+        tabId: 'tab-1',
         conversationId: 'conv-1',
         queueItemId: 'queue-1',
       }),
     ).toEqual({
       type: 'editQueuedMessage',
+      tabId: 'tab-1',
       conversationId: 'conv-1',
       queueItemId: 'queue-1',
     });
@@ -275,7 +277,10 @@ describe('parseWebviewToExtensionMessage', () => {
     ['conversation lifecycle', { type: 'conversationLifecycle', action: 'archive' }],
     ['queued message promotion', { type: 'promoteQueuedMessage', queueItemId: 'queue-1' }],
     ['queued message cancellation', { type: 'cancelQueuedMessage', queueItemId: 'queue-1' }],
-    ['queued message editing', { type: 'editQueuedMessage', queueItemId: 'queue-1' }],
+    [
+      'queued message editing',
+      { type: 'editQueuedMessage', tabId: 'tab-1', queueItemId: 'queue-1' },
+    ],
     ['plan approval', { type: 'planApprove', planId: 'plan-1' }],
     ['plan rejection', { type: 'planReject', planId: 'plan-1' }],
     ['plan step approval', { type: 'planStepApprove', planId: 'plan-1', stepId: 'step-1' }],

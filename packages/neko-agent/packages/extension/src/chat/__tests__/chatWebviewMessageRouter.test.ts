@@ -266,6 +266,7 @@ describe('handleChatWebviewMessage', () => {
     handleChatWebviewMessage(
       {
         type: 'editQueuedMessage',
+        tabId: 'tab-1',
         conversationId: 'conv-1',
         queueItemId: 'queue-1',
       },
@@ -288,6 +289,7 @@ describe('handleChatWebviewMessage', () => {
     );
     expect(deps.conversationMessageHandler.handleEditQueuedMessage).toHaveBeenCalledWith(
       deps.webview,
+      'tab-1',
       'conv-1',
       'queue-1',
     );

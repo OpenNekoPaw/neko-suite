@@ -272,6 +272,7 @@ export class ConversationMessageHandler {
 
   handleEditQueuedMessage(
     webview: vscode.Webview,
+    tabId: string,
     conversationId: string,
     queueItemId: string,
   ): void {
@@ -280,6 +281,7 @@ export class ConversationMessageHandler {
       const snapshot = this._createQueueSnapshot(conversationId);
       webview.postMessage(
         buildQueuedMessageEditRequestedMessage({
+          tabId,
           conversationId,
           item: projectAgentPendingMessageItem(item),
           snapshot,

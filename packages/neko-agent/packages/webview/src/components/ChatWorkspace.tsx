@@ -140,13 +140,7 @@ export interface ChatWorkspaceProps {
   onInitialInputRequestConsumed?: (id: number) => void;
   initialEntryPromptMenuRequest?: { id: number; menu: EntryPromptMenu } | null;
   onInitialEntryPromptMenuRequestConsumed?: (id: number) => void;
-  queuedEditRequest?: {
-    id: number;
-    conversationId: string;
-    item: AgentQueuedMessageItem;
-  } | null;
-  onQueuedEditRequestConsumed?: (id: number) => void;
-  onQueuedEditConflict?: (event: { conversationId: string; item: AgentQueuedMessageItem }) => void;
+  queuedEditDraftConflictMessage: string;
   onSessionDiagnostic?: (diagnostic: AgentSessionDiagnosticMessage) => void;
 }
 
@@ -210,9 +204,7 @@ export function ChatWorkspace({
   onInitialInputRequestConsumed,
   initialEntryPromptMenuRequest,
   onInitialEntryPromptMenuRequestConsumed,
-  queuedEditRequest,
-  onQueuedEditRequestConsumed,
-  onQueuedEditConflict,
+  queuedEditDraftConflictMessage,
   onSessionDiagnostic,
 }: ChatWorkspaceProps) {
   const { snapshot: tabRenderSnapshot, updateState: updateTabRenderState } =
@@ -222,6 +214,7 @@ export function ChatWorkspace({
   const selectedModel = tabState.selectedModel;
   const mediaModelSelection = tabState.mediaModelSelection;
   const promptMode = tabState.promptMode;
+  const queuedEdit = tabState.queuedEdit;
   const latestSessionDiagnostic = tabState.diagnostics.at(-1) ?? null;
   const attachedFiles = [...tabState.attachedFiles];
   const selectedFileReferences = [...tabState.selectedFileReferences];
@@ -509,26 +502,43 @@ export function ChatWorkspace({
   ]);
 
   useEffect(() => {
-    if (!queuedEditRequest || !sessionMutationConversationId) return;
-    if (queuedEditRequest.conversationId !== sessionMutationConversationId) return;
+    if (!queuedEdit) return;
 
     const currentInputValue = inputValueRef.current;
     if (currentInputValue.trim().length === 0) {
-      setInputValue(queuedEditRequest.item.content);
-      inputValueRef.current = queuedEditRequest.item.content;
-    } else {
-      onQueuedEditConflict?.({
-        conversationId: queuedEditRequest.conversationId,
-        item: queuedEditRequest.item,
-      });
+      inputValueRef.current = queuedEdit.item.content;
+      updateTabRenderState((state) =>
+        state.queuedEdit?.requestId === queuedEdit.requestId
+          ? { inputValue: queuedEdit.item.content, queuedEdit: null }
+          : {},
+      );
+      return;
     }
-    onQueuedEditRequestConsumed?.(queuedEditRequest.id);
+
+    updateTabRenderState((state) =>
+      state.queuedEdit?.requestId === queuedEdit.requestId
+        ? {
+            queuedEdit: null,
+            diagnostics: [
+              ...state.diagnostics,
+              {
+                type: 'sessionDiagnostic',
+                code: 'queued-edit-draft-conflict',
+                severity: 'warning',
+                message: queuedEditDraftConflictMessage,
+                conversationId: tabRenderSnapshot.conversationId,
+                tabId: tabRenderSnapshot.tabId,
+              },
+            ],
+          }
+        : {},
+    );
   }, [
-    onQueuedEditConflict,
-    onQueuedEditRequestConsumed,
-    queuedEditRequest,
-    sessionMutationConversationId,
-    setInputValue,
+    queuedEdit,
+    queuedEditDraftConflictMessage,
+    tabRenderSnapshot.conversationId,
+    tabRenderSnapshot.tabId,
+    updateTabRenderState,
   ]);
 
   // Pre-intercept handler: catches messages not in the registry
@@ -736,9 +746,13 @@ export function ChatWorkspace({
   const handleEditQueuedMessage = useCallback(
     (queueItemId: string) => {
       if (!sessionMutationConversationId || isCharacterRoleSession) return;
-      AgentHostMessages.editQueuedMessage(sessionMutationConversationId, queueItemId);
+      AgentHostMessages.editQueuedMessage(
+        tabRenderSnapshot.tabId,
+        sessionMutationConversationId,
+        queueItemId,
+      );
     },
-    [sessionMutationConversationId, isCharacterRoleSession],
+    [isCharacterRoleSession, sessionMutationConversationId, tabRenderSnapshot.tabId],
   );
 
   return (

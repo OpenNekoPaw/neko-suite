@@ -266,8 +266,8 @@ export const AgentHostMessages = {
   },
 
   /** Remove a queued message and ask Webview to restore it into the composer. */
-  editQueuedMessage: (conversationId: string, queueItemId: string) => {
-    postConversationMessage({ type: 'editQueuedMessage', conversationId, queueItemId });
+  editQueuedMessage: (tabId: string, conversationId: string, queueItemId: string) => {
+    postConversationMessage({ type: 'editQueuedMessage', tabId, conversationId, queueItemId });
   },
 
   /** Exit an active Embody Character feedback session */

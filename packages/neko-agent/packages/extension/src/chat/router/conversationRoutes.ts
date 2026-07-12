@@ -109,6 +109,7 @@ export function tryHandleConversationRoute(
       if (!conversationId) return true;
       deps.conversationMessageHandler.handleEditQueuedMessage(
         webview,
+        message.tabId,
         conversationId,
         message.queueItemId,
       );

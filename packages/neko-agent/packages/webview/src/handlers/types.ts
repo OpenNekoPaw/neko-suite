@@ -142,6 +142,7 @@ export interface GlobalNotificationContext {
 }
 
 export interface QueuedMessageEditRequest {
+  readonly tabId: string;
   readonly conversationId: string;
   readonly item: AgentQueuedMessageItem;
 }

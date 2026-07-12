@@ -387,7 +387,7 @@ describe('messages', () => {
         VSCodeMessages.getMessageQueue('conv-1');
         VSCodeMessages.promoteQueuedMessage('conv-1', 'queue-1');
         VSCodeMessages.cancelQueuedMessage('conv-1', 'queue-1');
-        VSCodeMessages.editQueuedMessage('conv-1', 'queue-1');
+        VSCodeMessages.editQueuedMessage('tab-1', 'conv-1', 'queue-1');
 
         expect(mockPostMessage).toHaveBeenCalledWith({
           type: 'getMessageQueue',
@@ -405,6 +405,7 @@ describe('messages', () => {
         });
         expect(mockPostMessage).toHaveBeenCalledWith({
           type: 'editQueuedMessage',
+          tabId: 'tab-1',
           conversationId: 'conv-1',
           queueItemId: 'queue-1',
         });
