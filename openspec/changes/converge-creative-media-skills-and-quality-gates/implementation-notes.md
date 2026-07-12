@@ -972,3 +972,60 @@ pnpm exec tsc --noEmit -p packages/neko-agent/packages/extension/tsconfig.json
 ```
 
 本批继续推进任务 9.5/9.6/9.7，但仍不整体勾选。下一步应继续审计 evaluation manifests、locale、command metadata、`quality-evidence-normalizer` 的无调用方旧 schema，以及 migration alias 的到期/telemetry 条件；不能因为 catalog 已 canonical 就保留这些残留成功或解释路径。
+
+## 20. 删除无调用方的 path-only Quality normalization 与 video index（2026-07-12）
+
+在 canonical `QualityGateResult` 已直接进入 Agent validation feedback 后，`@neko/shared` 仍公开导出一套旧的 Quality evidence normalization 和 video content index contract：
+
+- `normalizeQualityReviewPayload()` / `normalizeQualityConsistencyPayload()` 从 scene、`mediaPath`、time range 和旧 consistency payload 补造 Quality evidence；
+- `buildVideoContentIndex()` 及其 segment/continuity/temporal/aesthetic DTO 将上述旧 evidence 再组织成另一套派生索引；
+- 对应 runtime constants、id/hash helpers、validators、barrel exports 和大批 fixture 仍允许其他包重新建立 path-only 成功路径。
+
+生产调用方审计确认这些 API 只剩 `packages/neko-types` 自身 barrel 与测试引用；active Quality runtime、Agent validation adapter、Extension capability registry 和其他 owning package 均不再消费它们。因此本批没有增加 adapter 或迁移层，而是直接删除：
+
+- `quality-evidence-normalizer.ts` 及其测试；
+- `video-content-index.ts` 及其测试；
+- `types/quality/index.ts` 和根 `types/index.ts` 中所有相关 value/type exports。
+
+`qa-types.ts` 仍被 `LegacyMediaQualityRuntime` 与 remediation planner 使用，具有真实调用方，故本批只保留其现有 QA DTO 和 `QUALITY_ISSUE_CATEGORIES`，没有借无调用方清理扩大到另一条仍在迁移的 runtime 边界。
+
+新增 `@neko/shared` 主入口 poison assertion，明确证明以下已删除 API 不会被重新导出：
+
+- `normalizeQualityReviewPayload`；
+- `normalizeQualityConsistencyPayload`；
+- `buildVideoContentIndex`。
+
+这使旧 schema 不再只是从默认 catalog 隐藏，而是同时失去运行时实现、public export、fixture 和可重注册能力；后续 Quality evidence 必须来自 revision-bound `QualityTarget`、canonical evaluator evidence 与 `QualityGateResult`。
+
+验证：
+
+```bash
+pnpm --filter @neko/shared exec vitest --run \
+  src/__tests__/main-entry-boundary.test.ts
+# 1 file, 2 tests passed
+
+pnpm --filter @neko/shared test
+# 154 files, 1416 tests passed
+
+pnpm --filter @neko/skills test
+# 33 files, 306 tests passed
+
+pnpm exec tsc --noEmit -p packages/neko-skills/tsconfig.json
+# passed；neko-types 没有独立 tsconfig，使用实际消费 @neko/shared 的 skills tsconfig 做聚焦类型检查
+
+pnpm exec eslint \
+  packages/neko-types/src/__tests__/main-entry-boundary.test.ts \
+  packages/neko-types/src/types/index.ts \
+  packages/neko-types/src/types/quality/index.ts
+# passed
+
+pnpm check:unused
+# 仍为既有/并行全仓门禁失败：1 unused file、5 unused dependencies、
+# 2 unlisted dependencies、25 unused exports、2 duplicate exports；
+# 输出未包含本批删除的 Quality normalizer/video index API
+
+pnpm check:legacy-debt
+# 仍为既有全仓门禁失败：76 blocking（migrate-now: 65，needs-review: 11）
+```
+
+本批继续完成任务 9.6/9.7 中“删除 legacy Quality schema/fixture/export”和“证明 removed path-only entry point 不再成功”的独立子集。任务暂不整体勾选：generated asset lifecycle、evaluation/locale/command metadata、到期 alias 与剩余 fallback 仍待处理。
