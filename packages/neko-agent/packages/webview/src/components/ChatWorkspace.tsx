@@ -26,9 +26,7 @@ import {
   PromptMode,
   SessionMode,
   AgentState,
-  buildAgentSessionDiagnosticMessage,
   type ConversationKind,
-  type AgentSessionDiagnosticMessage,
   type CharacterDialogueSessionProjection,
   type EmbodyCharacterSessionProjection,
   type AgentQueuedMessageItem,
@@ -90,10 +88,6 @@ export interface ChatWorkspaceProps {
   queuedMessages: readonly AgentQueuedMessageItem[];
   setStreamingMessageId: React.Dispatch<React.SetStateAction<string | null>>;
   streamingMessageIdRef: MutableRefObject<string | null>;
-  activeConversationId: string | null;
-  activeConversationIdRef: MutableRefObject<string | null>;
-  activeTabConversationId: string | null;
-  isForegroundConversationActivationPending?: boolean;
   foregroundConversationAvailability?: ForegroundConversationAvailability;
   conversationKind: ConversationKind;
   characterDialogueSession?: CharacterDialogueSessionProjection;
@@ -142,7 +136,6 @@ export interface ChatWorkspaceProps {
   initialEntryPromptMenuRequest?: { id: number; menu: EntryPromptMenu } | null;
   onInitialEntryPromptMenuRequestConsumed?: (id: number) => void;
   queuedEditDraftConflictMessage: string;
-  onSessionDiagnostic?: (diagnostic: AgentSessionDiagnosticMessage) => void;
 }
 
 // =============================================================================
@@ -161,9 +154,6 @@ export function ChatWorkspace({
   queuedMessages,
   setStreamingMessageId,
   streamingMessageIdRef,
-  activeConversationId,
-  activeTabConversationId,
-  isForegroundConversationActivationPending = false,
   foregroundConversationAvailability = { kind: 'ready' },
   conversationKind,
   characterDialogueSession,
@@ -201,7 +191,6 @@ export function ChatWorkspace({
   initialEntryPromptMenuRequest,
   onInitialEntryPromptMenuRequestConsumed,
   queuedEditDraftConflictMessage,
-  onSessionDiagnostic,
 }: ChatWorkspaceProps) {
   const { snapshot: tabRenderSnapshot, updateState: updateTabRenderState } =
     useTabRenderStore(tabRenderStore);
@@ -376,50 +365,14 @@ export function ChatWorkspace({
     [updateTabRenderState],
   );
 
-  const visibleSessionConversationId = activeTabConversationId ?? activeConversationId;
+  const tabConversationId = tabRenderSnapshot.conversationId;
   const isCharacterRoleSession = isCharacterRoleConversationKind(conversationKind);
-  const hasActiveTabConversationMismatch = Boolean(
-    isVisible && activeTabConversationId && activeTabConversationId !== activeConversationId,
-  );
-  const isConversationSwitching = Boolean(
-    hasActiveTabConversationMismatch ||
-    (isForegroundConversationActivationPending && !activeTabConversationId),
-  );
-  const sessionMutationConversationId =
-    !isVisible || isConversationSwitching ? null : visibleSessionConversationId;
+  const sessionMutationConversationId = isVisible ? tabConversationId : null;
   const sessionMutationConversationIdRef = useRef<string | null>(sessionMutationConversationId);
 
   useLayoutEffect(() => {
     sessionMutationConversationIdRef.current = sessionMutationConversationId;
   }, [sessionMutationConversationId]);
-
-  useEffect(() => {
-    if (
-      !isConversationSwitching ||
-      isForegroundConversationActivationPending ||
-      !hasActiveTabConversationMismatch ||
-      !activeTabConversationId
-    ) {
-      return;
-    }
-    onSessionDiagnostic?.(
-      buildAgentSessionDiagnosticMessage({
-        code: 'active-tab-mismatch',
-        action: 'session-mutation',
-        conversationId: activeTabConversationId,
-        activeConversationId,
-        activeTabConversationId,
-        message: `Active tab conversation "${activeTabConversationId}" does not match host active conversation "${activeConversationId ?? 'none'}".`,
-      }),
-    );
-  }, [
-    activeConversationId,
-    activeTabConversationId,
-    hasActiveTabConversationMismatch,
-    isConversationSwitching,
-    isForegroundConversationActivationPending,
-    onSessionDiagnostic,
-  ]);
 
   const setVisibleSessionMode = useCallback(
     (mode: SessionMode) => {
@@ -488,7 +441,6 @@ export function ChatWorkspace({
     ),
     activeConversationId: sessionMutationConversationId,
     activeConversationIdRef: sessionMutationConversationIdRef,
-    isConversationSwitching,
     streamingMessageIdRef,
     messages,
     setMessages,
@@ -867,11 +819,10 @@ export function ChatWorkspace({
         queuedMessageCount={queuedMessageCount}
         queuedMessages={queuedMessages}
         streamingMessageId={streamingMessageId}
-        activeConversationId={visibleSessionConversationId}
+        activeConversationId={tabConversationId}
         conversationKind={conversationKind}
         characterDialogueSession={characterDialogueSession}
         embodyCharacterSession={embodyCharacterSession}
-        isConversationSwitching={isConversationSwitching}
         foregroundConversationAvailability={foregroundConversationAvailability}
         activeSkill={
           !isCharacterRoleSession && activeSkill?.conversationId === sessionMutationConversationId

@@ -316,37 +316,14 @@ describe('ChatWorkspace pending send', () => {
     vi.clearAllMocks();
   });
 
-  it('replays a tabless send after a new conversation is activated in default agent mode', () => {
-    const onSendWithoutConversation = vi.fn();
+  it('replays a pending entry send through the newly bound Tab runtime', () => {
     const onPendingSendRequestConsumed = vi.fn();
-    const { rerender, getByTestId } = render(
+    const runtime = createTabRenderRuntime({ tabId: 'tab-new', conversationId: 'conv-new' });
+
+    const { rerender } = render(
       <ChatWorkspace
         {...createProps({
-          activeConversationId: null,
-          activeConversationIdRef: createRefWithCurrent<string | null>(null),
-          activeTabConversationId: null,
-          onSendWithoutConversation,
-          onPendingSendRequestConsumed,
-        })}
-      />,
-    );
-
-    act(() => {
-      getByTestId('send').click();
-    });
-
-    expect(onSendWithoutConversation).toHaveBeenCalledWith({
-      messageText: 'hello from tabless state',
-      displayMessageText: 'hello from tabless state',
-    });
-    expect(vscodeMocks.sendMessage).not.toHaveBeenCalled();
-
-    rerender(
-      <ChatWorkspace
-        {...createProps({
-          activeConversationId: 'conv-new',
-          activeConversationIdRef: createRefWithCurrent<string | null>('conv-new'),
-          activeTabConversationId: 'conv-new',
+          tabRenderStore: runtime.store,
           pendingSendRequest: {
             id: 1,
             input: {
@@ -354,7 +331,6 @@ describe('ChatWorkspace pending send', () => {
               displayMessageText: 'hello from tabless state',
             },
           },
-          onSendWithoutConversation,
           onPendingSendRequestConsumed,
         })}
       />,
@@ -373,9 +349,7 @@ describe('ChatWorkspace pending send', () => {
     rerender(
       <ChatWorkspace
         {...createProps({
-          activeConversationId: 'conv-new',
-          activeConversationIdRef: createRefWithCurrent<string | null>('conv-new'),
-          activeTabConversationId: 'conv-new',
+          tabRenderStore: runtime.store,
           pendingSendRequest: {
             id: 1,
             input: {
@@ -383,7 +357,6 @@ describe('ChatWorkspace pending send', () => {
               displayMessageText: 'hello from tabless state',
             },
           },
-          onSendWithoutConversation,
           onPendingSendRequestConsumed,
         })}
       />,
@@ -808,23 +781,21 @@ describe('ChatWorkspace pending send', () => {
     expect(vscodeMocks.sendMessage).not.toHaveBeenCalled();
   });
 
-  it('does not route visible tab mutations to the stale active conversation during a switch', () => {
+  it('routes visible mutations through the immutable Tab runtime binding', () => {
     const clearMessages = vi.fn();
     const updateSettings = vi.fn();
     const handleMessage = vi.fn();
     const setAmbientNodes = vi.fn();
-    const onSessionDiagnostic = vi.fn();
-    const clearInputTarget = render(
+    const runtime = createTabRenderRuntime({ tabId: 'tab-b', conversationId: 'conv-b' });
+    const target = render(
       <ChatWorkspace
         {...createProps({
-          activeConversationId: 'conv-a',
-          activeConversationIdRef: createRefWithCurrent<string | null>('conv-a'),
-          activeTabConversationId: 'conv-b',
+          tabRenderStore: runtime.store,
           clearMessages,
           updateSettings,
           setActiveSkill: vi.fn(),
           activeSkill: {
-            conversationId: 'conv-a',
+            conversationId: 'conv-b',
             skillName: 'storyboard',
             records: [
               {
@@ -838,7 +809,6 @@ describe('ChatWorkspace pending send', () => {
           },
           handleMessage,
           setAmbientNodes,
-          onSessionDiagnostic,
         })}
       />,
     );
@@ -848,8 +818,8 @@ describe('ChatWorkspace pending send', () => {
         new MessageEvent('message', {
           data: {
             type: 'injectContext',
-            tabId: 'tab-1',
-            conversationId: 'conv-1',
+            tabId: 'tab-b',
+            conversationId: 'conv-b',
             payload: contextPayload('ctx-switch', 'Switching context'),
           },
         }),
@@ -858,54 +828,49 @@ describe('ChatWorkspace pending send', () => {
         new MessageEvent('message', {
           data: {
             type: 'ambientCanvasUpdate',
-            nodes: [{ nodeId: 'node-a', type: 'scene', summary: 'stale active scene' }],
+            nodes: [{ nodeId: 'node-b', type: 'scene', summary: 'Tab B scene' }],
           },
         }),
       );
     });
-    fireEvent.click(clearInputTarget.getByTestId('send'));
-    fireEvent.click(clearInputTarget.getByTestId('compress-context'));
-    fireEvent.click(clearInputTarget.getByTestId('set-plan-mode'));
-    fireEvent.click(clearInputTarget.getByTestId('clear-active-skill'));
-    fireEvent.click(clearInputTarget.getByTestId('approve-plan-step'));
-    fireEvent.click(clearInputTarget.getByTestId('promote-queued'));
-    fireEvent.click(clearInputTarget.getByTestId('cancel-queued'));
-    fireEvent.click(clearInputTarget.getByTestId('edit-queued'));
-    fireEvent.click(clearInputTarget.getByTestId('cancel-task'));
-    fireEvent.click(clearInputTarget.getByTestId('retry-task'));
-    fireEvent.click(clearInputTarget.getByTestId('view-task-result'));
+    fireEvent.click(target.getByTestId('send'));
+    fireEvent.click(target.getByTestId('compress-context'));
+    fireEvent.click(target.getByTestId('set-plan-mode'));
+    fireEvent.click(target.getByTestId('clear-active-skill'));
+    fireEvent.click(target.getByTestId('approve-plan-step'));
+    fireEvent.click(target.getByTestId('promote-queued'));
+    fireEvent.click(target.getByTestId('cancel-queued'));
+    fireEvent.click(target.getByTestId('edit-queued'));
+    fireEvent.click(target.getByTestId('cancel-task'));
+    fireEvent.click(target.getByTestId('retry-task'));
+    fireEvent.click(target.getByTestId('view-task-result'));
 
     runRegisteredShortcut('clearConversation');
 
-    expect(vscodeMocks.sendMessage).not.toHaveBeenCalled();
-    expect(vscodeMocks.clearHistory).not.toHaveBeenCalled();
-    expect(vscodeMocks.compressContext).not.toHaveBeenCalled();
-    expect(vscodeMocks.setPromptMode).not.toHaveBeenCalled();
-    expect(vscodeMocks.clearActiveSkill).not.toHaveBeenCalled();
-    expect(vscodeMocks.approvePlanStep).not.toHaveBeenCalled();
-    expect(vscodeMocks.promoteQueuedMessage).not.toHaveBeenCalled();
-    expect(vscodeMocks.cancelQueuedMessage).not.toHaveBeenCalled();
-    expect(vscodeMocks.editQueuedMessage).not.toHaveBeenCalled();
-    expect(vscodeMocks.cancelTask).not.toHaveBeenCalled();
-    expect(vscodeMocks.retryTask).not.toHaveBeenCalled();
-    expect(vscodeMocks.viewTaskResult).not.toHaveBeenCalled();
-    expect(clearMessages).not.toHaveBeenCalled();
-    expect(updateSettings).not.toHaveBeenCalled();
+    expect(vscodeMocks.sendMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ conversationId: 'conv-b' }),
+    );
+    expect(vscodeMocks.clearHistory).toHaveBeenCalledWith('conv-b');
+    expect(vscodeMocks.compressContext).toHaveBeenCalledWith('conv-b');
+    expect(vscodeMocks.setPromptMode).toHaveBeenCalledWith('plan', 'conv-b');
+    expect(vscodeMocks.clearActiveSkill).toHaveBeenCalledWith('conv-b', { recordId: 'record-1' });
+    expect(vscodeMocks.approvePlanStep).toHaveBeenCalledWith('plan-1', 'step-1', 'conv-b');
+    expect(vscodeMocks.promoteQueuedMessage).toHaveBeenCalledWith('conv-b', 'queued-1');
+    expect(vscodeMocks.cancelQueuedMessage).toHaveBeenCalledWith('conv-b', 'queued-1');
+    expect(vscodeMocks.editQueuedMessage).toHaveBeenCalledWith('tab-b', 'conv-b', 'queued-1');
+    expect(vscodeMocks.cancelTask).toHaveBeenCalledWith('task-1');
+    expect(vscodeMocks.retryTask).toHaveBeenCalledWith('task-1');
+    expect(vscodeMocks.viewTaskResult).toHaveBeenCalledWith('task-1', 'result-1');
+    expect(clearMessages).toHaveBeenCalledTimes(1);
+    expect(updateSettings).toHaveBeenCalledWith({ promptMode: 'plan' });
     expect(handleMessage).toHaveBeenCalledWith(
       expect.objectContaining({
-        data: expect.objectContaining({ type: 'injectContext', tabId: 'tab-1' }),
+        data: expect.objectContaining({ type: 'injectContext', tabId: 'tab-b' }),
       }),
     );
-    expect(setAmbientNodes).not.toHaveBeenCalled();
-    expect(onSessionDiagnostic).toHaveBeenCalledWith(
-      expect.objectContaining({
-        type: 'sessionDiagnostic',
-        code: 'active-tab-mismatch',
-        conversationId: 'conv-b',
-        activeConversationId: 'conv-a',
-        activeTabConversationId: 'conv-b',
-      }),
-    );
+    expect(setAmbientNodes).toHaveBeenCalledWith([
+      { nodeId: 'node-b', type: 'scene', summary: 'Tab B scene' },
+    ]);
   });
 
   it('keeps viewport and scroll intent isolated by Tab store', () => {
@@ -963,27 +928,12 @@ describe('ChatWorkspace pending send', () => {
     expect(runtimeA.store.getSnapshot().state.focus.requestRevision).toBe(1);
   });
 
-  it('does not report active-tab-mismatch while activation is pending for the same conversation', () => {
-    const onSessionDiagnostic = vi.fn();
-
+  it('does not require a host active-conversation owner to mutate the visible Tab', () => {
+    const runtime = createTabRenderRuntime({ tabId: 'tab-b', conversationId: 'conv-b' });
     const { getByTestId } = render(
-      <ChatWorkspace
-        {...createProps({
-          activeConversationId: 'conv-b',
-          activeConversationIdRef: createRefWithCurrent<string | null>('conv-b'),
-          activeTabConversationId: 'conv-b',
-          isForegroundConversationActivationPending: true,
-          onSessionDiagnostic,
-        })}
-      />,
+      <ChatWorkspace {...createProps({ tabRenderStore: runtime.store })} />,
     );
 
-    expect(onSessionDiagnostic).not.toHaveBeenCalledWith(
-      expect.objectContaining({
-        type: 'sessionDiagnostic',
-        code: 'active-tab-mismatch',
-      }),
-    );
     fireEvent.click(getByTestId('send'));
     expect(vscodeMocks.sendMessage).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -1016,9 +966,6 @@ function createProps(overrides: Partial<ChatWorkspaceProps> = {}): ChatWorkspace
     queuedMessageCount: 0,
     setStreamingMessageId: noop as React.Dispatch<React.SetStateAction<string | null>>,
     streamingMessageIdRef: createRefWithCurrent<string | null>(null),
-    activeConversationId: 'conv-1',
-    activeConversationIdRef: createRefWithCurrent<string | null>('conv-1'),
-    activeTabConversationId: 'conv-1',
     conversationKind: 'chat',
     queuedMessages: [],
     clearMessages: noop,

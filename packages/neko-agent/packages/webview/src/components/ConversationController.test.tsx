@@ -113,13 +113,10 @@ vi.mock('@/i18n/I18nContext', () => ({
 vi.mock('@/components/ChatWorkspace', () => ({
   ChatWorkspace: (props: {
     tabRenderStore: TabRenderStore;
-    activeConversationId?: string | null;
-    activeTabConversationId?: string | null;
     messages?: Message[];
     isThinking?: boolean;
     streamingMessageId?: string | null;
     agentState?: AgentState | null;
-    isForegroundConversationActivationPending?: boolean;
     foregroundConversationAvailability?: {
       kind: 'ready' | 'loading' | 'unavailable';
       diagnostic?: string;
@@ -142,11 +139,6 @@ vi.mock('@/components/ChatWorkspace', () => ({
     const isVisible = props.isVisible ?? true;
     const testId = (name: string) =>
       isVisible ? name : `${name}-${tabRenderSnapshot.snapshot.tabId}`;
-    const isConversationSwitching = Boolean(
-      props.isForegroundConversationActivationPending ||
-      (props.activeTabConversationId &&
-        props.activeTabConversationId !== props.activeConversationId),
-    );
 
     const handleMessage = props.handleMessage;
     useEffect(() => {
@@ -170,7 +162,7 @@ vi.mock('@/components/ChatWorkspace', () => ({
           onClick={() => setLocalRevision((current) => current + 1)}
         />
         <span data-testid={testId('workspace-conversation')}>
-          {props.activeConversationId ?? 'none'}
+          {tabRenderSnapshot.snapshot.conversationId}
         </span>
         <span data-testid={testId('workspace-prompt-mode')}>
           {tabRenderSnapshot.snapshot.state.promptMode}
@@ -184,7 +176,7 @@ vi.mock('@/components/ChatWorkspace', () => ({
           {tabRenderSnapshot.snapshot.state.queuedEdit?.item.content ?? ''}
         </span>
         <span data-testid={testId('workspace-tab-conversation')}>
-          {props.activeTabConversationId ?? 'none'}
+          {tabRenderSnapshot.snapshot.conversationId}
         </span>
         <span data-testid={testId('workspace-messages')}>
           {props.messages?.map((message) => message.content).join('|') ?? ''}
@@ -197,9 +189,7 @@ vi.mock('@/components/ChatWorkspace', () => ({
             })
             .join('|') ?? ''}
         </span>
-        <span data-testid={testId('workspace-switching')}>
-          {isConversationSwitching ? 'switching' : 'idle'}
-        </span>
+        <span data-testid={testId('workspace-switching')}>idle</span>
         <span data-testid={testId('workspace-availability')}>
           {props.foregroundConversationAvailability?.kind ?? 'ready'}
           {props.foregroundConversationAvailability?.diagnostic
@@ -1633,7 +1623,7 @@ describe('ConversationController entry state', () => {
       expectedTabStateRevision: number;
     };
     expect(screen.getByTestId('workspace-tab-conversation').textContent).toBe('conv-b');
-    expect(screen.getByTestId('workspace-switching').textContent).toBe('switching');
+    expect(screen.getByTestId('workspace-switching').textContent).toBe('idle');
     expect(screen.getByTestId('workspace-messages').textContent).toBe('');
 
     act(() => {

@@ -1533,9 +1533,6 @@ export function ConversationController({
         const foregroundConversationAvailability = foregroundAvailabilityByConversation.get(
           tab.conversationId,
         ) ?? { kind: 'ready' as const };
-        const visibleAgentState =
-          sessionState.agentState ??
-          (tab.conversationId === activeConversationId ? agentState : null);
 
         return (
           <ConversationTabRuntimeView
@@ -1552,12 +1549,6 @@ export function ConversationController({
             queuedMessages={sessionState.streaming.queuedMessages ?? []}
             setStreamingMessageId={setStreamingMessageId}
             streamingMessageIdRef={streamingMessageIdRef}
-            activeConversationId={activeConversationId}
-            activeConversationIdRef={activeConversationIdRef}
-            activeTabConversationId={tab.conversationId}
-            isForegroundConversationActivationPending={
-              visible && isForegroundConversationActivationPending
-            }
             foregroundConversationAvailability={foregroundConversationAvailability}
             conversationKind={tab.kind ?? 'chat'}
             characterDialogueSession={tab.characterDialogueSession}
@@ -1584,7 +1575,7 @@ export function ConversationController({
             setActiveSkill={(value) => setActiveSkillForConversation(tab.conversationId, value)}
             activationProgress={sessionState.skill.activationProgress}
             ambientNodes={[...sessionState.context.ambientNodes]}
-            agentState={visibleAgentState}
+            agentState={sessionState.agentState}
             handleMessage={handleMessage}
             setAmbientNodes={(value) => setAmbientNodesForConversation(tab.conversationId, value)}
             onNewChat={handleNewChat}
@@ -1597,7 +1588,6 @@ export function ConversationController({
             initialEntryPromptMenuRequest={visible ? initialEntryPromptMenuRequest : null}
             onInitialEntryPromptMenuRequestConsumed={handleInitialEntryPromptMenuRequestConsumed}
             queuedEditDraftConflictMessage={t('chat.input.queueEditDraftConflict')}
-            onSessionDiagnostic={reportConversationDiagnostic}
           />
         );
       })}
