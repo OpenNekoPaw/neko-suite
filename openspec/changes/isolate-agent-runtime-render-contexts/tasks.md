@@ -49,7 +49,7 @@
 - [x] 6.4 Implement Webview Tab attachment client and projection replica with endpoint/attachment/conversation/version/sequence validation.
 - [x] 6.5 Reattach every retained Tab from an authoritative snapshot after endpoint replacement and reject old epoch frames/ACKs.
 - [x] 6.6 Make live frame gaps and patch base mismatches fatal typed attachment diagnostics; recovery creates a new attachment rather than resuming the old one.
-- [ ] 6.7 Migrate Markdown sessions and work-item/message rendering to consume each Tab runtime's projection replica.
+- [x] 6.7 Migrate Markdown sessions and work-item/message rendering to consume each Tab runtime's projection replica.
 - [ ] 6.8 Add deterministic tests for snapshot-before-patch, projection changes during ACK, rapid visibility switching, endpoint restart, stale ACK, frame gap, and exact final content.
 
 ## 7. Legacy Removal, Documentation, and Validation
