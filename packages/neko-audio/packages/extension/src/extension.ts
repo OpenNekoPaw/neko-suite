@@ -15,6 +15,7 @@ import { AudioEditorProvider } from './providers/AudioEditorProvider';
 import { AudioProjectProvider } from './providers/AudioProjectProvider';
 import { AudioService } from './services/AudioService';
 import { AudioProjectQualityFacade } from './services/AudioProjectQualityFacade';
+import { AudioProjectAuthoringService } from './services/AudioProjectAuthoringService';
 import { AudioToolBridge } from './services/audioToolBridge';
 import {
   createAudioInteractiveEditorForwardedResult,
@@ -194,6 +195,15 @@ export async function activate(context: vscode.ExtensionContext): Promise<NekoAu
     return createAudioInteractiveEditorRequiredResult(operationId, noActiveEditorMessage);
   };
 
+  const projectAuthoring = new AudioProjectAuthoringService(projectProvider, {
+    async probeAudio(filePath) {
+      if (!sharedAudioService?.isAvailable) {
+        throw new Error('AudioService is unavailable for source probing.');
+      }
+      return sharedAudioService.probeAudio(filePath);
+    },
+  });
+
   // Register commands
   context.subscriptions.push(
     vscode.commands.registerCommand('neko.audio.record', () =>
@@ -268,6 +278,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<NekoAu
   // Build and return public API
   const api: NekoAudioAPI = {
     projectQuality,
+    authoring: {
+      importSource(request) {
+        return projectAuthoring.importSource(request);
+      },
+    },
     get isAvailable() {
       return sharedAudioService?.isAvailable ?? false;
     },
