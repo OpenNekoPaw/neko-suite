@@ -1251,3 +1251,60 @@ git diff --check
 ```
 
 `pnpm exec tsc --noEmit -p packages/neko-agent/packages/agent/tsconfig.json` 仍被并行工作区中的 perception/session 修改和该包既有测试 fixture 类型债务阻塞；输出中未出现本批 workflow state 文件错误，因此不把全包 tsc 描述为通过。
+
+## 25. Media Production 早期阶段编排与稳定素材身份（2026-07-12）
+
+任务 8.2 已完成。实现继续复用 8.1 的共享 workflow state 与 Agent task snapshot，不新增 source-to-Storyboard、shot planning、media generation 或 asset Gate 等用户级阶段 Skill，也不让 Agent 编排层直接依赖 Canvas、Cut、Audio、provider 或活动 Webview。
+
+五层审计结论：
+
+- **职责**：共享 workflow contract 拥有稳定 source identity；`MediaProductionEarlyStageOrchestrator` 只拥有前五个 canonical stage 的顺序、状态转换与错误传播；具体 Storyboard 构建/校验、镜头规划、生成和质量 Gate 由注入的 owning port 执行。
+- **依赖**：source 使用 durable `ResourceRef + revision/contentDigest` 或 `QualityProjectRef + projectRevision`；stage 间只传 typed artifact refs，不传缓存路径、render URI、对话文本或 provider/runtime handle。
+- **接口**：五个小型 executor port 共享同一 execution context，输入包括 workflow/source identity、前置 stage artifacts 与取消信号，输出仅包括 typed artifacts 和 diagnostics；没有叠加 factory、registry、provider 或平行 workflow DTO。
+- **扩展**：后续 8.3 可把通过 asset Gate 的资源交给 Canvas/Cut/Audio owning headless authoring API；8.4 可在现有 interrupted-stage fail-visible 边界上增加显式 artifact validation 与 resume，而无需重放已完成 mutation。
+- **测试**：覆盖十次 start/complete snapshot、canonical 调用顺序、Storyboard `videoPrompt` 校验失败阻断后续 mutation、asset Gate 绑定 generated asset revision，以及 completed stage 跳过和 interrupted stage 拒绝盲目重放。
+
+关键实现：
+
+- `MediaProductionWorkflowRunState.sourceRefs` 成为必填稳定输入；空 source、重复 source id、runtime/cache identity、缺失 revision 或非法 project revision 均 fail-visible。
+- source profile（例如 `media-production/from-comic`）仍是用户/工作流 profile；stage artifact profile 继续遵守内部 artifact id 约束，避免把带 `/` 的来源 profile 混入 artifact registry。
+- 每个 stage 在执行前持久化 `running` snapshot，执行成功或失败后立即持久化 terminal snapshot；error diagnostic 会使当前 stage 失败并停止下游，不能把失败包装成空 artifacts 的成功。
+- Storyboard validation 是 shot planning 与 media generation 的硬前置 Gate；测试明确保留并检查 scene-level `videoPrompt` 约束。shot-level `imagePrompt` 仍由 canonical Storyboard contract 和既有 Storyboard validator 负责，不折叠为通用 `generationPrompt`。
+- generated asset 通过既有 lifecycle helper 投影为 media-generation artifact，asset Gate 再返回绑定同一稳定 revision 的 `QualityTarget`/Gate artifact；cache 文件存在不构成 durable ownership。
+- 已完成 stage 直接跳过；持久状态为 `running` 的中断 stage 当前返回“requires explicit resume validation”，不调用 executor。真正的校验恢复与取消语义留在任务 8.4 实现。
+
+相关代码提交：
+
+```text
+57ab401e9 feat(media): persist production source identity
+e7c7207c6 feat(agent): orchestrate media production early stages
+```
+
+本轮验证：
+
+```bash
+pnpm exec eslint \
+  packages/neko-types/src/types/media-production-workflow.ts \
+  packages/neko-types/src/types/__tests__/media-production-workflow.test.ts \
+  packages/neko-agent/packages/agent/src/task/__tests__/media-production-workflow-state.test.ts \
+  packages/neko-agent/packages/agent/src/media-production/early-stage-orchestrator.ts \
+  packages/neko-agent/packages/agent/src/media-production/__tests__/early-stage-orchestrator.test.ts \
+  packages/neko-agent/packages/agent/src/media-production/index.ts \
+  packages/neko-agent/packages/agent/src/index.ts
+# no errors
+
+pnpm --dir packages/neko-types exec vitest run \
+  src/types/__tests__/media-production-workflow.test.ts
+# 1 file, 3 tests passed
+
+pnpm --dir packages/neko-agent exec vitest run \
+  packages/agent/src/task/__tests__/media-production-workflow-state.test.ts \
+  packages/agent/src/task/__tests__/task-manager-persistence.test.ts \
+  packages/agent/src/media-production/__tests__/early-stage-orchestrator.test.ts
+# 3 files, 27 tests passed
+
+git diff --check
+# passed
+```
+
+Agent package 全量 `tsc --noEmit` 仍受并行 perception/session 工作区改动与既有测试 fixture 类型债务阻塞；本批聚焦 ESLint、共享契约测试、task persistence 和 orchestrator 路径测试均通过，未将全包 typecheck 误报为成功。
