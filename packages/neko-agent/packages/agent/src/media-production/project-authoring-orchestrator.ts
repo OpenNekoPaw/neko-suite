@@ -1,4 +1,5 @@
 import {
+  cancelMediaProductionWorkflow,
   completeMediaProductionStage,
   failMediaProductionStage,
   startMediaProductionStage,
@@ -54,7 +55,9 @@ export class MediaProductionProjectAuthoringOrchestrator {
       );
     }
     if (signal?.aborted) {
-      throw createAbortError();
+      state = cancelMediaProductionWorkflow({ state, cancelledAt: this.now() });
+      await this.options.stateStore.save(taskId, state);
+      return state;
     }
 
     const dependency = getStage(state, 'asset-quality-gate');
@@ -132,6 +135,11 @@ export class MediaProductionProjectAuthoringOrchestrator {
       await this.options.stateStore.save(taskId, state);
       return state;
     } catch (error) {
+      if (isAbortError(error)) {
+        state = cancelMediaProductionWorkflow({ state, cancelledAt: this.now() });
+        await this.options.stateStore.save(taskId, state);
+        return state;
+      }
       state = failMediaProductionStage({
         state,
         stageId: 'project-authoring',
@@ -274,4 +282,8 @@ function createAbortError(): Error {
   const error = new Error('Media production project-authoring stage was cancelled.');
   error.name = 'AbortError';
   return error;
+}
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof Error && error.name === 'AbortError';
 }

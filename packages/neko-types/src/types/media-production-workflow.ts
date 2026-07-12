@@ -356,6 +356,105 @@ export function cancelMediaProductionWorkflow(input: {
   };
 }
 
+export type MediaProductionInterruptedStageRecovery =
+  | {
+      readonly disposition: 'retry';
+      readonly stageId: MediaProductionStageId;
+    }
+  | {
+      readonly disposition: 'complete';
+      readonly stageId: MediaProductionStageId;
+      readonly completedAt: string;
+      readonly artifacts: readonly MediaProductionStageArtifactRef[];
+      readonly diagnostics?: readonly MediaProductionWorkflowDiagnostic[];
+    };
+
+export function resumeMediaProductionWorkflow(input: {
+  readonly state: MediaProductionWorkflowRunState;
+  readonly resumedAt: string;
+  readonly interruptedStageRecovery?: MediaProductionInterruptedStageRecovery;
+}): MediaProductionWorkflowRunState {
+  assertIsoTimestamp(input.resumedAt, 'resumedAt');
+  assertCanonicalState(input.state);
+  if (input.state.status === 'completed' || input.state.status === 'failed') {
+    throw new Error(`Media production workflow ${input.state.workflowRunId} is terminal.`);
+  }
+  if (input.state.status === 'blocked') {
+    throw new Error(
+      `Media production workflow ${input.state.workflowRunId} requires explicit repair before resume.`,
+    );
+  }
+
+  const interruptedStages = input.state.stages.filter(
+    (stage) => stage.status === 'running' || stage.status === 'cancelled',
+  );
+  if (interruptedStages.length > 1) {
+    throw new Error('Media production workflow contains multiple interrupted stages.');
+  }
+  const interruptedStage = interruptedStages[0];
+  if (!interruptedStage) {
+    if (input.interruptedStageRecovery) {
+      throw new Error('Interrupted stage recovery was provided but no stage is interrupted.');
+    }
+    return {
+      ...input.state,
+      status: input.state.stages.every((stage) => stage.status === 'completed')
+        ? 'completed'
+        : 'running',
+      updatedAt: input.resumedAt,
+      diagnostics: [],
+    };
+  }
+
+  const recovery = input.interruptedStageRecovery;
+  if (!recovery || recovery.stageId !== interruptedStage.stageId) {
+    throw new Error(
+      `Media production stage ${interruptedStage.stageId} requires explicit reconciliation before resume.`,
+    );
+  }
+
+  let recoveredStage: MediaProductionStageState;
+  if (recovery.disposition === 'retry') {
+    if (interruptedStage.artifacts.length > 0) {
+      throw new Error(
+        `Media production stage ${interruptedStage.stageId} has persisted artifacts and cannot be retried blindly.`,
+      );
+    }
+    recoveredStage = {
+      ...interruptedStage,
+      status: 'pending',
+      startedAt: undefined,
+      completedAt: undefined,
+      diagnostics: [],
+    };
+  } else {
+    assertIsoTimestamp(recovery.completedAt, 'completedAt');
+    assertStageArtifacts(recovery.stageId, recovery.artifacts);
+    const diagnostics = recovery.diagnostics ?? [];
+    if (diagnostics.some((diagnostic) => diagnostic.severity === 'error')) {
+      throw new Error('Recovered completed stage cannot contain error diagnostics.');
+    }
+    recoveredStage = {
+      ...interruptedStage,
+      status: 'completed',
+      completedAt: recovery.completedAt,
+      artifacts: [...recovery.artifacts],
+      diagnostics: [...diagnostics],
+    };
+  }
+
+  const stages = input.state.stages.map((stage) =>
+    stage.stageId === interruptedStage.stageId ? recoveredStage : stage,
+  );
+  return {
+    ...input.state,
+    status: stages.every((stage) => stage.status === 'completed') ? 'completed' : 'running',
+    stages,
+    updatedAt: input.resumedAt,
+    diagnostics: [],
+  };
+}
+
 export function getNextMediaProductionStage(
   state: MediaProductionWorkflowRunState,
 ): MediaProductionStageState | undefined {

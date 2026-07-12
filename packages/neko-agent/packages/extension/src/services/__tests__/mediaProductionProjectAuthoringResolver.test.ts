@@ -57,6 +57,13 @@ describe('media production owning authoring resolver', () => {
         ),
         'utf8',
       ),
+      readFileSync(
+        new URL(
+          '../../../../agent/src/media-production/workflow-recovery-coordinator.ts',
+          import.meta.url,
+        ),
+        'utf8',
+      ),
     ];
     const forbiddenDependencyRules = [
       {

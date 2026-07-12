@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
+  cancelMediaProductionWorkflow,
   completeMediaProductionStage,
   createGeneratedAssetRevisionRef,
   createGeneratedAssetStageArtifactRef,
   createMediaProductionWorkflowRun,
   getNextMediaProductionStage,
+  resumeMediaProductionWorkflow,
   startMediaProductionStage,
   setMediaProductionProjectAuthoringPlan,
   validateMediaProductionWorkflowRun,
@@ -154,6 +156,56 @@ describe('media production workflow contract', () => {
         startedAt: '2026-07-12T00:00:03.000Z',
       }),
     ).toThrow('is not pending');
+  });
+
+  it('resumes a cancelled stage only after explicit reconciliation and preserves completed mutations', () => {
+    const sourceRunning = startMediaProductionStage({
+      state: createRun(),
+      stageId: 'source-normalization',
+      startedAt: '2026-07-12T00:00:01.000Z',
+    });
+    const sourceCompleted = completeMediaProductionStage({
+      state: sourceRunning,
+      stageId: 'source-normalization',
+      completedAt: '2026-07-12T00:00:02.000Z',
+      artifacts: [createGeneratedArtifact()],
+    });
+    const validationRunning = startMediaProductionStage({
+      state: sourceCompleted,
+      stageId: 'storyboard-validation',
+      startedAt: '2026-07-12T00:00:03.000Z',
+    });
+    const cancelled = cancelMediaProductionWorkflow({
+      state: validationRunning,
+      cancelledAt: '2026-07-12T00:00:04.000Z',
+    });
+
+    expect(() =>
+      resumeMediaProductionWorkflow({
+        state: cancelled,
+        resumedAt: '2026-07-12T00:00:05.000Z',
+      }),
+    ).toThrow('requires explicit reconciliation');
+
+    const resumed = resumeMediaProductionWorkflow({
+      state: cancelled,
+      resumedAt: '2026-07-12T00:00:05.000Z',
+      interruptedStageRecovery: {
+        disposition: 'retry',
+        stageId: 'storyboard-validation',
+      },
+    });
+
+    expect(resumed.status).toBe('running');
+    expect(resumed.stages[0]).toEqual(sourceCompleted.stages[0]);
+    expect(resumed.stages[1]).toMatchObject({
+      status: 'pending',
+      attempt: 1,
+      artifacts: [],
+      diagnostics: [],
+    });
+    expect(resumed.stages[1]?.startedAt).toBeUndefined();
+    expect(getNextMediaProductionStage(resumed)?.stageId).toBe('storyboard-validation');
   });
 
   it('persists only explicit owning project targets and rejects active fallback', () => {

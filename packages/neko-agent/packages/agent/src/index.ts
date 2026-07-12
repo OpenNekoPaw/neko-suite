@@ -1142,6 +1142,11 @@ export {
   type MediaProductionProjectAuthoringPort,
   type MediaProductionProjectAuthoringPorts,
   type MediaProductionProjectAuthoringRequest,
+  MediaProductionWorkflowRecoveryCoordinator,
+  type MediaProductionInterruptedStageRecoveryResult,
+  type MediaProductionWorkflowRecoveryCoordinatorOptions,
+  type MediaProductionWorkflowRecoveryPort,
+  type MediaProductionWorkflowStableReference,
 } from './media-production';
 
 // Export commands (builtin slash commands)

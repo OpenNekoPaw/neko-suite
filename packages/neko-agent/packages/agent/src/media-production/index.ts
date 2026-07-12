@@ -16,3 +16,11 @@ export {
   type MediaProductionProjectAuthoringPorts,
   type MediaProductionProjectAuthoringRequest,
 } from './project-authoring-orchestrator';
+
+export {
+  MediaProductionWorkflowRecoveryCoordinator,
+  type MediaProductionInterruptedStageRecoveryResult,
+  type MediaProductionWorkflowRecoveryCoordinatorOptions,
+  type MediaProductionWorkflowRecoveryPort,
+  type MediaProductionWorkflowStableReference,
+} from './workflow-recovery-coordinator';

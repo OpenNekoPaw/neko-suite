@@ -1,4 +1,5 @@
 import {
+  cancelMediaProductionWorkflow,
   completeMediaProductionStage,
   failMediaProductionStage,
   startMediaProductionStage,
@@ -76,7 +77,11 @@ export class MediaProductionEarlyStageOrchestrator {
           `Media production stage ${stageId} was interrupted and requires explicit resume validation.`,
         );
       }
-      if (signal?.aborted) throw createAbortError(stageId);
+      if (signal?.aborted) {
+        state = cancelMediaProductionWorkflow({ state, cancelledAt: this.now() });
+        await this.options.stateStore.save(taskId, state);
+        return state;
+      }
 
       state = startMediaProductionStage({ state, stageId, startedAt: this.now() });
       await this.options.stateStore.save(taskId, state);
@@ -115,6 +120,11 @@ export class MediaProductionEarlyStageOrchestrator {
         });
         await this.options.stateStore.save(taskId, state);
       } catch (error) {
+        if (isAbortError(error)) {
+          state = cancelMediaProductionWorkflow({ state, cancelledAt: this.now() });
+          await this.options.stateStore.save(taskId, state);
+          return state;
+        }
         const diagnostics: readonly MediaProductionWorkflowDiagnostic[] = [
           {
             code: 'stage-blocked',
@@ -172,5 +182,11 @@ function getInputArtifacts(
 }
 
 function createAbortError(stageId: MediaProductionStageId): Error {
-  return new Error(`Media production stage ${stageId} was cancelled.`);
+  const error = new Error(`Media production stage ${stageId} was cancelled.`);
+  error.name = 'AbortError';
+  return error;
+}
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof Error && error.name === 'AbortError';
 }

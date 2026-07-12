@@ -180,6 +180,36 @@ describe('media production early stage orchestrator', () => {
     expect(result.stages[0]?.artifacts).toHaveLength(1);
   });
 
+  it('persists cancellation instead of converting an aborted stage into failure', async () => {
+    let state = createState();
+    const controller = new AbortController();
+    const ports = createPorts([]);
+    ports.sourceToStoryboard.execute = vi.fn(async () => {
+      controller.abort();
+      return {
+        artifacts: [createResourceArtifact('source-normalization', 'cancelled')],
+        diagnostics: [],
+      };
+    });
+    const orchestrator = new MediaProductionEarlyStageOrchestrator({
+      stateStore: {
+        load: vi.fn(async () => state),
+        save: vi.fn(async (_taskId, next) => {
+          state = next;
+        }),
+      },
+      ports,
+      now: createClock(),
+    });
+
+    const result = await orchestrator.run('task-workflow-1', controller.signal);
+
+    expect(result.status).toBe('cancelled');
+    expect(result.stages[0]).toMatchObject({ status: 'cancelled', attempt: 1 });
+    expect(result.stages[0]?.diagnostics).toEqual([]);
+    expect(ports.storyboardValidation.execute).not.toHaveBeenCalled();
+  });
+
   it('skips completed stage artifacts and refuses blind replay of interrupted mutations', async () => {
     let state = createState();
     const ports = createPorts([]);

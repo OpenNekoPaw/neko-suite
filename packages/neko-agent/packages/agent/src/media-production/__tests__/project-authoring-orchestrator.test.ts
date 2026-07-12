@@ -219,6 +219,25 @@ describe('MediaProductionProjectAuthoringOrchestrator', () => {
     });
   });
 
+  it('persists cancellation when authoring is aborted and leaves reconciliation explicit', async () => {
+    const harness = createHarness(createState());
+    const controller = new AbortController();
+    harness.cutAuthor.mockImplementationOnce(async () => {
+      controller.abort();
+      const error = new Error('Authoring cancelled.');
+      error.name = 'AbortError';
+      throw error;
+    });
+
+    const result = await harness.orchestrator.run('task-1', controller.signal);
+
+    expect(result.status).toBe('cancelled');
+    expect(result.stages.find((stage) => stage.stageId === 'project-authoring')).toMatchObject({
+      status: 'cancelled',
+      attempt: 1,
+    });
+  });
+
   it('does not replay a completed project mutation', async () => {
     const harness = createHarness(createState());
     await harness.orchestrator.run('task-1');
