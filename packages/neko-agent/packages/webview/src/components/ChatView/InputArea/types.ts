@@ -85,10 +85,34 @@ export interface ComposerMenuSelectionState {
   readonly selectedIndex: number;
 }
 
+export type AgentConfigCategory = 'llm' | GenCategory;
+
+export type ComposerControlMenuId =
+  | 'session-mode'
+  | 'agent-config-category'
+  | 'agent-model'
+  | 'understanding-model'
+  | 'media-model'
+  | 'generation-ratio'
+  | 'generation-resolution'
+  | 'generation-duration'
+  | 'generation-audio-type'
+  | 'llm-reasoning'
+  | 'llm-verbosity'
+  | 'llm-creativity'
+  | 'execution-mode';
+
+export interface ComposerControlMenuState {
+  readonly openMenu: ComposerControlMenuId | null;
+  readonly agentConfigCategory: AgentConfigCategory;
+  readonly understandingCategory: GenCategory | null;
+}
+
 export interface ComposerMenuState {
   readonly slash: ComposerMenuSelectionState;
   readonly skill: ComposerMenuSelectionState;
   readonly mention: ComposerMenuSelectionState;
+  readonly controls: ComposerControlMenuState;
   readonly queueExpanded: boolean;
 }
 
@@ -102,6 +126,11 @@ export const DEFAULT_COMPOSER_MENU_STATE: Readonly<ComposerMenuState> = {
   slash: { open: false, filter: '', selectedIndex: 0 },
   skill: { open: false, filter: '', selectedIndex: 0 },
   mention: { open: false, filter: '', selectedIndex: 0 },
+  controls: {
+    openMenu: null,
+    agentConfigCategory: 'llm',
+    understandingCategory: null,
+  },
   queueExpanded: false,
 };
 

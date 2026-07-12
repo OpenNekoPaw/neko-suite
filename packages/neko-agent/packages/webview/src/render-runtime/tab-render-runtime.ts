@@ -362,6 +362,7 @@ function createInitialTabRenderState(): TabRenderState {
         slash: Object.freeze({ ...DEFAULT_COMPOSER_MENU_STATE.slash }),
         skill: Object.freeze({ ...DEFAULT_COMPOSER_MENU_STATE.skill }),
         mention: Object.freeze({ ...DEFAULT_COMPOSER_MENU_STATE.mention }),
+        controls: Object.freeze({ ...DEFAULT_COMPOSER_MENU_STATE.controls }),
       }),
     }),
     queuedEdit: null,

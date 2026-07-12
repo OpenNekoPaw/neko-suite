@@ -371,6 +371,32 @@ describe('InputArea composer controls', () => {
     });
   });
 
+  it('routes descendant control menus into the controlled Tab-owned menu state', () => {
+    const onComposerMenuStateChange = vi.fn();
+    render(
+      <Harness>
+        <InputArea
+          inputValue=""
+          isThinking={false}
+          composerMenuState={DEFAULT_COMPOSER_MENU_STATE}
+          onComposerMenuStateChange={onComposerMenuStateChange}
+          onInputChange={vi.fn()}
+          onSend={vi.fn()}
+        />
+      </Harness>,
+    );
+
+    fireEvent.click(screen.getByTitle('执行模式 (Shift+Tab)'));
+
+    expect(onComposerMenuStateChange).toHaveBeenLastCalledWith({
+      ...DEFAULT_COMPOSER_MENU_STATE,
+      controls: {
+        ...DEFAULT_COMPOSER_MENU_STATE.controls,
+        openMenu: 'execution-mode',
+      },
+    });
+  });
+
   it('reports IME composition and blocks send while the Tab is composing', () => {
     const onCompositionChange = vi.fn();
     const onSend = vi.fn();

@@ -44,6 +44,7 @@ import { UsageIndicator } from './UsageIndicator';
 import { useTranslation } from '@/i18n/I18nContext';
 import { useInputHistory } from '@/hooks/useInputHistory';
 import { useInputAreaContext } from '@/components/ChatView/InputAreaContext';
+import { ComposerMenuRuntimeProvider } from './composer-menu-runtime';
 import { projectInputAreaUi } from '@/presenters/input-area-presenter';
 import { isOptimisticQueuedMessageItem } from '@/presenters/message-queue-presenter';
 import { projectComposerModeConfig } from '@/presenters/composer-mode-config-presenter';
@@ -932,29 +933,31 @@ export function InputArea({
 
         {/* ── Top bar: mode + model | generation params (with integrated media model) ── */}
         {showControlRow && (
-          <ModeConfigBar
-            projection={composerModeConfig}
-            availableSessionModes={availableSessionModes}
-            availableModels={availableModels}
-            selectedModel={selectedModel}
-            onSessionModeChange={onSessionModeChange}
-            onModelSelect={onModelSelect}
-            mediaModelSelection={mediaModelSelection}
-            availableMediaModels={availableMediaModels}
-            mediaUnderstandingModels={mediaUnderstandingModels}
-            mediaUnderstandingSelection={mediaUnderstandingSelection}
-            onMediaModelSelect={onMediaModelSelect}
-            onMediaUnderstandingModelSelect={onMediaUnderstandingModelSelect}
-            genCategory={genCategory}
-            genParams={genParams}
-            onGenCategoryChange={onGenCategoryChange}
-            onGenParamsChange={onGenParamsChange}
-            llmConfig={llmConfig}
-            onLlmConfigChange={setLlmConfig}
-            showAgentConfig={inputAreaProjection.showChatModelSelector}
-            showMediaConfig={inputAreaProjection.showGenerationParams}
-            disabled={isBusy}
-          />
+          <ComposerMenuRuntimeProvider state={composerMenuState} update={setComposerMenuState}>
+            <ModeConfigBar
+              projection={composerModeConfig}
+              availableSessionModes={availableSessionModes}
+              availableModels={availableModels}
+              selectedModel={selectedModel}
+              onSessionModeChange={onSessionModeChange}
+              onModelSelect={onModelSelect}
+              mediaModelSelection={mediaModelSelection}
+              availableMediaModels={availableMediaModels}
+              mediaUnderstandingModels={mediaUnderstandingModels}
+              mediaUnderstandingSelection={mediaUnderstandingSelection}
+              onMediaModelSelect={onMediaModelSelect}
+              onMediaUnderstandingModelSelect={onMediaUnderstandingModelSelect}
+              genCategory={genCategory}
+              genParams={genParams}
+              onGenCategoryChange={onGenCategoryChange}
+              onGenParamsChange={onGenParamsChange}
+              llmConfig={llmConfig}
+              onLlmConfigChange={setLlmConfig}
+              showAgentConfig={inputAreaProjection.showChatModelSelector}
+              showMediaConfig={inputAreaProjection.showGenerationParams}
+              disabled={isBusy}
+            />
+          </ComposerMenuRuntimeProvider>
         )}
 
         {/* Ambient canvas reference — mirrors @ quick references above the composer. */}
@@ -1114,7 +1117,9 @@ export function InputArea({
 
             {/* Execution mode — runtime control belongs with send/tools, not model config. */}
             {inputAreaProjection.showExecutionModeSelector && (
-              <ModeSelector mode={executionMode} onChange={onExecutionModeChange} />
+              <ComposerMenuRuntimeProvider state={composerMenuState} update={setComposerMenuState}>
+                <ModeSelector mode={executionMode} onChange={onExecutionModeChange} />
+              </ComposerMenuRuntimeProvider>
             )}
 
             {/* Send */}

@@ -4,6 +4,7 @@
  */
 
 import { useState, useRef } from 'react';
+import { useComposerControlMenu } from './composer-menu-runtime';
 import { ShellExecutionMode } from '@neko-agent/types';
 import { useClickOutsideSingle } from './useClickOutside';
 import { ChevronDownIcon } from './DropdownMenu';
@@ -21,7 +22,7 @@ interface ModeSelectorProps {
 
 export function ModeSelector({ mode, onChange }: ModeSelectorProps) {
   const { t } = useTranslation();
-  const [isOpen, setIsOpen] = useState(false);
+  const [isOpen, setIsOpen] = useComposerControlMenu('execution-mode');
   const [placement, setPlacement] = useState<DropdownPlacement>({
     direction: 'up',
     alignment: 'start',

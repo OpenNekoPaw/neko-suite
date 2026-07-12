@@ -34,7 +34,18 @@ import type {
   MediaUnderstandingSelection,
 } from '@/components/ChatView/InputAreaContext';
 import type { ComposerModeConfigProjection } from '@/presenters/composer-mode-config-presenter';
-import type { GenCategory, GenerationDuration, GenerationParams } from './types';
+import type {
+  AgentConfigCategory,
+  ComposerControlMenuId,
+  GenCategory,
+  GenerationDuration,
+  GenerationParams,
+} from './types';
+import {
+  useComposerAgentConfigCategory,
+  useComposerControlMenu,
+  useComposerUnderstandingCategory,
+} from './composer-menu-runtime';
 
 interface ModeConfigBarProps {
   readonly projection: ComposerModeConfigProjection;
@@ -69,7 +80,6 @@ const MEDIA_UNDERSTANDING_CAPABILITIES: Record<MediaCategory, readonly string[]>
   audio: ['audio', 'audio.understand'],
   video: ['vision_video', 'video.understand'],
 };
-type AgentConfigCategory = 'llm' | MediaCategory;
 type Translate = (key: string, params?: Record<string, string | number>) => string;
 
 interface ParamOption {
@@ -166,7 +176,7 @@ export function ModeConfigBar({
     () => getAvailableAgentConfigCategories(availableModels, availableMediaModels),
     [availableMediaModels, availableModels],
   );
-  const [agentConfigCategory, setAgentConfigCategory] = useState<AgentConfigCategory>(() =>
+  const [agentConfigCategory, setAgentConfigCategory] = useComposerAgentConfigCategory(
     getInitialAgentConfigCategory(availableAgentCategories, genCategory),
   );
   const isAgentMode = projection.mode === 'agent';
@@ -193,6 +203,7 @@ export function ModeConfigBar({
     genCategory,
     isAgentMode,
     onGenCategoryChange,
+    setAgentConfigCategory,
   ]);
 
   const handleAgentConfigCategoryChange = (category: AgentConfigCategory) => {
@@ -390,6 +401,7 @@ function AgentLlmConfigBar({
         >
           {controls.reasoning ? (
             <PresetDropdown
+              menuId="llm-reasoning"
               titleKey="chat.agentConfig.section.reasoning"
               value={llmConfig.reasoningPreset ?? 'balanced'}
               options={REASONING_OPTIONS}
@@ -401,6 +413,7 @@ function AgentLlmConfigBar({
           ) : null}
           {controls.verbosity ? (
             <PresetDropdown
+              menuId="llm-verbosity"
               titleKey="chat.agentConfig.section.verbosity"
               value={llmConfig.verbosityPreset ?? 'standard'}
               options={VERBOSITY_OPTIONS}
@@ -412,6 +425,7 @@ function AgentLlmConfigBar({
           ) : null}
           {controls.creativity ? (
             <PresetDropdown
+              menuId="llm-creativity"
               titleKey="chat.agentConfig.section.creativity"
               value={llmConfig.creativityPreset ?? 'creative'}
               options={CREATIVITY_OPTIONS}
@@ -445,8 +459,8 @@ function AgentUnderstandingConfigChip({
   disabled = false,
 }: AgentUnderstandingConfigChipProps) {
   const { t } = useTranslation();
-  const [isOpen, setIsOpen] = useState(false);
-  const [activeCategory, setActiveCategory] = useState<MediaCategory | null>(null);
+  const [isOpen, setIsOpen] = useComposerControlMenu('understanding-model');
+  const [activeCategory, setActiveCategory] = useComposerUnderstandingCategory();
   const [placement, setPlacement] = useState<DropdownPlacement>({
     direction: 'down',
     alignment: 'start',
@@ -464,7 +478,7 @@ function AgentUnderstandingConfigChip({
   const handleOpen = () => {
     if (disabled) return;
     if (!isOpen) setPlacement(getPlacement());
-    setIsOpen((value) => !value);
+    setIsOpen(!isOpen);
     if (isOpen) setActiveCategory(null);
   };
 
@@ -639,7 +653,7 @@ function AgentConfigCategorySelector({
   disabled = false,
 }: AgentConfigCategorySelectorProps) {
   const { t } = useTranslation();
-  const [isOpen, setIsOpen] = useState(false);
+  const [isOpen, setIsOpen] = useComposerControlMenu('agent-config-category');
   const [placement, setPlacement] = useState<DropdownPlacement>({
     direction: 'up',
     alignment: 'start',
@@ -664,7 +678,7 @@ function AgentConfigCategorySelector({
         onClick={() => {
           if (!canOpen) return;
           if (!isOpen) setPlacement(getPlacement());
-          setIsOpen((value) => !value);
+          setIsOpen(!isOpen);
         }}
         aria-label={currentLabel}
         aria-haspopup={canOpen ? 'menu' : undefined}
@@ -769,7 +783,7 @@ function InlineMediaModelChip({
   disabled = false,
 }: InlineMediaModelChipProps) {
   const { t } = useTranslation();
-  const [isOpen, setIsOpen] = useState(false);
+  const [isOpen, setIsOpen] = useComposerControlMenu('media-model');
   const [placement, setPlacement] = useState<DropdownPlacement>({
     direction: 'down',
     alignment: 'start',
@@ -800,7 +814,7 @@ function InlineMediaModelChip({
   const handleOpen = () => {
     if (!canOpen) return;
     if (!isOpen) setPlacement(getPlacement());
-    setIsOpen((value) => !value);
+    setIsOpen(!isOpen);
   };
 
   return (
@@ -905,6 +919,7 @@ function MediaParamsPanel({
     return (
       <>
         <ParamDropdown
+          menuId="generation-ratio"
           value={params.ratio}
           options={RATIO_OPTIONS}
           onChange={(value) => onChange({ ratio: value as GenerationParams['ratio'] })}
@@ -913,6 +928,7 @@ function MediaParamsPanel({
           disabled={disabled}
         />
         <ParamDropdown
+          menuId="generation-resolution"
           value={params.resolution}
           options={IMAGE_RESOLUTION_OPTIONS}
           onChange={(value) => onChange({ resolution: value as GenerationParams['resolution'] })}
@@ -928,6 +944,7 @@ function MediaParamsPanel({
     return (
       <>
         <ParamDropdown
+          menuId="generation-ratio"
           value={params.ratio}
           options={RATIO_OPTIONS}
           onChange={(value) => onChange({ ratio: value as GenerationParams['ratio'] })}
@@ -936,6 +953,7 @@ function MediaParamsPanel({
           disabled={disabled}
         />
         <ParamDropdown
+          menuId="generation-resolution"
           value={params.resolution}
           options={VIDEO_RESOLUTION_OPTIONS}
           onChange={(value) => onChange({ resolution: value as GenerationParams['resolution'] })}
@@ -944,6 +962,7 @@ function MediaParamsPanel({
           disabled={disabled}
         />
         <ParamDropdown
+          menuId="generation-duration"
           value={String(params.videoDuration)}
           options={VIDEO_DURATION_OPTIONS}
           onChange={(value) => onChange({ videoDuration: parseGenerationDuration(value) })}
@@ -958,6 +977,7 @@ function MediaParamsPanel({
   return (
     <>
       <ParamDropdown
+        menuId="generation-audio-type"
         value={params.audioType}
         options={AUDIO_TYPE_OPTIONS.map((option) => ({
           value: option.value,
@@ -969,6 +989,7 @@ function MediaParamsPanel({
         disabled={disabled}
       />
       <ParamDropdown
+        menuId="generation-duration"
         value={String(params.audioDuration)}
         options={AUDIO_DURATION_OPTIONS}
         onChange={(value) => onChange({ audioDuration: parseGenerationDuration(value) })}
@@ -981,6 +1002,7 @@ function MediaParamsPanel({
 }
 
 interface ParamDropdownProps {
+  readonly menuId: ComposerControlMenuId;
   readonly value: string;
   readonly options: readonly ParamOption[] | readonly ResolvedParamOption[];
   readonly onChange: (value: string) => void;
@@ -990,6 +1012,7 @@ interface ParamDropdownProps {
 }
 
 function ParamDropdown({
+  menuId,
   value,
   options,
   onChange,
@@ -998,7 +1021,7 @@ function ParamDropdown({
   disabled = false,
 }: ParamDropdownProps) {
   const { t } = useTranslation();
-  const [isOpen, setIsOpen] = useState(false);
+  const [isOpen, setIsOpen] = useComposerControlMenu(menuId);
   const [placement, setPlacement] = useState<DropdownPlacement>({
     direction: 'down',
     alignment: 'start',
@@ -1021,7 +1044,7 @@ function ParamDropdown({
         onClick={() => {
           if (disabled) return;
           if (!isOpen) setPlacement(getPlacement());
-          setIsOpen((current) => !current);
+          setIsOpen(!isOpen);
         }}
         aria-label={ariaLabel}
         aria-haspopup={disabled ? undefined : 'menu'}
@@ -1073,6 +1096,7 @@ function ParamDropdown({
 }
 
 interface PresetDropdownProps<Value extends string> {
+  readonly menuId: ComposerControlMenuId;
   readonly titleKey: string;
   readonly value: Value;
   readonly options: readonly Value[];
@@ -1083,6 +1107,7 @@ interface PresetDropdownProps<Value extends string> {
 }
 
 function PresetDropdown<Value extends string>({
+  menuId,
   titleKey,
   value,
   options,
@@ -1092,7 +1117,7 @@ function PresetDropdown<Value extends string>({
   disabled = false,
 }: PresetDropdownProps<Value>) {
   const { t } = useTranslation();
-  const [isOpen, setIsOpen] = useState(false);
+  const [isOpen, setIsOpen] = useComposerControlMenu(menuId);
   const [placement, setPlacement] = useState<DropdownPlacement>({
     direction: 'down',
     alignment: 'start',

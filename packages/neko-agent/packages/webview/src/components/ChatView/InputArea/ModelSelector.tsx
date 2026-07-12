@@ -3,6 +3,7 @@
  */
 
 import { useMemo, useRef, useState } from 'react';
+import { useComposerControlMenu } from './composer-menu-runtime';
 import type { ChatModelOption } from '@neko/shared';
 import { useClickOutsideSingle } from './useClickOutside';
 import {
@@ -35,7 +36,7 @@ export function ModelSelector({
   disabled = false,
 }: ModelSelectorProps) {
   const { t } = useTranslation();
-  const [isOpen, setIsOpen] = useState(false);
+  const [isOpen, setIsOpen] = useComposerControlMenu('agent-model');
   const [placement, setPlacement] = useState<DropdownPlacement>({
     direction: 'up',
     alignment: 'start',

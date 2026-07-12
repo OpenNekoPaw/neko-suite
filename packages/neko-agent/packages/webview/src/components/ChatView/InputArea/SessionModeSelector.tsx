@@ -9,6 +9,7 @@
  */
 
 import { useState, useRef } from 'react';
+import { useComposerControlMenu } from './composer-menu-runtime';
 import type { SessionMode } from '@neko-agent/types';
 import { useClickOutsideSingle } from './useClickOutside';
 import { useDropdownPlacement, type DropdownPlacement } from './useDropdownDirection';
@@ -46,7 +47,7 @@ export function SessionModeSelector({
   disabled = false,
 }: SessionModeSelectorProps) {
   const { t } = useTranslation();
-  const [isOpen, setIsOpen] = useState(false);
+  const [isOpen, setIsOpen] = useComposerControlMenu('session-mode');
   const [placement, setPlacement] = useState<DropdownPlacement>({
     direction: 'up',
     alignment: 'start',

@@ -54,6 +54,11 @@ describe('TabRenderRuntime', () => {
           slash: { open: false, filter: '', selectedIndex: 0 },
           skill: { open: false, filter: '', selectedIndex: 0 },
           mention: { open: false, filter: '', selectedIndex: 0 },
+          controls: {
+            openMenu: null,
+            agentConfigCategory: 'llm',
+            understandingCategory: null,
+          },
           queueExpanded: false,
         },
       },
