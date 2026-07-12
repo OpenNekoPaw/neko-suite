@@ -1120,7 +1120,24 @@ export {
   type AgentTaskLeaseDiagnostic,
   type AgentTaskStorageScope,
   type WorkspaceVisibleAgentTaskRecord,
+  MEDIA_PRODUCTION_WORKFLOW_PAYLOAD_KIND,
+  MEDIA_PRODUCTION_WORKFLOW_STATE_OUTPUT_KEY,
+  TaskBackedMediaProductionWorkflowStateStore,
+  createMediaProductionWorkflowTaskInput,
+  readMediaProductionWorkflowTaskState,
+  type MediaProductionWorkflowTaskStatePort,
 } from './task';
+
+export {
+  MEDIA_PRODUCTION_EARLY_STAGE_IDS,
+  MediaProductionEarlyStageOrchestrator,
+  type MediaProductionEarlyStageOrchestratorOptions,
+  type MediaProductionEarlyStagePorts,
+  type MediaProductionStageExecutionContext,
+  type MediaProductionStageExecutionResult,
+  type MediaProductionStageExecutorPort,
+  type MediaProductionWorkflowStateStorePort,
+} from './media-production';
 
 // Export commands (builtin slash commands)
 export {
