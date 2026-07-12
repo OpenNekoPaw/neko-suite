@@ -47,7 +47,7 @@ import {
 import { getLocale, t } from '@/i18n';
 import { CodeBlock } from './CodeBlock';
 import { MermaidBlock } from './MermaidBlock';
-import { getAgentMarkdownSessionRegistry } from '@/markdown/agent-markdown-session-registry';
+import { useAgentMarkdownSessionRegistry } from '@/markdown/agent-markdown-session-context';
 
 type MarkdownDisplayLocale = 'en' | 'zh-cn';
 
@@ -1700,7 +1700,7 @@ function useCanonicalMarkdownSnapshot(input: {
   readonly isStreaming: boolean;
   readonly sessionKey: string;
 }): MarkdownStreamingSnapshot {
-  const registry = getAgentMarkdownSessionRegistry();
+  const registry = useAgentMarkdownSessionRegistry();
   const subscribe = useMemo(
     () => (listener: () => void) => registry.subscribe(input.sessionKey, listener),
     [input.sessionKey, registry],

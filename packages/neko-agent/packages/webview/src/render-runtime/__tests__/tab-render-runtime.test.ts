@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { createAgentMarkdownSessionKey } from '@/markdown/agent-markdown-session-registry';
 import { createTabRenderRuntime, createTabRenderRuntimeRegistry } from '../tab-render-runtime';
 
 describe('TabRenderRuntime', () => {
@@ -347,15 +348,124 @@ describe('TabRenderRuntimeRegistry', () => {
       projection: {
         conversationId: 'conversation-shared',
         projectionVersion: 0,
-        turns: [],
+        turns: [
+          {
+            turnId: 'turn-1',
+            messageId: 'message-1',
+            items: [projectionTextItem('initial', 1)],
+          },
+        ],
+      },
+    });
+    runtimeA.acceptProjectionFrame({
+      type: 'projectionPatch',
+      key: {
+        endpointEpoch: 'endpoint-1',
+        attachmentId: 'attachment-a',
+        tabId: 'tab-a',
+        conversationId: 'conversation-shared',
+      },
+      sequence: 1,
+      baseProjectionVersion: 0,
+      projectionVersion: 1,
+      patch: {
+        type: 'conversationProjectionPatch',
+        conversationId: 'conversation-shared',
+        baseProjectionVersion: 0,
+        projectionVersion: 1,
+        turnId: 'turn-1',
+        messageId: 'message-1',
+        operations: [{ operation: 'append', item: projectionTextItem(' update', 2) }],
       },
     });
 
+    const markdownKey = createAgentMarkdownSessionKey({
+      conversationId: 'conversation-shared',
+      messageId: 'message-1',
+      itemId: 'text-1',
+    });
     expect(runtimeA.projectionReplica).not.toBe(runtimeB.projectionReplica);
-    expect(runtimeA.projectionReplica.getSnapshot().projection?.projectionVersion).toBe(0);
+    expect(runtimeA.markdownSessions).not.toBe(runtimeB.markdownSessions);
+    expect(runtimeA.projectionReplica.getSnapshot().projection?.projectionVersion).toBe(1);
     expect(runtimeB.projectionReplica.getSnapshot().projection).toBeNull();
+    expect(runtimeA.markdownSessions.getSnapshot(markdownKey)?.source).toBe('initial update');
+    expect(runtimeB.markdownSessions.getSnapshot(markdownKey)).toBeUndefined();
     expect(messagesA).toHaveLength(2);
     expect(messagesB).toHaveLength(1);
+  });
+
+  it('does not mutate Tab Markdown when a projection patch fails validation', () => {
+    const runtime = createTabRenderRuntime({
+      tabId: 'tab-a',
+      conversationId: 'conversation-shared',
+    });
+    const reportError = vi.fn();
+    runtime.attachProjection({
+      endpointEpoch: 'endpoint-1',
+      attachmentId: 'attachment-a',
+      send: vi.fn(),
+      reportError,
+    });
+    const key = {
+      endpointEpoch: 'endpoint-1',
+      attachmentId: 'attachment-a',
+      tabId: 'tab-a',
+      conversationId: 'conversation-shared',
+    } as const;
+    runtime.acceptProjectionFrame({
+      type: 'projectionSnapshot',
+      key,
+      sequence: 0,
+      projectionVersion: 0,
+      projection: {
+        conversationId: 'conversation-shared',
+        projectionVersion: 0,
+        turns: [
+          {
+            turnId: 'turn-1',
+            messageId: 'message-1',
+            items: [projectionTextItem('initial', 1)],
+          },
+        ],
+      },
+    });
+    const markdownKey = createAgentMarkdownSessionKey({
+      conversationId: 'conversation-shared',
+      messageId: 'message-1',
+      itemId: 'text-1',
+    });
+
+    expect(() =>
+      runtime.acceptProjectionFrame({
+        type: 'projectionPatch',
+        key,
+        sequence: 1,
+        baseProjectionVersion: 0,
+        projectionVersion: 1,
+        patch: {
+          type: 'conversationProjectionPatch',
+          conversationId: 'conversation-shared',
+          baseProjectionVersion: 0,
+          projectionVersion: 1,
+          turnId: 'turn-1',
+          messageId: 'message-1',
+          operations: [
+            {
+              operation: 'append',
+              item: {
+                ...projectionTextItem('invalid', 2),
+                conversationId: 'conversation-other',
+              },
+            },
+          ],
+        },
+      }),
+    ).toThrow(/rejected its live patch/);
+
+    expect(runtime.markdownSessions.getSnapshot(markdownKey)?.source).toBe('initial');
+    expect(runtime.projectionReplica.getSnapshot().projection?.projectionVersion).toBe(0);
+    expect(runtime.projectionAttachment?.getSnapshot().phase).toBe('fatal');
+    expect(reportError).toHaveBeenCalledOnce();
   });
 
   it('disposes only the closed Tab projection attachment and replica', () => {
@@ -385,3 +495,19 @@ describe('TabRenderRuntimeRegistry', () => {
     expect(runtimeB.projectionReplica.getSnapshot().projection).toBeNull();
   });
 });
+
+function projectionTextItem(content: string, itemRevision: number) {
+  return {
+    conversationId: 'conversation-shared',
+    turnId: 'turn-1',
+    messageId: 'message-1',
+    itemId: 'text-1',
+    sequence: 1,
+    itemRevision,
+    kind: 'assistant_text' as const,
+    status: 'streaming' as const,
+    payload: { content, format: 'markdown' as const, sourceGeneration: 1 },
+    createdAt: 1,
+    updatedAt: itemRevision,
+  };
+}

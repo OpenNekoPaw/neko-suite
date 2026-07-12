@@ -32,7 +32,7 @@ export interface ProjectionAttachmentClientSnapshot {
 export interface ProjectionAttachmentClientOptions {
   readonly tabId: string;
   readonly conversationId: string;
-  readonly replica: ConversationProjectionReplica;
+  readonly replica: Pick<ConversationProjectionReplica, 'installSnapshot' | 'applyPatch'>;
   readonly send: (message: ProjectionAttachmentClientMessage) => void;
   readonly reportError: (error: Error, key: ProjectionAttachmentKey) => void;
 }
@@ -208,7 +208,17 @@ class DefaultProjectionAttachmentClient implements ProjectionAttachmentClient {
       );
     }
 
-    this.options.replica.installSnapshot(frame.projection);
+    try {
+      this.options.replica.installSnapshot(frame.projection);
+    } catch (error: unknown) {
+      this.fail(
+        new ProjectionAttachmentClientProtocolError(
+          'attachment-identity-mismatch',
+          `Projection attachment ${key.attachmentId} rejected its authoritative snapshot: ${toError(error).message}`,
+        ),
+        key,
+      );
+    }
     this.options.send({
       type: 'projectionSnapshotAck',
       key,
@@ -261,7 +271,17 @@ class DefaultProjectionAttachmentClient implements ProjectionAttachmentClient {
       );
     }
 
-    this.options.replica.applyPatch(frame.patch);
+    try {
+      this.options.replica.applyPatch(frame.patch);
+    } catch (error: unknown) {
+      this.fail(
+        new ProjectionAttachmentClientProtocolError(
+          'attachment-patch-base-mismatch',
+          `Projection attachment ${key.attachmentId} rejected its live patch: ${toError(error).message}`,
+        ),
+        key,
+      );
+    }
     this.snapshot = Object.freeze({
       phase: 'live',
       key,

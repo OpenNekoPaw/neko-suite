@@ -1,5 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { AgentTurnTimelineItem, AgentTurnTimelineMessage } from '@neko-agent/types';
+import type {
+  AgentTurnTimelineItem,
+  AgentTurnTimelineMessage,
+  ConversationProjectionPatch,
+  ConversationProjectionSnapshot,
+} from '@neko-agent/types';
 import {
   createAgentMarkdownSessionKey,
   createAgentMarkdownSessionRegistry,
@@ -290,6 +295,78 @@ describe('agent markdown session registry', () => {
     expect(registry.metrics()).toMatchObject({ activeSessions: 1, activeSubscriptions: 1 });
   });
 
+  it('builds and incrementally updates one Markdown session from projection delivery', () => {
+    const registry = createAgentMarkdownSessionRegistry();
+    const key = sessionKey();
+    const listener = vi.fn();
+    registry.subscribe(key, listener);
+
+    registry.commitProjectionSnapshot(projectionSnapshot('partial ', 1, 1)).publish();
+    const initial = registry.getSnapshot(key);
+    registry.commitProjectionPatch(projectionPatch('answer', 2, 1, 2)).publish();
+
+    expect(registry.getSnapshot(key)).toMatchObject({
+      sessionId: initial?.sessionId,
+      source: 'partial answer',
+      revision: 2,
+      isFinal: false,
+    });
+    expect(listener).toHaveBeenCalledTimes(2);
+  });
+
+  it('finalizes projection Markdown and reconciles removed turns from an authoritative snapshot', () => {
+    const registry = createAgentMarkdownSessionRegistry();
+    const key = sessionKey();
+    registry.commitProjectionSnapshot(projectionSnapshot('final', 1, 1)).publish();
+
+    registry
+      .commitProjectionPatch({
+        ...projectionPatch('', 2, 1, 2),
+        operations: [
+          {
+            operation: 'complete',
+            itemId: 'text-1',
+            itemRevision: 2,
+            kind: 'assistant_text',
+            sourceGeneration: 1,
+            status: 'complete',
+            updatedAt: 2,
+          },
+        ],
+        completion: { status: 'completed', completedAt: 2 },
+      })
+      .publish();
+
+    expect(registry.getSnapshot(key)).toMatchObject({ source: 'final', isFinal: true });
+
+    registry
+      .commitProjectionSnapshot({
+        conversationId: 'conv-1',
+        projectionVersion: 3,
+        turns: [],
+      })
+      .publish();
+
+    expect(registry.getSnapshot(key)).toBeUndefined();
+    expect(registry.metrics()).toMatchObject({ activeSessions: 0, disposedSessions: 1 });
+  });
+
+  it('keeps projection Markdown registries isolated for two Tabs on the same conversation', () => {
+    const registryA = createAgentMarkdownSessionRegistry();
+    const registryB = createAgentMarkdownSessionRegistry();
+    const key = sessionKey();
+
+    registryA.commitProjectionSnapshot(projectionSnapshot('tab A', 1, 1)).publish();
+
+    expect(registryA.getSnapshot(key)?.source).toBe('tab A');
+    expect(registryB.getSnapshot(key)).toBeUndefined();
+    registryB.commitProjectionSnapshot(projectionSnapshot('tab B', 1, 1)).publish();
+    registryA.disposeAll();
+
+    expect(registryA.getSnapshot(key)).toBeUndefined();
+    expect(registryB.getSnapshot(key)?.source).toBe('tab B');
+  });
+
   it('disposes realm sessions without notifying subscribers during teardown', () => {
     const registry = createAgentMarkdownSessionRegistry();
     const listener = vi.fn();
@@ -414,5 +491,42 @@ function markdownSnapshotItem(
     payload: { content, format: 'markdown', sourceGeneration },
     createdAt: 1,
     updatedAt: itemRevision,
+  };
+}
+
+function projectionSnapshot(
+  content: string,
+  itemRevision: number,
+  projectionVersion: number,
+): ConversationProjectionSnapshot {
+  return {
+    conversationId: 'conv-1',
+    projectionVersion,
+    turns: [
+      {
+        turnId: 'turn-1',
+        messageId: 'message-1',
+        items: [markdownSnapshotItem(content, itemRevision)],
+      },
+    ],
+  };
+}
+
+function projectionPatch(
+  content: string,
+  itemRevision: number,
+  baseProjectionVersion: number,
+  projectionVersion: number,
+): ConversationProjectionPatch {
+  const operation = appendMessage(1, itemRevision, content).operations[0];
+  if (!operation) throw new Error('Projection patch fixture requires one operation.');
+  return {
+    type: 'conversationProjectionPatch',
+    conversationId: 'conv-1',
+    baseProjectionVersion,
+    projectionVersion,
+    turnId: 'turn-1',
+    messageId: 'message-1',
+    operations: [operation],
   };
 }

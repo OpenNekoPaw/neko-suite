@@ -22,6 +22,10 @@ import {
 } from '@/components/ChatView/InputArea/types';
 import type { MediaModelSelection, MediaUnderstandingSelection } from '@/hooks/useUIState';
 import {
+  createAgentMarkdownSessionRegistry,
+  type AgentMarkdownSessionRegistry,
+} from '@/markdown/agent-markdown-session-registry';
+import {
   createConversationProjectionReplica,
   type ConversationProjectionReplica,
 } from './conversation-projection-replica';
@@ -138,6 +142,7 @@ export interface TabProjectionAttachmentBinding extends Pick<
 export interface TabRenderRuntime extends TabRenderBinding {
   readonly store: TabRenderStore;
   readonly projectionReplica: ConversationProjectionReplica;
+  readonly markdownSessions: AgentMarkdownSessionRegistry;
   readonly projectionAttachment: ProjectionAttachmentClient | null;
   readonly lifecycle: TabRenderRuntimeLifecycle;
   getRetentionSnapshot(): TabRenderRuntimeRetentionSnapshot;
@@ -262,6 +267,7 @@ class DefaultTabRenderRuntime implements TabRenderRuntime {
   readonly conversationId: string;
   readonly store: TabRenderStore;
   readonly projectionReplica: ConversationProjectionReplica;
+  readonly markdownSessions: AgentMarkdownSessionRegistry;
   private currentProjectionAttachment: ProjectionAttachmentClient | null = null;
   private currentLifecycle: TabRenderRuntimeLifecycle = 'attaching';
   private readonly retentionListeners = new Set<() => void>();
@@ -273,6 +279,7 @@ class DefaultTabRenderRuntime implements TabRenderRuntime {
     this.tabId = binding.tabId;
     this.conversationId = binding.conversationId;
     this.projectionReplica = createConversationProjectionReplica(binding.conversationId);
+    this.markdownSessions = createAgentMarkdownSessionRegistry();
     this.store = new DefaultTabRenderStore({
       tabId: binding.tabId,
       conversationId: binding.conversationId,
@@ -344,7 +351,20 @@ class DefaultTabRenderRuntime implements TabRenderRuntime {
     const client = createProjectionAttachmentClient({
       tabId: this.tabId,
       conversationId: this.conversationId,
-      replica: this.projectionReplica,
+      replica: {
+        installSnapshot: (snapshot) => {
+          const projectionPublication = this.projectionReplica.prepareSnapshot(snapshot);
+          const markdownPublication = this.markdownSessions.commitProjectionSnapshot(snapshot);
+          projectionPublication.publish();
+          markdownPublication.publish();
+        },
+        applyPatch: (patch) => {
+          const projectionPublication = this.projectionReplica.preparePatch(patch);
+          const markdownPublication = this.markdownSessions.commitProjectionPatch(patch);
+          projectionPublication.publish();
+          markdownPublication.publish();
+        },
+      },
       send: binding.send,
       reportError: binding.reportError,
     });
@@ -408,6 +428,7 @@ class DefaultTabRenderRuntime implements TabRenderRuntime {
     this.currentProjectionAttachment?.dispose();
     this.currentProjectionAttachment = null;
     this.projectionReplica.dispose();
+    this.markdownSessions.disposeAll();
     this.store.dispose();
   }
 

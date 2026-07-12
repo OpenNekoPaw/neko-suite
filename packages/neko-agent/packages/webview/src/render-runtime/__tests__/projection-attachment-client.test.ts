@@ -32,19 +32,7 @@ function appendPatch(
   baseProjectionVersion: number,
   projectionVersion: number,
 ): ConversationProjectionPatch {
-  const item = {
-    conversationId: 'conversation-a',
-    turnId: 'turn-a',
-    messageId: 'message-a',
-    itemId: 'text-a',
-    sequence: 1,
-    itemRevision: projectionVersion,
-    kind: 'assistant_text',
-    status: 'streaming',
-    createdAt: 1,
-    updatedAt: projectionVersion,
-    payload: { content, sourceGeneration: 1 },
-  } satisfies AgentTurnTimelineAssistantTextItem;
+  const item = assistantTextItem(content, projectionVersion, 'conversation-a');
   return {
     type: 'conversationProjectionPatch',
     conversationId: 'conversation-a',
@@ -53,6 +41,26 @@ function appendPatch(
     turnId: 'turn-a',
     messageId: 'message-a',
     operations: [{ operation: 'append', item }],
+  };
+}
+
+function assistantTextItem(
+  content: string,
+  itemRevision: number,
+  conversationId: string,
+): AgentTurnTimelineAssistantTextItem {
+  return {
+    conversationId,
+    turnId: 'turn-a',
+    messageId: 'message-a',
+    itemId: 'text-a',
+    sequence: 1,
+    itemRevision,
+    kind: 'assistant_text',
+    status: 'streaming',
+    createdAt: 1,
+    updatedAt: itemRevision,
+    payload: { content, sourceGeneration: 1 },
   };
 }
 
@@ -173,6 +181,34 @@ describe('ProjectionAttachmentClient', () => {
       }),
     ).toThrow(/patch base\/version mismatch/);
     expect(replica.getSnapshot().projection?.projectionVersion).toBe(0);
+  });
+
+  it('makes projection operation contract failures fatal without partial replica mutation', () => {
+    const { client, replica, reportError } = createClient();
+    client.accept(snapshotFrame(keyA));
+    const invalid = appendPatch('invalid owner', 0, 1);
+
+    expect(() =>
+      client.accept({
+        type: 'projectionPatch',
+        key: keyA,
+        sequence: 1,
+        baseProjectionVersion: 0,
+        projectionVersion: 1,
+        patch: {
+          ...invalid,
+          operations: [
+            {
+              operation: 'append',
+              item: assistantTextItem('invalid owner', 1, 'conversation-other'),
+            },
+          ],
+        },
+      }),
+    ).toThrow(/rejected its live patch/);
+    expect(client.getSnapshot().phase).toBe('fatal');
+    expect(replica.getSnapshot().projection?.projectionVersion).toBe(0);
+    expect(reportError).toHaveBeenCalledOnce();
   });
 
   it('keeps two Tab replicas and acknowledgement state independent for one conversation', () => {

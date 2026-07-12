@@ -13,9 +13,18 @@ export interface ConversationProjectionReplicaSnapshot {
   readonly revision: number;
 }
 
+export interface ConversationProjectionReplicaPublication {
+  /** Commit the prepared projection and notify subscribers exactly once. */
+  publish(): void;
+}
+
 export interface ConversationProjectionReplica {
   getSnapshot(): ConversationProjectionReplicaSnapshot;
   subscribe(listener: () => void): () => void;
+  prepareSnapshot(
+    snapshot: ConversationProjectionSnapshot,
+  ): ConversationProjectionReplicaPublication;
+  preparePatch(patch: ConversationProjectionPatch): ConversationProjectionReplicaPublication;
   installSnapshot(snapshot: ConversationProjectionSnapshot): void;
   applyPatch(patch: ConversationProjectionPatch): void;
   dispose(): void;
@@ -51,14 +60,16 @@ class DefaultConversationProjectionReplica implements ConversationProjectionRepl
     return () => this.listeners.delete(listener);
   }
 
-  installSnapshot(snapshot: ConversationProjectionSnapshot): void {
+  prepareSnapshot(
+    snapshot: ConversationProjectionSnapshot,
+  ): ConversationProjectionReplicaPublication {
     this.assertActive();
     this.assertOwner(snapshot.conversationId);
     assertProjectionVersion(snapshot.projectionVersion);
-    this.commit(cloneConversationProjectionSnapshot(snapshot));
+    return this.prepareCommit(cloneConversationProjectionSnapshot(snapshot));
   }
 
-  applyPatch(patch: ConversationProjectionPatch): void {
+  preparePatch(patch: ConversationProjectionPatch): ConversationProjectionReplicaPublication {
     this.assertActive();
     this.assertOwner(patch.conversationId);
     const projection = this.snapshot.projection;
@@ -67,13 +78,45 @@ class DefaultConversationProjectionReplica implements ConversationProjectionRepl
         `Conversation projection replica ${this.conversationId} requires a snapshot before patches.`,
       );
     }
-    this.commit(applyConversationProjectionPatch(projection, patch));
+    return this.prepareCommit(applyConversationProjectionPatch(projection, patch));
+  }
+
+  installSnapshot(snapshot: ConversationProjectionSnapshot): void {
+    this.prepareSnapshot(snapshot).publish();
+  }
+
+  applyPatch(patch: ConversationProjectionPatch): void {
+    this.preparePatch(patch).publish();
   }
 
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
     this.listeners.clear();
+  }
+
+  private prepareCommit(
+    projection: ConversationProjectionSnapshot,
+  ): ConversationProjectionReplicaPublication {
+    const expectedRevision = this.snapshot.revision;
+    let published = false;
+    return {
+      publish: (): void => {
+        this.assertActive();
+        if (published) {
+          throw new Error(
+            'Conversation projection replica publication may only be published once.',
+          );
+        }
+        if (this.snapshot.revision !== expectedRevision) {
+          throw new Error(
+            `Conversation projection replica ${this.conversationId} prepared revision ${expectedRevision} is stale; current revision is ${this.snapshot.revision}.`,
+          );
+        }
+        published = true;
+        this.commit(projection);
+      },
+    };
   }
 
   private commit(projection: ConversationProjectionSnapshot): void {

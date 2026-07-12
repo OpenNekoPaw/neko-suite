@@ -206,39 +206,55 @@ export function completeActiveTurnTimeline(
   };
 }
 
+export interface TimelineTurnRenderInput {
+  readonly messageId: string;
+  readonly items: readonly AgentTurnTimelineItem[];
+  readonly completed: boolean;
+  readonly finalContentBlocks?: readonly ContentBlock[];
+}
+
+export function projectTimelineTurnToMessage(input: TimelineTurnRenderInput): Message {
+  const timelineContentBlocks = projectTimelineItemsToContentBlocks(input.items);
+  const contentBlocks = input.completed
+    ? mergeFinalContentBlocksIntoTimelineOrder(timelineContentBlocks, input.finalContentBlocks)
+    : timelineContentBlocks;
+  const workItemIds = projectTimelineWorkItemIds(input.items);
+  return {
+    id: input.messageId,
+    role: 'assistant',
+    content: contentBlocks
+      .filter((block) => block.type === 'text')
+      .map((block) => block.content ?? '')
+      .join(''),
+    timestamp: contentBlocks[0]?.timestamp ?? Date.now(),
+    isStreaming: !input.completed,
+    contentBlocks,
+    ...(workItemIds.length > 0 ? { workItemIds: [...workItemIds] } : {}),
+  };
+}
+
 function projectActiveTurnTimelineToMessage(
   state: ActiveTurnTimelineState | null | undefined,
 ): ActiveTurnTimelineProjection {
   if (!state) return { message: null, workItemIds: [] };
-  const timelineContentBlocks = projectTimelineItemsToContentBlocks(state.items);
-  const contentBlocks = state.completed
-    ? mergeFinalContentBlocksIntoTimelineOrder(timelineContentBlocks, state.finalContentBlocks)
-    : timelineContentBlocks;
-  const workItemIds = projectTimelineWorkItemIds(state.items);
   return {
-    workItemIds,
-    message: {
-      id: state.messageId,
-      role: 'assistant',
-      content: contentBlocks
-        .filter((block) => block.type === 'text')
-        .map((block) => block.content ?? '')
-        .join(''),
-      timestamp: contentBlocks[0]?.timestamp ?? Date.now(),
-      isStreaming: !state.completed,
-      contentBlocks,
-      ...(workItemIds.length > 0 ? { workItemIds: [...workItemIds] } : {}),
-    },
+    message: projectTimelineTurnToMessage(state),
+    workItemIds: projectTimelineWorkItemIds(state.items),
   };
+}
+
+export function projectTimelineItemsToWorkItems(
+  items: readonly AgentTurnTimelineItem[],
+): AgentWorkItem[] {
+  return items.flatMap((item) =>
+    item.kind === 'task' || item.kind === 'media' ? [item.payload.workItem] : [],
+  );
 }
 
 export function projectActiveTurnTimelineWorkItems(
   state: ActiveTurnTimelineState | null | undefined,
 ): AgentWorkItem[] {
-  if (!state) return [];
-  return state.items.flatMap((item) =>
-    item.kind === 'task' || item.kind === 'media' ? [item.payload.workItem] : [],
-  );
+  return state ? projectTimelineItemsToWorkItems(state.items) : [];
 }
 
 export function projectMessagesWithActiveTurnTimeline(

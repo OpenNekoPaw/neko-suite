@@ -1,6 +1,9 @@
+import { useMemo, useSyncExternalStore } from 'react';
 import type { OpenTab } from '@neko-agent/types';
 import { ChatWorkspace, type ChatWorkspaceProps } from './ChatWorkspace';
 import type { TabRenderRuntime } from '@/render-runtime/tab-render-runtime';
+import { AgentMarkdownSessionRegistryProvider } from '@/markdown/agent-markdown-session-context';
+import { projectConversationProjectionRenderState } from '@/presenters/conversation-projection-presenter';
 
 export interface ConversationTabRuntimeViewProps extends Omit<
   ChatWorkspaceProps,
@@ -19,6 +22,10 @@ export function ConversationTabRuntimeView({
   tab,
   runtime,
   visible,
+  messages,
+  workItems,
+  isThinking,
+  streamingMessageId,
   ...workspaceProps
 }: ConversationTabRuntimeViewProps) {
   if (runtime.tabId !== tab.id || runtime.conversationId !== tab.conversationId) {
@@ -27,15 +34,47 @@ export function ConversationTabRuntimeView({
     );
   }
 
+  const subscribeProjection = useMemo(
+    () => (listener: () => void) => runtime.projectionReplica.subscribe(listener),
+    [runtime],
+  );
+  const readProjection = useMemo(() => () => runtime.projectionReplica.getSnapshot(), [runtime]);
+  const projectionSnapshot = useSyncExternalStore(
+    subscribeProjection,
+    readProjection,
+    readProjection,
+  );
+  const renderState = useMemo(
+    () =>
+      projectConversationProjectionRenderState({
+        messages,
+        workItems,
+        isThinking,
+        streamingMessageId,
+        projection: projectionSnapshot.projection,
+      }),
+    [isThinking, messages, projectionSnapshot.projection, streamingMessageId, workItems],
+  );
+
   return (
-    <div
-      data-agent-tab-runtime={tab.id}
-      data-agent-conversation={tab.conversationId}
-      hidden={!visible}
-      aria-hidden={!visible}
-      className={visible ? 'flex min-h-0 flex-1 flex-col' : 'hidden'}
-    >
-      <ChatWorkspace {...workspaceProps} tabRenderStore={runtime.store} isVisible={visible} />
-    </div>
+    <AgentMarkdownSessionRegistryProvider registry={runtime.markdownSessions}>
+      <div
+        data-agent-tab-runtime={tab.id}
+        data-agent-conversation={tab.conversationId}
+        hidden={!visible}
+        aria-hidden={!visible}
+        className={visible ? 'flex min-h-0 flex-1 flex-col' : 'hidden'}
+      >
+        <ChatWorkspace
+          {...workspaceProps}
+          messages={[...renderState.messages]}
+          workItems={[...renderState.workItems]}
+          isThinking={renderState.isThinking}
+          streamingMessageId={renderState.streamingMessageId}
+          tabRenderStore={runtime.store}
+          isVisible={visible}
+        />
+      </div>
+    </AgentMarkdownSessionRegistryProvider>
   );
 }
