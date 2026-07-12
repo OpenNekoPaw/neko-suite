@@ -6,6 +6,7 @@ import {
   createMediaProductionWorkflowRun,
   getNextMediaProductionStage,
   startMediaProductionStage,
+  setMediaProductionProjectAuthoringPlan,
   validateMediaProductionWorkflowRun,
   type MediaProductionResourceArtifactRef,
 } from '..';
@@ -153,5 +154,48 @@ describe('media production workflow contract', () => {
         startedAt: '2026-07-12T00:00:03.000Z',
       }),
     ).toThrow('is not pending');
+  });
+
+  it('persists only explicit owning project targets and rejects active fallback', () => {
+    const planned = setMediaProductionProjectAuthoringPlan({
+      state: createRun(),
+      updatedAt: '2026-07-12T00:00:01.000Z',
+      plan: {
+        version: 1,
+        handoffs: [
+          {
+            handoffId: 'cut-final',
+            domain: 'cut',
+            sourceArtifactId: 'approved-shot-1',
+            outputProfileId: 'media-production.cut-project',
+            target: { kind: 'file', documentUri: 'file:///workspace/final.nkv' },
+            mediaType: 'video',
+          },
+        ],
+      },
+    });
+    expect(planned.projectAuthoringPlan?.handoffs[0]?.target).toEqual({
+      kind: 'file',
+      documentUri: 'file:///workspace/final.nkv',
+    });
+
+    expect(() =>
+      setMediaProductionProjectAuthoringPlan({
+        state: createRun(),
+        updatedAt: '2026-07-12T00:00:01.000Z',
+        plan: {
+          version: 1,
+          handoffs: [
+            {
+              handoffId: 'cut-active',
+              domain: 'cut',
+              sourceArtifactId: 'approved-shot-1',
+              outputProfileId: 'media-production.cut-project',
+              target: { kind: 'active' },
+            },
+          ],
+        },
+      }),
+    ).toThrow('explicit file or new target');
   });
 });

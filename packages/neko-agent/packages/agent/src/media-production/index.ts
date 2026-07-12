@@ -8,3 +8,11 @@ export {
   type MediaProductionStageExecutorPort,
   type MediaProductionWorkflowStateStorePort,
 } from './early-stage-orchestrator';
+
+export {
+  MediaProductionProjectAuthoringOrchestrator,
+  type MediaProductionProjectAuthoringOrchestratorOptions,
+  type MediaProductionProjectAuthoringPort,
+  type MediaProductionProjectAuthoringPorts,
+  type MediaProductionProjectAuthoringRequest,
+} from './project-authoring-orchestrator';

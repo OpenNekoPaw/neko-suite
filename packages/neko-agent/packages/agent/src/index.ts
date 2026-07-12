@@ -1137,6 +1137,11 @@ export {
   type MediaProductionStageExecutionResult,
   type MediaProductionStageExecutorPort,
   type MediaProductionWorkflowStateStorePort,
+  MediaProductionProjectAuthoringOrchestrator,
+  type MediaProductionProjectAuthoringOrchestratorOptions,
+  type MediaProductionProjectAuthoringPort,
+  type MediaProductionProjectAuthoringPorts,
+  type MediaProductionProjectAuthoringRequest,
 } from './media-production';
 
 // Export commands (builtin slash commands)

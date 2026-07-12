@@ -10,6 +10,8 @@ import {
   validateDurableResourceRef,
 } from './durable-resource-ref';
 import type { ResourceRef } from './resource-cache';
+import type { NekoProjectAuthoringTarget } from '../project-authoring';
+import { validateNekoProjectAuthoringTarget } from '../project-authoring';
 
 export const MEDIA_PRODUCTION_WORKFLOW_VERSION = 1 as const;
 
@@ -39,7 +41,11 @@ export type MediaProductionWorkflowDiagnosticCode =
   | 'missing-stage-artifact'
   | 'unstable-stage-artifact'
   | 'stale-stage-artifact'
-  | 'stage-blocked';
+  | 'stage-blocked'
+  | 'missing-authoring-target'
+  | 'authoring-capability-unavailable'
+  | 'invalid-authoring-result'
+  | 'asset-not-approved';
 
 export interface MediaProductionWorkflowDiagnostic {
   readonly code: MediaProductionWorkflowDiagnosticCode;
@@ -95,6 +101,22 @@ export type MediaProductionWorkflowSourceRef =
       readonly projectRef: QualityProjectRef;
     };
 
+export type MediaProductionProjectAuthoringDomain = 'canvas' | 'cut' | 'audio';
+
+export interface MediaProductionProjectAuthoringHandoff {
+  readonly handoffId: string;
+  readonly domain: MediaProductionProjectAuthoringDomain;
+  readonly sourceArtifactId: string;
+  readonly outputProfileId: string;
+  readonly target: NekoProjectAuthoringTarget;
+  readonly mediaType?: 'image' | 'video' | 'audio';
+}
+
+export interface MediaProductionProjectAuthoringPlan {
+  readonly version: 1;
+  readonly handoffs: readonly MediaProductionProjectAuthoringHandoff[];
+}
+
 export interface MediaProductionStageState {
   readonly stageId: MediaProductionStageId;
   readonly status: MediaProductionStageStatus;
@@ -110,6 +132,7 @@ export interface MediaProductionWorkflowRunState {
   readonly workflowRunId: string;
   readonly sourceProfileId: string;
   readonly sourceRefs: readonly MediaProductionWorkflowSourceRef[];
+  readonly projectAuthoringPlan?: MediaProductionProjectAuthoringPlan;
   readonly status: MediaProductionRunStatus;
   readonly stages: readonly MediaProductionStageState[];
   readonly createdAt: string;
@@ -153,6 +176,37 @@ export function createMediaProductionWorkflowRun(input: {
     updatedAt: input.createdAt,
     diagnostics: [],
   };
+}
+
+export function setMediaProductionProjectAuthoringPlan(input: {
+  readonly state: MediaProductionWorkflowRunState;
+  readonly plan: MediaProductionProjectAuthoringPlan;
+  readonly updatedAt: string;
+}): MediaProductionWorkflowRunState {
+  assertIsoTimestamp(input.updatedAt, 'updatedAt');
+  const diagnostics = validateProjectAuthoringPlan(input.plan);
+  if (diagnostics.length > 0) {
+    throw new Error(diagnostics.map((diagnostic) => diagnostic.message).join(' '));
+  }
+  const projectAuthoringStage = input.state.stages.find(
+    (stage) => stage.stageId === 'project-authoring',
+  );
+  if (!projectAuthoringStage || projectAuthoringStage.status !== 'pending') {
+    throw new Error('Project authoring plan can only be set while project-authoring is pending.');
+  }
+  const next: MediaProductionWorkflowRunState = {
+    ...input.state,
+    projectAuthoringPlan: {
+      version: 1,
+      handoffs: input.plan.handoffs.map((handoff) => ({
+        ...handoff,
+        target: { ...handoff.target },
+      })),
+    },
+    updatedAt: input.updatedAt,
+  };
+  assertCanonicalState(next);
+  return next;
 }
 
 export function createGeneratedAssetStageArtifactRef(input: {
@@ -327,6 +381,9 @@ export function validateMediaProductionWorkflowRun(
     });
   }
   diagnostics.push(...validateWorkflowSourceRefs(state.sourceRefs));
+  if (state.projectAuthoringPlan) {
+    diagnostics.push(...validateProjectAuthoringPlan(state.projectAuthoringPlan));
+  }
   if (state.stages.length !== MEDIA_PRODUCTION_STAGE_IDS.length) {
     diagnostics.push({
       code: 'invalid-workflow-state',
@@ -352,6 +409,74 @@ export function validateMediaProductionWorkflowRun(
     ok: !diagnostics.some((diagnostic) => diagnostic.severity === 'error'),
     diagnostics,
   };
+}
+
+function validateProjectAuthoringPlan(
+  plan: MediaProductionProjectAuthoringPlan,
+): MediaProductionWorkflowDiagnostic[] {
+  if (plan.version !== 1 || plan.handoffs.length === 0) {
+    return [
+      {
+        code: 'invalid-workflow-state',
+        severity: 'error',
+        message: 'Project authoring plan requires version 1 and at least one handoff.',
+        stageId: 'project-authoring',
+        path: ['projectAuthoringPlan'],
+      },
+    ];
+  }
+
+  const diagnostics: MediaProductionWorkflowDiagnostic[] = [];
+  const seen = new Set<string>();
+  const extensionByDomain: Readonly<Record<MediaProductionProjectAuthoringDomain, string>> = {
+    canvas: '.nkc',
+    cut: '.nkv',
+    audio: '.nka',
+  };
+  plan.handoffs.forEach((handoff, index) => {
+    const path = ['projectAuthoringPlan', 'handoffs', index] as const;
+    if (
+      !handoff.handoffId.trim() ||
+      seen.has(handoff.handoffId) ||
+      !handoff.sourceArtifactId.trim() ||
+      !ARTIFACT_PROFILE_ID_PATTERN.test(handoff.outputProfileId)
+    ) {
+      diagnostics.push({
+        code: 'invalid-workflow-state',
+        severity: 'error',
+        message: 'Project authoring handoff identity, source, or output profile is invalid.',
+        stageId: 'project-authoring',
+        path,
+      });
+    }
+    seen.add(handoff.handoffId);
+
+    const targetValidation = validateNekoProjectAuthoringTarget(handoff.target, {
+      createNewAllowed: true,
+    });
+    if (handoff.target.kind === 'active' || !targetValidation.ok) {
+      diagnostics.push({
+        code: 'missing-authoring-target',
+        severity: 'error',
+        message: 'Project authoring handoffs require an explicit file or new target.',
+        stageId: 'project-authoring',
+        path: [...path, 'target'],
+      });
+    }
+    if (handoff.target.documentUri) {
+      const cleanUri = handoff.target.documentUri.split(/[?#]/, 1)[0]?.toLowerCase() ?? '';
+      if (!cleanUri.endsWith(extensionByDomain[handoff.domain])) {
+        diagnostics.push({
+          code: 'invalid-workflow-state',
+          severity: 'error',
+          message: `Project authoring target for ${handoff.domain} must use ${extensionByDomain[handoff.domain]}.`,
+          stageId: 'project-authoring',
+          path: [...path, 'target', 'documentUri'],
+        });
+      }
+    }
+  });
+  return diagnostics;
 }
 
 function validateWorkflowSourceRefs(
