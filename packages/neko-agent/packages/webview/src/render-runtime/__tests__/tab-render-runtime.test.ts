@@ -394,6 +394,117 @@ describe('TabRenderRuntimeRegistry', () => {
     expect(messagesB).toHaveLength(1);
   });
 
+  it('keeps projection and Markdown identities isolated during rapid visibility switching', () => {
+    const registry = createTabRenderRuntimeRegistry();
+    const bindings = [
+      { tabId: 'tab-a', conversationId: 'conversation-shared' },
+      { tabId: 'tab-b', conversationId: 'conversation-shared' },
+    ] as const;
+    registry.reconcile(bindings, 'tab-a');
+    const runtimeA = registry.require('tab-a');
+    const runtimeB = registry.require('tab-b');
+    const replicaA = runtimeA.projectionReplica;
+    const replicaB = runtimeB.projectionReplica;
+    const markdownA = runtimeA.markdownSessions;
+    const markdownB = runtimeB.markdownSessions;
+    const keyA = {
+      endpointEpoch: 'endpoint-1',
+      attachmentId: 'attachment-a',
+      tabId: 'tab-a',
+      conversationId: 'conversation-shared',
+    } as const;
+    const keyB = {
+      endpointEpoch: 'endpoint-1',
+      attachmentId: 'attachment-b',
+      tabId: 'tab-b',
+      conversationId: 'conversation-shared',
+    } as const;
+    runtimeA.attachProjection({
+      endpointEpoch: keyA.endpointEpoch,
+      attachmentId: keyA.attachmentId,
+      send: vi.fn(),
+      reportError: vi.fn(),
+    });
+    runtimeB.attachProjection({
+      endpointEpoch: keyB.endpointEpoch,
+      attachmentId: keyB.attachmentId,
+      send: vi.fn(),
+      reportError: vi.fn(),
+    });
+    runtimeA.acceptProjectionFrame({
+      type: 'projectionSnapshot',
+      key: keyA,
+      sequence: 0,
+      projectionVersion: 0,
+      projection: {
+        conversationId: 'conversation-shared',
+        projectionVersion: 0,
+        turns: [{ turnId: 'turn-1', messageId: 'message-1', items: [projectionTextItem('A0', 1)] }],
+      },
+    });
+    runtimeB.acceptProjectionFrame({
+      type: 'projectionSnapshot',
+      key: keyB,
+      sequence: 0,
+      projectionVersion: 0,
+      projection: {
+        conversationId: 'conversation-shared',
+        projectionVersion: 0,
+        turns: [{ turnId: 'turn-1', messageId: 'message-1', items: [projectionTextItem('B0', 1)] }],
+      },
+    });
+
+    for (let revision = 1; revision <= 20; revision += 1) {
+      registry.reconcile(bindings, revision % 2 === 0 ? 'tab-b' : 'tab-a');
+      for (const [runtime, key, prefix] of [
+        [runtimeA, keyA, 'A'],
+        [runtimeB, keyB, 'B'],
+      ] as const) {
+        runtime.acceptProjectionFrame({
+          type: 'projectionPatch',
+          key,
+          sequence: revision,
+          baseProjectionVersion: revision - 1,
+          projectionVersion: revision,
+          patch: {
+            type: 'conversationProjectionPatch',
+            conversationId: 'conversation-shared',
+            baseProjectionVersion: revision - 1,
+            projectionVersion: revision,
+            turnId: 'turn-1',
+            messageId: 'message-1',
+            operations: [
+              {
+                operation: 'append',
+                item: projectionTextItem(` ${prefix}${revision}`, revision + 1),
+              },
+            ],
+          },
+        });
+      }
+    }
+
+    const markdownKey = createAgentMarkdownSessionKey({
+      conversationId: 'conversation-shared',
+      messageId: 'message-1',
+      itemId: 'text-1',
+    });
+    expect(registry.require('tab-a')).toBe(runtimeA);
+    expect(registry.require('tab-b')).toBe(runtimeB);
+    expect(runtimeA.projectionReplica).toBe(replicaA);
+    expect(runtimeB.projectionReplica).toBe(replicaB);
+    expect(runtimeA.markdownSessions).toBe(markdownA);
+    expect(runtimeB.markdownSessions).toBe(markdownB);
+    expect(markdownA.getSnapshot(markdownKey)?.source).toBe(
+      `A0${Array.from({ length: 20 }, (_, index) => ` A${index + 1}`).join('')}`,
+    );
+    expect(markdownB.getSnapshot(markdownKey)?.source).toBe(
+      `B0${Array.from({ length: 20 }, (_, index) => ` B${index + 1}`).join('')}`,
+    );
+    expect(runtimeA.store.getSnapshot().visibility).toBe('hidden');
+    expect(runtimeB.store.getSnapshot().visibility).toBe('visible');
+  });
+
   it('does not mutate Tab Markdown when a projection patch fails validation', () => {
     const runtime = createTabRenderRuntime({
       tabId: 'tab-a',

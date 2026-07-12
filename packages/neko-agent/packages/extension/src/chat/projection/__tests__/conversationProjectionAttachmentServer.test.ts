@@ -6,6 +6,7 @@ import type {
   ProjectionAttachmentHostFrame,
   ProjectionAttachmentKey,
 } from '@neko-agent/types';
+import { applyConversationProjectionPatch } from '@neko-agent/types';
 import { createConversationProjectionStore } from '@neko/agent/runtime';
 import { createConversationProjectionAttachmentServer } from '../conversationProjectionAttachmentServer';
 
@@ -44,6 +45,27 @@ function appendUpdate(content: string, revision: number) {
   };
 }
 
+function completeUpdate(revision: number) {
+  return {
+    type: 'agentTurnTimelineUpdate' as const,
+    conversationId: 'conversation-a',
+    turnId: 'turn-a',
+    messageId: 'message-a',
+    operations: [
+      {
+        operation: 'complete' as const,
+        itemId: 'text-a',
+        itemRevision: revision,
+        kind: 'assistant_text' as const,
+        sourceGeneration: 1,
+        status: 'complete' as const,
+        updatedAt: revision,
+      },
+    ],
+    completion: { status: 'completed' as const, completedAt: revision },
+  };
+}
+
 function deferred<T>() {
   let resolve!: (value: T | PromiseLike<T>) => void;
   const promise = new Promise<T>((settle) => {
@@ -75,8 +97,9 @@ describe('ConversationProjectionAttachmentServer', () => {
 
     const attaching = server.attach({ type: 'projectionAttach', key: keyA });
     await nextMicrotask();
-    projection.apply(appendUpdate('a', 1));
-    projection.apply(appendUpdate('b', 2));
+    projection.apply(appendUpdate('partial ', 1));
+    projection.apply(appendUpdate('exact final content', 2));
+    projection.apply(completeUpdate(3));
 
     expect(frames.map((frame) => frame.type)).toEqual(['projectionSnapshot']);
     snapshotDelivery.resolve(true);
@@ -94,6 +117,7 @@ describe('ConversationProjectionAttachmentServer', () => {
       'projectionSnapshot',
       'projectionPatch',
       'projectionPatch',
+      'projectionPatch',
     ]);
     expect(frames[1]).toMatchObject({
       type: 'projectionPatch',
@@ -106,6 +130,37 @@ describe('ConversationProjectionAttachmentServer', () => {
       sequence: 2,
       baseProjectionVersion: 1,
       projectionVersion: 2,
+    });
+    expect(frames[3]).toMatchObject({
+      type: 'projectionPatch',
+      sequence: 3,
+      baseProjectionVersion: 2,
+      projectionVersion: 3,
+    });
+
+    const snapshotFrame = frames[0];
+    if (snapshotFrame?.type !== 'projectionSnapshot') {
+      throw new Error('Expected the attachment to begin with an authoritative snapshot.');
+    }
+    const finalProjection = frames.slice(1).reduce((current, frame) => {
+      if (frame.type !== 'projectionPatch') {
+        throw new Error('Expected only contiguous patches after the snapshot ACK.');
+      }
+      return applyConversationProjectionPatch(current, frame.patch);
+    }, snapshotFrame.projection);
+    expect(finalProjection).toMatchObject({
+      projectionVersion: 3,
+      turns: [
+        {
+          completion: { status: 'completed', completedAt: 3 },
+          items: [
+            {
+              status: 'complete',
+              payload: { content: 'partial exact final content' },
+            },
+          ],
+        },
+      ],
     });
   });
 
