@@ -128,7 +128,6 @@ function createProps(
     conversationKind: 'chat',
     clearMessages: vi.fn(),
     settings: createSettings(),
-    updateSettings: vi.fn(),
     onModelSelect: vi.fn(),
     mentionItems: [],
     onMentionSearchFilterChange: vi.fn(),

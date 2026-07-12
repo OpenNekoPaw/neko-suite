@@ -52,7 +52,10 @@ describe('configHandlers', () => {
     );
 
     expect(context.setSettings).toHaveBeenCalledTimes(1);
-    expect(context.setSelectedModel).toHaveBeenCalledWith('');
+    expect(context.hydrateConversationSettings).toHaveBeenCalledWith(
+      'conversation-1',
+      expect.objectContaining({ selectedModel: '' }),
+    );
     expect(context.setGlobalError).toHaveBeenCalledWith(
       'Configuration file contains invalid TOML: /home/user/.neko/config.toml. Fix the file, then open a new Agent session or tab.',
     );
@@ -76,7 +79,10 @@ describe('configHandlers', () => {
 
     expect(context.setSettings).toHaveBeenCalledTimes(1);
     expect(context.setHasConfigSnapshot).not.toHaveBeenCalled();
-    expect(context.setSelectedModel).toHaveBeenCalledWith('');
+    expect(context.hydrateConversationSettings).toHaveBeenCalledWith(
+      'conversation-1',
+      expect.objectContaining({ selectedModel: '' }),
+    );
     expect(context.setGlobalError).not.toHaveBeenCalled();
   });
 
@@ -94,12 +100,14 @@ describe('configHandlers', () => {
       context,
     );
 
-    expect(context.setSelectedModel).toHaveBeenCalledWith('openai:gpt-4.1');
+    expect(context.hydrateConversationSettings).toHaveBeenCalledWith(
+      'conversation-1',
+      expect.objectContaining({ selectedModel: 'openai:gpt-4.1' }),
+    );
   });
 
-  it('keeps the current model when a stale settings snapshot selects a different available model', () => {
+  it('projects available model identities for conversation-local stale snapshot handling', () => {
     const context = createContext();
-    context.selectedModelRef = { current: 'neko-account-gateway:gpt-5.5' };
 
     dispatch(
       {
@@ -128,7 +136,19 @@ describe('configHandlers', () => {
       context,
     );
 
-    expect(context.setSelectedModel).not.toHaveBeenCalled();
+    expect(context.hydrateConversationSettings).toHaveBeenCalledWith(
+      'conversation-1',
+      expect.objectContaining({
+        selectedModel: 'deepseek-chat:deepseek-v4-pro',
+        availableModelIds: ['deepseek-chat:deepseek-v4-pro', 'neko-account-gateway:gpt-5.5'],
+        defaultMediaModels: {},
+        executionMode: 'ask',
+        settingsPatch: expect.objectContaining({
+          selectedProviderId: 'deepseek-chat',
+          selectedModelId: 'deepseek-v4-pro',
+        }),
+      }),
+    );
   });
 
   it('hydrates the first real LLM model when settings has no explicit selection', () => {
@@ -154,7 +174,10 @@ describe('configHandlers', () => {
       context,
     );
 
-    expect(context.setSelectedModel).toHaveBeenCalledWith('neko-account-gateway:auto');
+    expect(context.hydrateConversationSettings).toHaveBeenCalledWith(
+      'conversation-1',
+      expect.objectContaining({ selectedModel: 'neko-account-gateway:auto' }),
+    );
     expect(context.updateSettings).toHaveBeenCalledWith({
       selectedProviderId: 'neko-account-gateway',
       selectedModelId: 'auto',
@@ -200,7 +223,10 @@ describe('configHandlers', () => {
       context,
     );
 
-    expect(context.setSelectedModel).toHaveBeenCalledWith('deepseek-direct:deepseek-chat');
+    expect(context.hydrateConversationSettings).toHaveBeenCalledWith(
+      'conversation-1',
+      expect.objectContaining({ selectedModel: 'deepseek-direct:deepseek-chat' }),
+    );
     expect(context.updateSettings).toHaveBeenCalledWith({
       selectedProviderId: 'deepseek-direct',
       selectedModelId: 'deepseek-chat',
@@ -269,8 +295,7 @@ function createContext(): MessageHandlerContext {
     requestConfigSnapshot: vi.fn(),
     setSettings: vi.fn(),
     setHasConfigSnapshot: vi.fn(),
-    setSelectedModel: vi.fn(),
-    setMediaModelSelection: vi.fn(),
+    hydrateConversationSettings: vi.fn(),
     updateSettings: vi.fn(),
     setPromptModeForConversation: vi.fn(),
     setAgentState: vi.fn(),

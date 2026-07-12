@@ -21,7 +21,6 @@ import type {
 } from './messages';
 import {
   projectConfigStateMessage,
-  projectMediaModelSelectionDefaults,
   projectPluginCommandsMessage,
   projectPluginsAvailableMessage,
   projectProjectFilesMessage,
@@ -47,14 +46,13 @@ const handleSettingsData: MessageHandler<'settingsData'> = (
   }));
 
   const defaultChatModel = selectInitialChatModel(projection);
-  const selectedModel = resolveHydratedSelectedModel(
-    projection,
-    context.selectedModelRef?.current,
-    defaultChatModel,
-  );
-  if (selectedModel !== context.selectedModelRef?.current) {
-    context.setSelectedModel(selectedModel);
-  }
+  context.hydrateConversationSettings(message.conversationId, {
+    selectedModel: projection.selectedModel ?? defaultChatModel?.id ?? '',
+    availableModelIds: (projection.settingsPatch.chatModelOptions ?? []).map((option) => option.id),
+    defaultMediaModels: projection.defaultMediaModels,
+    executionMode: projection.settingsPatch.executionMode ?? 'ask',
+    settingsPatch: projection.settingsPatch,
+  });
   if (!projection.selectedModel && defaultChatModel) {
     context.updateSettings({
       selectedProviderId: defaultChatModel.providerId,
@@ -69,35 +67,10 @@ const handleSettingsData: MessageHandler<'settingsData'> = (
     );
   }
 
-  if (Object.keys(projection.defaultMediaModels).length > 0) {
-    context.setMediaModelSelection((prev) => {
-      const defaultProjection = projectMediaModelSelectionDefaults({
-        selection: prev,
-        defaults: projection.defaultMediaModels,
-      });
-      return defaultProjection.updated ? defaultProjection.selection : prev;
-    });
-  }
-
   if (projection.configDiagnostic) {
     context.setGlobalError(projection.configDiagnostic.message);
   }
 };
-
-function resolveHydratedSelectedModel(
-  projection: SettingsDataProjection,
-  currentSelectedModel: string | undefined,
-  defaultChatModel: ChatModelOption | null,
-): string {
-  const chatModelOptions = projection.settingsPatch.chatModelOptions ?? [];
-  if (
-    currentSelectedModel &&
-    chatModelOptions.some((option) => option.id === currentSelectedModel)
-  ) {
-    return currentSelectedModel;
-  }
-  return projection.selectedModel ?? defaultChatModel?.id ?? '';
-}
 
 function selectInitialChatModel(projection: SettingsDataProjection): ChatModelOption | null {
   const chatModelOptions = projection.settingsPatch.chatModelOptions ?? [];

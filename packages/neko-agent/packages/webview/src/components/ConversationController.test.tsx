@@ -123,6 +123,7 @@ vi.mock('@/components/ChatWorkspace', () => ({
   ChatWorkspace: (props: {
     tabRenderStore: TabRenderStore;
     messages?: Message[];
+    settings?: SettingsState;
     setMessages?: (value: Message[] | ((current: Message[]) => Message[])) => void;
     isThinking?: boolean;
     streamingMessageId?: string | null;
@@ -176,6 +177,15 @@ vi.mock('@/components/ChatWorkspace', () => ({
         </span>
         <span data-testid={testId('workspace-prompt-mode')}>
           {tabRenderSnapshot.snapshot.state.promptMode}
+        </span>
+        <span data-testid={testId('workspace-selected-model')}>
+          {tabRenderSnapshot.snapshot.state.selectedModel}
+        </span>
+        <span data-testid={testId('workspace-execution-mode')}>
+          {tabRenderSnapshot.snapshot.state.executionMode}
+        </span>
+        <span data-testid={testId('workspace-model-options')}>
+          {props.settings?.chatModelOptions.map((option) => option.id).join('|') ?? ''}
         </span>
         <span data-testid={testId('workspace-diagnostics')}>
           {tabRenderSnapshot.snapshot.state.diagnostics
@@ -1191,6 +1201,87 @@ describe('ConversationController entry state', () => {
 
     expect(screen.getByTestId('workspace-messages').textContent).toBe('partial role');
     expect(screen.getByTestId('workspace-streaming-flags').textContent).toBe('true:true');
+  });
+
+  it('hydrates model and execution settings only into Tabs for the owning conversation', () => {
+    vi.clearAllMocks();
+    render(<ConversationController {...createProps()} />);
+    const openTabs = [
+      { id: 'tab-a', title: 'Chat A', conversationId: 'conv-a' },
+      { id: 'tab-b', title: 'Chat B', conversationId: 'conv-b' },
+    ];
+
+    act(() => {
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          data: { type: 'tabState', tabState: { openTabs, activeTabId: 'tab-b' } },
+        }),
+      );
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          data: {
+            type: 'settingsData',
+            conversationId: 'conv-a',
+            selectedProviderId: 'provider-a',
+            selectedModelId: 'model-a',
+            executionMode: 'auto',
+            chatModelOptions: [
+              {
+                id: 'provider-a:model-a',
+                label: 'Model A',
+                providerId: 'provider-a',
+                modelId: 'model-a',
+                category: 'llm',
+              },
+            ],
+          },
+        }),
+      );
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          data: {
+            type: 'settingsData',
+            conversationId: 'conv-b',
+            selectedProviderId: 'provider-b',
+            selectedModelId: 'model-b',
+            executionMode: 'plan',
+            chatModelOptions: [
+              {
+                id: 'provider-b:model-b',
+                label: 'Model B',
+                providerId: 'provider-b',
+                modelId: 'model-b',
+                category: 'llm',
+              },
+            ],
+          },
+        }),
+      );
+    });
+
+    expect(screen.getByTestId('workspace-selected-model').textContent).toBe('provider-b:model-b');
+    expect(screen.getByTestId('workspace-execution-mode').textContent).toBe('plan');
+    expect(screen.getByTestId('workspace-model-options').textContent).toBe('provider-b:model-b');
+    expect(screen.getByTestId('workspace-selected-model-tab-a').textContent).toBe(
+      'provider-a:model-a',
+    );
+    expect(screen.getByTestId('workspace-execution-mode-tab-a').textContent).toBe('auto');
+    expect(screen.getByTestId('workspace-model-options-tab-a').textContent).toBe(
+      'provider-a:model-a',
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Switch Chat A' }));
+
+    expect(screen.getByTestId('workspace-selected-model').textContent).toBe('provider-a:model-a');
+    expect(screen.getByTestId('workspace-execution-mode').textContent).toBe('auto');
+    expect(screen.getByTestId('workspace-model-options').textContent).toBe('provider-a:model-a');
+    expect(screen.getByTestId('workspace-selected-model-tab-b').textContent).toBe(
+      'provider-b:model-b',
+    );
+    expect(screen.getByTestId('workspace-execution-mode-tab-b').textContent).toBe('plan');
+    expect(screen.getByTestId('workspace-model-options-tab-b').textContent).toBe(
+      'provider-b:model-b',
+    );
   });
 
   it('routes prompt mode and diagnostics to every Tab store for the owning conversation only', () => {

@@ -35,7 +35,6 @@ import type {
 } from '@/components/ChatView/InputArea/types';
 import type { BoundActiveSkillIndicator } from './types';
 import type { ActivationProgressTimeline } from '@/presenters/activation-progress-presenter';
-import type { MediaModelSelection } from '@/hooks/useUIState';
 import type { ConversationRenderCoordinator } from '@/render-lifecycle/conversation-render-coordinator';
 import {
   commitConversationSnapshotProjection,
@@ -109,9 +108,7 @@ export interface UseMessageHandlerProps {
   // State setters - Settings
   setSettings: React.Dispatch<React.SetStateAction<SettingsState>>;
   setHasConfigSnapshot?: React.Dispatch<React.SetStateAction<boolean>>;
-  selectedModelRef?: MutableRefObject<string>;
-  setSelectedModel: React.Dispatch<React.SetStateAction<string>>;
-  setMediaModelSelection: React.Dispatch<React.SetStateAction<MediaModelSelection>>;
+  hydrateConversationSettings: MessageHandlerContext['hydrateConversationSettings'];
 
   // State setters - Work items
   setWorkItemsByConversation: React.Dispatch<React.SetStateAction<AgentWorkItemStore>>;
@@ -221,9 +218,7 @@ export function useMessageHandler(props: UseMessageHandlerProps): UseMessageHand
     setActiveTab,
     setSettings,
     setHasConfigSnapshot,
-    selectedModelRef,
-    setSelectedModel,
-    setMediaModelSelection,
+    hydrateConversationSettings,
     setWorkItemsByConversation,
 
     setProjectFiles,
@@ -327,9 +322,7 @@ export function useMessageHandler(props: UseMessageHandlerProps): UseMessageHand
       setActiveTab,
       setSettings,
       setHasConfigSnapshot,
-      selectedModelRef,
-      setSelectedModel,
-      setMediaModelSelection,
+      hydrateConversationSettings,
       setWorkItemsByConversation,
 
       setProjectFiles,
@@ -391,9 +384,7 @@ export function useMessageHandler(props: UseMessageHandlerProps): UseMessageHand
       setActiveTab,
       setSettings,
       setHasConfigSnapshot,
-      selectedModelRef,
-      setSelectedModel,
-      setMediaModelSelection,
+      hydrateConversationSettings,
       setWorkItemsByConversation,
 
       setProjectFiles,

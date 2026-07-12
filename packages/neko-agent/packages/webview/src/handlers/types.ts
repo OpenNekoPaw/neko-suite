@@ -14,13 +14,13 @@ import type {
   PromptMode,
   TabType,
   SettingsState,
+  ShellExecutionMode,
   AgentState,
   AgentQueuedMessageItem,
   AgentSessionDiagnosticMessage,
 } from '@neko-agent/types';
 import type { AgentMarkdownSessionRegistry } from '@/markdown/agent-markdown-session-registry';
 import type { ActivationProgressTimeline } from '@/presenters/activation-progress-presenter';
-import type { MediaModelSelection } from '@/hooks/useUIState';
 import type { AgentWorkItemStore } from '@/components/AgentWorkItem';
 import type { PluginsAvailable } from '@/components/ChatView/SendToMenu';
 import type { ProjectFileInfo } from '@/hooks/useConfigState';
@@ -110,11 +110,20 @@ export interface TabContext {
 export interface SettingsContext {
   setSettings: React.Dispatch<React.SetStateAction<SettingsState>>;
   setHasConfigSnapshot?: React.Dispatch<React.SetStateAction<boolean>>;
-  selectedModelRef?: MutableRefObject<string>;
-  setSelectedModel: React.Dispatch<React.SetStateAction<string>>;
-  setMediaModelSelection: React.Dispatch<React.SetStateAction<MediaModelSelection>>;
+  hydrateConversationSettings: (
+    conversationId: string,
+    snapshot: ConversationSettingsSnapshot,
+  ) => void;
   updateSettings: (partial: Partial<SettingsState>) => void;
   setPromptModeForConversation: (conversationId: string, mode: PromptMode) => void;
+}
+
+export interface ConversationSettingsSnapshot {
+  readonly selectedModel: string;
+  readonly availableModelIds: readonly string[];
+  readonly defaultMediaModels: Readonly<Partial<Record<'image' | 'video' | 'audio', string>>>;
+  readonly executionMode: ShellExecutionMode;
+  readonly settingsPatch: Partial<SettingsState>;
 }
 
 /** Per-conversation agent execution state */

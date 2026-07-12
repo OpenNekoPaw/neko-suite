@@ -64,6 +64,7 @@ import {
   type BoundActiveSkillIndicator,
   type PendingForegroundConversationActivation,
 } from '@/handlers';
+import type { ConversationSettingsSnapshot } from '@/handlers/types';
 import type { ActivationProgressTimeline } from '@/presenters/activation-progress-presenter';
 import { shouldActivateForegroundConversation } from '@/handlers/foreground-activation';
 import { ConversationTabRuntimeView } from './ConversationTabRuntimeView';
@@ -89,6 +90,7 @@ import {
 import { projectOptimisticQueuedMessageItem } from '@/presenters/message-queue-presenter';
 import {
   projectChatWorkspaceModelState,
+  projectMediaModelSelectionDefaults,
   projectMediaModelSelectionForSessionModeChange,
 } from '@/presenters/config-message-presenter';
 import {
@@ -98,7 +100,6 @@ import {
   projectConversationSessionState,
 } from '@/presenters/conversation-session-state-presenter';
 import { DEFAULT_GENERATION_PARAMS } from '@/components/ChatView/InputArea/types';
-import type { TabRenderState } from '@/render-runtime/tab-render-runtime';
 import { useTabRenderRuntimeRegistry } from '@/render-runtime/useTabRenderRuntimeRegistry';
 import { useProjectionEndpoint } from '@/render-runtime/useProjectionEndpoint';
 
@@ -150,6 +151,28 @@ export interface ConversationControllerProps {
 // =============================================================================
 // Component
 // =============================================================================
+
+function applyConversationSettingsSnapshot(
+  store: import('@/render-runtime/tab-render-runtime').TabRenderStore,
+  snapshot: ConversationSettingsSnapshot,
+): void {
+  store.updateState((state) => {
+    const hasValidSelection = snapshot.availableModelIds.includes(state.selectedModel);
+    if (state.modelConfigurationInitialized) {
+      return hasValidSelection ? {} : { selectedModel: snapshot.selectedModel };
+    }
+    const mediaDefaults = projectMediaModelSelectionDefaults({
+      selection: state.mediaModelSelection,
+      defaults: snapshot.defaultMediaModels,
+    });
+    return {
+      modelConfigurationInitialized: true,
+      selectedModel: hasValidSelection ? state.selectedModel : snapshot.selectedModel,
+      mediaModelSelection: mediaDefaults.selection,
+      executionMode: snapshot.executionMode,
+    };
+  });
+}
 
 export function ConversationController({
   settings,
@@ -218,6 +241,9 @@ export function ConversationController({
     video: 'none',
     audio: 'none',
   });
+  const settingsSnapshotByConversationRef = useRef<Map<string, ConversationSettingsSnapshot>>(
+    new Map(),
+  );
   const [globalError, setGlobalError] = useState<string | null>(null);
   const [foregroundAvailabilityByConversation, setForegroundAvailabilityByConversation] = useState<
     Map<string, ForegroundConversationAvailability>
@@ -258,6 +284,15 @@ export function ConversationController({
     (conversationId: string, mode: PromptMode) => {
       for (const runtime of tabRenderRuntimeRegistry.getByConversation(conversationId)) {
         runtime.store.updateState({ promptMode: mode, promptModeInitialized: true });
+      }
+    },
+    [tabRenderRuntimeRegistry],
+  );
+  const hydrateConversationSettings = useCallback(
+    (conversationId: string, snapshot: ConversationSettingsSnapshot) => {
+      settingsSnapshotByConversationRef.current.set(conversationId, snapshot);
+      for (const runtime of tabRenderRuntimeRegistry.getByConversation(conversationId)) {
+        applyConversationSettingsSnapshot(runtime.store, snapshot);
       }
     },
     [tabRenderRuntimeRegistry],
@@ -374,6 +409,7 @@ export function ConversationController({
 
   const cleanupConversation = useCallback(
     (conversationId: string) => {
+      settingsSnapshotByConversationRef.current.delete(conversationId);
       conversationTokenCountRef.current.delete(conversationId);
       conversationCompressingRef.current.delete(conversationId);
       conversationMediaCallCountRef.current.delete(conversationId);
@@ -462,31 +498,16 @@ export function ConversationController({
     for (const tab of openTabs) {
       const store = tabRenderRuntimeRegistry.get(tab.id)?.store;
       if (!store) continue;
-      const state = store.getSnapshot().state;
-      const update: Partial<TabRenderState> = {};
-      if (activeSettings.chatModelOptions.length > 0 && !state.modelConfigurationInitialized) {
-        Object.assign(update, {
-          modelConfigurationInitialized: true,
-          selectedModel,
-          mediaModelSelection,
-        });
-      }
-      if (!state.promptModeInitialized) {
-        Object.assign(update, {
+      const settingsSnapshot = settingsSnapshotByConversationRef.current.get(tab.conversationId);
+      if (settingsSnapshot) applyConversationSettingsSnapshot(store, settingsSnapshot);
+      if (!store.getSnapshot().state.promptModeInitialized) {
+        store.updateState({
           promptModeInitialized: true,
           promptMode: activeSettings.promptMode,
         });
       }
-      if (Object.keys(update).length > 0) store.updateState(update);
     }
-  }, [
-    activeSettings.chatModelOptions.length,
-    activeSettings.promptMode,
-    mediaModelSelection,
-    openTabs,
-    selectedModel,
-    tabRenderRuntimeRegistry,
-  ]);
+  }, [activeSettings.promptMode, openTabs, tabRenderRuntimeRegistry]);
   const entryModelState = useMemo(
     () =>
       projectChatWorkspaceModelState({
@@ -504,28 +525,17 @@ export function ConversationController({
       selectedModel,
     ],
   );
-  const updateSettingsForConversation = useCallback(
-    (conversationId: string, partial: Partial<SettingsState>) => {
-      const { promptMode, ...globalSettings } = partial;
-      if (promptMode) setPromptModeForConversation(conversationId, promptMode);
-      if (Object.keys(globalSettings).length > 0) updateSettings(globalSettings);
-    },
-    [setPromptModeForConversation, updateSettings],
-  );
   const handleModelSelectForConversation = useCallback(
     (conversationId: string, modelId: string) => {
-      const selectedOption = activeSettings.chatModelOptions.find(
-        (option) => option.id === modelId,
-      );
+      const conversationModelOptions =
+        settingsSnapshotByConversationRef.current.get(conversationId)?.settingsPatch
+          .chatModelOptions ?? activeSettings.chatModelOptions;
+      const selectedOption = conversationModelOptions.find((option) => option.id === modelId);
       if (!selectedOption?.providerId || !selectedOption.modelId) return;
 
       const selectedProviderId = selectedOption.providerId;
       const selectedModelId = selectedOption.modelId;
 
-      updateSettings({
-        selectedProviderId,
-        selectedModelId,
-      });
       AgentHostMessages.updateSettings(
         {
           providerId: selectedProviderId,
@@ -534,7 +544,7 @@ export function ConversationController({
         conversationId,
       );
     },
-    [activeSettings.chatModelOptions, updateSettings],
+    [activeSettings.chatModelOptions],
   );
   const handleEntryModelSelect = useCallback(
     (modelId: string) => {
@@ -840,9 +850,7 @@ export function ConversationController({
     setActiveTab,
     setSettings,
     setHasConfigSnapshot,
-    selectedModelRef,
-    setSelectedModel,
-    setMediaModelSelection,
+    hydrateConversationSettings,
     setWorkItemsByConversation,
     setPluginsAvailable,
     setProjectFiles,
@@ -1494,8 +1502,10 @@ export function ConversationController({
             characterDialogueSession={tab.characterDialogueSession}
             embodyCharacterSession={tab.embodyCharacterSession}
             clearMessages={() => clearConversationMessages(tab.conversationId)}
-            settings={activeSettings}
-            updateSettings={(partial) => updateSettingsForConversation(tab.conversationId, partial)}
+            settings={{
+              ...activeSettings,
+              ...settingsSnapshotByConversationRef.current.get(tab.conversationId)?.settingsPatch,
+            }}
             onModelSelect={(modelId) =>
               handleModelSelectForConversation(tab.conversationId, modelId)
             }

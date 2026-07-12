@@ -95,7 +95,6 @@ export interface ChatWorkspaceProps {
   clearMessages: () => void;
   // Config
   settings: SettingsState;
-  updateSettings: (partial: Partial<SettingsState>) => void;
   onModelSelect: (modelId: string) => void;
   mediaUnderstandingModels?: MediaUnderstandingModels;
   mentionItems: MentionItem[];
@@ -160,7 +159,6 @@ export function ChatWorkspace({
   embodyCharacterSession,
   clearMessages,
   settings,
-  updateSettings,
   onModelSelect,
   mediaUnderstandingModels,
   mentionItems,
@@ -198,6 +196,7 @@ export function ChatWorkspace({
   const inputValue = tabState.inputValue;
   const selectedModel = tabState.selectedModel;
   const mediaModelSelection = tabState.mediaModelSelection;
+  const executionMode = tabState.executionMode;
   const promptMode = tabState.promptMode;
   const queuedEdit = tabState.queuedEdit;
   const latestSessionDiagnostic = tabState.diagnostics.at(-1) ?? null;
@@ -684,15 +683,14 @@ export function ChatWorkspace({
   ]);
 
   const handleExecutionModeChange = (mode: ShellExecutionMode) => {
-    updateSettings({ executionMode: mode });
-    if (sessionMutationConversationId) {
-      AgentHostMessages.updateSettings({ executionMode: mode }, sessionMutationConversationId);
-    }
+    if (!sessionMutationConversationId) return;
+    updateTabRenderState({ executionMode: mode });
+    AgentHostMessages.updateSettings({ executionMode: mode }, sessionMutationConversationId);
   };
 
   const handlePromptModeChange = (mode: PromptMode) => {
     if (!sessionMutationConversationId) return;
-    updateSettings({ promptMode: mode });
+    updateTabRenderState({ promptMode: mode, promptModeInitialized: true });
     AgentHostMessages.setPromptMode(mode, sessionMutationConversationId);
   };
 
@@ -770,7 +768,7 @@ export function ChatWorkspace({
       mediaUnderstandingSelection={mediaUnderstandingSelection}
       onMediaModelSelect={handleMediaModelSelect}
       onMediaUnderstandingModelSelect={handleMediaUnderstandingModelSelect}
-      executionMode={settings.executionMode}
+      executionMode={executionMode}
       onExecutionModeChange={handleExecutionModeChange}
       promptMode={promptMode}
       onPromptModeChange={handlePromptModeChange}

@@ -744,7 +744,6 @@ describe('ChatWorkspace pending send', () => {
 
   it('routes visible mutations through the immutable Tab runtime binding', () => {
     const clearMessages = vi.fn();
-    const updateSettings = vi.fn();
     const handleMessage = vi.fn();
     const setAmbientNodes = vi.fn();
     const runtime = createTabRenderRuntime({ tabId: 'tab-b', conversationId: 'conv-b' });
@@ -753,7 +752,6 @@ describe('ChatWorkspace pending send', () => {
         {...createProps({
           tabRenderStore: runtime.store,
           clearMessages,
-          updateSettings,
           setActiveSkill: vi.fn(),
           activeSkill: {
             conversationId: 'conv-b',
@@ -823,7 +821,7 @@ describe('ChatWorkspace pending send', () => {
     expect(vscodeMocks.retryTask).toHaveBeenCalledWith('task-1');
     expect(vscodeMocks.viewTaskResult).toHaveBeenCalledWith('task-1', 'result-1');
     expect(clearMessages).toHaveBeenCalledTimes(1);
-    expect(updateSettings).toHaveBeenCalledWith({ promptMode: 'plan' });
+    expect(runtime.store.getSnapshot().state.promptMode).toBe('plan');
     expect(handleMessage).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({ type: 'injectContext', tabId: 'tab-b' }),
@@ -931,7 +929,6 @@ function createProps(overrides: Partial<ChatWorkspaceProps> = {}): ChatWorkspace
     queuedMessages: [],
     clearMessages: noop,
     settings: createSettings(),
-    updateSettings: noop,
     onModelSelect: noop,
     mentionItems: [],
     onMentionSearchFilterChange: noop,

@@ -2,6 +2,7 @@ import type { AgentContextPayload } from '@neko/shared';
 import {
   type PromptMode,
   type SessionMode,
+  type ShellExecutionMode,
   type TabType,
   type AgentQueuedMessageItem,
   type AgentSessionDiagnosticMessage,
@@ -86,6 +87,7 @@ export interface TabRenderState {
   readonly mediaModelSelection: Readonly<MediaModelSelection>;
   readonly mediaUnderstandingSelection: Readonly<MediaUnderstandingSelection>;
   readonly sessionMode: SessionMode;
+  readonly executionMode: ShellExecutionMode;
   readonly promptMode: PromptMode;
   readonly generationCategory: GenCategory;
   readonly generationParams: Readonly<GenerationParams>;
@@ -593,6 +595,7 @@ function createInitialTabRenderState(): TabRenderState {
     mediaModelSelection: Object.freeze({ image: 'none', video: 'none', audio: 'none' }),
     mediaUnderstandingSelection: Object.freeze({ image: 'auto', video: 'auto', audio: 'auto' }),
     sessionMode: 'agent',
+    executionMode: 'ask',
     promptMode: 'default',
     generationCategory: 'image',
     generationParams: Object.freeze({ ...DEFAULT_GENERATION_PARAMS }),
