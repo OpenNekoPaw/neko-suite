@@ -264,3 +264,9 @@ Rollback 采用 fail-closed：若某 canonical operation 或 validator 未完成
 - `.nkp/.nkm` 的 export readiness 是预览/运行态检查还是未来离线导出检查；首阶段可只实现结构和 runtime-probe profile，但必须明确 unavailable 范围。
 - `image split` 首阶段是确定性裁切/网格切分、漫画 panel segmentation，还是包含通用语义分割；建议先拆成不同 operation profile，避免一个模糊 contract。
 - `video enhance/extend/restyle` 哪些可列为 canonical supported operation，取决于当前 Provider adapter capability audit；无实现项只能进入 catalog 为 unsupported，不得用 prompt fallback 假装支持。
+
+### Decision: Typed Storyboard handoff is the Canvas production canonical path
+
+Rich Storyboard UI sends the canonical `StoryboardTable` artifact, including revision, nested scene/shot ownership, prompt intent, source trace, and stable media refs. The existing Canvas storyboard capability consumes that typed artifact first and projects it through `projectCanonicalStoryboardToCanvasPayload` into the owning headless `.nkc` authoring service. Markdown remains only a source adapter for text/Markdown inputs; `assetBatch` remains an Explorer/media transfer projection and is forbidden as a Canvas Storyboard authoring substitute. This reuses the existing capability and authoring service rather than adding another Skill, command, workflow service, or parallel Canvas API.
+
+Path-level tests must prove that canonical projection and headless authoring are invoked, that scene containers own their shot nodes after save/reopen, and that stable image refs survive. Runtime/cache-only refs fail visibly and must not trigger Markdown or flat-asset fallback.

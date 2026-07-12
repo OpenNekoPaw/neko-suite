@@ -46,3 +46,20 @@ Quality repair or regeneration in media production SHALL be an explicit approved
 - **WHEN** the user approves regeneration for a failed shot
 - **THEN** the workflow SHALL record the repair attempt as a new generated asset with lineage to the failed asset and issue
 - **AND** prior timeline or Gate evidence using the failed asset SHALL become stale until revalidated.
+
+### Requirement: Canvas materializes canonical Storyboard hierarchy without semantic reconstruction
+
+The Canvas authoring boundary SHALL accept a validated canonical Storyboard artifact as the preferred production input. It SHALL project each canonical scene to a `scene` container and each owned shot to a child `shot` node, preserving parent/child ordering, Storyboard revision, prompt intent, and stable media references. Markdown parsing MAY remain a source adapter for text-only inputs, but it MUST NOT be the fallback transport for an already-canonical Storyboard.
+
+#### Scenario: Multiple scenes are authored and reopened
+
+- **WHEN** Canvas authors a canonical Storyboard containing multiple scenes and shots
+- **THEN** each scene SHALL be persisted as a distinct scene container
+- **AND** each shot SHALL be persisted under its owning scene with matching parent and child identities
+- **AND** reopening the `.nkc` document SHALL preserve the hierarchy and shot media references unchanged.
+
+#### Scenario: Canonical payload projection fails validation
+
+- **WHEN** the canonical Storyboard revision, scene/shot hierarchy, or durable media references are invalid
+- **THEN** Canvas authoring SHALL return blocking diagnostics
+- **AND** it SHALL NOT retry through Markdown parsing, asset-batch import, or another legacy path.

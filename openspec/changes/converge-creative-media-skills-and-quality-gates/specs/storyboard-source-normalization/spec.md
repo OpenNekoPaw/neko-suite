@@ -90,3 +90,20 @@ The canonical Storyboard SHALL preserve image-generation or image-edit intent se
 - **WHEN** a migrated record contains both canonical `imagePrompt` and deprecated `generationPrompt`
 - **THEN** execution and review projection SHALL use `imagePrompt`
 - **AND** the deprecated value SHALL NOT override or appear as canonical prompt intent.
+
+### Requirement: Canonical Storyboard handoff preserves nested scene and shot ownership
+
+A canonical Storyboard handoff SHALL transmit the nested `scenes[] -> shots[]` artifact and its revision without flattening it into an asset batch or requiring Canvas to reconstruct production facts from a rendered Markdown table. Scene rows in a review projection MUST NOT replace scene records. Shot media references, `imagePrompt`, and scene-level `videoPrompt` SHALL remain attached to their canonical scene and shot owners.
+
+#### Scenario: Rich Storyboard is sent to Canvas
+
+- **WHEN** a validated rich Storyboard is sent to Canvas
+- **THEN** the handoff SHALL carry the canonical Storyboard revision and nested scene/shot records
+- **AND** it SHALL preserve stable source/generated media references and their roles on each shot
+- **AND** it SHALL NOT use a flat asset batch or Markdown-only reconstruction as the production authoring input.
+
+#### Scenario: Invalid canonical image identity is handed off
+
+- **WHEN** a shot image reference contains only a Webview URI, blob URL, cache path, or runtime handle
+- **THEN** the handoff SHALL fail visibly before Canvas persistence
+- **AND** it SHALL NOT silently drop the image or report successful Storyboard creation.
