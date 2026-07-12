@@ -307,4 +307,81 @@ describe('TabRenderRuntimeRegistry', () => {
       registry.reconcile([{ tabId: 'tab-a', conversationId: 'conv-b' }], 'tab-a'),
     ).toThrow(/cannot rebind/);
   });
+
+  it('owns an independent projection replica and attachment client per Tab runtime', () => {
+    const registry = createTabRenderRuntimeRegistry();
+    registry.reconcile(
+      [
+        { tabId: 'tab-a', conversationId: 'conversation-shared' },
+        { tabId: 'tab-b', conversationId: 'conversation-shared' },
+      ],
+      'tab-a',
+    );
+    const runtimeA = registry.require('tab-a');
+    const runtimeB = registry.require('tab-b');
+    const messagesA: unknown[] = [];
+    const messagesB: unknown[] = [];
+    runtimeA.attachProjection({
+      endpointEpoch: 'endpoint-1',
+      attachmentId: 'attachment-a',
+      send: (message) => messagesA.push(message),
+      reportError: vi.fn(),
+    });
+    runtimeB.attachProjection({
+      endpointEpoch: 'endpoint-1',
+      attachmentId: 'attachment-b',
+      send: (message) => messagesB.push(message),
+      reportError: vi.fn(),
+    });
+
+    runtimeA.acceptProjectionFrame({
+      type: 'projectionSnapshot',
+      key: {
+        endpointEpoch: 'endpoint-1',
+        attachmentId: 'attachment-a',
+        tabId: 'tab-a',
+        conversationId: 'conversation-shared',
+      },
+      sequence: 0,
+      projectionVersion: 0,
+      projection: {
+        conversationId: 'conversation-shared',
+        projectionVersion: 0,
+        turns: [],
+      },
+    });
+
+    expect(runtimeA.projectionReplica).not.toBe(runtimeB.projectionReplica);
+    expect(runtimeA.projectionReplica.getSnapshot().projection?.projectionVersion).toBe(0);
+    expect(runtimeB.projectionReplica.getSnapshot().projection).toBeNull();
+    expect(messagesA).toHaveLength(2);
+    expect(messagesB).toHaveLength(1);
+  });
+
+  it('disposes only the closed Tab projection attachment and replica', () => {
+    const registry = createTabRenderRuntimeRegistry();
+    registry.reconcile(
+      [
+        { tabId: 'tab-a', conversationId: 'conv-a' },
+        { tabId: 'tab-b', conversationId: 'conv-b' },
+      ],
+      'tab-a',
+    );
+    const runtimeA = registry.require('tab-a');
+    const runtimeB = registry.require('tab-b');
+    const messagesA: unknown[] = [];
+    runtimeA.attachProjection({
+      endpointEpoch: 'endpoint-1',
+      attachmentId: 'attachment-a',
+      send: (message) => messagesA.push(message),
+      reportError: vi.fn(),
+    });
+
+    registry.reconcile([{ tabId: 'tab-b', conversationId: 'conv-b' }], 'tab-b');
+
+    expect(messagesA.at(-1)).toMatchObject({ type: 'projectionDetach', reason: 'tab-closed' });
+    expect(() => runtimeA.projectionReplica.subscribe(vi.fn())).toThrow(/disposed/);
+    expect(runtimeB.lifecycle).toBe('ready');
+    expect(runtimeB.projectionReplica.getSnapshot().projection).toBeNull();
+  });
 });

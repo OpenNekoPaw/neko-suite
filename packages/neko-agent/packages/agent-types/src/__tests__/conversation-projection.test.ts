@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { AgentTurnTimelineAssistantTextItem } from '../agent-turn-timeline';
 import {
   applyAgentTurnProjectionOperations,
+  applyConversationProjectionPatch,
   cloneAgentTurnProjectionItem,
 } from '../conversation-projection';
 
@@ -56,5 +57,48 @@ describe('conversation projection contract', () => {
     expect(clone).toEqual(item);
     expect(clone).not.toBe(item);
     expect(clone.payload).not.toBe(item.payload);
+  });
+});
+
+describe('conversation projection patch application', () => {
+  it('creates immutable replica snapshots without mutating the previous version', () => {
+    const snapshot = Object.freeze({
+      conversationId: 'conversation-a',
+      projectionVersion: 0,
+      turns: Object.freeze([]),
+    });
+    const next = applyConversationProjectionPatch(snapshot, {
+      type: 'conversationProjectionPatch',
+      conversationId: 'conversation-a',
+      baseProjectionVersion: 0,
+      projectionVersion: 1,
+      turnId: 'turn-a',
+      messageId: 'message-a',
+      operations: [{ operation: 'append', item: textItem('first', 1) }],
+    });
+
+    expect(snapshot.turns).toEqual([]);
+    expect(next.projectionVersion).toBe(1);
+    expect(next.turns[0]?.items[0]).toMatchObject({ payload: { content: 'first' } });
+    expect(Object.isFrozen(next)).toBe(true);
+    expect(Object.isFrozen(next.turns)).toBe(true);
+    expect(Object.isFrozen(next.turns[0]?.items)).toBe(true);
+  });
+
+  it('rejects projection version gaps before applying item operations', () => {
+    expect(() =>
+      applyConversationProjectionPatch(
+        { conversationId: 'conversation-a', projectionVersion: 2, turns: [] },
+        {
+          type: 'conversationProjectionPatch',
+          conversationId: 'conversation-a',
+          baseProjectionVersion: 1,
+          projectionVersion: 3,
+          turnId: 'turn-a',
+          messageId: 'message-a',
+          operations: [{ operation: 'append', item: textItem('gap', 1) }],
+        },
+      ),
+    ).toThrow(/patch base mismatch/);
   });
 });

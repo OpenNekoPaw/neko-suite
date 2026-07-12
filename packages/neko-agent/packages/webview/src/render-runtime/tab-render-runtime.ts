@@ -21,6 +21,16 @@ import {
   DEFAULT_GENERATION_PARAMS,
 } from '@/components/ChatView/InputArea/types';
 import type { MediaModelSelection, MediaUnderstandingSelection } from '@/hooks/useUIState';
+import {
+  createConversationProjectionReplica,
+  type ConversationProjectionReplica,
+} from './conversation-projection-replica';
+import {
+  createProjectionAttachmentClient,
+  type ConversationProjectionAttachmentFrame,
+  type ProjectionAttachmentClient,
+  type ProjectionAttachmentClientOptions,
+} from './projection-attachment-client';
 
 export interface TabViewportSnapshot {
   readonly followMode: 'follow-tail' | 'detached';
@@ -117,14 +127,27 @@ export interface TabRenderRuntimeRetentionSnapshot extends Omit<
   readonly revision: number;
 }
 
+export interface TabProjectionAttachmentBinding extends Pick<
+  ProjectionAttachmentClientOptions,
+  'send' | 'reportError'
+> {
+  readonly endpointEpoch: string;
+  readonly attachmentId: string;
+}
+
 export interface TabRenderRuntime extends TabRenderBinding {
   readonly store: TabRenderStore;
+  readonly projectionReplica: ConversationProjectionReplica;
+  readonly projectionAttachment: ProjectionAttachmentClient | null;
   readonly lifecycle: TabRenderRuntimeLifecycle;
   getRetentionSnapshot(): TabRenderRuntimeRetentionSnapshot;
   subscribeRetention(listener: () => void): () => void;
   markReady(): void;
   beginAttach(): void;
   detach(): void;
+  attachProjection(binding: TabProjectionAttachmentBinding): void;
+  acceptProjectionFrame(frame: ConversationProjectionAttachmentFrame): void;
+  detachProjection(reason: import('@neko-agent/types').ProjectionDetachMessage['reason']): void;
   setVisible(visible: boolean): void;
   dispose(): void;
 }
@@ -234,6 +257,8 @@ class DefaultTabRenderRuntime implements TabRenderRuntime {
   readonly tabId: string;
   readonly conversationId: string;
   readonly store: TabRenderStore;
+  readonly projectionReplica: ConversationProjectionReplica;
+  private currentProjectionAttachment: ProjectionAttachmentClient | null = null;
   private currentLifecycle: TabRenderRuntimeLifecycle = 'attaching';
   private readonly retentionListeners = new Set<() => void>();
   private readonly unsubscribeStoreRetention: () => void;
@@ -243,6 +268,7 @@ class DefaultTabRenderRuntime implements TabRenderRuntime {
     assertBinding(binding);
     this.tabId = binding.tabId;
     this.conversationId = binding.conversationId;
+    this.projectionReplica = createConversationProjectionReplica(binding.conversationId);
     this.store = new DefaultTabRenderStore({
       tabId: binding.tabId,
       conversationId: binding.conversationId,
@@ -257,6 +283,10 @@ class DefaultTabRenderRuntime implements TabRenderRuntime {
 
   get lifecycle(): TabRenderRuntimeLifecycle {
     return this.currentLifecycle;
+  }
+
+  get projectionAttachment(): ProjectionAttachmentClient | null {
+    return this.currentProjectionAttachment;
   }
 
   getRetentionSnapshot(): TabRenderRuntimeRetentionSnapshot {
@@ -293,6 +323,52 @@ class DefaultTabRenderRuntime implements TabRenderRuntime {
     this.publishRetention();
   }
 
+  attachProjection(binding: TabProjectionAttachmentBinding): void {
+    if (this.currentLifecycle === 'disposed') {
+      throw new Error(`Tab render runtime ${this.tabId} is disposed.`);
+    }
+    const current = this.currentProjectionAttachment;
+    if (
+      current &&
+      current.getSnapshot().phase !== 'detached' &&
+      current.getSnapshot().phase !== 'fatal'
+    ) {
+      throw new Error(
+        `Tab render runtime ${this.tabId} already owns projection attachment ${current.getSnapshot().key?.attachmentId ?? 'unknown'}.`,
+      );
+    }
+    const client = createProjectionAttachmentClient({
+      tabId: this.tabId,
+      conversationId: this.conversationId,
+      replica: this.projectionReplica,
+      send: binding.send,
+      reportError: binding.reportError,
+    });
+    this.currentProjectionAttachment = client;
+    client.attach({
+      endpointEpoch: binding.endpointEpoch,
+      attachmentId: binding.attachmentId,
+    });
+  }
+
+  acceptProjectionFrame(frame: ConversationProjectionAttachmentFrame): void {
+    if (this.currentLifecycle === 'disposed') {
+      throw new Error(`Tab render runtime ${this.tabId} is disposed.`);
+    }
+    const client = this.currentProjectionAttachment;
+    if (!client) {
+      throw new Error(`Tab render runtime ${this.tabId} has no projection attachment.`);
+    }
+    client.accept(frame);
+  }
+
+  detachProjection(reason: import('@neko-agent/types').ProjectionDetachMessage['reason']): void {
+    if (this.currentLifecycle === 'disposed') {
+      throw new Error(`Tab render runtime ${this.tabId} is disposed.`);
+    }
+    this.currentProjectionAttachment?.detach(reason);
+  }
+
   setVisible(visible: boolean): void {
     if (this.currentLifecycle === 'disposed') {
       throw new Error(`Tab render runtime ${this.tabId} is disposed.`);
@@ -305,6 +381,9 @@ class DefaultTabRenderRuntime implements TabRenderRuntime {
     this.currentLifecycle = 'disposed';
     this.unsubscribeStoreRetention();
     this.retentionListeners.clear();
+    this.currentProjectionAttachment?.dispose();
+    this.currentProjectionAttachment = null;
+    this.projectionReplica.dispose();
     this.store.dispose();
   }
 

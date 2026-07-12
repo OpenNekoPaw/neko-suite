@@ -70,6 +70,122 @@ export function cloneAgentTurnProjectionItem(item: AgentTurnTimelineItem): Agent
   return structuredClone(item);
 }
 
+export function applyConversationProjectionPatch(
+  snapshot: ConversationProjectionSnapshot,
+  patch: ConversationProjectionPatch,
+): ConversationProjectionSnapshot {
+  if (patch.conversationId !== snapshot.conversationId) {
+    throw new Error(
+      `Conversation projection patch owner mismatch: expected ${snapshot.conversationId}, received ${patch.conversationId}.`,
+    );
+  }
+  if (patch.baseProjectionVersion !== snapshot.projectionVersion) {
+    throw new Error(
+      `Conversation projection patch base mismatch: expected ${snapshot.projectionVersion}, received ${patch.baseProjectionVersion}.`,
+    );
+  }
+  if (patch.projectionVersion <= patch.baseProjectionVersion) {
+    throw new Error(
+      `Conversation projection patch version must increase from ${patch.baseProjectionVersion}, received ${patch.projectionVersion}.`,
+    );
+  }
+  if (patch.operations.length === 0 && !patch.completion) {
+    throw new Error('Conversation projection patch must contain operations or completion.');
+  }
+
+  const turns = snapshot.turns.map(cloneConversationTurnProjection);
+  const turnIndex = turns.findIndex((turn) => turn.turnId === patch.turnId);
+  const current = turnIndex >= 0 ? turns[turnIndex] : undefined;
+  if (current && current.messageId !== patch.messageId) {
+    throw new Error(
+      `Conversation projection turn ${patch.turnId} is owned by message ${current.messageId}, received ${patch.messageId}.`,
+    );
+  }
+  if (current?.completion) {
+    throw new Error(`Conversation projection rejects mutation for completed turn ${patch.turnId}.`);
+  }
+  assertProjectionOperationOwners(patch);
+
+  const items = new Map(
+    (current?.items ?? []).map((item) => [item.itemId, cloneAgentTurnProjectionItem(item)]),
+  );
+  applyAgentTurnProjectionOperations(items, patch.operations);
+  const nextTurn: ConversationTurnProjection = {
+    turnId: patch.turnId,
+    messageId: patch.messageId,
+    items: Array.from(items.values()).sort((left, right) => left.sequence - right.sequence),
+    ...(patch.completion ? { completion: structuredClone(patch.completion) } : {}),
+  };
+  if (turnIndex >= 0) {
+    turns[turnIndex] = nextTurn;
+  } else {
+    turns.push(nextTurn);
+  }
+
+  return freezeProjectionSnapshot({
+    conversationId: snapshot.conversationId,
+    projectionVersion: patch.projectionVersion,
+    turns,
+  });
+}
+
+export function cloneConversationProjectionSnapshot(
+  snapshot: ConversationProjectionSnapshot,
+): ConversationProjectionSnapshot {
+  return freezeProjectionSnapshot(structuredClone(snapshot));
+}
+
+function cloneConversationTurnProjection(
+  turn: ConversationTurnProjection,
+): ConversationTurnProjection {
+  return {
+    turnId: turn.turnId,
+    messageId: turn.messageId,
+    items: turn.items.map(cloneAgentTurnProjectionItem),
+    ...(turn.completion ? { completion: structuredClone(turn.completion) } : {}),
+  };
+}
+
+function assertProjectionOperationOwners(patch: ConversationProjectionPatch): void {
+  for (const operation of patch.operations) {
+    if (operation.operation === 'complete') continue;
+    const item = operation.item;
+    if (
+      item.conversationId !== patch.conversationId ||
+      item.turnId !== patch.turnId ||
+      item.messageId !== patch.messageId
+    ) {
+      throw new Error(
+        `Conversation projection operation ${item.itemId} does not belong to ${patch.conversationId}/${patch.turnId}/${patch.messageId}.`,
+      );
+    }
+  }
+}
+
+function freezeProjectionSnapshot(
+  snapshot: ConversationProjectionSnapshot,
+): ConversationProjectionSnapshot {
+  freezeValue(snapshot);
+  return snapshot;
+}
+
+function freezeValue(value: unknown): void {
+  if (Array.isArray(value)) {
+    for (const item of value) freezeValue(item);
+    Object.freeze(value);
+    return;
+  }
+  if (!isPlainRecord(value)) return;
+  for (const item of Object.values(value)) freezeValue(item);
+  Object.freeze(value);
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  if (typeof value !== 'object' || value === null) return false;
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
+}
+
 function applyCompletion(
   items: Map<string, AgentTurnTimelineItem>,
   operation: Extract<AgentTurnTimelineOperation, { readonly operation: 'complete' }>,

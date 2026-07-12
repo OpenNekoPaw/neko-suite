@@ -45,7 +45,9 @@ export type {
 } from './conversation-projection';
 export {
   applyAgentTurnProjectionOperations,
+  applyConversationProjectionPatch,
   cloneAgentTurnProjectionItem,
+  cloneConversationProjectionSnapshot,
 } from './conversation-projection';
 
 // Message protocol
