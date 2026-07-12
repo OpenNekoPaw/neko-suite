@@ -1,10 +1,10 @@
 ## 1. Isolation Contracts and Red Tests
 
-- [ ] 1.1 Add Layer-0 conversation/run/child-run scope contracts and validators with owner-mismatch diagnostics.
-- [ ] 1.2 Add conversation-config and immutable turn-config snapshot contracts without VS Code, React, or provider implementation dependencies.
-- [ ] 1.3 Add projection attachment, snapshot, acknowledgement, patch, detach, and protocol diagnostic contracts.
+- [x] 1.1 Add Layer-0 conversation/run/child-run scope contracts and validators with owner-mismatch diagnostics.
+- [x] 1.2 Add conversation-config and immutable turn-config snapshot contracts without VS Code, React, or provider implementation dependencies.
+- [x] 1.3 Add projection attachment, snapshot, acknowledgement, patch, detach, and protocol diagnostic contracts.
 - [ ] 1.4 Add red producer/consumer tests proving global config locks, bare child IDs, shared Tab input state, visibility-coupled Timeline delivery, and revision-gap recovery violate the target path.
-- [ ] 1.5 Add architecture guards that prevent Webview/TUI/Extension types from entering Layer-0 isolation contracts.
+- [x] 1.5 Add architecture guards that prevent Webview/TUI/Extension types from entering Layer-0 isolation contracts.
 
 ## 2. Conversation Runtime and Configuration
 

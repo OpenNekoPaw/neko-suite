@@ -4,6 +4,40 @@
  * Zero-dependency types package consumed by agent, platform, extension, webview, and cli-tui.
  */
 
+export type {
+  ChildRunKind,
+  ChildRunScope,
+  ConversationRunScope,
+  RuntimeScopeDiagnostic,
+  RuntimeScopeDiagnosticCode,
+  RuntimeScopeValidationResult,
+} from './runtime-scope';
+export {
+  formatChildRunScope,
+  formatRunScope,
+  validateChildRunScope,
+  validateConversationRunScope,
+  validateRuntimeScopeOwner,
+} from './runtime-scope';
+export type { ConversationConfigState, TurnConfigSnapshot } from './runtime-config';
+export {
+  createConversationConfigState,
+  createTurnConfigSnapshot,
+  updateConversationConfigState,
+} from './runtime-config';
+export type {
+  ProjectionAttachmentHostFrame,
+  ProjectionAttachmentKey,
+  ProjectionAttachmentProtocolDiagnostic,
+  ProjectionAttachmentProtocolDiagnosticCode,
+  ProjectionAttachRequest,
+  ProjectionDetachMessage,
+  ProjectionPatchFrame,
+  ProjectionSnapshotAcknowledgement,
+  ProjectionSnapshotFrame,
+} from './projection-attachment';
+export { isSameProjectionAttachment } from './projection-attachment';
+
 // Message protocol
 export type {
   Message,
