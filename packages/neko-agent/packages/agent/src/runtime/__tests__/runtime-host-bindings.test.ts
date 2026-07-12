@@ -45,6 +45,7 @@ describe('buildAgentRuntimeSessionFactoryConfig', () => {
     const perceptionPipeline = { perceive: vi.fn() };
 
     const config = buildAgentRuntimeSessionFactoryConfig({
+      promptLocale: 'en',
       createService: () => service,
       toolRegistry,
       systemPrompt: 'system',
@@ -81,6 +82,7 @@ describe('buildAgentRuntimeSessionFactoryConfig', () => {
     const previous = createOperationRegistry();
 
     const config = buildAgentRuntimeSessionFactoryConfig({
+      promptLocale: 'en',
       createService,
       toolRegistry: createToolRegistry(),
       operationToolAdapterRegistry: explicit,
@@ -94,6 +96,7 @@ describe('buildAgentRuntimeSessionFactoryConfig', () => {
     const previous = createOperationRegistry();
 
     const config = buildAgentRuntimeSessionFactoryConfig({
+      promptLocale: 'en',
       createService,
       toolRegistry: createToolRegistry(),
       previousOperationToolAdapterRegistry: previous,
@@ -104,6 +107,7 @@ describe('buildAgentRuntimeSessionFactoryConfig', () => {
 
   it('does not create a domain operation registry when none is injected', () => {
     const config = buildAgentRuntimeSessionFactoryConfig({
+      promptLocale: 'en',
       createService,
       toolRegistry: createToolRegistry(),
     });
@@ -115,6 +119,7 @@ describe('buildAgentRuntimeSessionFactoryConfig', () => {
     const explicitHooks = [{ name: 'explicit' }] as unknown as readonly ExecutorHooks[];
 
     const config = buildAgentRuntimeSessionFactoryConfig({
+      promptLocale: 'en',
       createService,
       toolRegistry: createToolRegistry(),
       hooks: explicitHooks,
@@ -127,6 +132,7 @@ describe('buildAgentRuntimeSessionFactoryConfig', () => {
     const logger = { warn: vi.fn(), error: vi.fn() };
 
     const config = buildAgentRuntimeSessionFactoryConfig({
+      promptLocale: 'en',
       createService,
       toolRegistry: createToolRegistry(),
       getCapabilityPromptFragments: () => {
@@ -147,6 +153,7 @@ describe('buildAgentRuntimeSessionFactoryConfig', () => {
     const toolRegistry = createToolRegistry();
 
     const input = buildAgentWorkspaceRuntimeSessionAssemblyInput({
+      promptLocale: 'en',
       surface: 'tui',
       effectiveConfig: {
         providerId: 'explicit-user',

@@ -45,6 +45,7 @@ import {
 } from '../subagent-runtime';
 import type { ModelTierResolver, SpecializedAgentPreset } from '../../subagent';
 import type { WorkspaceFileIgnoreRules } from '../../input/workspace-ignore';
+import type { SupportedLocale } from '@neko/shared/i18n';
 import {
   createAgentRuntimeSessionMessageQueuePort,
   type AgentRuntimeSessionMessageQueuePort,
@@ -78,7 +79,7 @@ export interface AgentRuntimeSessionFactoryConfig {
   readonly taskManager?: IRuntimeTaskManager;
   readonly conversationId?: string;
   readonly operationToolAdapterRegistry?: IOperationToolAdapterRegistry;
-  readonly locale?: 'en' | 'zh';
+  readonly promptLocale: SupportedLocale;
   readonly providerExpressionTargets?: readonly ProviderExpressionTargetConfig[];
   readonly capabilityRuntime?: ICapabilityRuntime;
   readonly capabilityPromptFragments?: readonly PromptFragment[];
@@ -132,8 +133,9 @@ export interface AgentRuntimeSessionUpdate {
 export async function createAgentRuntimeSession(
   config: AgentRuntimeSessionFactoryConfig,
 ): Promise<AgentRuntimeSessionHandle> {
+  const promptDomainLocale = toPromptDomainLocale(config.promptLocale);
   const promptBuilder = createSystemPromptBuilder({
-    locale: config.locale ?? 'en',
+    locale: promptDomainLocale,
     mode: config.executionMode === 'plan' ? 'plan' : 'default',
   });
 
@@ -171,7 +173,7 @@ export async function createAgentRuntimeSession(
     service: config.service,
     toolRegistry: config.toolRegistry,
     systemPrompt: effectiveSystemPrompt,
-    locale: config.locale ?? 'en',
+    locale: promptDomainLocale,
     ...(agentsOverride !== undefined ? { agentsOverride } : {}),
     executionMode: config.executionMode ?? 'auto',
     maxIterations: config.maxIterations,
@@ -255,7 +257,7 @@ export function updateAgentRuntimeSession(
       contextSettings: config.contextSettings,
       thinkingBudget: config.thinkingBudget,
       providerOptions: config.providerOptions,
-      locale: config.locale,
+      locale: toPromptDomainLocale(config.promptLocale),
       maxIterations: config.maxIterations,
       executionMode: config.executionMode ?? 'auto',
       perceptionPipeline: config.perceptionPipeline,
@@ -340,7 +342,7 @@ function resolveRuntimeToolCategoryRegistry(
 export function resolveAgentRuntimePromptFragments(
   config: Pick<
     AgentRuntimeSessionFactoryConfig,
-    'capabilityPromptFragments' | 'capabilityRuntime' | 'providerExpressionTargets' | 'locale'
+    'capabilityPromptFragments' | 'capabilityRuntime' | 'providerExpressionTargets' | 'promptLocale'
   >,
 ): readonly PromptFragment[] | undefined {
   const capabilityFragments = config.capabilityPromptFragments ?? [];
@@ -348,7 +350,7 @@ export function resolveAgentRuntimePromptFragments(
   const providerFragments = resolveProviderExpressionFragments(
     providerCards,
     config.providerExpressionTargets,
-    config.locale,
+    toPromptDomainLocale(config.promptLocale),
   );
   const profileFragments = resolveProviderExpressionProfileFragments(
     config.providerExpressionTargets,
@@ -361,7 +363,7 @@ export function resolveAgentRuntimePromptFragments(
 function resolveProviderExpressionFragments(
   providerCards: readonly ProviderCard[],
   targets: readonly ProviderExpressionTargetConfig[] | undefined,
-  locale: AgentRuntimeSessionFactoryConfig['locale'],
+  locale: AgentSessionConfig['locale'],
 ): readonly PromptFragment[] {
   const selectedTargets = targets?.filter((target) => target.providerId || target.modelId) ?? [];
   if (selectedTargets.length === 0) {
@@ -556,6 +558,10 @@ function buildAgentRuntimeConfig(
   };
 }
 
+function toPromptDomainLocale(locale: SupportedLocale): NonNullable<AgentSessionConfig['locale']> {
+  return locale === 'zh-cn' ? 'zh' : 'en';
+}
+
 function registerSubAgentRuntime(
   config: AgentRuntimeSessionUpdateConfig,
   promptFragments: readonly PromptFragment[] | undefined,
@@ -585,6 +591,7 @@ function registerSubAgentRuntime(
     toolRegistry: config.toolRegistry,
     ...(config.providerId ? { providerId: config.providerId } : {}),
     ...(config.modelId ? { modelId: config.modelId } : {}),
+    promptLocale: config.promptLocale,
     ...(config.modelTierResolver ? { modelTierResolver: config.modelTierResolver } : {}),
     ...(config.capabilityRuntime ? { capabilityRuntime: config.capabilityRuntime } : {}),
     ...(promptFragments !== undefined ? { promptFragments } : {}),

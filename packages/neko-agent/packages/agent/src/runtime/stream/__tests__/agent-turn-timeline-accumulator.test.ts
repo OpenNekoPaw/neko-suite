@@ -76,6 +76,36 @@ describe('AgentTurnTimelineAccumulator', () => {
     ).toEqual(['Before.', ' After.']);
   });
 
+  it('keeps external error detail byte-stable and uses a semantic code when detail is absent', () => {
+    const externalAccumulator = createAgentTurnTimelineAccumulator({
+      conversationId: 'conv-1',
+      messageId: 'msg-external-error',
+      now: () => 100,
+    });
+    const externalMessage = 'Provider detail: E42 / 配额';
+    externalAccumulator.project({ type: 'error', error: new Error(externalMessage) }, 1);
+
+    expect(externalAccumulator.snapshot().items[0]).toMatchObject({
+      kind: 'error',
+      payload: { message: externalMessage },
+    });
+    expect(externalAccumulator.snapshot().items[0]?.payload).not.toHaveProperty('code');
+
+    const fallbackAccumulator = createAgentTurnTimelineAccumulator({
+      conversationId: 'conv-1',
+      messageId: 'msg-semantic-error',
+      now: () => 100,
+    });
+    fallbackAccumulator.project({ type: 'error', error: new Error('   ') }, 2);
+
+    expect(fallbackAccumulator.snapshot().items[0]).toMatchObject({
+      kind: 'error',
+      payload: { code: 'agent-error-without-detail' },
+    });
+    expect(fallbackAccumulator.snapshot().items[0]?.payload).not.toHaveProperty('message');
+    expect(JSON.stringify(fallbackAccumulator.snapshot())).not.toContain('An error occurred');
+  });
+
   it('uses stable item identity and monotonic revisions for append, replacement, and completion', () => {
     const accumulator = createAgentTurnTimelineAccumulator({
       conversationId: 'conv-1',

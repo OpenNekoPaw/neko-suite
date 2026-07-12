@@ -2,6 +2,7 @@ import type {
   AgentLlmConfig,
   AgentFileReference,
   AgentMediaModelSelections,
+  MediaUnderstandingModelSelections,
   AgentModelSlots,
   ContentBlock,
   ErrorMessage,
@@ -522,6 +523,7 @@ export interface AgentTurnRuntimePlanInput {
   readonly executionOverrides?: AgentMessageExecutionOverrides;
   readonly mediaModel?: ModelRef<MediaModelCategory>;
   readonly mediaModels?: AgentMediaModelSelections;
+  readonly understandingModels?: MediaUnderstandingModelSelections;
 }
 
 export interface AgentTurnRuntimePlan {
@@ -540,6 +542,7 @@ export interface AgentTurnConfigurationPlanInput {
   readonly chatModel?: ModelRef<'llm'>;
   readonly mediaModel?: ModelRef<MediaModelCategory>;
   readonly mediaModels?: AgentMediaModelSelections;
+  readonly understandingModels?: MediaUnderstandingModelSelections;
   readonly executionOverrides?: AgentMessageExecutionOverrides;
   readonly maxIterations?: number;
   readonly autoExecuteTools?: boolean;
@@ -1453,6 +1456,45 @@ export function appendAmbientCanvasSystemPrompt(
   );
 }
 
+export function appendPerceptionToolRoutingPrompt(
+  systemPrompt: string,
+  input: {
+    readonly chatModel?: ModelRef<'llm'>;
+    readonly understandingModels?: MediaUnderstandingModelSelections;
+  },
+): string {
+  const modalities = getDifferentUnderstandingModelModalities(input);
+  if (modalities.length === 0) {
+    return systemPrompt;
+  }
+
+  return `${systemPrompt}\n\n## Runtime Media Perception Routing\n\nThe selected chat model is different from the configured ${modalities.join(
+    ', ',
+  )} perception model. When the user asks to inspect, describe, compare, OCR, judge quality, analyze style, or reason from those media pixels/samples, do not stop because the chat model lacks native media input. First call \`perception.perceive\` on the stable asset/resource ref with the relevant focus, then base the answer on the returned PerceptionCard evidence. If no stable asset/resource ref is available, report that missing media reference instead of guessing from a prompt, file name, task id, or thumbnail label.`;
+}
+
+function getDifferentUnderstandingModelModalities(input: {
+  readonly chatModel?: ModelRef<'llm'>;
+  readonly understandingModels?: MediaUnderstandingModelSelections;
+}): string[] {
+  const models = input.understandingModels;
+  if (!input.chatModel || !models) return [];
+
+  const modalities: string[] = [];
+  for (const modality of ['image', 'audio', 'video'] as const) {
+    const model = models[modality];
+    if (!model) continue;
+    if (
+      model.providerId !== input.chatModel.providerId ||
+      model.modelId !== input.chatModel.modelId
+    ) {
+      modalities.push(modality);
+    }
+  }
+
+  return modalities;
+}
+
 export function appendCustomSystemPromptOverlay(
   systemPrompt: string,
   customSystemPrompt?: string | null,
@@ -1630,12 +1672,19 @@ export function buildAgentTurnConfigurationPlan(
     executionOverrides: input.executionOverrides,
     mediaModel: input.mediaModel,
     mediaModels: input.mediaModels,
+    understandingModels: input.understandingModels,
   });
 
   return {
-    systemPrompt: appendAmbientCanvasSystemPrompt(
-      appendCustomSystemPromptOverlay(input.baseSystemPrompt, input.customSystemPrompt),
-      input.ambientCanvas ?? [],
+    systemPrompt: appendPerceptionToolRoutingPrompt(
+      appendAmbientCanvasSystemPrompt(
+        appendCustomSystemPromptOverlay(input.baseSystemPrompt, input.customSystemPrompt),
+        input.ambientCanvas ?? [],
+      ),
+      {
+        chatModel: input.chatModel,
+        understandingModels: input.understandingModels,
+      },
     ),
     maxIterations: input.maxIterations ?? 200,
     autoExecuteTools: input.autoExecuteTools,
@@ -1660,6 +1709,7 @@ export function buildAgentTurnRuntimePlan(input: AgentTurnRuntimePlanInput): Age
     input.executionMode,
     input.executionOverrides?.metadata,
     runtimeMediaModels,
+    input.understandingModels,
   );
 
   return {
@@ -1745,13 +1795,18 @@ export function buildAgentTurnExecutionMetadata(
   executionMode: 'auto' | 'ask' | 'plan',
   overrides?: Record<string, unknown>,
   mediaModels?: RuntimeMediaModelSelections,
+  understandingModels?: MediaUnderstandingModelSelections,
 ): Record<string, unknown> | undefined {
   const base = executionMode === 'plan' ? createPlanModeCreationMetadata() : undefined;
   const merged = mergeCreationExecutionMetadata(base, overrides);
-  if (!mediaModels || Object.keys(mediaModels).length === 0) return merged;
+  const hasMediaModels = mediaModels !== undefined && Object.keys(mediaModels).length > 0;
+  const hasUnderstandingModels =
+    understandingModels !== undefined && Object.keys(understandingModels).length > 0;
+  if (!hasMediaModels && !hasUnderstandingModels) return merged;
   return {
     ...(merged ?? {}),
-    mediaModels,
+    ...(hasMediaModels ? { mediaModels } : {}),
+    ...(hasUnderstandingModels ? { understandingModels } : {}),
   };
 }
 

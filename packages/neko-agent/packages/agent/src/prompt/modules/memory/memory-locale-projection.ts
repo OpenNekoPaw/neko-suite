@@ -28,9 +28,7 @@ function localizeMemoryLineForPrompt(line: string): string {
     return `${marker} ${ZH_MEMORY_SECTION_LABELS[title] ?? title}`;
   }
 
-  const prefixedHeading = line.match(
-    /^(- \[[^\]]+\]\s+)(#{1,6})\s+(.+?)(\s+\(relevance: .+\))?$/,
-  );
+  const prefixedHeading = line.match(/^(- \[[^\]]+\]\s+)(#{1,6})\s+(.+?)(\s+\(relevance: .+\))?$/);
   if (prefixedHeading) {
     const prefix = prefixedHeading[1] ?? '';
     const marker = prefixedHeading[2] ?? '##';
@@ -39,28 +37,9 @@ function localizeMemoryLineForPrompt(line: string): string {
     return `${prefix}${marker} ${ZH_MEMORY_SECTION_LABELS[title] ?? title}${suffix}`;
   }
 
-  return localizeKnownGeneratedMemoryText(
-    localizeMemoryLineLabel(line.replace(/\bTool result:/g, '工具结果:')),
-  );
+  return localizeMemoryLineLabel(line.replace(/\bTool result:/g, '工具结果:'));
 }
 
 function localizeMemoryLineLabel(line: string): string {
   return line.replace(/\brelevance:/g, '相关度:');
-}
-
-function localizeKnownGeneratedMemoryText(line: string): string {
-  return line
-    .replace(/\bActivated skill\b/g, '已激活技能')
-    .replace(
-      /\bEPUB chapter range with (\d+) image pages\b/g,
-      'EPUB 章节范围包含 $1 张图片页面',
-    )
-    .replace(
-      /\bEPUB image document with (\d+) image pages\b/g,
-      'EPUB 图片文档包含 $1 张图片页面',
-    )
-    .replace(
-      /\bCBZ page range ([^:]+): (\d+) image pages\b/g,
-      'CBZ 页面范围 $1 包含 $2 张图片页面',
-    );
 }

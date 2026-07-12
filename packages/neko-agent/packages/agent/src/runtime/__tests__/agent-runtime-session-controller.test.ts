@@ -53,6 +53,7 @@ describe('AgentRuntimeSessionController', () => {
 
     const controller = createAgentRuntimeSessionController(target);
     await controller.configure({
+      promptLocale: 'en',
       createService,
       toolRegistry: createToolRegistry(),
       systemPrompt: 'system',
@@ -87,11 +88,13 @@ describe('AgentRuntimeSessionController', () => {
 
     const controller = createAgentRuntimeSessionController(target);
     await controller.configure({
+      promptLocale: 'en',
       createService,
       toolRegistry: createToolRegistry(),
       systemPrompt: 'system',
     });
     await controller.configure({
+      promptLocale: 'en',
       createService,
       toolRegistry: createToolRegistry(),
       systemPrompt: 'updated',
@@ -119,6 +122,7 @@ describe('AgentRuntimeSessionController', () => {
 
     const controller = createAgentRuntimeSessionController(target);
     await controller.configure({
+      promptLocale: 'en',
       createService,
       toolRegistry: createToolRegistry(),
     });
@@ -148,6 +152,7 @@ describe('AgentRuntimeSessionController', () => {
 
     const controller = createAgentRuntimeSessionController(target);
     await controller.configure({
+      promptLocale: 'en',
       createService,
       toolRegistry: createToolRegistry(),
     });

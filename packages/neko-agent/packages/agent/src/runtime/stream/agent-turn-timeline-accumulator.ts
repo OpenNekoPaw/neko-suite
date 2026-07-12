@@ -9,6 +9,12 @@ import type {
 } from '@neko-agent/types';
 import type { AgentEvent } from '../../session/types';
 import { applyToolResultBackfillToResult } from '../tool-result-backfill';
+import {
+  AGENT_ERROR_WITHOUT_DETAIL_CODE,
+  readAgentEventErrorCode,
+  readAgentEventErrorDetails,
+  readAgentEventErrorMessage,
+} from './agent-event-error';
 
 export interface AgentTurnTimelineAccumulatorUpdate {
   readonly type: 'agentTurnTimelineUpdate';
@@ -338,8 +344,9 @@ export function createAgentTurnTimelineAccumulator(input: {
         }
         case 'error': {
           const operations = completeTextItems(eventTime);
-          const errorCode = readErrorCode(event.error);
-          const errorDetails = readErrorDetails(event.error);
+          const errorMessage = readAgentEventErrorMessage(event.error);
+          const errorCode = readAgentEventErrorCode(event.error);
+          const errorDetails = readAgentEventErrorDetails(event.error);
           const item: Extract<AgentTurnTimelineItem, { readonly kind: 'error' }> = {
             conversationId: input.conversationId,
             turnId,
@@ -350,8 +357,12 @@ export function createAgentTurnTimelineAccumulator(input: {
             kind: 'error',
             status: 'failed',
             payload: {
-              message: event.error?.message ?? 'An error occurred',
-              ...(errorCode ? { code: errorCode } : {}),
+              ...(errorMessage ? { message: errorMessage } : {}),
+              ...(errorCode
+                ? { code: errorCode }
+                : errorMessage
+                  ? {}
+                  : { code: AGENT_ERROR_WITHOUT_DETAIL_CODE }),
               ...(errorDetails ? { details: errorDetails } : {}),
             },
             createdAt: eventTime,
@@ -499,20 +510,4 @@ function toTimelineStatus(status: AgentWorkItem['status']): AgentTurnTimelineIte
     case 'processing':
       return 'pending';
   }
-}
-
-function readErrorCode(error: AgentEvent['error']): string | undefined {
-  if (!isRecord(error)) return undefined;
-  const code = error['code'];
-  return typeof code === 'string' && code.length > 0 ? code : undefined;
-}
-
-function readErrorDetails(error: AgentEvent['error']): Record<string, unknown> | undefined {
-  if (!isRecord(error)) return undefined;
-  const context = error['context'];
-  return isRecord(context) ? context : undefined;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }

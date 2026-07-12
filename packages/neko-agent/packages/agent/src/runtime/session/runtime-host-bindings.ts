@@ -29,6 +29,7 @@ import type {
 } from '../types';
 import type { ModelTierResolver, SpecializedAgentPreset } from '../../subagent';
 import type { WorkspaceFileIgnoreRules } from '../../input/workspace-ignore';
+import type { SupportedLocale } from '@neko/shared/i18n';
 
 export interface AgentRuntimeHostBindings {
   readonly createService: () => IService;
@@ -64,7 +65,7 @@ export interface AgentRuntimeSessionAssemblyInput extends AgentRuntimeHostBindin
   readonly conversationId?: string;
   readonly operationToolAdapterRegistry?: IOperationToolAdapterRegistry;
   readonly previousOperationToolAdapterRegistry?: IOperationToolAdapterRegistry;
-  readonly locale?: 'en' | 'zh';
+  readonly promptLocale: SupportedLocale;
   readonly providerExpressionTargets?: readonly ProviderExpressionTargetConfig[];
   readonly toolCategoryRegistry?: IToolCategoryRegistry;
   readonly creationGuidance?: ICreationGuidanceRuntime;
@@ -163,7 +164,7 @@ export function buildAgentRuntimeSessionFactoryConfig(
     taskManager: input.taskManager,
     conversationId: input.conversationId,
     operationToolAdapterRegistry,
-    locale: input.locale,
+    promptLocale: input.promptLocale,
     providerExpressionTargets: input.providerExpressionTargets,
     capabilityRuntime: input.capabilityRuntime,
     capabilityPromptFragments,

@@ -2,8 +2,12 @@ import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { IService, IToolRegistry, Tool, ToolCategory, ToolResult } from '@neko/shared';
-import { createAgentRuntimeSession, updateAgentRuntimeSession } from '../session/agent-session-factory';
+import {
+  createAgentRuntimeSession,
+  updateAgentRuntimeSession,
+} from '../session/agent-session-factory';
 import { ToolCategoryRegistry } from '../../tools/tool-category-registry';
+import { SubAgentRuntimeCoordinator } from '../subagent-runtime';
 
 class MemoryToolRegistry implements IToolRegistry {
   private readonly tools = new Map<string, Tool>();
@@ -68,6 +72,7 @@ describe('Agent runtime shell policy', () => {
   it('does not register Bash in ordinary creative runtime sessions by default', async () => {
     const toolRegistry = new MemoryToolRegistry();
     await createAgentRuntimeSession({
+      promptLocale: 'en',
       service: createService(),
       createService,
       toolRegistry,
@@ -80,9 +85,33 @@ describe('Agent runtime shell policy', () => {
     );
   });
 
+  it('registers the parent prompt locale with the SubAgent runtime', async () => {
+    const toolRegistry = new MemoryToolRegistry();
+    const subAgentRuntime = new SubAgentRuntimeCoordinator();
+    const registerRuntime = vi.spyOn(subAgentRuntime, 'registerRuntime');
+
+    await createAgentRuntimeSession({
+      promptLocale: 'zh-cn',
+      service: createService(),
+      createService,
+      toolRegistry,
+      systemPrompt: 'system',
+      conversationId: 'conv-zh',
+      subAgentRuntime,
+    });
+
+    expect(registerRuntime).toHaveBeenCalledWith(
+      expect.objectContaining({
+        conversationId: 'conv-zh',
+        promptLocale: 'zh-cn',
+      }),
+    );
+  });
+
   it('refreshes core file tools when authorized read roots change', async () => {
     const toolRegistry = new MemoryToolRegistry();
     const handle = await createAgentRuntimeSession({
+      promptLocale: 'en',
       service: createService(),
       createService,
       toolRegistry,
@@ -97,6 +126,7 @@ describe('Agent runtime shell policy', () => {
     });
 
     updateAgentRuntimeSession(handle, {
+      promptLocale: 'en',
       createService,
       toolRegistry,
       systemPrompt: 'system',
@@ -128,6 +158,7 @@ describe('Agent runtime shell policy', () => {
     });
 
     const handle = await createAgentRuntimeSession({
+      promptLocale: 'en',
       service: createService(),
       createService,
       toolRegistry,

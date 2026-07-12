@@ -318,6 +318,41 @@ describe('agent stream state reducer', () => {
     expect(state.errorMessage).toBe('bad');
   });
 
+  it('keeps missing error detail absent from runtime state and host projection', () => {
+    const state = createAgentStreamProjectionState();
+    state.errorMessage = 'POISON LEGACY PROSE';
+
+    applyAgentStreamEventToState(state, { type: 'error', error: new Error('   ') });
+
+    expect(state.hasError).toBe(true);
+    expect(state).not.toHaveProperty('errorMessage');
+    expect(
+      projectAgentStreamEventToWebviewMessages({
+        conversationId: 'conv-1',
+        messageId: 'msg-1',
+        event: { type: 'error', error: new Error('   ') },
+      }),
+    ).toEqual([{ type: 'error', conversationId: 'conv-1' }]);
+    expect(JSON.stringify(state)).not.toContain('An error occurred');
+  });
+
+  it('preserves external error detail in runtime state and host projection', () => {
+    const state = createAgentStreamProjectionState();
+    const message = 'Provider detail: E42 / 配额';
+    const event = { type: 'error', error: new Error(message) } as const;
+
+    applyAgentStreamEventToState(state, event);
+
+    expect(state.errorMessage).toBe(message);
+    expect(
+      projectAgentStreamEventToWebviewMessages({
+        conversationId: 'conv-1',
+        messageId: 'msg-1',
+        event,
+      }),
+    ).toEqual([{ type: 'error', conversationId: 'conv-1', message }]);
+  });
+
   it('preserves streamed storyboard text when post-stream validation fails', () => {
     const state = createAgentStreamProjectionState();
     const streamedTable = '| 镜号 | 画面内容 |\n| --- | --- |\n| 1 | bad |';

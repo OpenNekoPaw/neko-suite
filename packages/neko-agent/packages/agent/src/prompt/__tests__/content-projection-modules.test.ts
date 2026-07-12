@@ -183,7 +183,7 @@ describe('MemoryRecallModule locale projection', () => {
     expect(result?.[0]?.content).not.toContain('Tool result:');
   });
 
-  it('localizes known generated tool-result snippets from persisted memory for zh locale', async () => {
+  it('preserves persisted tool-result payloads instead of translating prose by string detection', async () => {
     const mod = new MemoryProjectModule();
     mod.setContent(
       [
@@ -199,14 +199,11 @@ describe('MemoryRecallModule locale projection', () => {
     const content = result?.[0]?.content ?? '';
 
     expect(content).toContain('## 最近操作');
-    expect(content).toContain('已激活技能 \\"ai-generate\\"');
-    expect(content).toContain('EPUB 图片文档包含 10 张图片页面');
-    expect(content).toContain('EPUB 章节范围包含 3 张图片页面');
-    expect(content).toContain('CBZ 页面范围 1-4 包含 4 张图片页面');
-    expect(content).not.toContain('Activated skill');
-    expect(content).not.toContain('EPUB image document with');
-    expect(content).not.toContain('EPUB chapter range with');
-    expect(content).not.toContain('CBZ page range 1-4:');
+    expect(content).toContain(String.raw`Activated skill \"ai-generate\"`);
+    expect(content).toContain('EPUB image document with 10 image pages');
+    expect(content).toContain('EPUB chapter range with 3 image pages');
+    expect(content).toContain('CBZ page range 1-4: 4 image pages');
+    expect(content).not.toContain('已激活技能');
   });
 });
 

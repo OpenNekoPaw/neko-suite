@@ -1,4 +1,17 @@
 import { describe, expect, it, vi } from 'vitest';
+
+const { createAgentSessionWithRuntime } = vi.hoisted(() => ({
+  createAgentSessionWithRuntime: vi.fn(() => ({
+    async *execute() {
+      yield { type: 'text', content: 'done' };
+    },
+    cancel: vi.fn(),
+  })),
+}));
+
+vi.mock('../session/session-config-projection', () => ({
+  createAgentSessionWithRuntime,
+}));
 import type { IService, IToolRegistry } from '@neko/shared';
 import { SubAgentRuntimeCoordinator } from '../subagent-runtime';
 
@@ -32,6 +45,7 @@ describe('SubAgentRuntimeCoordinator', () => {
     });
     coordinator.registerRuntime({
       conversationId: 'conv-a',
+      promptLocale: 'en',
       createService,
       toolRegistry,
       providerId: 'provider-a',
@@ -66,6 +80,47 @@ describe('SubAgentRuntimeCoordinator', () => {
     });
   });
 
+  it('propagates the parent runtime prompt locale into the child Agent session', async () => {
+    const coordinator = new SubAgentRuntimeCoordinator();
+    const toolRegistry = createToolRegistry();
+    coordinator.ensureSystem({
+      createService,
+      toolRegistry,
+    });
+    coordinator.registerRuntime({
+      conversationId: 'conv-zh',
+      promptLocale: 'zh-cn',
+      createService,
+      toolRegistry,
+      providerId: 'provider-a',
+      modelId: 'model-a',
+    });
+
+    const taskTool = (toolRegistry.register as ReturnType<typeof vi.fn>).mock.calls.find(
+      (call) => call[0].name === 'task',
+    )?.[0];
+    expect(taskTool).toBeDefined();
+
+    const result = await taskTool.execute(
+      {
+        description: '检查本地化',
+        prompt: '继续执行',
+      },
+      {
+        metadata: {
+          conversationId: 'conv-zh',
+          parentAgentId: 'agent-conv-zh',
+          locale: 'zh',
+        },
+      },
+    );
+
+    expect(result.success).toBe(true);
+    expect(createAgentSessionWithRuntime).toHaveBeenCalledWith(
+      expect.objectContaining({ locale: 'zh' }),
+    );
+  });
+
   it('requires conversationId metadata before spawning a subagent task', async () => {
     const coordinator = new SubAgentRuntimeCoordinator();
     const toolRegistry = createToolRegistry();
@@ -75,6 +130,7 @@ describe('SubAgentRuntimeCoordinator', () => {
     });
     coordinator.registerRuntime({
       conversationId: 'conv-a',
+      promptLocale: 'en',
       createService,
       toolRegistry,
       providerId: 'provider-a',

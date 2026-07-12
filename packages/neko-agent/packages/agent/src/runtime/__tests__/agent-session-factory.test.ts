@@ -28,7 +28,7 @@ function createProviderCard(): ProviderCard {
 describe('resolveAgentRuntimePromptFragments', () => {
   it('passes runtime locale to provider expression fragments', () => {
     const fragments = resolveAgentRuntimePromptFragments({
-      locale: 'zh',
+      promptLocale: 'zh-cn',
       capabilityRuntime: {
         providerCardRegistry: createProviderCardRegistry([createProviderCard()]),
       },
@@ -48,7 +48,7 @@ describe('resolveAgentRuntimePromptFragments', () => {
     registry.register(createProviderExpressionProfile());
 
     const fragments = resolveAgentRuntimePromptFragments({
-      locale: 'en',
+      promptLocale: 'en',
       providerExpressionTargets: [
         {
           capability: 'image.generate',
@@ -77,7 +77,7 @@ describe('resolveAgentRuntimePromptFragments', () => {
 
   it('emits diagnostic fragments for missing provider expression profile references', () => {
     const fragments = resolveAgentRuntimePromptFragments({
-      locale: 'en',
+      promptLocale: 'en',
       providerExpressionTargets: [
         {
           capability: 'image.generate',
@@ -107,7 +107,7 @@ describe('resolveAgentRuntimePromptFragments', () => {
     registry.register(createProviderExpressionProfile());
 
     const fragments = resolveAgentRuntimePromptFragments({
-      locale: 'en',
+      promptLocale: 'en',
       providerExpressionTargets: [
         {
           capability: 'image.generate',

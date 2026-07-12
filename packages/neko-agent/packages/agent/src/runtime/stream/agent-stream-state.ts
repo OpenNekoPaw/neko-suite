@@ -10,6 +10,7 @@ import {
 import type { AgentEvent } from '../../session';
 import { createPlanContentBlockFromToolResultData } from '../../plan';
 import { applyToolResultBackfillToResult } from '../tool-result-backfill';
+import { readAgentEventErrorMessage } from './agent-event-error';
 import {
   projectMarkdownDerivedCompositeBlocks,
   type AgentStreamCompositeProjector,
@@ -123,7 +124,7 @@ export type AgentStreamProjectionMessage =
   | {
       type: 'error';
       conversationId: string;
-      message: string;
+      message?: string;
     }
   | {
       type: 'messageQueued';
@@ -271,14 +272,16 @@ export function projectAgentStreamEventToHostMessages(
           details: event.toolConfirmation?.details,
         },
       ];
-    case 'error':
+    case 'error': {
+      const message = readAgentEventErrorMessage(event.error);
       return [
         {
           type: 'error',
           conversationId,
-          message: event.error?.message || 'An error occurred',
+          ...(message ? { message } : {}),
         },
       ];
+    }
     case 'messageQueued':
       return [
         {
@@ -331,11 +334,17 @@ export function applyAgentStreamEventToState(
       return applyToolResult(state, event, options);
     case 'tool_result_backfill':
       return applyToolResultBackfill(state, event);
-    case 'error':
+    case 'error': {
       state.hasError = true;
-      state.errorMessage = event.error?.message || 'An error occurred';
+      const errorMessage = readAgentEventErrorMessage(event.error);
+      if (errorMessage) {
+        state.errorMessage = errorMessage;
+      } else {
+        delete state.errorMessage;
+      }
       state.terminalStatus = event.error?.name === 'AbortError' ? 'cancelled' : 'failed';
       return setPhase(state, 'idle');
+    }
     case 'done':
       return setPhase(state, 'idle');
     default:

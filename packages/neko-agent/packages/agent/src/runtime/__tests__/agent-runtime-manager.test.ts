@@ -184,8 +184,8 @@ describe('AgentRuntimeManager', () => {
     const provider: ISkillProvider = {
       listSkills: () => [],
       getActiveSkill: () => null,
-      activateSkill: async () => ({ success: true, message: 'ok' }),
-      deactivateSkill: async () => ({ success: true, message: 'ok' }),
+      activateSkill: async () => ({ success: true }),
+      deactivateSkill: async () => ({ success: true }),
     };
 
     manager.setSkillProviderFactory(() => provider);

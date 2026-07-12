@@ -93,6 +93,9 @@ describe('message runtime helpers', () => {
         {
           image: { providerId: 'flux', modelId: 'flux-pro-1.1', category: 'image' },
         },
+        {
+          image: { providerId: 'google', modelId: 'gemini-2.5-flash', category: 'llm' },
+        },
       ),
     ).toEqual({
       agentCreation: {
@@ -104,6 +107,9 @@ describe('message runtime helpers', () => {
       traceId: 'trace-1',
       mediaModels: {
         image: { providerId: 'flux', modelId: 'flux-pro-1.1', category: 'image' },
+      },
+      understandingModels: {
+        image: { providerId: 'google', modelId: 'gemini-2.5-flash', category: 'llm' },
       },
     });
   });
@@ -1309,6 +1315,9 @@ describe('message runtime helpers', () => {
         mediaModels: {
           video: { providerId: 'runway', modelId: 'gen-4', category: 'video' },
         },
+        understandingModels: {
+          image: { providerId: 'google', modelId: 'gemini-2.5-flash', category: 'llm' },
+        },
       }),
     ).toEqual({
       providerExpressionTargets: [
@@ -1322,8 +1331,50 @@ describe('message runtime helpers', () => {
         mediaModels: {
           video: { providerId: 'runway', modelId: 'gen-4', category: 'video' },
         },
+        understandingModels: {
+          image: { providerId: 'google', modelId: 'gemini-2.5-flash', category: 'llm' },
+        },
       },
     });
+  });
+
+  it('injects perception tool routing when chat and perception models differ', () => {
+    const plan = buildAgentTurnConfigurationPlan({
+      conversationId: 'conv-1',
+      baseSystemPrompt: 'base',
+      isPlanMode: false,
+      executionMode: 'ask',
+      chatModel: { providerId: 'openai', modelId: 'gpt-text', category: 'llm' },
+      understandingModels: {
+        image: { providerId: 'google', modelId: 'gemini-2.5-flash', category: 'llm' },
+      },
+    });
+
+    expect(plan.systemPrompt).toContain('Runtime Media Perception Routing');
+    expect(plan.systemPrompt).toContain('perception.perceive');
+    expect(plan.systemPrompt).toContain(
+      'do not stop because the chat model lacks native media input',
+    );
+    expect(plan.executionMetadata).toEqual({
+      understandingModels: {
+        image: { providerId: 'google', modelId: 'gemini-2.5-flash', category: 'llm' },
+      },
+    });
+  });
+
+  it('does not inject perception tool routing when chat and perception models match', () => {
+    const plan = buildAgentTurnConfigurationPlan({
+      conversationId: 'conv-1',
+      baseSystemPrompt: 'base',
+      isPlanMode: false,
+      executionMode: 'ask',
+      chatModel: { providerId: 'google', modelId: 'gemini-2.5-flash', category: 'llm' },
+      understandingModels: {
+        image: { providerId: 'google', modelId: 'gemini-2.5-flash', category: 'llm' },
+      },
+    });
+
+    expect(plan.systemPrompt).not.toContain('Runtime Media Perception Routing');
   });
 
   it('selects the requested configured provider and model', () => {

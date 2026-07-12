@@ -24,6 +24,7 @@ import { summarizeAgentEventProgress } from './turn/message-runtime';
 import { createNodeArtifactStore } from '../artifact/node-artifact-store';
 import type { IArtifactStore, ICapabilityRuntime, IValidationLoop } from './types';
 import type { WorkspaceFileIgnoreRules } from '../input/workspace-ignore';
+import type { SupportedLocale } from '@neko/shared/i18n';
 
 export interface AgentSubAgentSystemConfig {
   readonly createService: () => IService;
@@ -42,6 +43,7 @@ export interface AgentSubAgentRuntimeRegistration {
   readonly toolRegistry: IToolRegistry;
   readonly providerId?: string;
   readonly modelId?: string;
+  readonly promptLocale: SupportedLocale;
   readonly modelTierResolver?: ModelTierResolver;
   readonly capabilityRuntime?: ICapabilityRuntime;
   readonly promptFragments?: readonly PromptFragment[];
@@ -175,6 +177,7 @@ export class SubAgentRuntimeCoordinator {
           maxIterations: agentConfig.maxIterations,
           providerId: agentConfig.providerId,
           modelId: agentConfig.primaryModel,
+          locale: runtime.promptLocale === 'zh-cn' ? 'zh' : 'en',
           runtime: {
             capabilityRuntime: {
               ...(runtime.capabilityRuntime?.skillService
