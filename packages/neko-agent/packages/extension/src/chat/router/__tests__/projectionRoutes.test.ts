@@ -40,10 +40,13 @@ describe('projection routes', () => {
     const { deps, projectionAttachments, announceProjectionEndpoint } = createDeps();
 
     expect(
-      tryHandleProjectionRoute({ type: 'projectionEndpointDiscover', protocolVersion: 1 }, deps),
+      tryHandleProjectionRoute(
+        { type: 'projectionEndpointDiscover', protocolVersion: 1, realmId: 'realm-1' },
+        deps,
+      ),
     ).toBe(true);
 
-    expect(announceProjectionEndpoint).toHaveBeenCalledWith(1);
+    expect(announceProjectionEndpoint).toHaveBeenCalledWith(1, 'realm-1');
     expect(projectionAttachments.attach).not.toHaveBeenCalled();
     expect(projectionAttachments.acknowledge).not.toHaveBeenCalled();
     expect(projectionAttachments.detach).not.toHaveBeenCalled();

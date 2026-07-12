@@ -495,11 +495,13 @@ export type ConversationProjectionAttachmentHostFrame = ProjectionAttachmentHost
 export interface ProjectionEndpointDiscoverRequest {
   readonly type: 'projectionEndpointDiscover';
   readonly protocolVersion: typeof AGENT_WEBVIEW_PROTOCOL_VERSION;
+  readonly realmId: string;
 }
 
 export interface ProjectionEndpointReadyMessage {
   readonly type: 'projectionEndpointReady';
   readonly protocolVersion: typeof AGENT_WEBVIEW_PROTOCOL_VERSION;
+  readonly realmId: string;
   readonly endpointEpoch: string;
 }
 
@@ -1838,8 +1840,8 @@ export function parseWebviewToExtensionMessage(raw: unknown): WebviewToExtension
 
   const type = raw.type;
   if (type === 'projectionEndpointDiscover') {
-    return raw.protocolVersion === AGENT_WEBVIEW_PROTOCOL_VERSION
-      ? { type, protocolVersion: AGENT_WEBVIEW_PROTOCOL_VERSION }
+    return raw.protocolVersion === AGENT_WEBVIEW_PROTOCOL_VERSION && isNonEmptyString(raw.realmId)
+      ? { type, protocolVersion: AGENT_WEBVIEW_PROTOCOL_VERSION, realmId: raw.realmId }
       : null;
   }
   if (type === 'projectionAttach') {

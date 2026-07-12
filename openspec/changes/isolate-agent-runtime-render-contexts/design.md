@@ -216,7 +216,7 @@ On Webview initialization:
 4. Webview ACKs and begins live frames.
 5. The active Tab is made visible only after its own runtime reaches a renderable state; background Tabs continue independently.
 
-Endpoint discovery includes an explicit Agent Webview protocol version. This distinguishes a retained stale Webview bundle after Extension Host restart from a malformed same-version message and produces a typed mismatch diagnostic before attachments start.
+Endpoint discovery includes an explicit Agent Webview protocol version and a Webview-realm identity generated once per mounted realm. The Extension echoes that realm identity with the endpoint epoch. A different realm identity on the same VS Code Webview means the browser realm was reloaded: the Extension abandons the old realm's attachment server without posting detach frames into the new realm, allocates a new endpoint epoch, and only then accepts new attachments. Repeated discovery from the same realm is idempotent. This distinguishes a retained stale Webview bundle after Extension Host restart, a same-Webview realm reload, and a malformed same-version message before attachments start.
 
 On Extension restart, conversation/session persistence restores execution state where supported; Tab render caches are rebuilt. Old persisted `connectionEpoch`/delivery revision recovery descriptors are ignored and removed because they have no durable semantic value.
 

@@ -57,16 +57,26 @@ describe('webview protocol parser', () => {
       parseWebviewToExtensionMessage({
         type: 'projectionEndpointDiscover',
         protocolVersion: AGENT_WEBVIEW_PROTOCOL_VERSION,
+        realmId: 'realm-1',
       }),
     ).toEqual({
       type: 'projectionEndpointDiscover',
       protocolVersion: AGENT_WEBVIEW_PROTOCOL_VERSION,
+      realmId: 'realm-1',
     });
     expect(parseWebviewToExtensionMessage({ type: 'projectionEndpointDiscover' })).toBeNull();
     expect(
       parseWebviewToExtensionMessage({
         type: 'projectionEndpointDiscover',
         protocolVersion: AGENT_WEBVIEW_PROTOCOL_VERSION + 1,
+        realmId: 'realm-1',
+      }),
+    ).toBeNull();
+    expect(
+      parseWebviewToExtensionMessage({
+        type: 'projectionEndpointDiscover',
+        protocolVersion: AGENT_WEBVIEW_PROTOCOL_VERSION,
+        realmId: '',
       }),
     ).toBeNull();
   });

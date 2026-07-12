@@ -10,16 +10,25 @@ import type { TabRenderRuntimeRegistry } from './tab-render-runtime';
 
 const logger = getLogger('ProjectionEndpoint');
 
+function createProjectionRealmId(): string {
+  if (!globalThis.crypto?.randomUUID) {
+    throw new Error('Projection endpoint discovery requires crypto.randomUUID().');
+  }
+  return globalThis.crypto.randomUUID();
+}
+
 export function useProjectionEndpoint(
   registry: TabRenderRuntimeRegistry,
   openTabs: readonly OpenTab[],
 ): void {
   const host = useAgentHostRuntimeAdapter();
+  const realmId = useMemo(() => createProjectionRealmId(), []);
   const controller = useMemo(
     () =>
       createProjectionEndpointController({
         registry,
         host,
+        realmId,
         createAttachmentId: () => createProjectionAttachmentId(),
         reportError: (error, context) => {
           logger.error(error.message, {
@@ -43,7 +52,7 @@ export function useProjectionEndpoint(
           }));
         },
       }),
-    [host, registry],
+    [host, realmId, registry],
   );
   const bindings = useMemo(
     () => openTabs.map((tab) => ({ tabId: tab.id, conversationId: tab.conversationId })),

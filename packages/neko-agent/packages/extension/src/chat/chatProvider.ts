@@ -1013,8 +1013,8 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
         handleChatWebviewMessage(message, {
           webview,
           projectionAttachments,
-          announceProjectionEndpoint: (protocolVersion) =>
-            this._announceProjectionEndpoint(webview, protocolVersion),
+          announceProjectionEndpoint: (protocolVersion, realmId) =>
+            this._announceProjectionEndpoint(webview, protocolVersion, realmId),
           reportProjectionProtocolError: (error, key) =>
             this._reportProjectionProtocolError(webview, error, key),
           messages: this._messages,
@@ -1047,7 +1047,11 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
     );
   }
 
-  private _announceProjectionEndpoint(webview: vscode.Webview, protocolVersion: number): void {
+  private _announceProjectionEndpoint(
+    webview: vscode.Webview,
+    protocolVersion: number,
+    realmId: string,
+  ): void {
     if (this._view?.webview !== webview) {
       throw new Error('Cannot announce a replaced projection endpoint.');
     }
@@ -1068,6 +1072,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
     void webview.postMessage({
       type: 'projectionEndpointReady',
       protocolVersion: AGENT_WEBVIEW_PROTOCOL_VERSION,
+      realmId,
       endpointEpoch,
     });
     if (this._webviewReady) return;

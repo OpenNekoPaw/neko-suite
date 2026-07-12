@@ -20,6 +20,7 @@ export interface ProjectionEndpointControllerErrorContext {
 export interface ProjectionEndpointControllerOptions {
   readonly registry: TabRenderRuntimeRegistry;
   readonly host: AgentHostRuntimeAdapter;
+  readonly realmId: string;
   readonly createAttachmentId: (tabId: string) => string;
   readonly reportError: (error: Error, context: ProjectionEndpointControllerErrorContext) => void;
 }
@@ -57,6 +58,7 @@ class DefaultProjectionEndpointController implements ProjectionEndpointControlle
     this.options.host.send({
       type: 'projectionEndpointDiscover',
       protocolVersion: AGENT_WEBVIEW_PROTOCOL_VERSION,
+      realmId: this.options.realmId,
     });
   }
 
@@ -99,6 +101,7 @@ class DefaultProjectionEndpointController implements ProjectionEndpointControlle
           `Agent Webview protocol mismatch: expected ${AGENT_WEBVIEW_PROTOCOL_VERSION}, received ${message.protocolVersion}.`,
         );
       }
+      if (message.realmId !== this.options.realmId) return;
       this.acceptEndpoint(message.endpointEpoch);
       return;
     }

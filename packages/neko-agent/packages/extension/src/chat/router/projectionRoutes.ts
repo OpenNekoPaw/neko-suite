@@ -7,7 +7,7 @@ export function tryHandleProjectionRoute(
 ): boolean {
   switch (message.type) {
     case 'projectionEndpointDiscover':
-      deps.announceProjectionEndpoint(message.protocolVersion);
+      deps.announceProjectionEndpoint(message.protocolVersion, message.realmId);
       return true;
 
     case 'projectionAttach':

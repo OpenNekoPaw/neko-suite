@@ -46,12 +46,18 @@ When the Webview endpoint epoch changes, all attachments from the old epoch MUST
 - **AND** the new Tab runtime MUST attach from an authoritative conversation snapshot
 
 ### Requirement: Endpoint discovery verifies the Webview protocol version
-The Webview and Extension SHALL exchange an explicit Agent Webview protocol version during endpoint discovery. A missing or mismatched version MUST fail with a typed protocol-mismatch diagnostic and MUST NOT expose the endpoint or start attachments.
+The Webview and Extension SHALL exchange an explicit Agent Webview protocol version and Webview-realm identity during endpoint discovery. A missing or mismatched version or realm identity MUST fail with a typed protocol diagnostic and MUST NOT expose the endpoint or start attachments. The Extension MUST echo the discovering realm identity with the endpoint epoch.
 
 #### Scenario: Extension Host restarts while an older Webview bundle remains mounted
 - **WHEN** the retained Webview sends endpoint discovery without the current protocol version
 - **THEN** the Extension MUST reject discovery with a `webview-protocol-mismatch` diagnostic containing the expected and received versions
 - **AND** it MUST NOT report the request as a generic global error or attach any Tab runtime
+
+#### Scenario: Browser realm reloads inside the same VS Code Webview
+- **WHEN** endpoint discovery carries a new realm identity for the current VS Code Webview
+- **THEN** the Extension MUST abandon the old realm's attachment server without delivering old detach or projection frames into the new realm
+- **AND** it MUST allocate a new endpoint epoch before accepting replacement Tab attachments
+- **AND** repeated discovery carrying the same realm identity MUST return the same endpoint rather than replacing it again
 
 ### Requirement: Established live gaps fail visibly instead of entering fallback recovery
 After an attachment becomes live, frame sequence gaps, patch base-version mismatches, and identity mismatches SHALL close or suspend that attachment with a typed protocol diagnostic. The canonical path MUST NOT repeatedly request snapshots to make an internally generated gap appear successful.
