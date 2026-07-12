@@ -1,10 +1,4 @@
-import type {
-  Skill,
-  SkillCatalogPolicy,
-  SkillCatalogMeta,
-  SkillDef,
-  SkillLocalizedText,
-} from '@neko/shared';
+import type { Skill, SkillCatalogPolicy, SkillDef, SkillLocalizedText } from '@neko/shared';
 import {
   toSkillCatalogEntry,
   type ConfiguredSkill,
@@ -32,8 +26,8 @@ export interface CreateSkillCatalogProviderOptions {
   readonly locales?: Readonly<Record<string, SkillLocaleMap>>;
 }
 
-const MEDIA_TO_VIDEO_GROUP = 'media-to-video';
 const SCRIPT_WORKFLOW_GROUP = 'script-workflow';
+const CREATIVE_MEDIA_PRODUCTION_GROUP = 'media-production';
 const AI_GENERATION_GROUP = 'ai-generation';
 const POST_PRODUCTION_GROUP = 'post-production';
 
@@ -45,20 +39,16 @@ const BUILTIN_FORK_ACTIONS: NonNullable<SkillCatalogPolicy['actions']> = [
 const PERSONA_SKILL_NAMES = new Set(['creation-persona', 'execution-persona', 'iteration-persona']);
 
 const BUILTIN_CATALOG_OVERRIDES: Readonly<Record<string, SkillCatalogPolicy>> = {
-  [MEDIA_TO_VIDEO_GROUP]: {
+  storyboard: createPrimaryBuiltinCatalog(),
+  image: createPrimaryBuiltinCatalog(),
+  video: createPrimaryBuiltinCatalog(),
+  'media-production': {
     role: 'orchestrator',
-    groupId: MEDIA_TO_VIDEO_GROUP,
+    groupId: CREATIVE_MEDIA_PRODUCTION_GROUP,
     visibility: 'primary',
     editable: false,
     actions: BUILTIN_FORK_ACTIONS,
   },
-  'comic-to-storyboard': createFocusedBuiltinCatalog(MEDIA_TO_VIDEO_GROUP),
-  'comic-to-animation': createFocusedBuiltinCatalog(MEDIA_TO_VIDEO_GROUP),
-  'image-to-shot': createFocusedBuiltinCatalog(MEDIA_TO_VIDEO_GROUP),
-  'storyboard-to-animation-plan': createFocusedBuiltinCatalog(MEDIA_TO_VIDEO_GROUP),
-  'animation-plan-to-cut': createFocusedBuiltinCatalog(MEDIA_TO_VIDEO_GROUP),
-  'generated-shot-assembly': createFocusedBuiltinCatalog(MEDIA_TO_VIDEO_GROUP),
-  'export-video-package': createFocusedBuiltinCatalog(MEDIA_TO_VIDEO_GROUP),
   'script-generation': {
     role: 'orchestrator',
     groupId: SCRIPT_WORKFLOW_GROUP,
@@ -67,13 +57,6 @@ const BUILTIN_CATALOG_OVERRIDES: Readonly<Record<string, SkillCatalogPolicy>> = 
     actions: BUILTIN_FORK_ACTIONS,
   },
   'script-to-timeline': createFocusedBuiltinCatalog(SCRIPT_WORKFLOW_GROUP, 'script-generation'),
-  'ai-generate': {
-    role: 'orchestrator',
-    groupId: AI_GENERATION_GROUP,
-    visibility: 'primary',
-    editable: false,
-    actions: BUILTIN_FORK_ACTIONS,
-  },
   'scene-to-music': createQuickActionBuiltinCatalog(AI_GENERATION_GROUP),
   'video-editing': createQuickActionBuiltinCatalog(POST_PRODUCTION_GROUP),
   'color-grading': createQuickActionBuiltinCatalog(POST_PRODUCTION_GROUP),
@@ -242,6 +225,15 @@ function createBuiltinCatalog(skill: Skill): SkillCatalogPolicy {
   return {
     role: 'standalone',
     visibility: 'advanced',
+    editable: false,
+    actions: BUILTIN_FORK_ACTIONS,
+  };
+}
+
+function createPrimaryBuiltinCatalog(): SkillCatalogPolicy {
+  return {
+    role: 'standalone',
+    visibility: 'primary',
     editable: false,
     actions: BUILTIN_FORK_ACTIONS,
   };

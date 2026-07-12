@@ -9,65 +9,97 @@ import {
 import type { SkillScanResult } from '../SkillFileService';
 
 describe('skillCatalogProvider', () => {
-  it('classifies media orchestrators and focused skills', () => {
+  it('projects canonical creative media skills without legacy stage identities', () => {
     const skills = buildSkillDefs({
       builtinSkills: [
-        makeSkill('media-to-video', 'Coordinate media to video.'),
-        makeSkill('comic-to-storyboard', 'Analyze comics.'),
-        makeSkill('comic-to-animation', 'Animate comics.'),
+        makeSkill('storyboard', 'Create storyboards.'),
+        makeSkill('image', 'Create and edit images.'),
+        makeSkill('video', 'Create video clips.'),
+        makeSkill('media-production', 'Coordinate end-to-end media production.'),
         makeSkill('script-generation', 'Write scripts.'),
         makeSkill('script-to-timeline', 'Convert scripts.'),
         makeSkill('video-editing', 'Edit timelines.'),
+        makeSkill('media-quality-review', 'Review media quality.'),
       ],
     });
 
-    const media = findSkill(skills, 'media-to-video');
-    const comic = findSkill(skills, 'comic-to-storyboard');
-    const comicAnimation = findSkill(skills, 'comic-to-animation');
-    const script = findSkill(skills, 'script-generation');
-    const scriptToTimeline = findSkill(skills, 'script-to-timeline');
-    const videoEditing = findSkill(skills, 'video-editing');
+    expect(skills.map((skill) => skill.id)).toEqual([
+      'media-production',
+      'script-generation',
+      'image',
+      'storyboard',
+      'video',
+      'media-quality-review',
+      'video-editing',
+      'script-to-timeline',
+    ]);
 
-    expect(media.catalog).toMatchObject({
+    expect(findSkill(skills, 'media-production').catalog).toMatchObject({
       role: 'orchestrator',
       source: 'builtin',
       visibility: 'primary',
-      groupId: 'media-to-video',
+      groupId: 'media-production',
       editable: false,
     });
-    expect(comic.catalog).toMatchObject({
-      role: 'focused-skill',
-      source: 'builtin',
-      visibility: 'advanced',
-      groupId: 'media-to-video',
-      parentSkillIds: ['media-to-video'],
-    });
-    expect(comicAnimation.catalog).toMatchObject({
-      role: 'focused-skill',
-      source: 'builtin',
-      visibility: 'advanced',
-      groupId: 'media-to-video',
-      parentSkillIds: ['media-to-video'],
-    });
-    expect(script.catalog).toMatchObject({
+    for (const skillName of ['storyboard', 'image', 'video']) {
+      expect(findSkill(skills, skillName).catalog).toMatchObject({
+        role: 'standalone',
+        source: 'builtin',
+        visibility: 'primary',
+        editable: false,
+      });
+    }
+    expect(findSkill(skills, 'script-generation').catalog).toMatchObject({
       role: 'orchestrator',
       source: 'builtin',
       visibility: 'primary',
       groupId: 'script-workflow',
     });
-    expect(scriptToTimeline.catalog).toMatchObject({
+    expect(findSkill(skills, 'script-to-timeline').catalog).toMatchObject({
       role: 'focused-skill',
       source: 'builtin',
       visibility: 'advanced',
       groupId: 'script-workflow',
       parentSkillIds: ['script-generation'],
     });
-    expect(videoEditing.catalog).toMatchObject({
+    expect(findSkill(skills, 'video-editing').catalog).toMatchObject({
       role: 'quick-action',
       source: 'builtin',
       visibility: 'primary',
       groupId: 'post-production',
     });
+    expect(findSkill(skills, 'media-quality-review').catalog).toMatchObject({
+      role: 'quick-action',
+      source: 'builtin',
+      visibility: 'primary',
+      groupId: 'post-production',
+    });
+  });
+
+  it('does not give removed creative stage names canonical builtin catalog roles', () => {
+    const removedNames = [
+      'media-to-video',
+      'comic-to-storyboard',
+      'comic-to-animation',
+      'image-to-shot',
+      'storyboard-to-animation-plan',
+      'animation-plan-to-cut',
+      'generated-shot-assembly',
+      'export-video-package',
+      'ai-generate',
+    ];
+    const skills = buildSkillDefs({
+      builtinSkills: removedNames.map((name) => makeSkill(name, 'Removed identity fixture.')),
+    });
+
+    for (const skill of skills) {
+      expect(skill.catalog).toMatchObject({
+        role: 'standalone',
+        visibility: 'advanced',
+      });
+      expect(skill.catalog?.groupId).toBeUndefined();
+      expect(skill.catalog?.parentSkillIds).toBeUndefined();
+    }
   });
 
   it('keeps unknown built-in skills out of the primary catalog by default', () => {
