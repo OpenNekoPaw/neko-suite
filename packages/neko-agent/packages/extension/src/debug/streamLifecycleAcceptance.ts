@@ -10,7 +10,7 @@ import {
   AgentStreamProcessor,
   type StreamProcessingResult,
 } from '../chat/message/agentStreamProcessor';
-import type { AgentTimelineDeliveryMetrics } from '../chat/message/agentTimelineDeliveryScheduler';
+import type { ConversationProjectionSnapshot } from '@neko-agent/types';
 
 export const STREAM_LIFECYCLE_ACCEPTANCE_COMMAND = 'neko.agent.debug.startStreamLifecycleReplay';
 export const STREAM_LIFECYCLE_ACCEPTANCE_CONTINUE_COMMAND =
@@ -35,10 +35,9 @@ export interface StreamLifecycleAcceptanceReport extends StreamLifecycleAcceptan
   readonly sourceSha256: string;
   readonly providerChunks: number;
   readonly persistenceWrites: 0;
-  readonly timelineMetrics: AgentTimelineDeliveryMetrics | null;
+  readonly projectionVersion: number;
+  readonly projectedSourceSha256: string;
   readonly terminalStatus?: StreamProcessingResult['terminalStatus'];
-  readonly terminalDeliveryStatus?: StreamProcessingResult['lifecycle']['terminalDelivery']['status'];
-  readonly activeTurnResynchronizationStatus?: StreamProcessingResult['lifecycle']['activeTurnResynchronization']['status'];
   readonly error?: string;
 }
 
@@ -49,9 +48,7 @@ interface StreamLifecycleAcceptanceProcessor {
     events: AsyncIterable<AgentEvent>,
     callbacks: { readonly messageId: string; readonly onPhaseChange: () => void },
   ): Promise<StreamProcessingResult>;
-  getTimelineDeliveryMetrics(
-    identity: StreamLifecycleAcceptanceIdentity,
-  ): AgentTimelineDeliveryMetrics | undefined;
+  getProjectionSnapshot(conversationId: string): ConversationProjectionSnapshot;
   dispose(): void;
 }
 
@@ -73,7 +70,13 @@ function createOwnedAcceptanceProcessor(): StreamLifecycleAcceptanceProcessor {
   });
   return {
     processStream: (...args) => processor.processStream(...args),
-    getTimelineDeliveryMetrics: (identity) => processor.getTimelineDeliveryMetrics(identity),
+    getProjectionSnapshot: (conversationId) => {
+      const projection = projections.get(conversationId);
+      if (!projection) {
+        throw new Error(`No acceptance projection exists for conversation ${conversationId}.`);
+      }
+      return projection.snapshot();
+    },
     dispose: () => {
       processor.dispose();
       for (const projection of projections.values()) projection.dispose();
@@ -191,6 +194,13 @@ export class StreamLifecycleAcceptanceController implements vscode.Disposable {
           `Acceptance replay source mismatch: expected ${fixture.source.length} characters, received ${result.accumulatedResponse.length}.`,
         );
       }
+      const projection = run.processor.getProjectionSnapshot(run.identity.conversationId);
+      const projectedSource = readProjectedAssistantText(projection, run.identity);
+      if (!run.stopRequested && projectedSource !== fixture.source) {
+        throw new Error(
+          `Acceptance projection mismatch: expected ${fixture.source.length} characters, received ${projectedSource.length}.`,
+        );
+      }
       run.phase = 'completed';
       const report: StreamLifecycleAcceptanceReport = {
         ...run.identity,
@@ -199,15 +209,16 @@ export class StreamLifecycleAcceptanceController implements vscode.Disposable {
         sourceSha256: sha256(fixture.source),
         providerChunks: run.providerChunks,
         persistenceWrites: 0,
-        timelineMetrics: run.processor.getTimelineDeliveryMetrics(run.identity) ?? null,
+        projectionVersion: projection.projectionVersion,
+        projectedSourceSha256: sha256(projectedSource),
         terminalStatus: result.terminalStatus,
-        terminalDeliveryStatus: result.lifecycle.terminalDelivery.status,
-        activeTurnResynchronizationStatus: result.lifecycle.activeTurnResynchronization.status,
       };
       logger.info('Development stream lifecycle replay completed', report);
       return report;
     } catch (error) {
       run.phase = 'failed';
+      const projection = run.processor.getProjectionSnapshot(run.identity.conversationId);
+      const projectedSource = readProjectedAssistantText(projection, run.identity);
       const report: StreamLifecycleAcceptanceReport = {
         ...run.identity,
         state: 'failed',
@@ -215,7 +226,8 @@ export class StreamLifecycleAcceptanceController implements vscode.Disposable {
         sourceSha256: sha256(fixture.source),
         providerChunks: run.providerChunks,
         persistenceWrites: 0,
-        timelineMetrics: run.processor.getTimelineDeliveryMetrics(run.identity) ?? null,
+        projectionVersion: projection.projectionVersion,
+        projectedSourceSha256: sha256(projectedSource),
         error: error instanceof Error ? error.message : String(error),
       };
       logger.error('Development stream lifecycle replay failed', report);
@@ -286,7 +298,7 @@ export async function registerStreamLifecycleAcceptanceCommands(input: {
         throw new Error(report.error ?? 'Stream lifecycle acceptance replay failed.');
       }
       void vscode.window.showInformationMessage(
-        `Neko Agent stream replay completed: ${report.providerChunks} chunks, ${report.timelineMetrics?.deliveredBatches ?? 0} Timeline batches.`,
+        `Neko Agent stream replay completed: ${report.providerChunks} chunks, projection version ${report.projectionVersion}.`,
       );
       return report;
     }),
@@ -342,6 +354,21 @@ function splitIntoDeterministicChunks(source: string, chunkCount: number): reado
   }
   chunks.push(source.slice(chunkCount - 1));
   return chunks;
+}
+
+function readProjectedAssistantText(
+  projection: ConversationProjectionSnapshot,
+  identity: StreamLifecycleAcceptanceIdentity,
+): string {
+  const turn = projection.turns.find(
+    (candidate) =>
+      candidate.turnId === identity.turnId && candidate.messageId === identity.messageId,
+  );
+  if (!turn) return '';
+  return turn.items
+    .filter((item) => item.kind === 'assistant_text')
+    .map((item) => item.payload.content)
+    .join('');
 }
 
 function sha256(source: string): string {

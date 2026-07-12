@@ -79,6 +79,7 @@ import {
   ProjectionAttachmentProtocolError,
   type ConversationProjectionAttachmentServer,
 } from './projection/conversationProjectionAttachmentServer';
+import { projectConversationProjectionAttachmentFrameForWebview } from './message/webviewResourceProjection';
 import {
   getCapabilityDiscoveryService,
   getCapabilityRuntimeBindings,
@@ -950,7 +951,16 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
         }
         return this._agentManager.getOrCreateProjection(conversationId);
       },
-      postMessage: async (frame) => Boolean(await webview.postMessage(frame)),
+      postMessage: async (frame) => {
+        const projectedFrame = await projectConversationProjectionAttachmentFrameForWebview(frame, {
+          webview,
+          localResourceAccess: this._localResourceAccess,
+          contentAccessRuntime: getCapabilityRuntimeBindings().contentAccessRuntime,
+          localMediaCaller: 'neko-agent.projection-attachment',
+          documentResourceCaller: 'neko-agent.projection-document-resource',
+        });
+        return Boolean(await webview.postMessage(projectedFrame));
+      },
       reportError: (error, key) => this._reportProjectionProtocolError(webview, error, key),
     });
 

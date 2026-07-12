@@ -36,15 +36,7 @@ import {
   type TaskRunScope,
   type ToolResultBackfillPayload,
 } from '@neko/shared';
-import {
-  type AgentPhase,
-  type AgentTurnTimelineDiagnostic,
-  type AgentTurnTimelineMessage,
-  type AgentTurnTimelineSnapshotRequest,
-  type ContentBlock,
-  type ConversationTurnProjection,
-  type Message,
-} from '@neko-agent/types';
+import { type AgentPhase, type ContentBlock, type Message } from '@neko-agent/types';
 import type { ConversationBridge } from '../conversationBridge';
 import type { GeneratedAssetIndex } from '@neko/platform/media/generated-asset-index';
 import { maybeAttachInferredEntityMemoryContribution } from '@neko/skills';
@@ -57,12 +49,6 @@ import {
 } from './entityMemoryContributionAutomation';
 import { projectValueForWebviewResourceDisplay } from './webviewResourceProjection';
 import { getLogger } from '../../base';
-import {
-  AgentTimelineDeliveryChannel,
-  type AgentTimelineDeliveryMetrics,
-  type AgentTimelineDeliveryResult,
-  type AgentTimelineSnapshotSource,
-} from './agentTimelineDeliveryScheduler';
 
 const logger = getLogger('AgentStreamProcessor');
 
@@ -78,33 +64,9 @@ interface MediaUnderstandingModelOverrides {
 }
 
 /**
- * Stream processing result
+ * Stream processing result. Authoritative render state is committed to the
+ * conversation projection and delivered independently by Tab attachments.
  */
-export type AgentStreamTerminalDeliveryResult =
-  | {
-      readonly status: 'delivered';
-      readonly deliveryRevision: number;
-      readonly finalBlocksDelivered: true;
-    }
-  | {
-      readonly status: 'unavailable';
-      readonly deliveryRevision: number;
-      readonly finalBlocksDelivered: boolean;
-      readonly diagnostic: 'endpoint-unavailable' | 'disposed';
-    };
-
-export type AgentStreamResynchronizationResult =
-  | { readonly status: 'available'; readonly deliveryRevision: number }
-  | {
-      readonly status: 'unavailable';
-      readonly diagnostic: 'turn-snapshot-unavailable' | 'disposed';
-    };
-
-export interface AgentStreamLifecycleResult {
-  readonly terminalDelivery: AgentStreamTerminalDeliveryResult;
-  readonly activeTurnResynchronization: AgentStreamResynchronizationResult;
-}
-
 export interface StreamProcessingResult {
   accumulatedResponse: string;
   accumulatedThinking: string;
@@ -113,7 +75,6 @@ export interface StreamProcessingResult {
   terminalStatus: 'completed' | 'cancelled' | 'failed';
   collectedToolCalls: readonly CollectedToolCall[];
   contentBlocks: readonly ContentBlock[];
-  lifecycle: AgentStreamLifecycleResult;
 }
 
 /**
@@ -162,8 +123,6 @@ export interface AgentStreamProcessorDeps {
   getContextTokenCount?: (conversationId: string) => number;
   /** Optional host-side automation for reviewable entity memory contribution envelopes. */
   entityMemoryContributionAutomation?: EntityMemoryContributionAutomationPort;
-  /** Testable endpoint epoch source. */
-  createTimelineConnectionEpoch?: () => string;
   /** Optional adapter for durable Agent task-result observations. */
   taskResultObservations?: {
     handleTerminalTask(
@@ -182,21 +141,13 @@ export interface AgentStreamProcessorDeps {
 /**
  * Processor for agent event streams
  */
-interface ActiveTimelineChannel {
-  readonly endpoint: { current: vscode.Webview };
-  readonly channel: AgentTimelineDeliveryChannel;
-  readonly accumulator: AgentTurnTimelineAccumulator;
-  readonly projection: ConversationProjectionStore;
-}
-
 export class AgentStreamProcessor {
   private readonly mediaDeliveryHost: MediaTaskDeliveryHost;
   private readonly streamRuntime = new AgentEventStreamRuntimeProcessor<
     MediaTask,
     MediaTaskProgressDeliveryPlan
   >();
-  private readonly activeTimelineChannels = new Map<string, ActiveTimelineChannel>();
-  private nextTimelineConnectionEpoch = 1;
+  private readonly activeStreams = new Map<string, AgentTurnTimelineAccumulator>();
 
   constructor(private deps: AgentStreamProcessorDeps) {
     this.mediaDeliveryHost =
@@ -218,11 +169,6 @@ export class AgentStreamProcessor {
     callbacks: StreamCallbacks,
   ): Promise<StreamProcessingResult> {
     const media = this.deps.platform?.media;
-    const turnId = `turn-${callbacks.messageId}`;
-    const connectionEpoch = this.createConnectionEpoch();
-    const channelKey = toTimelineChannelKey(conversationId, turnId, callbacks.messageId);
-    this.disposeTimelineChannelsForConversation(conversationId);
-
     const conversationProjection = this.deps.getConversationProjection(conversationId);
     if (conversationProjection.conversationId !== conversationId) {
       throw new Error(
@@ -233,68 +179,30 @@ export class AgentStreamProcessor {
       conversationId,
       messageId: callbacks.messageId,
     });
-    const endpoint = { current: webview };
-    const timelineChannel: AgentTimelineDeliveryChannel = new AgentTimelineDeliveryChannel(
-      { connectionEpoch, conversationId, turnId, messageId: callbacks.messageId },
-      {
-        postMessage: async (message): Promise<boolean> => {
-          const active = this.activeTimelineChannels.get(channelKey);
-          if (active?.accumulator !== timelineAccumulator) return false;
-          const targetWebview = endpoint.current;
-          const projectedMessage = await projectTimelineMessageResourcesForWebview(
-            targetWebview,
-            message,
-            {
-              localResourceAccess: this.deps.localResourceAccess,
-              contentAccessRuntime: this.deps.contentAccessRuntime,
-            },
-          );
-          this.deps.dashboardWorkItems?.acceptWebviewMessage(message);
-          return targetWebview.postMessage(projectedMessage);
-        },
-      },
-    );
-    this.activeTimelineChannels.set(channelKey, {
-      endpoint,
-      channel: timelineChannel,
-      accumulator: timelineAccumulator,
-      projection: conversationProjection,
-    });
+    this.activeStreams.set(conversationId, timelineAccumulator);
 
-    let terminalTimelineDelivery: AgentTimelineDeliveryResult | undefined;
-    let finalBlocksDelivered = false;
-    let finalBlocksDeliveryAttempted = false;
     const isActiveTurn = (): boolean =>
-      this.activeTimelineChannels.get(channelKey)?.accumulator === timelineAccumulator;
+      this.activeStreams.get(conversationId) === timelineAccumulator;
 
     const postProjectedMessage = async (message: AgentEventStreamRuntimeMessage) => {
+      if (!isActiveTurn()) return;
       if (message.type === 'agentTurnTimelineUpdate') {
         conversationProjection.apply(message);
-        const delivery = await timelineChannel.enqueue(message);
-        if (message.completion) terminalTimelineDelivery = delivery;
+        this.deps.dashboardWorkItems?.acceptWebviewMessage(message);
         return;
       }
-      await timelineChannel.flush();
-      let delivered = false;
-      if (isActiveTurn()) {
-        const targetWebview = endpoint.current;
-        const projectedMessage = await projectStreamMessageResourcesForWebview(
-          targetWebview,
-          message,
-          {
-            localResourceAccess: this.deps.localResourceAccess,
-            contentAccessRuntime: this.deps.contentAccessRuntime,
-          },
-        );
-        try {
-          delivered = await targetWebview.postMessage(projectedMessage);
-        } catch {
-          delivered = false;
-        }
-      }
-      if (message.type === 'streamComplete') {
-        finalBlocksDeliveryAttempted = true;
-        finalBlocksDelivered = delivered;
+      const projectedMessage = await projectStreamMessageResourcesForWebview(webview, message, {
+        localResourceAccess: this.deps.localResourceAccess,
+        contentAccessRuntime: this.deps.contentAccessRuntime,
+      });
+      try {
+        await webview.postMessage(projectedMessage);
+      } catch (error) {
+        logger.warn('Failed to deliver non-projection stream message', {
+          conversationId,
+          messageType: message.type,
+          error,
+        });
       }
     };
 
@@ -416,12 +324,6 @@ export class AgentStreamProcessor {
       },
     });
 
-    const flushedDelivery = await timelineChannel.flush();
-    const effectiveTerminalDelivery = terminalTimelineDelivery ?? flushedDelivery;
-    const resynchronization = await timelineChannel.snapshot(
-      requireTurnProjectionSnapshot(conversationProjection, turnId, callbacks.messageId),
-    );
-
     if (this.deps.getContextTokenCount && isActiveTurn()) {
       try {
         const tokenCount = this.deps.getContextTokenCount(conversationId);
@@ -441,31 +343,9 @@ export class AgentStreamProcessor {
       throw new Error('Agent stream runtime completed without a terminal status.');
     }
 
-    const terminalDelivery: AgentStreamTerminalDeliveryResult =
-      effectiveTerminalDelivery.delivered && finalBlocksDeliveryAttempted && finalBlocksDelivered
-        ? {
-            status: 'delivered',
-            deliveryRevision: effectiveTerminalDelivery.deliveryRevision,
-            finalBlocksDelivered: true,
-          }
-        : {
-            status: 'unavailable',
-            deliveryRevision: effectiveTerminalDelivery.deliveryRevision,
-            finalBlocksDelivered,
-            diagnostic: effectiveTerminalDelivery.diagnostic ?? 'endpoint-unavailable',
-          };
-    const activeTurnResynchronization: AgentStreamResynchronizationResult =
-      resynchronization.available
-        ? {
-            status: 'available',
-            deliveryRevision: resynchronization.message.deliveryRevision,
-          }
-        : { status: 'unavailable', diagnostic: resynchronization.diagnostic };
-
     return {
       ...result,
       terminalStatus: result.terminalStatus,
-      lifecycle: { terminalDelivery, activeTurnResynchronization },
     };
   }
 
@@ -581,143 +461,15 @@ export class AgentStreamProcessor {
     }
   }
 
-  async requestTimelineSnapshot(
-    webview: vscode.Webview,
-    request: AgentTurnTimelineSnapshotRequest,
-  ): Promise<AgentTurnTimelineMessage | AgentTurnTimelineDiagnostic> {
-    const key = toTimelineChannelKey(request.conversationId, request.turnId, request.messageId);
-    const active = this.activeTimelineChannels.get(key);
-    if (!active) return buildSnapshotDiagnostic(request, 'turn-snapshot-unavailable');
-    if (request.connectionEpoch !== active.channel.snapshotIdentity().connectionEpoch) {
-      return buildSnapshotDiagnostic(request, 'identity-mismatch');
-    }
-    active.endpoint.current = webview;
-    const turnSnapshot = findTurnProjectionSnapshot(
-      active.projection,
-      request.turnId,
-      request.messageId,
-    );
-    if (!turnSnapshot) return buildSnapshotDiagnostic(request, 'turn-snapshot-unavailable');
-    const snapshot = await active.channel.snapshot(turnSnapshot);
-    return snapshot.available
-      ? snapshot.message
-      : buildSnapshotDiagnostic(request, snapshot.diagnostic);
-  }
-
-  getTimelineDeliveryMetrics(input: {
-    readonly conversationId: string;
-    readonly turnId: string;
-    readonly messageId: string;
-  }): AgentTimelineDeliveryMetrics | undefined {
-    return this.activeTimelineChannels
-      .get(toTimelineChannelKey(input.conversationId, input.turnId, input.messageId))
-      ?.channel.metrics();
-  }
-
   clearConversation(conversationId: string): void {
     this.streamRuntime.clearConversation(conversationId);
-    this.disposeTimelineChannelsForConversation(conversationId);
+    this.activeStreams.delete(conversationId);
   }
 
   dispose(): void {
     this.streamRuntime.dispose();
-    for (const active of this.activeTimelineChannels.values()) void active.channel.dispose();
-    this.activeTimelineChannels.clear();
+    this.activeStreams.clear();
   }
-
-  private disposeTimelineChannelsForConversation(conversationId: string): void {
-    for (const [key, active] of this.activeTimelineChannels) {
-      if (active.channel.snapshotIdentity().conversationId !== conversationId) continue;
-      this.activeTimelineChannels.delete(key);
-      void active.channel.dispose();
-    }
-  }
-
-  private createConnectionEpoch(): string {
-    return (
-      this.deps.createTimelineConnectionEpoch?.() ??
-      `webview-${Date.now().toString(36)}-${this.nextTimelineConnectionEpoch++}`
-    );
-  }
-}
-
-function requireTurnProjectionSnapshot(
-  projection: ConversationProjectionStore,
-  turnId: string,
-  messageId: string,
-): AgentTimelineSnapshotSource {
-  const snapshot = findTurnProjectionSnapshot(projection, turnId, messageId);
-  if (!snapshot) {
-    throw new Error(
-      `Conversation projection ${projection.conversationId} has no turn ${turnId}/${messageId}.`,
-    );
-  }
-  return snapshot;
-}
-
-function findTurnProjectionSnapshot(
-  projection: ConversationProjectionStore,
-  turnId: string,
-  messageId: string,
-): AgentTimelineSnapshotSource | undefined {
-  const turn = projection
-    .snapshot()
-    .turns.find((candidate) => candidate.turnId === turnId && candidate.messageId === messageId);
-  return turn ? toTimelineSnapshotSource(projection.conversationId, turn) : undefined;
-}
-
-function toTimelineSnapshotSource(
-  conversationId: string,
-  turn: ConversationTurnProjection,
-): AgentTimelineSnapshotSource {
-  return {
-    conversationId,
-    turnId: turn.turnId,
-    messageId: turn.messageId,
-    items: turn.items,
-    ...(turn.completion ? { completion: turn.completion } : {}),
-  };
-}
-
-function toTimelineChannelKey(conversationId: string, turnId: string, messageId: string): string {
-  return `${conversationId}\u0000${turnId}\u0000${messageId}`;
-}
-
-function buildSnapshotDiagnostic(
-  request: AgentTurnTimelineSnapshotRequest,
-  code: 'identity-mismatch' | 'turn-snapshot-unavailable' | 'disposed',
-): AgentTurnTimelineDiagnostic {
-  return {
-    type: 'agentTurnTimelineDiagnostic',
-    schemaVersion: request.schemaVersion,
-    connectionEpoch: request.connectionEpoch,
-    conversationId: request.conversationId,
-    turnId: request.turnId,
-    messageId: request.messageId,
-    code: code === 'disposed' ? 'turn-snapshot-unavailable' : code,
-    message:
-      code === 'identity-mismatch'
-        ? 'Timeline snapshot request does not match the active Webview endpoint generation.'
-        : 'The requested active turn snapshot is unavailable.',
-    ...(request.lastAppliedDeliveryRevision !== undefined
-      ? { deliveryRevision: request.lastAppliedDeliveryRevision }
-      : {}),
-  };
-}
-
-async function projectTimelineMessageResourcesForWebview(
-  webview: vscode.Webview,
-  message: AgentTurnTimelineMessage,
-  options: {
-    readonly localResourceAccess?: AgentLocalResourceAccess;
-    readonly contentAccessRuntime?: AgentContentAccessRuntime;
-  },
-): Promise<AgentTurnTimelineMessage> {
-  const projected = await projectStreamMessageResourcesForWebview(webview, message, options);
-  if (projected.type !== 'agentTurnTimeline') {
-    throw new Error('Timeline resource projection returned a non-Timeline message.');
-  }
-  return projected;
 }
 
 function readBackgroundTaskError(value: unknown): string | undefined {
@@ -726,12 +478,12 @@ function readBackgroundTaskError(value: unknown): string | undefined {
 
 function projectStreamMessageResourcesForWebview(
   webview: vscode.Webview,
-  message: AgentEventStreamRuntimeMessage | AgentTurnTimelineMessage,
+  message: AgentEventStreamRuntimeMessage,
   options: {
     readonly localResourceAccess?: AgentLocalResourceAccess;
     readonly contentAccessRuntime?: AgentContentAccessRuntime;
   },
-): Promise<AgentEventStreamRuntimeMessage | AgentTurnTimelineMessage> {
+): Promise<AgentEventStreamRuntimeMessage> {
   const projectValue = (value: unknown) =>
     projectValueForWebviewResourceDisplay(value, {
       webview,

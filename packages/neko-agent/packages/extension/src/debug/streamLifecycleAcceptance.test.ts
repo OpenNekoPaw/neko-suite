@@ -70,7 +70,8 @@ describe('StreamLifecycleAcceptanceController', () => {
         }
         return { ...completedResult(), accumulatedResponse: accumulated };
       },
-      getTimelineDeliveryMetrics: () => deliveryMetrics(),
+      getProjectionSnapshot: (conversationId: string) =>
+        projectionSnapshot(conversationId, 'stream-lifecycle-acceptance-fixed', accumulated),
       dispose: vi.fn(),
     };
     const controller = new StreamLifecycleAcceptanceController({
@@ -94,10 +95,10 @@ describe('StreamLifecycleAcceptanceController', () => {
       providerChunks: 4_000,
       persistenceWrites: 0,
       terminalStatus: 'completed',
-      terminalDeliveryStatus: 'delivered',
-      activeTurnResynchronizationStatus: 'available',
+      projectionVersion: 1,
     });
     expect(report.sourceSha256).toMatch(/^[a-f0-9]{64}$/);
+    expect(report.projectedSourceSha256).toBe(report.sourceSha256);
   });
 
   it('registers commands only in the Extension Development Host', async () => {
@@ -146,44 +147,36 @@ function completedResult() {
     terminalStatus: 'completed' as const,
     collectedToolCalls: [],
     contentBlocks: [],
-    lifecycle: {
-      terminalDelivery: {
-        status: 'delivered' as const,
-        deliveryRevision: 3,
-        finalBlocksDelivered: true as const,
-      },
-      activeTurnResynchronization: {
-        status: 'available' as const,
-        deliveryRevision: 3,
-      },
-    },
   };
 }
 
-function deliveryMetrics() {
+function projectionSnapshot(conversationId: string, messageId: string, content: string) {
   return {
-    inputBatches: 4_001,
-    inputOperations: 4_001,
-    deliveredBatches: 4,
-    deliveredOperations: 6,
-    deliveredBytes: 6_000,
-    pendingBytesHighWaterMark: 2_000,
-    pendingOperationsHighWaterMark: 2_000,
-    flushCount: 4,
-    maximumFlushLatencyMs: 32,
-    failedDeliveries: 0,
-    pendingOperations: 0,
-    pendingTextBytes: 0,
-    timerScheduled: false,
-    accepting: false,
-    disposed: false,
+    conversationId,
+    projectionVersion: 1,
+    turns: [
+      {
+        turnId: `turn-${messageId}`,
+        messageId,
+        items: [
+          {
+            id: 'text-1',
+            kind: 'assistant_text' as const,
+            payload: { content },
+          },
+        ],
+        completion: { status: 'completed' as const },
+      },
+    ],
   };
 }
 
 function fakeProcessor() {
   return {
     processStream: vi.fn(async () => completedResult()),
-    getTimelineDeliveryMetrics: vi.fn(() => deliveryMetrics()),
+    getProjectionSnapshot: vi.fn((conversationId: string) =>
+      projectionSnapshot(conversationId, 'stream-lifecycle-acceptance-fake', ''),
+    ),
     dispose: vi.fn(),
   };
 }

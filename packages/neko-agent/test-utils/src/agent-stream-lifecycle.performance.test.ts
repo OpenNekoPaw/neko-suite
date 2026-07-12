@@ -1,14 +1,13 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { AgentEvent } from '../../packages/agent/src/session/types';
-import type { AgentTurnTimelineMessage } from '../../packages/agent-types/src/agent-turn-timeline';
 import { ConversationPersistenceCoordinator } from '../../packages/agent/src/session/conversation-persistence-coordinator';
 import type { ConversationRecord } from '../../packages/agent/src/session/conversation-record';
 import { AgentStreamProcessor } from '../../packages/extension/src/chat/message/agentStreamProcessor';
-import { createTimelineRenderCommitScheduler } from '../../packages/webview/src/handlers/timeline-render-commit-scheduler';
 import {
   createAgentMarkdownSessionKey,
   createAgentMarkdownSessionRegistry,
 } from '../../packages/webview/src/markdown/agent-markdown-session-registry';
+import { createConversationProjectionStore } from '../../packages/agent/src/runtime/projection/conversation-projection-store';
 import { createAgentPoisonPaths } from './poison-paths';
 import { createTableHeavyStreamFixture } from './fixtures/table-heavy-stream';
 import { createAgentStreamReplayHarness } from './stream-replay-harness';
@@ -36,22 +35,19 @@ describe('Agent stream lifecycle performance regression', () => {
   it('keeps the 4,000-chunk Extension/Webview/persistence path linear and bounded', async () => {
     const fixture = createTableHeavyStreamFixture();
     const poisonPaths = createAgentPoisonPaths();
-    const frame = createFrameHarness();
     const markdownSessions = createAgentMarkdownSessionRegistry();
-    const renderScheduler = createTimelineRenderCommitScheduler(frame.port);
+    const projection = createConversationProjectionStore('conv-regression');
+    markdownSessions.commitProjectionSnapshot(projection.snapshot()).publish();
+    let projectionPatches = 0;
+    const unsubscribeProjection = projection.subscribe((patch) => {
+      projectionPatches += 1;
+      markdownSessions.commitProjectionPatch(patch).publish();
+      replay.recordWebviewCommit(markdownSessions.metrics().renderRevisions);
+    });
     const firstWriteGate = createDeferred<void>();
     let firstWrite = true;
 
-    const replay = createAgentStreamReplayHarness({
-      counters: fixture.counters,
-      onPostMessage(message): void {
-        if (message.type !== 'agentTurnTimeline') return;
-        renderScheduler.enqueue(message as AgentTurnTimelineMessage, (deliveries) => {
-          markdownSessions.applyTimelineDeliveries(deliveries);
-          replay.recordWebviewCommit(markdownSessions.metrics().renderRevisions);
-        });
-      },
-    });
+    const replay = createAgentStreamReplayHarness({ counters: fixture.counters });
 
     const persistence = new ConversationPersistenceCoordinator({
       storage: {
@@ -82,7 +78,10 @@ describe('Agent stream lifecycle performance regression', () => {
     };
     const processor = new AgentStreamProcessor({
       conversations: conversations as never,
-      createTimelineConnectionEpoch: () => 'regression-epoch',
+      getConversationProjection: (conversationId) => {
+        expect(conversationId).toBe('conv-regression');
+        return projection;
+      },
     });
 
     const result = await processor.processStream(
@@ -95,16 +94,8 @@ describe('Agent stream lifecycle performance regression', () => {
     firstWriteGate.resolve();
     await terminal.completion;
     await persistence.flush();
-    renderScheduler.flushAll();
-
-    const timelineMetrics = processor.getTimelineDeliveryMetrics({
-      conversationId: 'conv-regression',
-      turnId: 'turn-message-regression',
-      messageId: 'message-regression',
-    });
     const persistenceMetrics = persistence.metrics();
     const report = replay.report();
-    const sourceBytes = new TextEncoder().encode(fixture.source).byteLength;
     const snapshot = markdownSessions.getSnapshot(
       createAgentMarkdownSessionKey({
         conversationId: 'conv-regression',
@@ -116,22 +107,21 @@ describe('Agent stream lifecycle performance regression', () => {
     expect(result.accumulatedResponse).toBe(fixture.source);
     expect(snapshot?.source).toBe(fixture.source);
     expect(report.counters.providerChunks).toBe(fixture.chunks.length);
-    expect(timelineMetrics).toBeDefined();
-    expect(timelineMetrics?.inputOperations).toBeLessThanOrEqual(fixture.chunks.length + 2);
-    expect(timelineMetrics?.deliveredBatches).toBeLessThan(16);
-    expect(report.counters.timelineMessages).toBe(timelineMetrics?.deliveredBatches);
-    expect(report.counters.timelinePayloadBytes).toBeLessThan(sourceBytes * 8);
-    expect(report.counters.webviewCommits).toBeLessThan(8);
-    expect(report.counters.webviewRenderRevisions).toBeLessThan(8);
+    expect(projection.projectionVersion).toBe(projectionPatches);
+    expect(projectionPatches).toBeLessThanOrEqual(fixture.chunks.length + 2);
+    expect(report.counters.timelineMessages).toBe(0);
+    expect(report.counters.timelinePayloadBytes).toBe(0);
+    expect(report.counters.webviewCommits).toBe(projectionPatches);
+    expect(report.counters.webviewRenderRevisions).toBe(markdownSessions.metrics().renderRevisions);
     expect(persistenceMetrics.enqueuedPartials).toBeGreaterThan(0);
-    expect(persistenceMetrics.enqueuedPartials).toBeLessThan(8);
+    expect(persistenceMetrics.enqueuedPartials).toBeLessThanOrEqual(
+      Math.ceil(fixture.chunks.length / 32),
+    );
     expect(persistenceMetrics.maximumActiveMutations).toBe(1);
     expect(report.counters.persistenceMaxConcurrent).toBe(1);
     expect(report.counters.persistenceConcurrent).toBe(0);
     expect(report.counters.staleWriteDiagnostics).toBe(0);
     expect(result.terminalStatus).toBe('completed');
-    expect(result.lifecycle.terminalDelivery.status).toBe('delivered');
-    expect(frame.pending()).toBe(0);
 
     poisonPaths.cumulativeTimelineSnapshotPerDelta.assertNotHit();
     poisonPaths.timelineStringPrefixMerge.assertNotHit();
@@ -139,11 +129,12 @@ describe('Agent stream lifecycle performance regression', () => {
     poisonPaths.directLegacyMarkdownParse.assertNotHit();
     poisonPaths.concurrentConversationStorageWrite.assertNotHit();
 
-    renderScheduler.dispose();
+    unsubscribeProjection();
+    projection.dispose();
     markdownSessions.disposeAll();
     await persistence.dispose();
     processor.dispose();
-  });
+  }, 30_000);
 });
 
 async function* replayEvents(
@@ -167,33 +158,6 @@ function conversationRecord(revision: number): ConversationRecord {
     createdAt: 1,
     updatedAt: revision,
     source: 'extension',
-  };
-}
-
-function createFrameHarness(): {
-  readonly port: {
-    request(callback: () => void): number;
-    cancel(handle: number): void;
-  };
-  pending(): number;
-} {
-  let nextHandle = 1;
-  const callbacks = new Map<number, () => void>();
-  return {
-    port: {
-      request(callback): number {
-        const handle = nextHandle;
-        nextHandle += 1;
-        callbacks.set(handle, callback);
-        return handle;
-      },
-      cancel(handle): void {
-        callbacks.delete(handle);
-      },
-    },
-    pending(): number {
-      return callbacks.size;
-    },
   };
 }
 

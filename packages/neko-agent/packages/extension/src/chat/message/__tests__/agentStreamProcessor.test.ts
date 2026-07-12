@@ -4,7 +4,7 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { AgentStreamProcessor, type AgentStreamProcessorDeps } from '../agentStreamProcessor';
-import type { AgentTurnTimelineItem, AgentTurnTimelineMessage } from '@neko-agent/types';
+import type { AgentTurnTimelineItem } from '@neko-agent/types';
 import type { EntityMemoryContribution } from '@neko/shared';
 import { evaluateAgentTaskResultDelivery, normalizeAgentTaskResultObservation } from '@neko/agent';
 import { createConversationProjectionStore } from '@neko/agent/runtime';
@@ -51,40 +51,30 @@ function createMockCallbacks() {
   };
 }
 
-function getPostedTimelineMessages(
-  webview: ReturnType<typeof createMockWebview>,
-): AgentTurnTimelineMessage[] {
-  return webview.postMessage.mock.calls
-    .map(([message]) => message)
-    .filter((message): message is AgentTurnTimelineMessage => message.type === 'agentTurnTimeline');
+function createTaskRunScope(conversationId: string, runId: string, taskId: string) {
+  return {
+    conversationId,
+    runId,
+    parentRunId: runId,
+    childRunId: taskId,
+    childKind: 'task' as const,
+  };
 }
 
-function getTimelineItems(message: AgentTurnTimelineMessage): AgentTurnTimelineItem[] {
-  return message.operations.flatMap((operation) => ('item' in operation ? [operation.item] : []));
+const testProjections = new Map<string, ReturnType<typeof createConversationProjectionStore>>();
+
+function getProjectedTurn(conversationId: string) {
+  return testProjections.get(conversationId)?.snapshot().turns.at(-1);
 }
 
-function getPostedTimelineItems(
-  webview: ReturnType<typeof createMockWebview>,
-): AgentTurnTimelineItem[] {
-  return getPostedTimelineMessages(webview).flatMap(getTimelineItems);
+function getProjectedTimelineItems(conversationId: string): AgentTurnTimelineItem[] {
+  return [...(getProjectedTurn(conversationId)?.items ?? [])];
 }
 
-function getPostedTimelineToolResult(
-  webview: ReturnType<typeof createMockWebview>,
-  toolCallId: string,
-) {
-  return getPostedTimelineItems(webview)
+function getProjectedTimelineToolResult(conversationId: string, toolCallId: string) {
+  return getProjectedTimelineItems(conversationId)
     .filter((item) => item.kind === 'tool_call' && item.payload.toolCall.id === toolCallId)
     .at(-1)?.payload.toolCall.result;
-}
-
-function deliveredTextFromTimeline(messages: readonly AgentTurnTimelineMessage[]): string {
-  return messages
-    .flatMap((message) => message.operations)
-    .filter((operation) => operation.operation === 'append' || operation.operation === 'snapshot')
-    .filter((operation) => operation.item.kind === 'assistant_text')
-    .map((operation) => operation.item.payload.content)
-    .join('');
 }
 
 function waitForMicrotasks(): Promise<void> {
@@ -118,14 +108,13 @@ type TestAgentStreamProcessorDeps = Omit<AgentStreamProcessorDeps, 'getConversat
   Partial<Pick<AgentStreamProcessorDeps, 'getConversationProjection'>>;
 
 function createAgentStreamProcessor(deps: TestAgentStreamProcessorDeps = {}): AgentStreamProcessor {
-  const projections = new Map<string, ReturnType<typeof createConversationProjectionStore>>();
   const getConversationProjection =
     deps.getConversationProjection ??
     ((conversationId: string) => {
-      const existing = projections.get(conversationId);
+      const existing = testProjections.get(conversationId);
       if (existing) return existing;
       const created = createConversationProjectionStore(conversationId);
-      projections.set(conversationId, created);
+      testProjections.set(conversationId, created);
       return created;
     });
   return new AgentStreamProcessor({ ...deps, getConversationProjection });
@@ -147,6 +136,8 @@ describe('AgentStreamProcessor', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    for (const projection of testProjections.values()) projection.dispose();
+    testProjections.clear();
     webview = createMockWebview();
     callbacks = createMockCallbacks();
     processor = createAgentStreamProcessor({});
@@ -164,7 +155,7 @@ describe('AgentStreamProcessor', () => {
       expect(result.contentBlocks).toEqual([]);
     });
 
-    it('returns a typed all-success lifecycle after terminal delivery and snapshot retention', async () => {
+    it('commits terminal state to the authoritative projection without Timeline delivery', async () => {
       const result = await processor.processStream(
         webview as any,
         'conv-1',
@@ -176,20 +167,16 @@ describe('AgentStreamProcessor', () => {
       );
 
       expect(result.terminalStatus).toBe('completed');
-      expect(result.lifecycle).toEqual({
-        terminalDelivery: {
-          status: 'delivered',
-          deliveryRevision: expect.any(Number),
-          finalBlocksDelivered: true,
-        },
-        activeTurnResynchronization: {
-          status: 'available',
-          deliveryRevision: expect.any(Number),
-        },
+      expect(getProjectedTurn('conv-1')).toMatchObject({
+        messageId: 'assistant-stream',
+        completion: { status: 'completed' },
       });
+      expect(webview.postMessage).not.toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'agentTurnTimeline' }),
+      );
     });
 
-    it('keeps model completion separate when the Webview endpoint is unavailable', async () => {
+    it('keeps model completion authoritative when the Webview endpoint is unavailable', async () => {
       webview.postMessage.mockResolvedValue(false);
 
       const result = await processor.processStream(
@@ -204,12 +191,14 @@ describe('AgentStreamProcessor', () => {
 
       expect(result.terminalStatus).toBe('completed');
       expect(result.accumulatedResponse).toBe('Retained answer');
-      expect(result.lifecycle.terminalDelivery).toMatchObject({
-        status: 'unavailable',
-        finalBlocksDelivered: false,
-        diagnostic: 'endpoint-unavailable',
-      });
-      expect(result.lifecycle.activeTurnResynchronization.status).toBe('available');
+      expect(getProjectedTimelineItems('conv-1')).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            kind: 'assistant_text',
+            payload: expect.objectContaining({ content: 'Retained answer' }),
+          }),
+        ]),
+      );
     });
 
     it('marks AbortError streams cancelled while retaining final partial content', async () => {
@@ -228,10 +217,7 @@ describe('AgentStreamProcessor', () => {
 
       expect(result.terminalStatus).toBe('cancelled');
       expect(result.accumulatedResponse).toBe('Partial answer');
-      expect(
-        getPostedTimelineMessages(webview).find((message) => message.completion)?.completion,
-      ).toMatchObject({ status: 'cancelled' });
-      expect(result.lifecycle.terminalDelivery.status).toBe('delivered');
+      expect(getProjectedTurn('conv-1')?.completion).toMatchObject({ status: 'cancelled' });
     });
 
     it('rejects late delivery and partial persistence callbacks after disposal', async () => {
@@ -266,14 +252,14 @@ describe('AgentStreamProcessor', () => {
       expect(conversations.upsertMessageToConversation).toHaveBeenCalledTimes(1);
       expect(webview.postMessage).toHaveBeenCalledTimes(postedBeforeDispose);
       expect(result.accumulatedResponse).toBe('before dispose after dispose');
-      expect(result.lifecycle.terminalDelivery).toMatchObject({
-        status: 'unavailable',
-        diagnostic: 'disposed',
-      });
-      expect(result.lifecycle.activeTurnResynchronization).toEqual({
-        status: 'unavailable',
-        diagnostic: 'disposed',
-      });
+      expect(getProjectedTimelineItems('conv-1')).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            kind: 'assistant_text',
+            payload: expect.objectContaining({ content: 'before dispose' }),
+          }),
+        ]),
+      );
     });
 
     it('should handle thinking_content events', async () => {
@@ -290,13 +276,9 @@ describe('AgentStreamProcessor', () => {
       expect(result.contentBlocks[0]!.thinking).toBe('Let me think... about this.');
       expect(callbacks.onPhaseChange).toHaveBeenCalledWith('thinking', undefined);
 
-      expect(
-        getPostedTimelineMessages(webview)[0]
-          ? getTimelineItems(getPostedTimelineMessages(webview)[0]!)[0]
-          : undefined,
-      ).toMatchObject({
+      expect(getProjectedTimelineItems('conv-1')[0]).toMatchObject({
         kind: 'thinking',
-        payload: { content: 'Let me think...' },
+        payload: { content: 'Let me think... about this.' },
       });
       expect(webview.postMessage).not.toHaveBeenCalledWith(
         expect.objectContaining({ type: 'streamThinking' }),
@@ -454,7 +436,7 @@ describe('AgentStreamProcessor', () => {
         error: undefined,
       });
 
-      expect(getPostedTimelineItems(webview)).toEqual(
+      expect(getProjectedTimelineItems('conv-1')).toEqual(
         expect.arrayContaining([
           expect.objectContaining({
             kind: 'tool_call',
@@ -537,7 +519,7 @@ describe('AgentStreamProcessor', () => {
           }),
         },
       ]);
-      expect(getPostedTimelineToolResult(webview, 'tc-memory')?.data).toMatchObject({
+      expect(getProjectedTimelineToolResult('conv-1', 'tc-memory')?.data).toMatchObject({
         entityMemoryAutomation: expect.objectContaining({
           contributionId: 'contribution-page-1',
         }),
@@ -628,7 +610,7 @@ describe('AgentStreamProcessor', () => {
           ],
         },
       });
-      expect(getPostedTimelineToolResult(webview, 'tc-memory')?.artifacts).toEqual([
+      expect(getProjectedTimelineToolResult('conv-1', 'tc-memory')?.artifacts).toEqual([
         {
           type: 'artifactExecutionSummary',
           summary: expect.objectContaining({
@@ -838,7 +820,7 @@ describe('AgentStreamProcessor', () => {
         '/tmp/page-1.jpg',
         'neko-agent.stream-tool-result',
       );
-      expect(getPostedTimelineItems(webview)).toEqual(
+      expect(getProjectedTimelineItems('conv-1')).toEqual(
         expect.arrayContaining([
           expect.objectContaining({
             kind: 'tool_call',
@@ -849,7 +831,7 @@ describe('AgentStreamProcessor', () => {
                   images: [
                     {
                       label: 'Page 1',
-                      path: 'webview-uri:/tmp/page-1.jpg',
+                      path: '/tmp/page-1.jpg',
                     },
                   ],
                 },
@@ -958,24 +940,23 @@ describe('AgentStreamProcessor', () => {
         materializedPath,
         'neko-agent.document-resource',
       );
-      expect(getPostedTimelineToolResult(webview, 'tc-read-doc-image')?.data).toMatchObject({
+      expect(getProjectedTimelineToolResult('conv-1', 'tc-read-doc-image')?.data).toMatchObject({
         images: [
           expect.objectContaining({
-            renderUri: 'vscode-webview://page-1.jpg',
-            src: 'vscode-webview://page-1.jpg',
             resourceRef: archiveRef,
-            documentImage: expect.objectContaining({
-              renderUri: 'vscode-webview://page-1.jpg',
-              src: 'vscode-webview://page-1.jpg',
-              resourceRef: archiveRef,
-            }),
+            documentImage: expect.objectContaining({ resourceRef: archiveRef }),
           }),
         ],
       });
+      expect(getProjectedTimelineToolResult('conv-1', 'tc-read-doc-image')?.data).not.toMatchObject(
+        {
+          images: [expect.objectContaining({ renderUri: expect.any(String) })],
+        },
+      );
       expect(JSON.stringify(webview.postMessage.mock.calls)).not.toContain(materializedPath);
       expect(dashboardWorkItems.acceptWebviewMessage).toHaveBeenCalledWith(
         expect.objectContaining({
-          type: 'agentTurnTimeline',
+          type: 'agentTurnTimelineUpdate',
           operations: expect.arrayContaining([
             expect.objectContaining({
               operation: 'upsert',
@@ -1182,41 +1163,21 @@ describe('AgentStreamProcessor', () => {
 
       await processor.processStream(webview as any, 'conv-1', events, callbacks);
 
-      expect(localResourceAccess.toWebviewUri).toHaveBeenCalledWith(
-        webview,
-        imagePath,
-        'neko-agent.stream-tool-result',
-      );
-      const timelineTool = getPostedTimelineMessages(webview)
-        .flatMap(getTimelineItems)
-        .filter((item) => item.kind === 'tool_call' && item.payload.toolCall.id === 'tc-read-image')
-        .at(-1);
-      expect(timelineTool).toMatchObject({
-        payload: {
-          toolCall: {
-            result: {
-              attachments: [
-                expect.objectContaining({
-                  path: `webview-uri:${imagePath}`,
-                  assetRef: expect.objectContaining({
-                    uri: `webview-uri:${imagePath}`,
-                  }),
-                }),
-              ],
-              perceptionCards: [
-                expect.objectContaining({
-                  perceptual: expect.objectContaining({
-                    keyframeRefs: [
-                      expect.objectContaining({
-                        uri: `webview-uri:${imagePath}`,
-                      }),
-                    ],
-                  }),
-                }),
-              ],
-            },
-          },
-        },
+      expect(localResourceAccess.toWebviewUri).toHaveBeenCalled();
+      expect(getProjectedTimelineToolResult('conv-1', 'tc-read-image')).toMatchObject({
+        attachments: [
+          expect.objectContaining({
+            path: imagePath,
+            assetRef: expect.objectContaining({ uri: imagePath }),
+          }),
+        ],
+        perceptionCards: [
+          expect.objectContaining({
+            perceptual: expect.objectContaining({
+              keyframeRefs: [expect.objectContaining({ uri: imagePath })],
+            }),
+          }),
+        ],
       });
       expect(webview.postMessage).not.toHaveBeenCalledWith(
         expect.objectContaining({ type: 'toolResult' }),
@@ -1242,7 +1203,7 @@ describe('AgentStreamProcessor', () => {
 
       await processor.processStream(webview as any, 'conv-1', events, callbacks);
 
-      expect(getPostedTimelineItems(webview)).toEqual(
+      expect(getProjectedTimelineItems('conv-1')).toEqual(
         expect.arrayContaining([
           expect.objectContaining({
             kind: 'tool_call',
@@ -1273,7 +1234,7 @@ describe('AgentStreamProcessor', () => {
       expect(result.hasError).toBe(true);
       expect(result.errorMessage).toBe('Rate limited');
       expect(callbacks.onPhaseChange).toHaveBeenCalledWith('idle', undefined);
-      expect(getPostedTimelineItems(webview)).toEqual(
+      expect(getProjectedTimelineItems('conv-1')).toEqual(
         expect.arrayContaining([
           expect.objectContaining({
             kind: 'error',
@@ -1418,7 +1379,7 @@ describe('AgentStreamProcessor', () => {
       expect(result.contentBlocks).toHaveLength(4);
     });
 
-    it('posts anchored turn timeline messages without non-timeline stream and tool display messages', async () => {
+    it('commits anchored turn projection without direct Timeline Webview messages', async () => {
       await processor.processStream(
         webview as any,
         'conv-1',
@@ -1438,52 +1399,41 @@ describe('AgentStreamProcessor', () => {
         callbacks,
       );
 
-      const posted = webview.postMessage.mock.calls.map(([message]) => message);
-      expect(posted.map((message) => message.type)).toEqual([
-        'agentTurnTimeline',
-        'agentTurnTimeline',
-        'agentTurnTimeline',
-        'agentTurnTimeline',
-        'agentTurnTimeline',
-        'streamComplete',
-      ]);
-
-      const timelineMessages = posted.filter(
-        (message): message is AgentTurnTimelineMessage => message.type === 'agentTurnTimeline',
+      expect(webview.postMessage).not.toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'agentTurnTimeline' }),
       );
-      expect(
-        timelineMessages.map((message) => getTimelineItems(message).map((item) => item.itemId)),
-      ).toEqual([['text-1'], ['tool-tc-1'], ['tool-tc-1'], ['text-3'], []]);
-      expect(timelineMessages[1]!.operations).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({
-            operation: 'complete',
-            itemId: 'text-1',
-            status: 'complete',
-          }),
-          expect.objectContaining({
-            operation: 'upsert',
-            item: expect.objectContaining({
-              itemId: 'tool-tc-1',
-              sequence: 2,
-              status: 'pending',
-            }),
-          }),
-        ]),
+      expect(webview.postMessage).toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'streamComplete' }),
       );
-      expect(getTimelineItems(timelineMessages[2]!)[0]).toMatchObject({
-        itemId: 'tool-tc-1',
-        sequence: 2,
-        status: 'succeeded',
-        payload: {
-          toolCall: {
-            id: 'tc-1',
-            result: { success: true, data: { text: 'A' } },
+      expect(getProjectedTimelineItems('conv-1')).toEqual([
+        expect.objectContaining({
+          itemId: 'text-1',
+          sequence: 1,
+          kind: 'assistant_text',
+          status: 'complete',
+        }),
+        expect.objectContaining({
+          itemId: 'tool-tc-1',
+          sequence: 2,
+          status: 'succeeded',
+          payload: {
+            toolCall: {
+              id: 'tc-1',
+              name: 'read',
+              arguments: { path: 'a.md' },
+              result: { success: true, data: { text: 'A' } },
+            },
           },
-        },
-      });
+        }),
+        expect.objectContaining({
+          itemId: 'text-3',
+          sequence: 3,
+          kind: 'assistant_text',
+          status: 'complete',
+        }),
+      ]);
       expect(
-        timelineMessages[4]!.completion?.finalContentBlocks?.map((block) => block.type),
+        getProjectedTurn('conv-1')?.completion?.finalContentBlocks?.map((block) => block.type),
       ).toEqual(['text', 'tool_call', 'text']);
     });
 
@@ -1521,6 +1471,7 @@ describe('AgentStreamProcessor', () => {
                 conversationId: 'conv-1',
                 runId: 'run-media',
                 taskId: 'task-media',
+                taskScope: createTaskRunScope('conv-1', 'run-media', 'task-media'),
                 type: 'video',
                 message: 'Generate a city flythrough',
                 routedTo: { provider: 'runway' },
@@ -1534,6 +1485,7 @@ describe('AgentStreamProcessor', () => {
 
       await progressCallback?.({
         id: 'task-media',
+        scope: createTaskRunScope('conv-1', 'run-media', 'task-media'),
         type: 'text-to-video',
         status: 'processing',
         progress: 45,
@@ -1548,6 +1500,7 @@ describe('AgentStreamProcessor', () => {
       });
       await progressCallback?.({
         id: 'task-media',
+        scope: createTaskRunScope('conv-1', 'run-media', 'task-media'),
         type: 'text-to-video',
         status: 'completed',
         progress: 100,
@@ -1563,7 +1516,7 @@ describe('AgentStreamProcessor', () => {
       });
       await processing;
 
-      expect(getPostedTimelineItems(webview)).toEqual(
+      expect(getProjectedTimelineItems('conv-1')).toEqual(
         expect.arrayContaining([
           expect.objectContaining({
             kind: 'task',
@@ -1612,6 +1565,7 @@ describe('AgentStreamProcessor', () => {
         createProgressViewDelivery: vi.fn(async () => ({
           view: {
             id: 'task-media',
+            scope: createTaskRunScope('conv-1', 'run-media', 'task-media'),
             type: 'image',
             status: 'completed',
             progress: 100,
@@ -1682,6 +1636,7 @@ describe('AgentStreamProcessor', () => {
                 runId: 'run-media',
                 runStartedAt: 101,
                 taskId: 'task-media',
+                taskScope: createTaskRunScope('conv-1', 'run-media', 'task-media'),
                 type: 'image',
                 message: 'Generate a cat',
                 routedTo: { provider: 'openai' },
@@ -1695,6 +1650,7 @@ describe('AgentStreamProcessor', () => {
 
       const completedTask = {
         id: 'task-media',
+        scope: createTaskRunScope('conv-1', 'run-media', 'task-media'),
         type: 'text-to-image',
         status: 'completed',
         progress: 100,
@@ -1758,6 +1714,7 @@ describe('AgentStreamProcessor', () => {
         createProgressViewDelivery: vi.fn(async () => ({
           view: {
             id: 'task-media',
+            scope: createTaskRunScope('conv-1', 'run-media', 'task-media'),
             type: 'image',
             status: 'completed',
             progress: 100,
@@ -1813,6 +1770,7 @@ describe('AgentStreamProcessor', () => {
                 conversationId: 'conv-1',
                 runId: 'run-media',
                 taskId: 'task-media',
+                taskScope: createTaskRunScope('conv-1', 'run-media', 'task-media'),
                 type: 'image',
                 message: 'Generate a cat',
                 routedTo: { provider: 'openai' },
@@ -1826,6 +1784,7 @@ describe('AgentStreamProcessor', () => {
 
       const completedTask = {
         id: 'task-media',
+        scope: createTaskRunScope('conv-1', 'run-media', 'task-media'),
         type: 'text-to-image',
         status: 'completed',
         progress: 100,
@@ -1904,6 +1863,7 @@ describe('AgentStreamProcessor', () => {
         createProgressViewDelivery: vi.fn(async () => ({
           view: {
             id: 'task-media',
+            scope: createTaskRunScope('conv-1', 'run-media', 'task-media'),
             type: 'image',
             status: 'completed',
             progress: 100,
@@ -1954,6 +1914,7 @@ describe('AgentStreamProcessor', () => {
                 conversationId: 'conv-1',
                 runId: 'run-media',
                 taskId: 'task-media',
+                taskScope: createTaskRunScope('conv-1', 'run-media', 'task-media'),
                 type: 'image',
                 message: 'Generate a cat',
                 routedTo: { provider: 'openai' },
@@ -1967,6 +1928,7 @@ describe('AgentStreamProcessor', () => {
 
       const completedTask = {
         id: 'task-media',
+        scope: createTaskRunScope('conv-1', 'run-media', 'task-media'),
         type: 'text-to-image',
         status: 'completed',
         progress: 100,
@@ -2025,6 +1987,7 @@ describe('AgentStreamProcessor', () => {
                 conversationId: 'conv-1',
                 runId: 'run-media',
                 taskId: 'task-media',
+                taskScope: createTaskRunScope('conv-1', 'run-media', 'task-media'),
                 type: 'image',
                 message: 'Generate a cat',
                 routedTo: { provider: 'openai' },
@@ -2038,6 +2001,7 @@ describe('AgentStreamProcessor', () => {
 
       await progressCallback?.({
         id: 'task-media',
+        scope: createTaskRunScope('conv-1', 'run-media', 'task-media'),
         type: 'text-to-image',
         status: 'processing',
         progress: 50,
@@ -2086,6 +2050,7 @@ describe('AgentStreamProcessor', () => {
                 conversationId: 'conv-1',
                 runId: 'run-media',
                 taskId: 'task-media',
+                taskScope: createTaskRunScope('conv-1', 'run-media', 'task-media'),
                 type: 'image',
                 message: 'Generate a cat',
                 routedTo: { provider: 'openai' },
@@ -2139,6 +2104,7 @@ describe('AgentStreamProcessor', () => {
                 conversationId,
                 runId: `run-${taskId}`,
                 taskId,
+                taskScope: createTaskRunScope(conversationId, `run-${taskId}`, taskId),
                 type: 'image',
                 message: 'Generate a cat',
                 routedTo: { provider: 'openai' },
@@ -2182,182 +2148,6 @@ describe('AgentStreamProcessor', () => {
 
       expect(unsubscribeA).toHaveBeenCalledTimes(1);
       expect(unsubscribeB).not.toHaveBeenCalled();
-    });
-  });
-
-  describe('Timeline delivery scheduling and resynchronization', () => {
-    it('bounds postMessage batches for a 4,000-fragment text stream and preserves exact source', async () => {
-      processor = createAgentStreamProcessor({
-        createTimelineConnectionEpoch: () => 'epoch-burst',
-      });
-      const source = 'x'.repeat(4_000);
-      const events = toAsyncIterable([
-        ...Array.from(source, (content) => ({ type: 'text_delta' as const, content })),
-        { type: 'done' as const },
-      ]);
-
-      const result = await processor.processStream(webview as any, 'conv-1', events, callbacks);
-      const timelineMessages = getPostedTimelineMessages(webview);
-
-      expect(result.accumulatedResponse).toBe(source);
-      expect(deliveredTextFromTimeline(timelineMessages)).toBe(source);
-      expect(timelineMessages.length).toBeLessThanOrEqual(3);
-      expect(
-        processor.getTimelineDeliveryMetrics({
-          conversationId: 'conv-1',
-          turnId: 'turn-assistant-stream',
-          messageId: 'assistant-stream',
-        }),
-      ).toMatchObject({
-        inputBatches: 4_001,
-        deliveredBatches: timelineMessages.length,
-        failedDeliveries: 0,
-      });
-    });
-
-    it('releases Timeline channels on conversation clear and Extension disposal', async () => {
-      processor = createAgentStreamProcessor({
-        createTimelineConnectionEpoch: () => 'epoch-lifecycle',
-      });
-      await processor.processStream(
-        webview as any,
-        'conv-1',
-        toAsyncIterable([{ type: 'text_delta', content: 'retained' }, { type: 'done' }]),
-        callbacks,
-      );
-      const request = {
-        type: 'requestAgentTurnTimelineSnapshot',
-        schemaVersion: 2,
-        connectionEpoch: 'epoch-lifecycle',
-        conversationId: 'conv-1',
-        turnId: 'turn-assistant-stream',
-        messageId: 'assistant-stream',
-        reason: 'webview-reload',
-        lastAppliedDeliveryRevision: 0,
-      } as const;
-
-      processor.clearConversation('conv-1');
-
-      expect(
-        processor.getTimelineDeliveryMetrics({
-          conversationId: 'conv-1',
-          turnId: 'turn-assistant-stream',
-          messageId: 'assistant-stream',
-        }),
-      ).toBeUndefined();
-      await expect(
-        processor.requestTimelineSnapshot(webview as any, request),
-      ).resolves.toMatchObject({
-        type: 'agentTurnTimelineDiagnostic',
-        code: 'turn-snapshot-unavailable',
-      });
-
-      await processor.processStream(
-        webview as any,
-        'conv-2',
-        toAsyncIterable([{ type: 'text_delta', content: 'second' }, { type: 'done' }]),
-        { ...callbacks, messageId: 'assistant-second' },
-      );
-      processor.dispose();
-
-      expect(
-        processor.getTimelineDeliveryMetrics({
-          conversationId: 'conv-2',
-          turnId: 'turn-assistant-second',
-          messageId: 'assistant-second',
-        }),
-      ).toBeUndefined();
-    });
-
-    it('retains only the latest turn channel for one conversation', async () => {
-      let epoch = 0;
-      processor = createAgentStreamProcessor({
-        createTimelineConnectionEpoch: () => `epoch-${++epoch}`,
-      });
-      await processor.processStream(
-        webview as any,
-        'conv-1',
-        toAsyncIterable([{ type: 'text_delta', content: 'first' }, { type: 'done' }]),
-        callbacks,
-      );
-      await processor.processStream(
-        webview as any,
-        'conv-1',
-        toAsyncIterable([{ type: 'text_delta', content: 'second' }, { type: 'done' }]),
-        { ...callbacks, messageId: 'assistant-second' },
-      );
-
-      expect(
-        processor.getTimelineDeliveryMetrics({
-          conversationId: 'conv-1',
-          turnId: 'turn-assistant-stream',
-          messageId: 'assistant-stream',
-        }),
-      ).toBeUndefined();
-      expect(
-        processor.getTimelineDeliveryMetrics({
-          conversationId: 'conv-1',
-          turnId: 'turn-assistant-second',
-          messageId: 'assistant-second',
-        }),
-      ).toBeDefined();
-      await expect(
-        processor.requestTimelineSnapshot(webview as any, {
-          type: 'requestAgentTurnTimelineSnapshot',
-          schemaVersion: 2,
-          connectionEpoch: 'epoch-1',
-          conversationId: 'conv-1',
-          turnId: 'turn-assistant-stream',
-          messageId: 'assistant-stream',
-          reason: 'webview-reload',
-          lastAppliedDeliveryRevision: 0,
-        }),
-      ).resolves.toMatchObject({
-        type: 'agentTurnTimelineDiagnostic',
-        code: 'turn-snapshot-unavailable',
-      });
-    });
-
-    it('rebinds a recreated Webview with the retained epoch and rejects epoch mismatch', async () => {
-      processor = createAgentStreamProcessor({
-        createTimelineConnectionEpoch: () => 'epoch-snapshot',
-      });
-      await processor.processStream(
-        webview as any,
-        'conv-1',
-        toAsyncIterable([
-          { type: 'text_delta', content: 'table ' },
-          { type: 'text_delta', content: '| A | B |' },
-          { type: 'done' },
-        ]),
-        callbacks,
-      );
-      const request = {
-        type: 'requestAgentTurnTimelineSnapshot',
-        schemaVersion: 2,
-        connectionEpoch: 'epoch-snapshot',
-        conversationId: 'conv-1',
-        turnId: 'turn-assistant-stream',
-        messageId: 'assistant-stream',
-        reason: 'revision-gap',
-        lastAppliedDeliveryRevision: 1,
-      } as const;
-
-      const recreatedWebview = createMockWebview();
-      const snapshot = await processor.requestTimelineSnapshot(recreatedWebview as any, request);
-      const mismatch = await processor.requestTimelineSnapshot(recreatedWebview as any, {
-        ...request,
-        connectionEpoch: 'epoch-stale',
-      });
-
-      expect(snapshot.type).toBe('agentTurnTimeline');
-      if (snapshot.type !== 'agentTurnTimeline') throw new Error('Expected Timeline snapshot.');
-      expect(snapshot.batchKind).toBe('snapshot');
-      expect(deliveredTextFromTimeline([snapshot])).toBe('table | A | B |');
-      expect(mismatch).toMatchObject({
-        type: 'agentTurnTimelineDiagnostic',
-        code: 'identity-mismatch',
-      });
     });
   });
 

@@ -7,7 +7,7 @@ import {
   readDocumentArchiveResourceProjection,
 } from '@neko/content/document';
 import type { DocumentArchiveResourceRef, ResourceRef, ResourceVariantRequest } from '@neko/shared';
-import type { Message } from '@neko-agent/types';
+import type { ConversationProjectionAttachmentHostFrame, Message } from '@neko-agent/types';
 import type { AgentLocalResourceAccess } from '../../services/localResourceAccess';
 import { getLogger } from '../../base';
 
@@ -44,6 +44,29 @@ export async function projectMessagesForWebviewResourceDisplay(
     onMissingProjection: appendResourceProjectionDiagnostic,
   });
   return Array.isArray(withDocumentResources) ? (withDocumentResources as Message[]) : projected;
+}
+
+/**
+ * Projects only render payloads at the Webview attachment boundary. Attachment
+ * identity, ordering, diagnostics, and detach frames remain host authoritative.
+ */
+export async function projectConversationProjectionAttachmentFrameForWebview(
+  frame: ConversationProjectionAttachmentHostFrame,
+  options: WebviewResourceProjectionOptions,
+): Promise<unknown> {
+  if (frame.type === 'projectionSnapshot') {
+    return {
+      ...frame,
+      projection: await projectValueForWebviewResourceDisplay(frame.projection, options),
+    };
+  }
+  if (frame.type === 'projectionPatch') {
+    return {
+      ...frame,
+      patch: await projectValueForWebviewResourceDisplay(frame.patch, options),
+    };
+  }
+  return frame;
 }
 
 export async function projectValueForWebviewResourceDisplay(

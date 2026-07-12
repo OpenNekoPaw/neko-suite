@@ -33,7 +33,6 @@ describe('AgentStreamProcessor conversation projection ownership', () => {
 
   it('commits stream updates to the conversation store even when transport is unavailable', async () => {
     const projection = createConversationProjectionStore('conversation-a');
-    const snapshot = vi.spyOn(projection, 'snapshot');
     const webview = {
       postMessage: vi.fn().mockResolvedValue(false),
       asWebviewUri: vi.fn((uri: { readonly fsPath: string }) => ({
@@ -52,12 +51,10 @@ describe('AgentStreamProcessor conversation projection ownership', () => {
       onPhaseChange: vi.fn(),
     });
 
-    expect(result.lifecycle.terminalDelivery).toMatchObject({
-      status: 'unavailable',
-      diagnostic: 'endpoint-unavailable',
-    });
+    expect(webview.postMessage).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'agentTurnTimeline' }),
+    );
     expect(projection.projectionVersion).toBeGreaterThan(0);
-    expect(snapshot).toHaveBeenCalled();
     expect(projection.snapshot()).toMatchObject({
       conversationId: 'conversation-a',
       turns: [

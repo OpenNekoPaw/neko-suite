@@ -46,11 +46,7 @@ import type {
   ConversationTerminalPersistenceResult,
 } from '../conversationBridge';
 import type { ProviderManager } from '../providerManager';
-import type {
-  AgentStreamLifecycleResult,
-  AgentStreamProcessor,
-  StreamProcessingResult,
-} from './agentStreamProcessor';
+import type { AgentStreamProcessor, StreamProcessingResult } from './agentStreamProcessor';
 import type { AccountAiCatalogCache } from '../../services/accountAiCatalogCache';
 import { loadWorkspaceFileIgnoreRules } from '../../services/workspaceIgnoreFilter';
 
@@ -81,24 +77,6 @@ export interface AgentTurnBridgeDeps {
   generateMessageId: () => string;
 }
 
-export type AgentTurnTerminalDeliveryOutcome =
-  | { readonly status: 'delivered'; readonly streamCount: number }
-  | {
-      readonly status: 'unavailable';
-      readonly streamCount: number;
-      readonly diagnostics: readonly ('endpoint-unavailable' | 'disposed')[];
-    }
-  | { readonly status: 'not-applicable'; readonly streamCount: 0 };
-
-export type AgentTurnResynchronizationOutcome =
-  | { readonly status: 'available'; readonly streamCount: number }
-  | {
-      readonly status: 'unavailable';
-      readonly streamCount: number;
-      readonly diagnostics: readonly ('turn-snapshot-unavailable' | 'disposed')[];
-    }
-  | { readonly status: 'not-applicable'; readonly streamCount: 0 };
-
 export type AgentTurnDurabilityOutcome =
   | { readonly status: 'durable'; readonly result: ConversationTerminalPersistenceResult }
   | { readonly status: 'failed'; readonly result: ConversationTerminalPersistenceResult }
@@ -112,8 +90,6 @@ export type AgentTurnModelOutcome =
 
 export interface AgentTurnLifecycleResult {
   readonly model: AgentTurnModelOutcome;
-  readonly terminalWebviewDelivery: AgentTurnTerminalDeliveryOutcome;
-  readonly activeTurnResynchronization: AgentTurnResynchronizationOutcome;
   readonly terminalConversationDurability: AgentTurnDurabilityOutcome;
 }
 
@@ -255,15 +231,11 @@ export class AgentTurnBridge {
       }),
     );
     const model = summarizeModelOutcome(result, streamResults);
-    const terminalWebviewDelivery = summarizeTerminalDelivery(streamResults);
-    const activeTurnResynchronization = summarizeResynchronization(streamResults);
     if (result.status !== 'completed') {
       return {
         ...result,
         lifecycle: {
           model,
-          terminalWebviewDelivery,
-          activeTurnResynchronization,
           terminalConversationDurability: { status: 'skipped', reason: 'model-not-completed' },
         },
       };
@@ -274,24 +246,10 @@ export class AgentTurnBridge {
     );
     const lifecycle: AgentTurnLifecycleResult = {
       model,
-      terminalWebviewDelivery,
-      activeTurnResynchronization,
       terminalConversationDurability: isDurableConversationResult(conversationDurability)
         ? { status: 'durable', result: conversationDurability }
         : { status: 'failed', result: conversationDurability },
     };
-    if (terminalWebviewDelivery.status === 'unavailable') {
-      await postLifecycleDiagnostic(
-        input.webview,
-        buildAgentSessionDiagnosticMessage({
-          code: 'terminal-webview-delivery-unavailable',
-          severity: 'warning',
-          action: 'deliverTerminalAgentTurn',
-          conversationId: input.conversationId,
-          message: `The model run completed, but terminal Webview delivery was unavailable (${terminalWebviewDelivery.diagnostics.join(', ')}).`,
-        }),
-      );
-    }
     if (!isDurableConversationResult(conversationDurability)) {
       await postLifecycleDiagnostic(
         input.webview,
@@ -339,38 +297,6 @@ function summarizeModelOutcome(
     return { status: 'cancelled', streamCount: streams.length };
   }
   return { status: 'completed', streamCount: streams.length };
-}
-
-function summarizeTerminalDelivery(
-  streams: readonly StreamProcessingResult[],
-): AgentTurnTerminalDeliveryOutcome {
-  if (streams.length === 0) return { status: 'not-applicable', streamCount: 0 };
-  const unavailable = streams
-    .map((stream) => stream.lifecycle.terminalDelivery)
-    .filter((delivery) => delivery.status === 'unavailable');
-  return unavailable.length === 0
-    ? { status: 'delivered', streamCount: streams.length }
-    : {
-        status: 'unavailable',
-        streamCount: streams.length,
-        diagnostics: unavailable.map((delivery) => delivery.diagnostic),
-      };
-}
-
-function summarizeResynchronization(
-  streams: readonly StreamProcessingResult[],
-): AgentTurnResynchronizationOutcome {
-  if (streams.length === 0) return { status: 'not-applicable', streamCount: 0 };
-  const unavailable = streams
-    .map((stream) => stream.lifecycle.activeTurnResynchronization)
-    .filter((resynchronization) => resynchronization.status === 'unavailable');
-  return unavailable.length === 0
-    ? { status: 'available', streamCount: streams.length }
-    : {
-        status: 'unavailable',
-        streamCount: streams.length,
-        diagnostics: unavailable.map((resynchronization) => resynchronization.diagnostic),
-      };
 }
 
 async function postLifecycleDiagnostic(

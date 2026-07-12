@@ -148,14 +148,6 @@ vi.mock('../message/agentStreamProcessor', () => {
         contentBlocks: [],
         hasError: false,
         terminalStatus: 'completed',
-        lifecycle: {
-          terminalDelivery: {
-            status: 'delivered',
-            deliveryRevision: 1,
-            finalBlocksDelivered: true,
-          },
-          activeTurnResynchronization: { status: 'available', deliveryRevision: 1 },
-        },
       });
       clearConversation = vi.fn();
       dispose = vi.fn();
@@ -497,7 +489,7 @@ function buildHandler(
       toWebviewAsset?: ReturnType<typeof vi.fn>;
     };
     taskResultObservationCoordinator?: {
-      handleTerminalTask: ReturnType<typeof vi.fn>;
+      handleTerminalChildRun: ReturnType<typeof vi.fn>;
     };
   } = {},
 ) {
@@ -1267,37 +1259,16 @@ describe('AgentMessageTurnHandler', () => {
       expect(conversations.persistConversationTerminal).toHaveBeenCalledWith('conv-1');
     });
 
-    it('reports terminal Webview delivery failure without changing model completion into an error result', async () => {
+    it('persists model completion independently from the Webview projection endpoint', async () => {
       const webview = createMockWebview();
+      webview.postMessage.mockResolvedValue(false);
       const conversations = createMockConversations();
       const handler = buildHandler({ conversations });
-      agentStreamProcessorInstances[0]!.processStream.mockResolvedValue({
-        accumulatedResponse: 'mock response',
-        accumulatedThinking: '',
-        collectedToolCalls: [],
-        contentBlocks: [],
-        hasError: false,
-        terminalStatus: 'completed',
-        lifecycle: {
-          terminalDelivery: {
-            status: 'unavailable',
-            deliveryRevision: 2,
-            finalBlocksDelivered: false,
-            diagnostic: 'endpoint-unavailable',
-          },
-          activeTurnResynchronization: { status: 'available', deliveryRevision: 2 },
-        },
-      });
 
       await handler.handleUserMessage(webview as any, createChatModelRequest('test message'));
 
-      expect(webview.postMessage).toHaveBeenCalledWith(
-        expect.objectContaining({
-          type: 'sessionDiagnostic',
-          code: 'terminal-webview-delivery-unavailable',
-          severity: 'warning',
-          message: expect.stringContaining('model run completed'),
-        }),
+      expect(webview.postMessage).not.toHaveBeenCalledWith(
+        expect.objectContaining({ code: 'terminal-webview-delivery-unavailable' }),
       );
       expect(conversations.persistConversationTerminal).toHaveBeenCalledWith('conv-1');
       expect(conversations.getMessages()).toEqual(
@@ -1430,6 +1401,13 @@ describe('AgentMessageTurnHandler', () => {
 
       agentRunner.emitSubAgentEvent({
         type: 'progress',
+        scope: {
+          conversationId: 'conv-1',
+          runId: 'run-subagent',
+          parentRunId: 'agent-1',
+          childRunId: 'sub-1',
+          childKind: 'subagent',
+        },
         subAgentId: 'sub-1',
         parentAgentId: 'agent-1',
         conversationId: 'conv-1',
@@ -1460,7 +1438,7 @@ describe('AgentMessageTurnHandler', () => {
       const webview = createMockWebview();
       const agentRunner = createMockAgentRunner();
       const taskResultObservationCoordinator = {
-        handleTerminalTask: vi.fn(async () => undefined),
+        handleTerminalChildRun: vi.fn(async () => undefined),
       };
       const handler = buildHandler({
         agentManager: createMockAgentManager(agentRunner),
@@ -1475,6 +1453,13 @@ describe('AgentMessageTurnHandler', () => {
 
       agentRunner.emitSubAgentEvent({
         type: 'completed',
+        scope: {
+          conversationId: 'conv-1',
+          runId: 'run-subagent',
+          parentRunId: 'agent-1',
+          childRunId: 'sub-1',
+          childKind: 'subagent',
+        },
         subAgentId: 'sub-1',
         parentAgentId: 'agent-1',
         conversationId: 'conv-1',
@@ -1488,21 +1473,22 @@ describe('AgentMessageTurnHandler', () => {
         timestamp: 100,
       });
 
-      expect(taskResultObservationCoordinator.handleTerminalTask).toHaveBeenCalledWith(
+      expect(taskResultObservationCoordinator.handleTerminalChildRun).toHaveBeenCalledWith(
         expect.objectContaining({
-          id: 'sub-1',
+          scope: {
+            conversationId: 'conv-1',
+            runId: 'run-subagent',
+            parentRunId: 'agent-1',
+            childRunId: 'sub-1',
+            childKind: 'subagent',
+          },
+          childId: 'sub-1',
           status: 'completed',
-          lifecycle: expect.objectContaining({
-            ownerConversationId: 'conv-1',
-            ownerRunId: 'run-subagent',
-            ownerRunStartedAt: 101,
-          }),
-        }),
-        {
           source: 'subagent',
           parentMessageId: 'msg-1',
           parentToolCallId: 'tool-1',
-        },
+          runStartedAt: 101,
+        }),
       );
     });
 
@@ -1521,6 +1507,13 @@ describe('AgentMessageTurnHandler', () => {
 
       agentRunner.emitSubAgentEvent({
         type: 'started',
+        scope: {
+          conversationId: 'conv-2',
+          runId: 'run-subagent-2',
+          parentRunId: 'agent-2',
+          childRunId: 'sub-2',
+          childKind: 'subagent',
+        },
         subAgentId: 'sub-2',
         parentAgentId: 'agent-2',
         conversationId: 'conv-2',
@@ -1544,7 +1537,7 @@ describe('AgentMessageTurnHandler', () => {
       const webview = createMockWebview();
       const agentRunner = createMockAgentRunner();
       const taskResultObservationCoordinator = {
-        handleTerminalTask: vi.fn(async () => undefined),
+        handleTerminalChildRun: vi.fn(async () => undefined),
       };
       const handler = buildHandler({
         agentManager: createMockAgentManager(agentRunner),
@@ -1559,6 +1552,13 @@ describe('AgentMessageTurnHandler', () => {
 
       agentRunner.emitSubAgentEvent({
         type: 'completed',
+        scope: {
+          conversationId: 'conv-2',
+          runId: 'run-subagent-2',
+          parentRunId: 'agent-2',
+          childRunId: 'sub-2',
+          childKind: 'subagent',
+        },
         subAgentId: 'sub-2',
         parentAgentId: 'agent-2',
         conversationId: 'conv-2',
@@ -1569,7 +1569,7 @@ describe('AgentMessageTurnHandler', () => {
         timestamp: 200,
       });
 
-      expect(taskResultObservationCoordinator.handleTerminalTask).not.toHaveBeenCalled();
+      expect(taskResultObservationCoordinator.handleTerminalChildRun).not.toHaveBeenCalled();
     });
 
     it('disposes the SubAgent event subscription when clearing agent state', async () => {
@@ -1590,6 +1590,13 @@ describe('AgentMessageTurnHandler', () => {
 
       agentRunner.emitSubAgentEvent({
         type: 'completed',
+        scope: {
+          conversationId: 'conv-1',
+          runId: 'run-subagent',
+          parentRunId: 'agent-1',
+          childRunId: 'sub-1',
+          childKind: 'subagent',
+        },
         subAgentId: 'sub-1',
         parentAgentId: 'agent-1',
         conversationId: 'conv-1',
