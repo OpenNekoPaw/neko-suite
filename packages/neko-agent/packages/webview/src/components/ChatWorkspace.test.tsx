@@ -780,6 +780,34 @@ describe('ChatWorkspace pending send', () => {
     expect(getByTestId('session-mode').textContent).toBe('image');
   });
 
+  it('keeps hidden Tab workspaces mounted but non-interactive', () => {
+    const handleMessage = vi.fn();
+    const { getByTestId } = render(
+      <ChatWorkspace
+        {...createProps({
+          isVisible: false,
+          handleMessage,
+        })}
+      />,
+    );
+
+    const keyboardOptions = keyboardMocks.useKeyboardShortcuts.mock.calls.at(-1)?.[0] as
+      { enabled?: boolean } | undefined;
+    expect(keyboardOptions?.enabled).toBe(false);
+
+    act(() => {
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          data: { type: 'injectContext', conversationId: 'conv-1' },
+        }),
+      );
+    });
+    fireEvent.click(getByTestId('send'));
+
+    expect(handleMessage).not.toHaveBeenCalled();
+    expect(vscodeMocks.sendMessage).not.toHaveBeenCalled();
+  });
+
   it('does not route visible tab mutations to the stale active conversation during a switch', () => {
     const clearMessages = vi.fn();
     const updateSettings = vi.fn();

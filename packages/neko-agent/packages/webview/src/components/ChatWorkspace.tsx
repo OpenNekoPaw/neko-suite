@@ -12,7 +12,14 @@
  * Extracted from the former 589-line AIAssistant component (ADR P0.1).
  */
 
-import { type MutableRefObject, useEffect, useCallback, useRef, useState } from 'react';
+import {
+  type MutableRefObject,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react';
 import type { AgentContextPayload, ChatModelOption } from '@neko/shared';
 import {
   ShellExecutionMode,
@@ -72,6 +79,7 @@ import { useTabRenderStore } from '@/render-runtime/useTabRenderStore';
 
 export interface ChatWorkspaceProps {
   tabRenderStore: TabRenderStore;
+  isVisible?: boolean;
   // Conversation state
   messages: Message[];
   setMessages: React.Dispatch<React.SetStateAction<Message[]>>;
@@ -143,6 +151,7 @@ export interface ChatWorkspaceProps {
 
 export function ChatWorkspace({
   tabRenderStore,
+  isVisible = true,
   messages,
   setMessages,
   isThinking,
@@ -370,18 +379,17 @@ export function ChatWorkspace({
   const visibleSessionConversationId = activeTabConversationId ?? activeConversationId;
   const isCharacterRoleSession = isCharacterRoleConversationKind(conversationKind);
   const hasActiveTabConversationMismatch = Boolean(
-    activeTabConversationId && activeTabConversationId !== activeConversationId,
+    isVisible && activeTabConversationId && activeTabConversationId !== activeConversationId,
   );
   const isConversationSwitching = Boolean(
     hasActiveTabConversationMismatch ||
     (isForegroundConversationActivationPending && !activeTabConversationId),
   );
-  const sessionMutationConversationId = isConversationSwitching
-    ? null
-    : visibleSessionConversationId;
+  const sessionMutationConversationId =
+    !isVisible || isConversationSwitching ? null : visibleSessionConversationId;
   const sessionMutationConversationIdRef = useRef<string | null>(sessionMutationConversationId);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     sessionMutationConversationIdRef.current = sessionMutationConversationId;
   }, [sessionMutationConversationId]);
 
@@ -648,11 +656,22 @@ export function ChatWorkspace({
     ],
   );
 
-  // Listen for messages from extension
+  const visibleMessageHandlerRef = useRef(handleMessageWithExtras);
+  const isVisibleRef = useRef(isVisible);
+  useLayoutEffect(() => {
+    visibleMessageHandlerRef.current = handleMessageWithExtras;
+    isVisibleRef.current = isVisible;
+  }, [handleMessageWithExtras, isVisible]);
+
+  // Every retained workspace keeps one stable listener. Only the visible Tab may
+  // consume host UI events, so switching cannot create a detach/attach gap.
   useEffect(() => {
-    window.addEventListener('message', handleMessageWithExtras);
-    return () => window.removeEventListener('message', handleMessageWithExtras);
-  }, [handleMessageWithExtras]);
+    const listener = (event: MessageEvent) => {
+      if (isVisibleRef.current) visibleMessageHandlerRef.current(event);
+    };
+    window.addEventListener('message', listener);
+    return () => window.removeEventListener('message', listener);
+  }, []);
 
   const planActions = usePlanActions({ activeConversationId: sessionMutationConversationId });
 
@@ -683,7 +702,7 @@ export function ChatWorkspace({
       COMMON_SHORTCUTS.copyLastResponse(copyLastResponse),
       COMMON_SHORTCUTS.cancel(handleCancelMessage),
     ],
-    enabled: true,
+    enabled: isVisible,
   });
 
   // Slash command routing

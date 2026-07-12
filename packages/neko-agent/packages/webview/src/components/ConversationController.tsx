@@ -61,7 +61,7 @@ import {
 } from '@/handlers';
 import type { ActivationProgressTimeline } from '@/presenters/activation-progress-presenter';
 import { shouldActivateForegroundConversation } from '@/handlers/foreground-activation';
-import { ChatWorkspace } from './ChatWorkspace';
+import { ConversationTabRuntimeView } from './ConversationTabRuntimeView';
 import { isCharacterRoleConversationKind } from '@/presenters/character-role-session-presenter';
 import {
   commitConversationRenderActivation,
@@ -94,6 +94,7 @@ import {
 } from '@/presenters/config-message-presenter';
 import {
   type ConversationAmbientNode,
+  type ConversationSessionState,
   projectConversationSessionActiveSkillMap,
   projectConversationSessionState,
 } from '@/presenters/conversation-session-state-presenter';
@@ -196,12 +197,8 @@ export function ConversationController({
     setOpenTabs,
     activeTabId,
     setActiveTabId,
-    clearMessages,
   } = conversation;
   const tabRenderRuntimeRegistry = useTabRenderRuntimeRegistry(openTabs, activeTabId);
-  const activeTabRenderStore = activeTabId
-    ? (tabRenderRuntimeRegistry.get(activeTabId)?.store ?? null)
-    : null;
 
   // ---- UI state for active tab ----
   const [activeTab, setActiveTab] = useState<TabType>('chat');
@@ -273,19 +270,26 @@ export function ConversationController({
   const [activationProgressByConversation, setActivationProgressByConversation] = useState<
     Map<string, readonly ActivationProgressTimeline[]>
   >(() => new Map());
+  const setActiveSkillForConversation = useCallback(
+    (conversationId: string, value: React.SetStateAction<BoundActiveSkillIndicator | null>) => {
+      setActiveSkillByConversation((prev) =>
+        projectConversationSessionActiveSkillMap({
+          activeSkillByConversation: prev,
+          visibleConversationId: conversationId,
+          value,
+        }),
+      );
+    },
+    [],
+  );
   const setActiveSkill = useCallback<
     React.Dispatch<React.SetStateAction<BoundActiveSkillIndicator | null>>
   >(
     (value) => {
-      setActiveSkillByConversation((prev) => {
-        return projectConversationSessionActiveSkillMap({
-          activeSkillByConversation: prev,
-          visibleConversationId,
-          value,
-        });
-      });
+      if (!visibleConversationId) return;
+      setActiveSkillForConversation(visibleConversationId, value);
     },
-    [visibleConversationId],
+    [setActiveSkillForConversation, visibleConversationId],
   );
 
   // ---- Agent state ----
@@ -350,24 +354,21 @@ export function ConversationController({
   const [ambientNodesByConversation, setAmbientNodesByConversation] = useState<
     Map<string, ConversationAmbientNode[]>
   >(() => new Map());
-  const setAmbientNodesForVisibleConversation = useCallback<
-    React.Dispatch<React.SetStateAction<ConversationAmbientNode[]>>
-  >(
-    (value) => {
-      if (!visibleConversationId) return;
+  const setAmbientNodesForConversation = useCallback(
+    (conversationId: string, value: React.SetStateAction<ConversationAmbientNode[]>) => {
       setAmbientNodesByConversation((prev) => {
-        const current = prev.get(visibleConversationId) ?? [];
+        const current = prev.get(conversationId) ?? [];
         const nextValue = typeof value === 'function' ? value(current) : value;
         const next = new Map(prev);
         if (nextValue.length === 0) {
-          next.delete(visibleConversationId);
+          next.delete(conversationId);
         } else {
-          next.set(visibleConversationId, [...nextValue]);
+          next.set(conversationId, [...nextValue]);
         }
         return next;
       });
     },
-    [visibleConversationId],
+    [],
   );
 
   const cleanupConversation = useCallback(
@@ -398,12 +399,13 @@ export function ConversationController({
     [setWorkItemsByConversation],
   );
 
-  // ---- Derived state for visible conversation ----
-  const visibleSessionState = useMemo(() => {
-    const conversationId = visibleConversationId ?? '';
+  // ---- Derived state for retained Tab conversations ----
+  const sessionStateByConversation = useMemo(() => {
+    const conversationIds = new Set(openTabs.map((tab) => tab.conversationId));
+    if (visibleConversationId) conversationIds.add(visibleConversationId);
+
     const messagesByConversation = new Map(conversationMessagesRef.current);
     const streamingByConversation = new Map(conversationStreamingRef.current);
-
     if (activeConversationId) {
       messagesByConversation.set(activeConversationId, messages);
       streamingByConversation.set(activeConversationId, {
@@ -415,19 +417,26 @@ export function ConversationController({
       });
     }
 
-    return projectConversationSessionState({
-      conversationId,
-      messagesByConversation,
-      streamingByConversation,
-      activeSkillByConversation,
-      activationProgressByConversation,
-      ambientNodesByConversation,
-      tokenCountByConversation: conversationTokenCountRef.current,
-      compressingByConversation: conversationCompressingRef.current,
-      agentStateByConversation: conversationAgentStateRef.current,
-      workItemsByConversation,
-      defaultPromptMode: settings.promptMode,
-    });
+    const states = new Map<string, ConversationSessionState>();
+    for (const conversationId of conversationIds) {
+      states.set(
+        conversationId,
+        projectConversationSessionState({
+          conversationId,
+          messagesByConversation,
+          streamingByConversation,
+          activeSkillByConversation,
+          activationProgressByConversation,
+          ambientNodesByConversation,
+          tokenCountByConversation: conversationTokenCountRef.current,
+          compressingByConversation: conversationCompressingRef.current,
+          agentStateByConversation: conversationAgentStateRef.current,
+          workItemsByConversation,
+          defaultPromptMode: settings.promptMode,
+        }),
+      );
+    }
+    return states;
   }, [
     activeConversationId,
     activeSkillByConversation,
@@ -437,6 +446,7 @@ export function ConversationController({
     conversationStreamingRef,
     isThinking,
     messages,
+    openTabs,
     projectionVersion,
     queuedMessageCount,
     queuedMessages,
@@ -445,46 +455,47 @@ export function ConversationController({
     visibleConversationId,
     workItemsByConversation,
   ]);
-  const contextTokenCount = visibleSessionState.context.tokenCount;
-  const isCompressing = visibleSessionState.context.isCompressing;
-  const mediaModelCallCount = visibleConversationId
-    ? (conversationMediaCallCountRef.current.get(visibleConversationId) ?? 0)
-    : 0;
-  const workItems = [...visibleSessionState.workItems];
-  const activeSkill = visibleSessionState.skill.activeSkill;
-  const activationProgress = visibleSessionState.skill.activationProgress;
-  const ambientNodes = [...visibleSessionState.context.ambientNodes];
-  const visibleAgentState =
-    visibleSessionState.agentState ??
-    (visibleConversationId === activeConversationId ? agentState : null);
+  const visibleSessionState = useMemo(
+    () =>
+      sessionStateByConversation.get(visibleConversationId ?? '') ??
+      projectConversationSessionState({
+        conversationId: visibleConversationId ?? '',
+        messagesByConversation: new Map(),
+        streamingByConversation: new Map(),
+        defaultPromptMode: settings.promptMode,
+      }),
+    [sessionStateByConversation, settings.promptMode, visibleConversationId],
+  );
   const activeSettings = settings;
 
   useEffect(() => {
-    if (!activeTabRenderStore) return;
-    const state = activeTabRenderStore.getSnapshot().state;
-    const update: Partial<TabRenderState> = {};
-    if (activeSettings.chatModelOptions.length > 0 && !state.modelConfigurationInitialized) {
-      Object.assign(update, {
-        modelConfigurationInitialized: true,
-        selectedModel,
-        mediaModelSelection,
-      });
-    }
-    if (!state.promptModeInitialized) {
-      Object.assign(update, {
-        promptModeInitialized: true,
-        promptMode: activeSettings.promptMode,
-      });
-    }
-    if (Object.keys(update).length > 0) {
-      activeTabRenderStore.updateState(update);
+    for (const tab of openTabs) {
+      const store = tabRenderRuntimeRegistry.get(tab.id)?.store;
+      if (!store) continue;
+      const state = store.getSnapshot().state;
+      const update: Partial<TabRenderState> = {};
+      if (activeSettings.chatModelOptions.length > 0 && !state.modelConfigurationInitialized) {
+        Object.assign(update, {
+          modelConfigurationInitialized: true,
+          selectedModel,
+          mediaModelSelection,
+        });
+      }
+      if (!state.promptModeInitialized) {
+        Object.assign(update, {
+          promptModeInitialized: true,
+          promptMode: activeSettings.promptMode,
+        });
+      }
+      if (Object.keys(update).length > 0) store.updateState(update);
     }
   }, [
     activeSettings.chatModelOptions.length,
     activeSettings.promptMode,
-    activeTabRenderStore,
     mediaModelSelection,
+    openTabs,
     selectedModel,
+    tabRenderRuntimeRegistry,
   ]);
   const entryModelState = useMemo(
     () =>
@@ -503,20 +514,16 @@ export function ConversationController({
       selectedModel,
     ],
   );
-  const updateActiveSettings = useCallback(
-    (partial: Partial<SettingsState>) => {
+  const updateSettingsForConversation = useCallback(
+    (conversationId: string, partial: Partial<SettingsState>) => {
       const { promptMode, ...globalSettings } = partial;
-      if (promptMode && activeTabRenderStore) {
-        setPromptModeForConversation(activeTabRenderStore.getSnapshot().conversationId, promptMode);
-      }
-      if (Object.keys(globalSettings).length > 0) {
-        updateSettings(globalSettings);
-      }
+      if (promptMode) setPromptModeForConversation(conversationId, promptMode);
+      if (Object.keys(globalSettings).length > 0) updateSettings(globalSettings);
     },
-    [activeTabRenderStore, setPromptModeForConversation, updateSettings],
+    [setPromptModeForConversation, updateSettings],
   );
-  const handleModelSelect = useCallback(
-    (modelId: string) => {
+  const handleModelSelectForConversation = useCallback(
+    (conversationId: string, modelId: string) => {
       const selectedOption = activeSettings.chatModelOptions.find(
         (option) => option.id === modelId,
       );
@@ -529,21 +536,35 @@ export function ConversationController({
         selectedProviderId,
         selectedModelId,
       });
-      if (!visibleConversationId) {
-        throw new Error('Cannot update Agent model without a visible conversation runtime.');
-      }
       AgentHostMessages.updateSettings(
         {
           providerId: selectedProviderId,
           modelId: selectedModelId,
         },
-        visibleConversationId,
+        conversationId,
       );
     },
-    [activeSettings.chatModelOptions, updateSettings, visibleConversationId],
+    [activeSettings.chatModelOptions, updateSettings],
+  );
+  const handleEntryModelSelect = useCallback(
+    (modelId: string) => {
+      const selectedOption = activeSettings.chatModelOptions.find(
+        (option) => option.id === modelId,
+      );
+      if (!selectedOption?.providerId || !selectedOption.modelId) return;
+      setSelectedModel(modelId);
+      updateSettings({
+        selectedProviderId: selectedOption.providerId,
+        selectedModelId: selectedOption.modelId,
+      });
+    },
+    [activeSettings.chatModelOptions, updateSettings],
+  );
+  const updateEntrySettings = useCallback(
+    (partial: Partial<SettingsState>) => updateSettings(partial),
+    [updateSettings],
   );
   const conversationKind = activeOpenTab?.kind ?? 'chat';
-  const embodyCharacterSession = activeOpenTab?.embodyCharacterSession;
 
   const triggerForceUpdate = useCallback(() => forceUpdate((n) => n + 1), []);
   const requestConfigSnapshot = useCallback(() => {
@@ -668,52 +689,47 @@ export function ConversationController({
     visibleConversationId,
   ]);
 
-  const clearVisibleConversationMessages = useCallback(() => {
-    const conversationId = visibleConversationId;
-    if (!conversationId) {
-      clearMessages();
-      return;
-    }
-
-    const snapshot = ingestConversationRenderSnapshot({
-      coordinator: conversationRenderCoordinator,
-      conversationId,
-      messages: [],
-      streaming: {
-        streamingMessageId: null,
-        isThinking: false,
-        queuedMessageCount: 0,
-        queuedMessages: [],
-        activeTurnTimeline: null,
-      },
-    });
-    commitConversationSnapshotProjection({
-      snapshot,
+  const clearConversationMessages = useCallback(
+    (conversationId: string) => {
+      const snapshot = ingestConversationRenderSnapshot({
+        coordinator: conversationRenderCoordinator,
+        conversationId,
+        messages: [],
+        streaming: {
+          streamingMessageId: null,
+          isThinking: false,
+          queuedMessageCount: 0,
+          queuedMessages: [],
+          activeTurnTimeline: null,
+        },
+      });
+      commitConversationSnapshotProjection({
+        snapshot,
+        conversationMessagesRef,
+        conversationStreamingRef,
+      });
+      if (conversationId === activeConversationIdRef.current) {
+        setMessages([]);
+        setStreamingMessageId(null);
+        streamingMessageIdRef.current = null;
+        setIsThinking(false);
+        setQueuedMessageCount(0);
+        setQueuedMessages([]);
+      }
+    },
+    [
+      activeConversationIdRef,
       conversationMessagesRef,
+      conversationRenderCoordinator,
       conversationStreamingRef,
-    });
-    if (conversationId === activeConversationIdRef.current) {
-      setMessages([]);
-      setStreamingMessageId(null);
-      streamingMessageIdRef.current = null;
-      setIsThinking(false);
-      setQueuedMessageCount(0);
-      setQueuedMessages([]);
-    }
-  }, [
-    activeConversationIdRef,
-    clearMessages,
-    conversationMessagesRef,
-    conversationRenderCoordinator,
-    conversationStreamingRef,
-    setIsThinking,
-    setMessages,
-    setQueuedMessageCount,
-    setQueuedMessages,
-    setStreamingMessageId,
-    streamingMessageIdRef,
-    visibleConversationId,
-  ]);
+      setIsThinking,
+      setMessages,
+      setQueuedMessageCount,
+      setQueuedMessages,
+      setStreamingMessageId,
+      streamingMessageIdRef,
+    ],
+  );
 
   const beginForegroundConversationActivation = useCallback(() => {
     const previousConversationIds = new Set<string>();
@@ -1420,9 +1436,6 @@ export function ConversationController({
     [historyConversations],
   );
 
-  const foregroundConversationAvailability = visibleConversationId
-    ? (foregroundAvailabilityByConversation.get(visibleConversationId) ?? { kind: 'ready' })
-    : { kind: 'ready' as const };
   return (
     <>
       {renderHeader({
@@ -1456,7 +1469,7 @@ export function ConversationController({
               onSessionModeChange={handleEntrySessionModeChange}
               selectedModel={selectedModel}
               availableModels={entryModelState.availableModels}
-              onModelSelect={handleModelSelect}
+              onModelSelect={handleEntryModelSelect}
               mediaModelSelection={mediaModelSelection}
               availableMediaModels={entryModelState.availableMediaModels}
               mediaUnderstandingModels={activeSettings.mediaUnderstandingModels}
@@ -1464,9 +1477,9 @@ export function ConversationController({
               onMediaModelSelect={handleEntryMediaModelSelect}
               onMediaUnderstandingModelSelect={() => undefined}
               executionMode={activeSettings.executionMode}
-              onExecutionModeChange={(mode) => updateActiveSettings({ executionMode: mode })}
+              onExecutionModeChange={(mode) => updateEntrySettings({ executionMode: mode })}
               promptMode={activeSettings.promptMode}
-              onPromptModeChange={(mode) => updateActiveSettings({ promptMode: mode })}
+              onPromptModeChange={(mode) => updateEntrySettings({ promptMode: mode })}
               maxContextTokens={entryModelState.selectedEffectiveInputBudget}
               outputTokenCap={entryModelState.selectedOutputTokenCap}
               modelMaxOutputTokens={entryModelState.selectedMaxOutputTokens}
@@ -1500,72 +1513,86 @@ export function ConversationController({
               />
             </InputAreaProvider>
           </div>
-        ) : activeTabRenderStore ? (
-          <ChatWorkspace
-            tabRenderStore={activeTabRenderStore}
-            // Conversation state
-            messages={[...visibleSessionState.messages]}
+        ) : null
+      ) : null}
+
+      {openTabs.map((tab) => {
+        const runtime = tabRenderRuntimeRegistry.get(tab.id);
+        const sessionState = sessionStateByConversation.get(tab.conversationId);
+        if (!runtime || !sessionState) return null;
+
+        const visible = activeTab === 'chat' && tab.id === activeTabId;
+        const foregroundConversationAvailability = foregroundAvailabilityByConversation.get(
+          tab.conversationId,
+        ) ?? { kind: 'ready' as const };
+        const visibleAgentState =
+          sessionState.agentState ??
+          (tab.conversationId === activeConversationId ? agentState : null);
+
+        return (
+          <ConversationTabRuntimeView
+            key={tab.id}
+            tab={tab}
+            runtime={runtime}
+            visible={visible}
+            messages={[...sessionState.messages]}
             setMessages={setMessages}
-            isThinking={visibleSessionState.streaming.isThinking}
+            isThinking={sessionState.streaming.isThinking}
             setIsThinking={setIsThinking}
-            streamingMessageId={visibleSessionState.streaming.streamingMessageId}
-            queuedMessageCount={visibleSessionState.streaming.queuedMessageCount ?? 0}
-            queuedMessages={visibleSessionState.streaming.queuedMessages ?? []}
+            streamingMessageId={sessionState.streaming.streamingMessageId}
+            queuedMessageCount={sessionState.streaming.queuedMessageCount ?? 0}
+            queuedMessages={sessionState.streaming.queuedMessages ?? []}
             setStreamingMessageId={setStreamingMessageId}
             streamingMessageIdRef={streamingMessageIdRef}
             activeConversationId={activeConversationId}
             activeConversationIdRef={activeConversationIdRef}
-            activeTabConversationId={activeTabConversationId}
-            isForegroundConversationActivationPending={isForegroundConversationActivationPending}
+            activeTabConversationId={tab.conversationId}
+            isForegroundConversationActivationPending={
+              visible && isForegroundConversationActivationPending
+            }
             foregroundConversationAvailability={foregroundConversationAvailability}
-            conversationKind={conversationKind}
-            characterDialogueSession={activeOpenTab?.characterDialogueSession}
-            embodyCharacterSession={embodyCharacterSession}
-            clearMessages={clearVisibleConversationMessages}
-            // Config
+            conversationKind={tab.kind ?? 'chat'}
+            characterDialogueSession={tab.characterDialogueSession}
+            embodyCharacterSession={tab.embodyCharacterSession}
+            clearMessages={() => clearConversationMessages(tab.conversationId)}
             settings={activeSettings}
-            updateSettings={updateActiveSettings}
-            onModelSelect={handleModelSelect}
+            updateSettings={(partial) => updateSettingsForConversation(tab.conversationId, partial)}
+            onModelSelect={(modelId) =>
+              handleModelSelectForConversation(tab.conversationId, modelId)
+            }
             mediaUnderstandingModels={activeSettings.mediaUnderstandingModels}
             mentionItems={mentionItems}
             onMentionSearchFilterChange={updateMentionSearchFilter}
             pluginCommands={pluginCommands}
-            // Resources
-            workItems={workItems}
+            workItems={[...sessionState.workItems]}
             pluginsAvailable={pluginsAvailable}
-            // Session
             setActiveTab={setActiveTab}
             conversationCompressingRef={conversationCompressingRef}
-            // Context management
-            contextTokenCount={contextTokenCount}
-            isCompressing={isCompressing}
-            mediaModelCallCount={mediaModelCallCount}
-            // Skills
+            contextTokenCount={sessionState.context.tokenCount}
+            isCompressing={sessionState.context.isCompressing}
+            mediaModelCallCount={conversationMediaCallCountRef.current.get(tab.conversationId) ?? 0}
             skills={skills}
-            activeSkill={activeSkill}
-            setActiveSkill={setActiveSkill}
-            activationProgress={activationProgress}
-            // Context chips
-            ambientNodes={ambientNodes}
-            // Agent state
+            activeSkill={sessionState.skill.activeSkill}
+            setActiveSkill={(value) => setActiveSkillForConversation(tab.conversationId, value)}
+            activationProgress={sessionState.skill.activationProgress}
+            ambientNodes={[...sessionState.context.ambientNodes]}
             agentState={visibleAgentState}
-            // Message handler (for pre-intercept)
             handleMessage={handleMessage}
-            setAmbientNodes={setAmbientNodesForVisibleConversation}
+            setAmbientNodes={(value) => setAmbientNodesForConversation(tab.conversationId, value)}
             onNewChat={handleNewChat}
             onUserMessageSent={handleUserMessageSent}
-            onSendWithoutConversation={handleSendWithoutConversation}
-            pendingSendRequest={pendingSendRequest}
+            onSendWithoutConversation={visible ? handleSendWithoutConversation : undefined}
+            pendingSendRequest={visible ? pendingSendRequest : null}
             onPendingSendRequestConsumed={handlePendingSendRequestConsumed}
-            initialInputRequest={initialInputRequest}
+            initialInputRequest={visible ? initialInputRequest : null}
             onInitialInputRequestConsumed={handleInitialInputRequestConsumed}
-            initialEntryPromptMenuRequest={initialEntryPromptMenuRequest}
+            initialEntryPromptMenuRequest={visible ? initialEntryPromptMenuRequest : null}
             onInitialEntryPromptMenuRequestConsumed={handleInitialEntryPromptMenuRequestConsumed}
             queuedEditDraftConflictMessage={t('chat.input.queueEditDraftConflict')}
             onSessionDiagnostic={reportConversationDiagnostic}
           />
-        ) : null
-      ) : null}
+        );
+      })}
 
       {globalError ? (
         <div className="fixed right-4 top-12 z-50 max-w-[360px] rounded-lg border border-[var(--vscode-inputValidation-errorBorder,var(--agent-border))] bg-[var(--vscode-inputValidation-errorBackground,var(--agent-elevated))] px-3 py-2 text-sm text-[var(--vscode-inputValidation-errorForeground,var(--agent-fg))] shadow-lg animate-slide-in">

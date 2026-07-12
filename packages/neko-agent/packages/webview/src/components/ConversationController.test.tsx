@@ -1,5 +1,5 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
-import { StrictMode, useEffect } from 'react';
+import { StrictMode, useEffect, useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import type { AgentContextPayload } from '@neko/shared';
 import type {
@@ -134,42 +134,62 @@ vi.mock('@/components/ChatWorkspace', () => ({
     initialInputRequest?: { id: number; messageText: string } | null;
     initialEntryPromptMenuRequest?: { id: number; menu: 'generate-assets' | 'roleplay' } | null;
     onInitialEntryPromptMenuRequestConsumed?: (id: number) => void;
+    isVisible?: boolean;
   }) => {
     const tabRenderSnapshot = useTabRenderStore(props.tabRenderStore);
+    const [instanceId] = useState(() => crypto.randomUUID());
+    const [localRevision, setLocalRevision] = useState(0);
+    const isVisible = props.isVisible ?? true;
+    const testId = (name: string) =>
+      isVisible ? name : `${name}-${tabRenderSnapshot.snapshot.tabId}`;
     const isConversationSwitching = Boolean(
       props.isForegroundConversationActivationPending ||
       (props.activeTabConversationId &&
         props.activeTabConversationId !== props.activeConversationId),
     );
 
+    const handleMessage = props.handleMessage;
     useEffect(() => {
-      if (!props.handleMessage) return;
-      const listener = (event: MessageEvent) => props.handleMessage?.(event);
+      if (!handleMessage || !isVisible) return;
+      const listener = (event: MessageEvent) => handleMessage(event);
       window.addEventListener('message', listener);
       return () => window.removeEventListener('message', listener);
-    }, [props.handleMessage]);
+    }, [handleMessage, isVisible]);
 
     return (
-      <div data-testid="chat-workspace">
-        <span data-testid="workspace-conversation">{props.activeConversationId ?? 'none'}</span>
-        <span data-testid="workspace-prompt-mode">
+      <div
+        data-testid={`workspace-runtime-${tabRenderSnapshot.snapshot.tabId}`}
+        data-instance-id={instanceId}
+        data-visible={String(isVisible)}
+      >
+        {isVisible ? <span data-testid="chat-workspace" /> : null}
+        <span data-testid={testId('workspace-local-state')}>{localRevision}</span>
+        <button
+          type="button"
+          data-testid={testId('increment-workspace-local-state')}
+          onClick={() => setLocalRevision((current) => current + 1)}
+        />
+        <span data-testid={testId('workspace-conversation')}>
+          {props.activeConversationId ?? 'none'}
+        </span>
+        <span data-testid={testId('workspace-prompt-mode')}>
           {tabRenderSnapshot.snapshot.state.promptMode}
         </span>
-        <span data-testid="workspace-diagnostics">
+        <span data-testid={testId('workspace-diagnostics')}>
           {tabRenderSnapshot.snapshot.state.diagnostics
             .map((diagnostic) => diagnostic.message)
             .join('|')}
         </span>
-        <span data-testid="workspace-queued-edit">
+        <span data-testid={testId('workspace-queued-edit')}>
           {tabRenderSnapshot.snapshot.state.queuedEdit?.item.content ?? ''}
         </span>
-        <span data-testid="workspace-tab-conversation">
+        <span data-testid={testId('workspace-tab-conversation')}>
           {props.activeTabConversationId ?? 'none'}
         </span>
-        <span data-testid="workspace-messages">
+        <span data-testid={testId('workspace-messages')}>
           {props.messages?.map((message) => message.content).join('|') ?? ''}
         </span>
-        <span data-testid="workspace-streaming-flags">
+        <span data-testid={testId('workspace-streaming-flags')}>
           {props.messages
             ?.map((message) => {
               const textBlock = message.contentBlocks?.find((block) => block.type === 'text');
@@ -177,46 +197,50 @@ vi.mock('@/components/ChatWorkspace', () => ({
             })
             .join('|') ?? ''}
         </span>
-        <span data-testid="workspace-switching">
+        <span data-testid={testId('workspace-switching')}>
           {isConversationSwitching ? 'switching' : 'idle'}
         </span>
-        <span data-testid="workspace-availability">
+        <span data-testid={testId('workspace-availability')}>
           {props.foregroundConversationAvailability?.kind ?? 'ready'}
           {props.foregroundConversationAvailability?.diagnostic
             ? `:${props.foregroundConversationAvailability.diagnostic}`
             : ''}
         </span>
-        <span data-testid="workspace-composer-mode">
+        <span data-testid={testId('workspace-composer-mode')}>
           {props.isThinking || props.streamingMessageId ? 'queue-enabled' : 'send-enabled'}
         </span>
-        <span data-testid="workspace-agent-state">
+        <span data-testid={testId('workspace-agent-state')}>
           {props.agentState
             ? `${props.agentState.phase}:${props.agentState.startedAt}:${props.agentState.toolName ?? 'none'}`
             : 'none'}
         </span>
-        <span data-testid="workspace-activation-progress">
+        <span data-testid={testId('workspace-activation-progress')}>
           {props.activationProgress?.map((timeline) => timeline.name).join(',') ?? 'none'}
         </span>
-        <span data-testid="workspace-queued-messages">
+        <span data-testid={testId('workspace-queued-messages')}>
           {props.queuedMessages?.map((item) => item.content).join('|') ?? ''}
         </span>
-        <span data-testid="workspace-active-skill">{props.activeSkill?.skillName ?? 'none'}</span>
-        <span data-testid="workspace-context-chips">
+        <span data-testid={testId('workspace-active-skill')}>
+          {props.activeSkill?.skillName ?? 'none'}
+        </span>
+        <span data-testid={testId('workspace-context-chips')}>
           {tabRenderSnapshot.snapshot.state.contextReferences.map((chip) => chip.label).join('|')}
         </span>
-        <span data-testid="workspace-input">{tabRenderSnapshot.snapshot.state.inputValue}</span>
-        <span data-testid="workspace-token-count">{props.contextTokenCount ?? 0}</span>
-        <span data-testid="workspace-work-items">
+        <span data-testid={testId('workspace-input')}>
+          {tabRenderSnapshot.snapshot.state.inputValue}
+        </span>
+        <span data-testid={testId('workspace-token-count')}>{props.contextTokenCount ?? 0}</span>
+        <span data-testid={testId('workspace-work-items')}>
           {props.workItems?.map((item) => item.title).join('|') ?? ''}
         </span>
-        <span data-testid="workspace-viewport">
+        <span data-testid={testId('workspace-viewport')}>
           {tabRenderSnapshot.snapshot.state.viewport.followMode}:
           {tabRenderSnapshot.snapshot.state.viewport.anchorMessageId ?? 'none'}:
           {tabRenderSnapshot.snapshot.state.viewport.anchorOffset ?? 0}
         </span>
         <button
           type="button"
-          data-testid="detach-viewport"
+          data-testid={testId('detach-viewport')}
           onClick={() =>
             tabRenderSnapshot.updateState({
               viewport: {
@@ -229,18 +253,22 @@ vi.mock('@/components/ChatWorkspace', () => ({
         />
         <button
           type="button"
-          data-testid="add-context-chip"
+          data-testid={testId('add-context-chip')}
           onClick={() =>
             tabRenderSnapshot.updateState((state) => ({
               contextReferences: [...state.contextReferences, contextPayload('ctx-a', 'A context')],
             }))
           }
         />
-        <span data-testid="entry-menu">{props.initialEntryPromptMenuRequest?.menu ?? 'none'}</span>
-        <span data-testid="pending-send">
+        <span data-testid={testId('entry-menu')}>
+          {props.initialEntryPromptMenuRequest?.menu ?? 'none'}
+        </span>
+        <span data-testid={testId('pending-send')}>
           {props.pendingSendRequest?.input.messageText ?? 'none'}
         </span>
-        <span data-testid="initial-input">{props.initialInputRequest?.messageText ?? 'none'}</span>
+        <span data-testid={testId('initial-input')}>
+          {props.initialInputRequest?.messageText ?? 'none'}
+        </span>
       </div>
     );
   },
@@ -725,6 +753,118 @@ describe('ConversationController entry state', () => {
       ]),
     );
     prepareActivation.mockRestore();
+  });
+
+  it('retains independent keyed workspace instances for different conversations while switching visibility', () => {
+    vi.clearAllMocks();
+    render(<ConversationController {...createProps()} />);
+
+    act(() => {
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          data: {
+            type: 'tabState',
+            tabState: {
+              openTabs: [
+                { id: 'tab-a', title: 'Chat A', conversationId: 'conv-a' },
+                { id: 'tab-b', title: 'Chat B', conversationId: 'conv-b' },
+              ],
+              activeTabId: 'tab-a',
+            },
+          },
+        }),
+      );
+    });
+
+    const workspaceA = screen.getByTestId('workspace-runtime-tab-a');
+    const workspaceB = screen.getByTestId('workspace-runtime-tab-b');
+    const instanceA = workspaceA.getAttribute('data-instance-id');
+    const instanceB = workspaceB.getAttribute('data-instance-id');
+    expect(instanceA).not.toBe(instanceB);
+    expect(workspaceA.getAttribute('data-visible')).toBe('true');
+    expect(workspaceB.getAttribute('data-visible')).toBe('false');
+    fireEvent.click(screen.getByTestId('increment-workspace-local-state'));
+    expect(screen.getByTestId('workspace-local-state').textContent).toBe('1');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Switch Chat B' }));
+
+    expect(screen.getByTestId('workspace-local-state').textContent).toBe('0');
+    expect(screen.getByTestId('workspace-runtime-tab-a')).toBe(workspaceA);
+    expect(screen.getByTestId('workspace-runtime-tab-b')).toBe(workspaceB);
+    expect(workspaceA.getAttribute('data-instance-id')).toBe(instanceA);
+    expect(workspaceB.getAttribute('data-instance-id')).toBe(instanceB);
+    expect(workspaceA.getAttribute('data-visible')).toBe('false');
+    expect(workspaceB.getAttribute('data-visible')).toBe('true');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Switch Chat A' }));
+    expect(screen.getByTestId('workspace-local-state').textContent).toBe('1');
+  });
+
+  it('retains independent keyed workspace instances for two tabs bound to one conversation', () => {
+    vi.clearAllMocks();
+    render(<ConversationController {...createProps()} />);
+
+    act(() => {
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          data: {
+            type: 'tabState',
+            tabState: {
+              openTabs: [
+                { id: 'tab-a', title: 'Chat A1', conversationId: 'conv-a' },
+                { id: 'tab-b', title: 'Chat A2', conversationId: 'conv-a' },
+              ],
+              activeTabId: 'tab-a',
+            },
+          },
+        }),
+      );
+    });
+
+    const workspaceA = screen.getByTestId('workspace-runtime-tab-a');
+    const workspaceB = screen.getByTestId('workspace-runtime-tab-b');
+    const instanceA = workspaceA.getAttribute('data-instance-id');
+    const instanceB = workspaceB.getAttribute('data-instance-id');
+    expect(instanceA).not.toBe(instanceB);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Switch Chat A2' }));
+
+    expect(screen.getByTestId('workspace-runtime-tab-a')).toBe(workspaceA);
+    expect(screen.getByTestId('workspace-runtime-tab-b')).toBe(workspaceB);
+    expect(workspaceA.getAttribute('data-instance-id')).toBe(instanceA);
+    expect(workspaceB.getAttribute('data-instance-id')).toBe(instanceB);
+    expect(workspaceA.getAttribute('data-visible')).toBe('false');
+    expect(workspaceB.getAttribute('data-visible')).toBe('true');
+  });
+
+  it('unmounts only the closed Tab workspace and retains the remaining instance', () => {
+    vi.clearAllMocks();
+    render(<ConversationController {...createProps()} />);
+
+    act(() => {
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          data: {
+            type: 'tabState',
+            tabState: {
+              openTabs: [
+                { id: 'tab-a', title: 'Chat A', conversationId: 'conv-a' },
+                { id: 'tab-b', title: 'Chat B', conversationId: 'conv-b' },
+              ],
+              activeTabId: 'tab-a',
+            },
+          },
+        }),
+      );
+    });
+
+    const workspaceB = screen.getByTestId('workspace-runtime-tab-b');
+    const instanceB = workspaceB.getAttribute('data-instance-id');
+    fireEvent.click(screen.getByRole('button', { name: 'Close Chat A' }));
+
+    expect(screen.queryByTestId('workspace-runtime-tab-a')).toBeNull();
+    expect(screen.getByTestId('workspace-runtime-tab-b')).toBe(workspaceB);
+    expect(workspaceB.getAttribute('data-instance-id')).toBe(instanceB);
   });
 
   it('keeps viewport intent owned by its Tab across background revisions and tab switches', () => {
