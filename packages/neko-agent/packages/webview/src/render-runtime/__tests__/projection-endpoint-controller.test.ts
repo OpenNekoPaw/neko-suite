@@ -92,19 +92,20 @@ describe('ProjectionEndpointController', () => {
     const { host } = createHarness([]);
 
     expect(host.events.slice(0, 2)).toEqual(['subscribe', 'send:projectionEndpointDiscover']);
+    expect(host.sent[0]).toEqual({ type: 'projectionEndpointDiscover', protocolVersion: 1 });
   });
 
   it('attaches every retained Tab independently and ignores visibility-only switching', () => {
     const { host, registry, controller, bindings } = createHarness();
 
-    host.emit({ type: 'projectionEndpointReady', endpointEpoch: 'endpoint-1' });
+    host.emit({ type: 'projectionEndpointReady', protocolVersion: 1, endpointEpoch: 'endpoint-1' });
     const initialAttachments = attachMessages(host.sent);
     expect(initialAttachments).toHaveLength(2);
     expect(new Set(initialAttachments.map((message) => message.key.attachmentId)).size).toBe(2);
 
     registry.reconcile(bindings, 'tab-b');
     controller.reconcile(bindings);
-    host.emit({ type: 'projectionEndpointReady', endpointEpoch: 'endpoint-1' });
+    host.emit({ type: 'projectionEndpointReady', protocolVersion: 1, endpointEpoch: 'endpoint-1' });
 
     expect(attachMessages(host.sent)).toHaveLength(2);
     expect(host.sent.filter((message) => message.type === 'projectionDetach')).toHaveLength(0);
@@ -112,7 +113,7 @@ describe('ProjectionEndpointController', () => {
 
   it('routes authoritative frames to hidden Tab replicas', () => {
     const { host, registry } = createHarness();
-    host.emit({ type: 'projectionEndpointReady', endpointEpoch: 'endpoint-1' });
+    host.emit({ type: 'projectionEndpointReady', protocolVersion: 1, endpointEpoch: 'endpoint-1' });
     const hiddenKey = attachMessages(host.sent).find(
       (message) => message.key.tabId === 'tab-b',
     )?.key;
@@ -137,12 +138,12 @@ describe('ProjectionEndpointController', () => {
     const { host, registry, errors } = createHarness([
       { tabId: 'tab-a', conversationId: 'conv-a' },
     ]);
-    host.emit({ type: 'projectionEndpointReady', endpointEpoch: 'endpoint-1' });
+    host.emit({ type: 'projectionEndpointReady', protocolVersion: 1, endpointEpoch: 'endpoint-1' });
     const oldKey = attachMessages(host.sent)[0]?.key;
     if (!oldKey) throw new Error('Missing old attachment.');
     host.emit(snapshotFrame(oldKey, 2));
 
-    host.emit({ type: 'projectionEndpointReady', endpointEpoch: 'endpoint-2' });
+    host.emit({ type: 'projectionEndpointReady', protocolVersion: 1, endpointEpoch: 'endpoint-2' });
     const attachments = attachMessages(host.sent);
     const newKey = attachments[1]?.key;
     if (!newKey) throw new Error('Missing replacement attachment.');
@@ -175,7 +176,7 @@ describe('ProjectionEndpointController', () => {
     const { host, registry, errors } = createHarness([
       { tabId: 'tab-a', conversationId: 'conv-a' },
     ]);
-    host.emit({ type: 'projectionEndpointReady', endpointEpoch: 'endpoint-1' });
+    host.emit({ type: 'projectionEndpointReady', protocolVersion: 1, endpointEpoch: 'endpoint-1' });
     const oldKey = attachMessages(host.sent)[0]?.key;
     if (!oldKey) throw new Error('Missing initial attachment.');
     host.emit(snapshotFrame(oldKey));
@@ -221,7 +222,7 @@ describe('ProjectionEndpointController', () => {
 
   it('closing one Tab detaches only its attachment', () => {
     const { host, registry, controller } = createHarness();
-    host.emit({ type: 'projectionEndpointReady', endpointEpoch: 'endpoint-1' });
+    host.emit({ type: 'projectionEndpointReady', protocolVersion: 1, endpointEpoch: 'endpoint-1' });
     const closedKey = attachMessages(host.sent).find(
       (message) => message.key.tabId === 'tab-a',
     )?.key;

@@ -524,6 +524,7 @@ export type {
   PlanStepActionWebviewMessage,
   PlanStepStatusUpdateMessage,
   PrefillInputMessage,
+  ProjectionEndpointDiscoverRequest,
   ProjectionEndpointReadyMessage,
   PromptModeChangedMessage,
   ProviderMutationResultMessage,
@@ -615,6 +616,7 @@ export {
   isSessionMode,
   parseSendMessageWebviewMessage,
   parseWebviewToExtensionMessage,
+  AGENT_WEBVIEW_PROTOCOL_VERSION,
   NEKO_AGENT_HOST_MESSAGE_EVENT,
   WEBVIEW_TO_EXTENSION_MESSAGE_TYPES,
 } from './webview-protocol';

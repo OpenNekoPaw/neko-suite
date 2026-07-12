@@ -216,6 +216,8 @@ On Webview initialization:
 4. Webview ACKs and begins live frames.
 5. The active Tab is made visible only after its own runtime reaches a renderable state; background Tabs continue independently.
 
+Endpoint discovery includes an explicit Agent Webview protocol version. This distinguishes a retained stale Webview bundle after Extension Host restart from a malformed same-version message and produces a typed mismatch diagnostic before attachments start.
+
 On Extension restart, conversation/session persistence restores execution state where supported; Tab render caches are rebuilt. Old persisted `connectionEpoch`/delivery revision recovery descriptors are ignored and removed because they have no durable semantic value.
 
 ### 9. Fail-visible replaces compatibility fallback

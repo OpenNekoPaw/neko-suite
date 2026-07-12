@@ -330,9 +330,20 @@ describe('conversation-tab-runtime', () => {
       type: 'tabState',
       tabState: { openTabs: [tab], activeTabId: 'tab-1' },
     });
-    expect(buildInvalidWebviewPayloadMessage()).toEqual({
-      type: 'globalError',
-      message: 'Invalid webview message payload.',
+    expect(buildInvalidWebviewPayloadMessage({ type: 'removedMessage', value: 1 })).toEqual({
+      type: 'sessionDiagnostic',
+      code: 'invalid-webview-message',
+      severity: 'error',
+      action: 'removedMessage',
+      message: 'Invalid Agent Webview message "removedMessage"; payload keys: type, value.',
+    });
+    expect(buildInvalidWebviewPayloadMessage({ type: 'projectionEndpointDiscover' })).toEqual({
+      type: 'sessionDiagnostic',
+      code: 'webview-protocol-mismatch',
+      severity: 'error',
+      action: 'projectionEndpointDiscover',
+      message:
+        'Agent Webview protocol mismatch: Extension expects v1, Webview sent no version. Reload the Webview.',
     });
   });
 });

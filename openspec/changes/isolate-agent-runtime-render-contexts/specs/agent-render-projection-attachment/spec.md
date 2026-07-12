@@ -45,6 +45,14 @@ When the Webview endpoint epoch changes, all attachments from the old epoch MUST
 - **THEN** old attachment frames and persisted delivery revisions MUST NOT be replayed into the new endpoint
 - **AND** the new Tab runtime MUST attach from an authoritative conversation snapshot
 
+### Requirement: Endpoint discovery verifies the Webview protocol version
+The Webview and Extension SHALL exchange an explicit Agent Webview protocol version during endpoint discovery. A missing or mismatched version MUST fail with a typed protocol-mismatch diagnostic and MUST NOT expose the endpoint or start attachments.
+
+#### Scenario: Extension Host restarts while an older Webview bundle remains mounted
+- **WHEN** the retained Webview sends endpoint discovery without the current protocol version
+- **THEN** the Extension MUST reject discovery with a `webview-protocol-mismatch` diagnostic containing the expected and received versions
+- **AND** it MUST NOT report the request as a generic global error or attach any Tab runtime
+
 ### Requirement: Established live gaps fail visibly instead of entering fallback recovery
 After an attachment becomes live, frame sequence gaps, patch base-version mismatches, and identity mismatches SHALL close or suspend that attachment with a typed protocol diagnostic. The canonical path MUST NOT repeatedly request snapshots to make an internally generated gap appear successful.
 

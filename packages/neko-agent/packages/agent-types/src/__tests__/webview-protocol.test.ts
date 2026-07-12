@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createResourceFingerprint, createResourceRef, type TaskRunScope } from '@neko/shared';
 import {
+  AGENT_WEBVIEW_PROTOCOL_VERSION,
   buildAmbientCanvasUpdateMessage,
   buildAgentPhaseMessage,
   buildAgentCapabilityActivationProgressMessage,
@@ -52,9 +53,22 @@ const cacheResourceRef = createResourceRef({
 
 describe('webview protocol parser', () => {
   it('accepts explicit projection endpoint discovery', () => {
-    expect(parseWebviewToExtensionMessage({ type: 'projectionEndpointDiscover' })).toEqual({
+    expect(
+      parseWebviewToExtensionMessage({
+        type: 'projectionEndpointDiscover',
+        protocolVersion: AGENT_WEBVIEW_PROTOCOL_VERSION,
+      }),
+    ).toEqual({
       type: 'projectionEndpointDiscover',
+      protocolVersion: AGENT_WEBVIEW_PROTOCOL_VERSION,
     });
+    expect(parseWebviewToExtensionMessage({ type: 'projectionEndpointDiscover' })).toBeNull();
+    expect(
+      parseWebviewToExtensionMessage({
+        type: 'projectionEndpointDiscover',
+        protocolVersion: AGENT_WEBVIEW_PROTOCOL_VERSION + 1,
+      }),
+    ).toBeNull();
   });
 
   it('accepts projection attachment lifecycle messages with complete identity', () => {

@@ -260,7 +260,7 @@ describe('chatProvider', () => {
     const receiveSecondMessage = vi.mocked(secondWebview.onDidReceiveMessage).mock.calls[0]?.[0] as
       ((message: unknown) => void | Promise<void>) | undefined;
     await receiveSecondMessage?.({ type: 'getActiveConversation' });
-    await receiveSecondMessage?.({ type: 'projectionEndpointDiscover' });
+    await receiveSecondMessage?.({ type: 'projectionEndpointDiscover', protocolVersion: 1 });
     await receiveSecondMessage?.({ type: 'getTabState' });
     await flushWebviewAsyncWork();
 
@@ -1146,6 +1146,41 @@ describe('chatProvider', () => {
     provider.dispose();
   });
 
+  it('reports protocol mismatch for a stale endpoint discovery message', async () => {
+    const webview = vscode.createMockWebview();
+    const provider = new ChatViewProvider(vscode.Uri.file('/ext/neko-agent'), createMockContext(), {
+      localResourceAccess: createImmediateLocalResourceAccess(),
+    });
+
+    provider.resolveWebviewView(
+      {
+        webview,
+        visible: true,
+        onDidChangeVisibility: vi.fn(() => ({ dispose: vi.fn() })),
+      } as never,
+      {} as never,
+      {} as never,
+    );
+    await Promise.resolve();
+
+    const receiveMessage = vi.mocked(webview.onDidReceiveMessage).mock.calls[0]?.[0] as
+      ((message: unknown) => void | Promise<void>) | undefined;
+    vi.mocked(webview.postMessage).mockClear();
+
+    await receiveMessage?.({ type: 'projectionEndpointDiscover' });
+
+    expect(webview.postMessage).toHaveBeenCalledWith({
+      type: 'sessionDiagnostic',
+      code: 'webview-protocol-mismatch',
+      severity: 'error',
+      action: 'projectionEndpointDiscover',
+      message:
+        'Agent Webview protocol mismatch: Extension expects v1, Webview sent no version. Reload the Webview.',
+    });
+
+    provider.dispose();
+  });
+
   it('sets the agent editable keyboard context while the assistant input owns focus', async () => {
     const webview = vscode.createMockWebview();
     const view = {
@@ -1237,7 +1272,7 @@ describe('chatProvider', () => {
       expect.objectContaining({ type: 'prefillInput', message: 'queued message' }),
     );
 
-    await receiveMessage?.({ type: 'projectionEndpointDiscover' });
+    await receiveMessage?.({ type: 'projectionEndpointDiscover', protocolVersion: 1 });
     expect(webview.postMessage).toHaveBeenCalledWith(
       expect.objectContaining({ type: 'prefillInput', message: 'queued message' }),
     );
@@ -1264,12 +1299,18 @@ describe('chatProvider', () => {
     await Promise.resolve();
     const receiveFirstMessage = vi.mocked(firstWebview.onDidReceiveMessage).mock.calls[0]?.[0] as
       ((message: unknown) => void | Promise<void>) | undefined;
-    await receiveFirstMessage?.({ type: 'projectionEndpointDiscover' });
+    await receiveFirstMessage?.({ type: 'projectionEndpointDiscover', protocolVersion: 1 });
     const firstEndpointMessage = vi
       .mocked(firstWebview.postMessage)
       .mock.calls.map(([message]) => message)
       .find(
-        (message): message is { type: 'projectionEndpointReady'; endpointEpoch: string } =>
+        (
+          message,
+        ): message is {
+          type: 'projectionEndpointReady';
+          protocolVersion: 1;
+          endpointEpoch: string;
+        } =>
           typeof message === 'object' &&
           message !== null &&
           'type' in message &&
@@ -1288,12 +1329,18 @@ describe('chatProvider', () => {
     await Promise.resolve();
     const receiveSecondMessage = vi.mocked(secondWebview.onDidReceiveMessage).mock.calls[0]?.[0] as
       ((message: unknown) => void | Promise<void>) | undefined;
-    await receiveSecondMessage?.({ type: 'projectionEndpointDiscover' });
+    await receiveSecondMessage?.({ type: 'projectionEndpointDiscover', protocolVersion: 1 });
     const secondEndpointMessage = vi
       .mocked(secondWebview.postMessage)
       .mock.calls.map(([message]) => message)
       .find(
-        (message): message is { type: 'projectionEndpointReady'; endpointEpoch: string } =>
+        (
+          message,
+        ): message is {
+          type: 'projectionEndpointReady';
+          protocolVersion: 1;
+          endpointEpoch: string;
+        } =>
           typeof message === 'object' &&
           message !== null &&
           'type' in message &&

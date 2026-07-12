@@ -1,13 +1,14 @@
 import {
+  AGENT_WEBVIEW_PROTOCOL_VERSION,
+  buildAgentSessionDiagnosticMessage,
   buildAmbientCanvasUpdateMessage,
   buildExternalInputMessage,
-  buildGlobalErrorMessage,
   buildInjectContextMessage,
   buildPluginCommandsMessage,
   buildTabStateMessage,
   type AmbientCanvasUpdateMessage,
   type ExternalMessage,
-  type GlobalErrorMessage,
+  type AgentSessionDiagnosticMessage,
   type InjectContextMessage,
   projectTabStateUpdate,
   resolveActiveTabConversationId,
@@ -204,8 +205,38 @@ export function buildChatTabStateMessage(tabState: TabState, revision: number): 
   return buildTabStateMessage(tabState, revision);
 }
 
-export function buildInvalidWebviewPayloadMessage(): GlobalErrorMessage {
-  return buildGlobalErrorMessage('Invalid webview message payload.');
+export function buildInvalidWebviewPayloadMessage(raw: unknown): AgentSessionDiagnosticMessage {
+  const messageType = readMessageType(raw);
+  if (messageType === 'projectionEndpointDiscover') {
+    const receivedVersion = readProtocolVersion(raw);
+    return buildAgentSessionDiagnosticMessage({
+      code: 'webview-protocol-mismatch',
+      action: messageType,
+      message: `Agent Webview protocol mismatch: Extension expects v${AGENT_WEBVIEW_PROTOCOL_VERSION}, Webview sent ${receivedVersion === null ? 'no version' : `v${receivedVersion}`}. Reload the Webview.`,
+    });
+  }
+  const keys = readMessageKeys(raw);
+  return buildAgentSessionDiagnosticMessage({
+    code: 'invalid-webview-message',
+    ...(messageType ? { action: messageType } : {}),
+    message: `Invalid Agent Webview message${messageType ? ` "${messageType}"` : ''}; payload keys: ${keys.length > 0 ? keys.join(', ') : '(none)'}.`,
+  });
+}
+
+function readMessageType(raw: unknown): string | null {
+  return isRecord(raw) && typeof raw.type === 'string' ? raw.type : null;
+}
+
+function readProtocolVersion(raw: unknown): number | null {
+  return isRecord(raw) && typeof raw.protocolVersion === 'number' ? raw.protocolVersion : null;
+}
+
+function readMessageKeys(raw: unknown): string[] {
+  return isRecord(raw) ? Object.keys(raw).sort() : [];
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 export function buildChatRestorePlan(input: BuildChatRestorePlanInput): ChatRestorePlan {

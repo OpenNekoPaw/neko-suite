@@ -4,7 +4,7 @@ import type {
   ExtensionToWebviewMessage,
   ProjectionAttachmentKey,
 } from '@neko-agent/types';
-import { isSameProjectionAttachment } from '@neko-agent/types';
+import { AGENT_WEBVIEW_PROTOCOL_VERSION, isSameProjectionAttachment } from '@neko-agent/types';
 import type {
   TabProjectionAttachmentBinding,
   TabRenderBinding,
@@ -54,7 +54,10 @@ class DefaultProjectionEndpointController implements ProjectionEndpointControlle
   start(): void {
     if (this.subscription) return;
     this.subscription = this.options.host.subscribe((message) => this.acceptHostMessage(message));
-    this.options.host.send({ type: 'projectionEndpointDiscover' });
+    this.options.host.send({
+      type: 'projectionEndpointDiscover',
+      protocolVersion: AGENT_WEBVIEW_PROTOCOL_VERSION,
+    });
   }
 
   stop(): void {
@@ -91,6 +94,11 @@ class DefaultProjectionEndpointController implements ProjectionEndpointControlle
 
   private acceptHostMessage(message: ExtensionToWebviewMessage): void {
     if (message.type === 'projectionEndpointReady') {
+      if (message.protocolVersion !== AGENT_WEBVIEW_PROTOCOL_VERSION) {
+        throw new Error(
+          `Agent Webview protocol mismatch: expected ${AGENT_WEBVIEW_PROTOCOL_VERSION}, received ${message.protocolVersion}.`,
+        );
+      }
       this.acceptEndpoint(message.endpointEpoch);
       return;
     }

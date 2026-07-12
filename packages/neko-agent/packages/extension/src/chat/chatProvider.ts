@@ -87,6 +87,7 @@ import {
   setCapabilityRuntimeSkillLifecycleRuntime,
 } from '../bootstrap/capabilityBootstrap';
 import {
+  AGENT_WEBVIEW_PROTOCOL_VERSION,
   NEKO_AI_ASSISTANT_FOCUS_COMMAND,
   buildAgentSessionDiagnosticMessage,
   normalizeTabState,
@@ -974,10 +975,14 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
       webview.onDidReceiveMessage(async (raw: unknown) => {
         const message = parseWebviewToExtensionMessage(raw);
         if (!message) {
-          logger.warn('Rejected invalid webview message payload');
-          webview.postMessage(
-            buildMissingSessionIdentityDiagnostic(raw) ?? buildInvalidWebviewPayloadMessage(),
-          );
+          const invalidMessage =
+            buildMissingSessionIdentityDiagnostic(raw) ?? buildInvalidWebviewPayloadMessage(raw);
+          logger.warn('Rejected invalid webview message payload', {
+            code: invalidMessage.code,
+            action: invalidMessage.action,
+            message: invalidMessage.message,
+          });
+          webview.postMessage(invalidMessage);
           return;
         }
 
@@ -1008,7 +1013,8 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
         handleChatWebviewMessage(message, {
           webview,
           projectionAttachments,
-          announceProjectionEndpoint: () => this._announceProjectionEndpoint(webview),
+          announceProjectionEndpoint: (protocolVersion) =>
+            this._announceProjectionEndpoint(webview, protocolVersion),
           reportProjectionProtocolError: (error, key) =>
             this._reportProjectionProtocolError(webview, error, key),
           messages: this._messages,
@@ -1041,7 +1047,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
     );
   }
 
-  private _announceProjectionEndpoint(webview: vscode.Webview): void {
+  private _announceProjectionEndpoint(webview: vscode.Webview, protocolVersion: number): void {
     if (this._view?.webview !== webview) {
       throw new Error('Cannot announce a replaced projection endpoint.');
     }
@@ -1049,7 +1055,21 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
     if (!endpointEpoch) {
       throw new Error('Projection endpoint epoch is unavailable for the active Webview.');
     }
-    void webview.postMessage({ type: 'projectionEndpointReady', endpointEpoch });
+    if (protocolVersion !== AGENT_WEBVIEW_PROTOCOL_VERSION) {
+      void webview.postMessage(
+        buildAgentSessionDiagnosticMessage({
+          code: 'webview-protocol-mismatch',
+          action: 'projectionEndpointDiscover',
+          message: `Agent Webview protocol mismatch: Extension expects v${AGENT_WEBVIEW_PROTOCOL_VERSION}, Webview sent v${protocolVersion}. Reload the Webview.`,
+        }),
+      );
+      return;
+    }
+    void webview.postMessage({
+      type: 'projectionEndpointReady',
+      protocolVersion: AGENT_WEBVIEW_PROTOCOL_VERSION,
+      endpointEpoch,
+    });
     if (this._webviewReady) return;
     this._webviewReady = true;
     this._flushPendingMessages();

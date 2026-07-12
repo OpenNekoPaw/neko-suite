@@ -39,9 +39,11 @@ describe('projection routes', () => {
   it('announces the endpoint for explicit discovery without touching attachment state', () => {
     const { deps, projectionAttachments, announceProjectionEndpoint } = createDeps();
 
-    expect(tryHandleProjectionRoute({ type: 'projectionEndpointDiscover' }, deps)).toBe(true);
+    expect(
+      tryHandleProjectionRoute({ type: 'projectionEndpointDiscover', protocolVersion: 1 }, deps),
+    ).toBe(true);
 
-    expect(announceProjectionEndpoint).toHaveBeenCalledTimes(1);
+    expect(announceProjectionEndpoint).toHaveBeenCalledWith(1);
     expect(projectionAttachments.attach).not.toHaveBeenCalled();
     expect(projectionAttachments.acknowledge).not.toHaveBeenCalled();
     expect(projectionAttachments.detach).not.toHaveBeenCalled();

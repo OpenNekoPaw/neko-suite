@@ -494,12 +494,16 @@ export type ConversationProjectionAttachmentHostFrame = ProjectionAttachmentHost
 
 export interface ProjectionEndpointDiscoverRequest {
   readonly type: 'projectionEndpointDiscover';
+  readonly protocolVersion: typeof AGENT_WEBVIEW_PROTOCOL_VERSION;
 }
 
 export interface ProjectionEndpointReadyMessage {
   readonly type: 'projectionEndpointReady';
+  readonly protocolVersion: typeof AGENT_WEBVIEW_PROTOCOL_VERSION;
   readonly endpointEpoch: string;
 }
+
+export const AGENT_WEBVIEW_PROTOCOL_VERSION = 1 as const;
 
 export type WebviewToExtensionMessage =
   | SendMessageWebviewMessage
@@ -742,6 +746,8 @@ export type AgentSessionDiagnosticCode =
   | 'unknown-conversation'
   | 'deleted-conversation'
   | 'missing-session-identity'
+  | 'invalid-webview-message'
+  | 'webview-protocol-mismatch'
   | 'active-tab-mismatch'
   | 'terminal-webview-delivery-unavailable'
   | 'conversation-durability-failed'
@@ -1821,7 +1827,9 @@ export function parseWebviewToExtensionMessage(raw: unknown): WebviewToExtension
 
   const type = raw.type;
   if (type === 'projectionEndpointDiscover') {
-    return { type };
+    return raw.protocolVersion === AGENT_WEBVIEW_PROTOCOL_VERSION
+      ? { type, protocolVersion: AGENT_WEBVIEW_PROTOCOL_VERSION }
+      : null;
   }
   if (type === 'projectionAttach') {
     const key = parseProjectionAttachmentKey(raw.key);
