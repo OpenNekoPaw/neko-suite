@@ -890,3 +890,53 @@ pnpm exec eslint <本批 4 个 TypeScript 文件>
 ```
 
 该子集继续推进任务 9.5/9.6/9.7，但不整体勾选；active Agent tool-result validation adapter 中仍存在旧 `QualityRepairCheck` / `QualityCheckConsistency` 输出解释分支，需要与 canonical `QualityGateResult` 证据投影一起迁移，不能只删分支导致 Agent 失去质量反馈。
+
+## 18. Canonical Quality Gate → Agent feedback 单一路径（2026-07-12）
+
+继续审计 active tool-result validation adapter 后确认：`QualityCheck` 已返回 canonical `QualityGateResult`，但 `quality-review-validation.ts` 仍只解释旧 `totalScenes/passed/failed/evaluations`、`QualityRepairCheck` 和 `QualityCheckConsistency` 输出。因此真实 Gate 结果会被 adapter 忽略，Agent 看不到 pass/fail/manual-review、过期证据、缺失 evaluator 或 repair plan；旧 fixture 反而仍可生成成功反馈。
+
+本批按五层边界收敛：
+
+- **职责**：Quality runtime 生成 revision-bound `QualityGateResult`；validation adapter 只负责把该 Gate 投影为通用 Agent `tool-review` feedback 和 `PerceptionEvidence`，不再重新计算场景质量或一致性。
+- **依赖**：adapter 只依赖 `@neko/shared` 的 canonical Quality contract、validator 和 Agent feedback contract；删除对旧 Quality normalization、audio/video scene metrics 和 consistency report schema 的依赖。
+- **接口**：只接受成功的 canonical `QualityCheck` 结果；`QualityRepairCheck`、`QualityCheckConsistency` 以及旧 scene payload 均返回 `null`，不能继续产生默认成功信号。
+- **扩展**：图片、视频、音频、Storyboard、跨镜一致性、`.nk*` project 和 exported deliverable 继续通过 `QualityTarget.kind`、profile、policy 和 evaluator 组合扩展，不再增加每种素材或阶段专属 adapter/tool。
+- **测试**：路径测试覆盖 pass、fail、manual-review、missing evaluator、repair plan、stale evidence 和 legacy poison；nominal `pass` 若携带 stale/missing evaluator 等非法状态，会被 contract validator 改投影为 blocking feedback，而不是放行。
+
+具体清理：
+
+- 删除 `QualityReviewValidationPayload`、`QualityReviewEvaluationSummary` 公开导出和对应 legacy scene fixtures；
+- 删除从 `scenes[].mediaPath/timeRange` 推导 evidence、ConsistencyReport 补字段、repair-mode 和 continuity normalization 分支；
+- Agent evidence 现在保留完整 `QualityGateResult`、contract diagnostics、target identity、Gate verdict、evidence/stale/missing evaluator 计数和 repair plan 摘要；
+- fail repair guidance 明确要求由 owning capability 执行 mutation、创建新 revision、使旧 evidence stale 后重跑 `QualityCheck`；manual-review 明确要求人工批准或补齐 evaluator evidence；
+- 保留既有 adapter id 和 Extension/CLI registration，因此无需修改当前被并行工作占用的 Agent runtime 文件，也不会因删除旧分支而丢失 canonical 质量反馈。
+
+验证：
+
+```bash
+pnpm --filter @neko/skills exec vitest --run \
+  src/quality/__tests__/quality-review-validation.test.ts
+# 1 file, 7 tests passed
+
+pnpm --filter @neko/skills test
+# 33 files, 306 tests passed
+
+pnpm exec tsc --noEmit -p packages/neko-skills/tsconfig.json
+# passed
+
+pnpm exec eslint \
+  packages/neko-skills/src/quality/quality-review-validation.ts \
+  packages/neko-skills/src/quality/__tests__/quality-review-validation.test.ts \
+  packages/neko-skills/src/quality/index.ts
+# passed
+
+pnpm --filter @neko-agent/extension exec vitest --run \
+  src/tools/__tests__/capabilityProviders.test.ts \
+  src/tools/__tests__/qualityCapabilityProvider.test.ts
+# 2 files, 7 tests passed
+
+pnpm check:legacy-debt
+# 仍为既有全仓门禁失败：76 blocking（migrate-now: 65，needs-review: 11）
+```
+
+本批完成了任务 9.5/9.6/9.7 中 active Quality validation adapter、legacy fixture 和路径 poison 的独立子集。任务暂不整体勾选：evaluation manifest、locale/docs 全量迁移、到期 Skill alias、generated asset lifecycle 和其他 fallback/debt 仍需继续处理。
