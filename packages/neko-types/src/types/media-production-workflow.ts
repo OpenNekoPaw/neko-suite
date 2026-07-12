@@ -81,6 +81,20 @@ export type MediaProductionStageArtifactRef =
   | MediaProductionProjectArtifactRef
   | MediaProductionQualityGateArtifactRef;
 
+export type MediaProductionWorkflowSourceRef =
+  | {
+      readonly kind: 'resource';
+      readonly sourceId: string;
+      readonly resourceRef: ResourceRef;
+      readonly revision: string;
+      readonly contentDigest?: string;
+    }
+  | {
+      readonly kind: 'project';
+      readonly sourceId: string;
+      readonly projectRef: QualityProjectRef;
+    };
+
 export interface MediaProductionStageState {
   readonly stageId: MediaProductionStageId;
   readonly status: MediaProductionStageStatus;
@@ -95,6 +109,7 @@ export interface MediaProductionWorkflowRunState {
   readonly version: typeof MEDIA_PRODUCTION_WORKFLOW_VERSION;
   readonly workflowRunId: string;
   readonly sourceProfileId: string;
+  readonly sourceRefs: readonly MediaProductionWorkflowSourceRef[];
   readonly status: MediaProductionRunStatus;
   readonly stages: readonly MediaProductionStageState[];
   readonly createdAt: string;
@@ -110,16 +125,22 @@ export interface MediaProductionWorkflowValidationResult {
 export function createMediaProductionWorkflowRun(input: {
   readonly workflowRunId: string;
   readonly sourceProfileId: string;
+  readonly sourceRefs: readonly MediaProductionWorkflowSourceRef[];
   readonly createdAt: string;
 }): MediaProductionWorkflowRunState {
   assertNonEmpty(input.workflowRunId, 'workflowRunId');
   assertNonEmpty(input.sourceProfileId, 'sourceProfileId');
   assertIsoTimestamp(input.createdAt, 'createdAt');
+  const sourceDiagnostics = validateWorkflowSourceRefs(input.sourceRefs);
+  if (sourceDiagnostics.length > 0) {
+    throw new Error(sourceDiagnostics.map((diagnostic) => diagnostic.message).join(' '));
+  }
 
   return {
     version: MEDIA_PRODUCTION_WORKFLOW_VERSION,
     workflowRunId: input.workflowRunId,
     sourceProfileId: input.sourceProfileId,
+    sourceRefs: [...input.sourceRefs],
     status: 'pending',
     stages: MEDIA_PRODUCTION_STAGE_IDS.map((stageId) => ({
       stageId,
@@ -305,6 +326,7 @@ export function validateMediaProductionWorkflowRun(
       message: 'Media production workflow has invalid identity, version, profile, or timestamps.',
     });
   }
+  diagnostics.push(...validateWorkflowSourceRefs(state.sourceRefs));
   if (state.stages.length !== MEDIA_PRODUCTION_STAGE_IDS.length) {
     diagnostics.push({
       code: 'invalid-workflow-state',
@@ -330,6 +352,60 @@ export function validateMediaProductionWorkflowRun(
     ok: !diagnostics.some((diagnostic) => diagnostic.severity === 'error'),
     diagnostics,
   };
+}
+
+function validateWorkflowSourceRefs(
+  sourceRefs: readonly MediaProductionWorkflowSourceRef[],
+): MediaProductionWorkflowDiagnostic[] {
+  if (sourceRefs.length === 0) {
+    return [
+      {
+        code: 'missing-stage-artifact',
+        severity: 'error',
+        message: 'Media production workflows require at least one stable source reference.',
+        path: ['sourceRefs'],
+      },
+    ];
+  }
+  const diagnostics: MediaProductionWorkflowDiagnostic[] = [];
+  const seen = new Set<string>();
+  sourceRefs.forEach((source, index) => {
+    const path = ['sourceRefs', index] as const;
+    if (!source.sourceId.trim() || seen.has(source.sourceId)) {
+      diagnostics.push({
+        code: 'invalid-workflow-state',
+        severity: 'error',
+        message: 'Workflow source identity must be non-empty and unique.',
+        path,
+      });
+    }
+    seen.add(source.sourceId);
+    if (source.kind === 'resource') {
+      if (
+        !source.revision.trim() ||
+        !validateDurableResourceRef(source.resourceRef, [...path, 'resourceRef']).ok
+      ) {
+        diagnostics.push({
+          code: 'unstable-stage-artifact',
+          severity: 'error',
+          message: 'Workflow resource sources require durable ResourceRef and revision identity.',
+          path,
+        });
+      }
+    } else if (
+      !source.projectRef.documentUri.trim() ||
+      !source.projectRef.projectRevision.trim() ||
+      isRuntimeOnlyResourceIdentityValue(source.projectRef.documentUri)
+    ) {
+      diagnostics.push({
+        code: 'unstable-stage-artifact',
+        severity: 'error',
+        message: 'Workflow project sources require durable document URI and project revision.',
+        path,
+      });
+    }
+  });
+  return diagnostics;
 }
 
 function validateStageArtifacts(

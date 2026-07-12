@@ -12,10 +12,28 @@ import {
 
 const CREATED_AT = '2026-07-12T00:00:00.000Z';
 
+function createSourceRef() {
+  const lifecycle = createGeneratedAssetRevisionRef({
+    assetId: 'comic-source-1',
+    contentDigest: 'sha256:comic-source',
+    mediaKind: 'image',
+    mimeType: 'image/png',
+    generation: { taskId: 'task-import-source' },
+  });
+  return {
+    kind: 'resource' as const,
+    sourceId: 'comic-source-1',
+    resourceRef: lifecycle.resourceRef,
+    revision: lifecycle.revision,
+    contentDigest: lifecycle.contentDigest,
+  };
+}
+
 function createRun() {
   return createMediaProductionWorkflowRun({
     workflowRunId: 'workflow-1',
     sourceProfileId: 'media-production/from-comic',
+    sourceRefs: [createSourceRef()],
     createdAt: CREATED_AT,
   });
 }
