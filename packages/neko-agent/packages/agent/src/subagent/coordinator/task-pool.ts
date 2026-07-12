@@ -1,77 +1,80 @@
 /**
- * TaskPool — Shared task queue with dependency resolution
+ * TaskPool — Coordinator-owned task queue with dependency resolution.
  *
- * Pure state container managing task lifecycle:
- * pending → claimed → running → completed | failed
- *
- * Features:
- * - Priority-based claim (higher priority first)
- * - Dependency resolution (task starts only when deps complete)
- * - Progress tracking
+ * Every mutable worker assignment is bound to one complete ChildRunScope.
+ * Local task and worker IDs are presentation handles only.
  */
 
+import {
+  formatChildRunScope,
+  formatRunScope,
+  validateChildRunScope,
+  validateConversationRunScope,
+  type ChildRunScope,
+  type ConversationRunScope,
+} from '@neko-agent/types';
 import type { SubAgentResult } from '../types';
 import type { TaskItem, TaskStatus, TaskNotification, TaskPoolProgress } from './types';
 
-// =============================================================================
-// TaskPool
-// =============================================================================
-
 export class TaskPool {
-  private _tasks = new Map<string, TaskItem>();
+  private readonly tasks = new Map<string, TaskItem>();
+  private readonly ownerScope: ConversationRunScope;
 
-  /** Number of tasks */
+  constructor(
+    ownerScope: ConversationRunScope,
+    private readonly parentRunId: string,
+  ) {
+    const validated = validateConversationRunScope(ownerScope);
+    if (!validated.ok) throw new Error(validated.diagnostic.message);
+    if (parentRunId.trim().length === 0) {
+      throw new Error('TaskPool requires a non-empty parentRunId.');
+    }
+    this.ownerScope = validated.scope;
+  }
+
   get size(): number {
-    return this._tasks.size;
+    return this.tasks.size;
   }
 
-  /**
-   * Add a task to the pool.
-   * Throws if a task with the same ID already exists.
-   */
   add(task: TaskItem): void {
-    if (this._tasks.has(task.id)) {
-      throw new Error(`Task already exists: ${task.id}`);
+    if (this.tasks.has(task.id)) throw new Error(`Task already exists: ${task.id}`);
+    if (task.status !== 'pending') {
+      throw new Error(`New TaskPool task must be pending: ${task.id}`);
     }
-    this._tasks.set(task.id, { ...task });
+    if (task.workerScope || task.result) {
+      throw new Error(`New TaskPool task must not carry runtime ownership or result: ${task.id}`);
+    }
+    this.tasks.set(task.id, { ...task });
   }
 
-  /**
-   * Add multiple tasks at once.
-   */
   addAll(tasks: TaskItem[]): void {
-    for (const task of tasks) {
-      this.add(task);
-    }
+    for (const task of tasks) this.add(task);
   }
 
-  /**
-   * Claim the highest-priority ready task for a SubAgent.
-   * Returns undefined if no tasks are available.
-   *
-   * A task is "ready" when:
-   * 1. Status is 'pending'
-   * 2. All dependencies are 'completed'
-   */
-  claim(agentId: string): TaskItem | undefined {
-    const ready = this.getReady();
-    if (ready.length === 0) return undefined;
+  getNextReady(): TaskItem | undefined {
+    return this.getReady().sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0))[0];
+  }
 
-    // Sort by priority descending (higher = first)
-    ready.sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0));
-
-    const task = ready[0]!;
+  claim(taskId: string, workerScope: ChildRunScope): TaskItem {
+    const task = this.requireTask(taskId);
+    if (task.status !== 'pending' || !this.areDependenciesMet(task)) {
+      throw new Error(`Task is not ready to claim: ${taskId} (status: ${task.status})`);
+    }
+    const scope = this.requireOwnedWorkerScope(workerScope);
+    const scopeKey = formatChildRunScope(scope);
+    for (const existing of this.tasks.values()) {
+      if (existing.workerScope && formatChildRunScope(existing.workerScope) === scopeKey) {
+        throw new Error(`TaskPool worker scope already assigned: ${scopeKey}`);
+      }
+    }
     task.status = 'claimed';
-    task.claimedBy = agentId;
+    task.workerScope = scope;
     return task;
   }
 
-  /**
-   * Mark a claimed task as running.
-   */
-  markRunning(taskId: string): void {
-    const task = this._tasks.get(taskId);
-    if (!task) throw new Error(`Task not found: ${taskId}`);
+  markRunning(taskId: string, workerScope: ChildRunScope): void {
+    const task = this.requireTask(taskId);
+    this.requireAssignedWorker(task, workerScope);
     if (task.status !== 'claimed') {
       throw new Error(
         `Cannot mark non-claimed task as running: ${taskId} (status: ${task.status})`,
@@ -80,41 +83,37 @@ export class TaskPool {
     task.status = 'running';
   }
 
-  /**
-   * Complete a task with result. Returns a TaskNotification.
-   */
   complete(taskId: string, result: SubAgentResult): TaskNotification {
-    const task = this._tasks.get(taskId);
-    if (!task) throw new Error(`Task not found: ${taskId}`);
+    const task = this.requireTask(taskId);
+    const workerScope = this.requireAssignedWorker(task, result.scope);
+    if (task.status !== 'running') {
+      throw new Error(`Cannot complete non-running task: ${taskId} (status: ${task.status})`);
+    }
 
     task.status = 'completed';
     task.result = result;
-
     return {
       taskId,
-      subAgentId: task.claimedBy ?? '',
+      workerScope,
       status: 'completed',
-      result: {
-        response: result.response ?? '',
-      },
+      result: { response: result.response ?? '' },
       duration: result.duration ?? 0,
       timestamp: Date.now(),
     };
   }
 
-  /**
-   * Fail a task with error. Returns a TaskNotification.
-   */
-  fail(taskId: string, error: string, duration = 0): TaskNotification {
-    const task = this._tasks.get(taskId);
-    if (!task) throw new Error(`Task not found: ${taskId}`);
+  fail(taskId: string, workerScope: ChildRunScope, error: string, duration = 0): TaskNotification {
+    const task = this.requireTask(taskId);
+    const scope = this.requireAssignedWorker(task, workerScope);
+    if (task.status !== 'claimed' && task.status !== 'running') {
+      throw new Error(`Cannot fail inactive task: ${taskId} (status: ${task.status})`);
+    }
 
     task.status = 'failed';
     task.result = undefined;
-
     return {
       taskId,
-      subAgentId: task.claimedBy ?? '',
+      workerScope: scope,
       status: 'failed',
       error,
       duration,
@@ -122,51 +121,32 @@ export class TaskPool {
     };
   }
 
-  /**
-   * Get tasks that are ready to be claimed (pending + dependencies met).
-   */
   getReady(): TaskItem[] {
     const result: TaskItem[] = [];
-    for (const task of this._tasks.values()) {
-      if (task.status !== 'pending') continue;
-      if (this.areDependenciesMet(task)) {
-        result.push(task);
-      }
+    for (const task of this.tasks.values()) {
+      if (task.status === 'pending' && this.areDependenciesMet(task)) result.push(task);
     }
     return result;
   }
 
-  /**
-   * Get task by ID.
-   */
   get(taskId: string): TaskItem | undefined {
-    return this._tasks.get(taskId);
+    return this.tasks.get(taskId);
   }
 
-  /**
-   * Get all tasks.
-   */
   getAll(): TaskItem[] {
-    return Array.from(this._tasks.values());
+    return Array.from(this.tasks.values());
   }
 
-  /**
-   * Get tasks by status.
-   */
   getByStatus(status: TaskStatus): TaskItem[] {
-    return Array.from(this._tasks.values()).filter((t) => t.status === status);
+    return Array.from(this.tasks.values()).filter((task) => task.status === status);
   }
 
-  /**
-   * Get current progress snapshot.
-   */
   getProgress(): TaskPoolProgress {
     let pending = 0;
     let running = 0;
     let completed = 0;
     let failed = 0;
-
-    for (const task of this._tasks.values()) {
+    for (const task of this.tasks.values()) {
       switch (task.status) {
         case 'pending':
           pending++;
@@ -183,60 +163,68 @@ export class TaskPool {
           break;
       }
     }
-
-    return { total: this._tasks.size, pending, running, completed, failed };
+    return { total: this.tasks.size, pending, running, completed, failed };
   }
 
-  /**
-   * Check if all tasks are terminal (completed or failed).
-   */
   isAllDone(): boolean {
-    for (const task of this._tasks.values()) {
-      if (task.status !== 'completed' && task.status !== 'failed') {
-        return false;
-      }
+    for (const task of this.tasks.values()) {
+      if (task.status !== 'completed' && task.status !== 'failed') return false;
     }
-    return this._tasks.size > 0;
+    return this.tasks.size > 0;
   }
 
-  /**
-   * Reset all tasks to pending.
-   */
   reset(): void {
-    for (const task of this._tasks.values()) {
+    for (const task of this.tasks.values()) {
       task.status = 'pending';
-      task.claimedBy = undefined;
+      task.workerScope = undefined;
       task.result = undefined;
     }
   }
 
-  // ---------------------------------------------------------------------------
-  // Private
-  // ---------------------------------------------------------------------------
+  private requireTask(taskId: string): TaskItem {
+    const task = this.tasks.get(taskId);
+    if (!task) throw new Error(`Task not found: ${taskId}`);
+    return task;
+  }
 
-  /**
-   * Check if all dependencies of a task are completed.
-   */
-  private areDependenciesMet(task: TaskItem): boolean {
-    if (!task.dependencies || task.dependencies.length === 0) {
-      return true;
+  private requireOwnedWorkerScope(scope: ChildRunScope): ChildRunScope {
+    const validated = validateChildRunScope(scope);
+    if (!validated.ok) throw new Error(validated.diagnostic.message);
+    const worker = validated.scope;
+    if (
+      worker.childKind !== 'subagent' ||
+      worker.conversationId !== this.ownerScope.conversationId ||
+      worker.runId !== this.ownerScope.runId ||
+      worker.parentRunId !== this.parentRunId
+    ) {
+      throw new Error(
+        `TaskPool worker owner mismatch: expected ${formatRunScope(this.ownerScope)}/${this.parentRunId}/subagent, received ${formatChildRunScope(worker)}.`,
+      );
     }
+    return worker;
+  }
 
-    for (const depId of task.dependencies) {
-      const dep = this._tasks.get(depId);
-      if (!dep || dep.status !== 'completed') {
-        return false;
-      }
+  private requireAssignedWorker(task: TaskItem, actualScope: ChildRunScope): ChildRunScope {
+    const actual = this.requireOwnedWorkerScope(actualScope);
+    const assigned = task.workerScope;
+    if (!assigned) throw new Error(`Task has no assigned worker scope: ${task.id}`);
+    if (formatChildRunScope(assigned) !== formatChildRunScope(actual)) {
+      throw new Error(
+        `Task worker scope mismatch for ${task.id}: expected ${formatChildRunScope(assigned)}, received ${formatChildRunScope(actual)}.`,
+      );
+    }
+    return assigned;
+  }
+
+  private areDependenciesMet(task: TaskItem): boolean {
+    for (const dependencyId of task.dependencies ?? []) {
+      const dependency = this.tasks.get(dependencyId);
+      if (!dependency || dependency.status !== 'completed') return false;
     }
     return true;
   }
 }
 
-// =============================================================================
-// Factory
-// =============================================================================
-
-/** Create a new TaskPool instance */
-export function createTaskPool(): TaskPool {
-  return new TaskPool();
+export function createTaskPool(ownerScope: ConversationRunScope, parentRunId: string): TaskPool {
+  return new TaskPool(ownerScope, parentRunId);
 }

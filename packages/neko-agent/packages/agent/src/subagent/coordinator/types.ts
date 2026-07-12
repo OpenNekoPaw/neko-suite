@@ -8,7 +8,7 @@
  * - Permission bridging (SubAgent confirmations route to parent UI)
  */
 
-import type { ConversationRunScope } from '@neko-agent/types';
+import type { ChildRunScope, ConversationRunScope } from '@neko-agent/types';
 import type {
   SubAgentResult,
   SpecializedAgentType,
@@ -50,8 +50,8 @@ export interface TaskItem {
   agentType: SpecializedAgentType;
   /** Current status */
   status: TaskStatus;
-  /** SubAgent ID that claimed this task */
-  claimedBy?: string;
+  /** Complete owner scope of the SubAgent worker assigned to this task. */
+  workerScope?: ChildRunScope;
   /** Result when completed/failed */
   result?: SubAgentResult;
   /** Task IDs that must complete before this task can start */
@@ -82,7 +82,7 @@ export interface CoordinatorConfig {
   /** Workflow description */
   description: string;
   /** Task items to execute */
-  tasks: Omit<TaskItem, 'status'>[];
+  tasks: Omit<TaskItem, 'status' | 'workerScope' | 'result'>[];
   /** Max concurrent workers (default: 3) */
   maxConcurrency?: number;
   /** Require user confirmation before execute phase (default: true) */
@@ -106,7 +106,8 @@ export interface CoordinatorConfig {
 /** Structured notification when a task completes or fails */
 export interface TaskNotification {
   taskId: string;
-  subAgentId: string;
+  /** Complete authoritative identity of the worker that produced this notification. */
+  workerScope: ChildRunScope;
   status: 'completed' | 'failed';
   result?: {
     response: string;

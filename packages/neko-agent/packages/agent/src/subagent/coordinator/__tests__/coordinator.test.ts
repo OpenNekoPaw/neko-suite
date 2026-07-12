@@ -277,6 +277,36 @@ describe('Coordinator', () => {
       const results = coord.getResults();
       expect(results.length).toBeGreaterThanOrEqual(1);
     });
+
+    it('keeps equal local coordinator, task, and worker IDs isolated by run scope', async () => {
+      const depsA = createMockDeps();
+      const depsB = createMockDeps();
+      depsA.runScope = { conversationId: 'conv-a', runId: 'run-a' };
+      depsB.runScope = { conversationId: 'conv-b', runId: 'run-b' };
+      const config = createConfig({
+        id: 'same-coordinator',
+        tasks: [{ id: 'same-task', description: 'Task', prompt: 'Run', agentType: 'general' }],
+      });
+
+      const coordinatorA = createCoordinator(config, depsA);
+      const coordinatorB = createCoordinator(config, depsB);
+      await Promise.all([collectEvents(coordinatorA), collectEvents(coordinatorB)]);
+
+      expect(coordinatorA.getResults()[0]?.workerScope).toEqual({
+        conversationId: 'conv-a',
+        runId: 'run-a',
+        parentRunId: 'parent-1',
+        childRunId: 'same-coordinator-same-task',
+        childKind: 'subagent',
+      });
+      expect(coordinatorB.getResults()[0]?.workerScope).toEqual({
+        conversationId: 'conv-b',
+        runId: 'run-b',
+        parentRunId: 'parent-1',
+        childRunId: 'same-coordinator-same-task',
+        childKind: 'subagent',
+      });
+    });
   });
 
   describe('error handling', () => {

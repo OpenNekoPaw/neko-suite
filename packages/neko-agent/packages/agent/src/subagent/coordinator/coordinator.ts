@@ -56,7 +56,7 @@ export class Coordinator implements ICoordinator {
     this.id = config.id;
     this._config = config;
     this._deps = deps;
-    this._pool = new TaskPool();
+    this._pool = new TaskPool(deps.runScope, deps.parentRunId);
 
     // Initialize task pool from config
     for (const task of config.tasks) {
@@ -190,13 +190,15 @@ export class Coordinator implements ICoordinator {
 
       if (slotsAvailable > 0) {
         for (let i = 0; i < slotsAvailable; i++) {
-          const task = this._pool.claim(`coordinator-${this.id}`);
-          if (!task) break;
+          const readyTask = this._pool.getNextReady();
+          if (!readyTask) break;
+          const workerScope = this.createWorkerScope(readyTask);
+          const task = this._pool.claim(readyTask.id, workerScope);
 
           yield this.event('task_claimed', { task });
 
           // Spawn SubAgent synchronously (await spawn, not fire-and-forget)
-          await this.dispatchTask(task, taskTimeout, activeAgents);
+          await this.dispatchTask(task, workerScope, taskTimeout, activeAgents);
         }
       }
 
@@ -253,6 +255,7 @@ export class Coordinator implements ICoordinator {
    */
   private async dispatchTask(
     task: TaskItem,
+    workerScope: ChildRunScope,
     timeout: number,
     activeAgents: Map<string, { scope: ChildRunScope; taskId: string }>,
   ): Promise<void> {
@@ -282,20 +285,15 @@ export class Coordinator implements ICoordinator {
         timeout,
         ...(this._config.locale ? { locale: this._config.locale } : {}),
       };
-      const scope: ChildRunScope = {
-        ...this._deps.runScope,
-        parentRunId: this._deps.parentRunId,
-        childRunId: config.id,
-        childKind: 'subagent',
-      };
-      await this._deps.subAgentManager.spawn(scope, config);
-      activeAgents.set(formatChildRunScope(scope), { scope, taskId: task.id });
+      await this._deps.subAgentManager.spawn(workerScope, config);
+      activeAgents.set(formatChildRunScope(workerScope), { scope: workerScope, taskId: task.id });
       // Mark as running (SubAgent was spawned successfully)
-      this._pool.markRunning(task.id);
+      this._pool.markRunning(task.id, workerScope);
     } catch (err) {
       // Spawn failed — mark task as failed
       const notification = this._pool.fail(
         task.id,
+        workerScope,
         `Spawn failed: ${err instanceof Error ? err.message : String(err)}`,
       );
       this._notifications.push(notification);
@@ -333,6 +331,7 @@ export class Coordinator implements ICoordinator {
         return {
           notification: this._pool.fail(
             taskId,
+            result.worker.scope,
             result.subResult.error ?? 'SubAgent failed',
             result.subResult.duration,
           ),
@@ -343,6 +342,15 @@ export class Coordinator implements ICoordinator {
       logger.error('Wait for completion error', { error: err });
       return undefined;
     }
+  }
+
+  private createWorkerScope(task: TaskItem): ChildRunScope {
+    return {
+      ...this._deps.runScope,
+      parentRunId: this._deps.parentRunId,
+      childRunId: `${this.id}-${task.id}`,
+      childKind: 'subagent',
+    };
   }
 
   // ---------------------------------------------------------------------------
