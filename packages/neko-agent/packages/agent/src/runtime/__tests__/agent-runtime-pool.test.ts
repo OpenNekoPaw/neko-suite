@@ -105,6 +105,51 @@ describe('AgentRuntimePool', () => {
     expect(pool.getContext('conv-b')).toBe(contextB);
   });
 
+  it('disposes only conversation A Agent, SubAgent, and Task run tree', () => {
+    const pool = new AgentRuntimePool({ createAgent: () => new TestAgent(true) });
+    const contextA = pool.getOrCreateContext('conv-a');
+    const contextB = pool.getOrCreateContext('conv-b');
+    const cancelledA: string[] = [];
+    const cancelledB: string[] = [];
+    const runA = { conversationId: 'conv-a', runId: 'run-1' } as const;
+    const runB = { conversationId: 'conv-b', runId: 'run-1' } as const;
+    const subAgentA = {
+      ...runA,
+      parentRunId: 'run-1',
+      childRunId: 'worker-1',
+      childKind: 'subagent',
+    } as const;
+    const subAgentB = { ...subAgentA, conversationId: 'conv-b' } as const;
+    const taskA = {
+      ...runA,
+      parentRunId: 'worker-1',
+      childRunId: 'task-1',
+      childKind: 'task',
+    } as const;
+    const taskB = { ...taskA, conversationId: 'conv-b' } as const;
+
+    contextA.runs.registerRun(runA, () => cancelledA.push('agent'));
+    contextA.runs.registerChild(subAgentA, () => cancelledA.push('subagent'));
+    contextA.runs.registerChild(taskA, () => cancelledA.push('task'));
+    contextB.runs.registerRun(runB, () => cancelledB.push('agent'));
+    contextB.runs.registerChild(subAgentB, () => cancelledB.push('subagent'));
+    contextB.runs.registerChild(taskB, () => cancelledB.push('task'));
+
+    pool.remove('conv-a');
+
+    expect(cancelledA).toEqual(['task', 'subagent', 'agent']);
+    expect(contextA.session.cancel).toHaveBeenCalledOnce();
+    expect(contextA.session.dispose).toHaveBeenCalledOnce();
+    expect(contextA.lifecycle).toBe('disposed');
+    expect(cancelledB).toEqual([]);
+    expect(contextB.session.cancel).not.toHaveBeenCalled();
+    expect(contextB.session.dispose).not.toHaveBeenCalled();
+    expect(contextB.lifecycle).toBe('ready');
+    expect(contextB.runs.hasRun(runB)).toBe(true);
+    expect(contextB.runs.hasChild(subAgentB)).toBe(true);
+    expect(contextB.runs.hasChild(taskB)).toBe(true);
+  });
+
   it('removes a failed runtime context without corrupting another conversation', () => {
     const pool = new AgentRuntimePool({
       createAgent: (conversationId) => {

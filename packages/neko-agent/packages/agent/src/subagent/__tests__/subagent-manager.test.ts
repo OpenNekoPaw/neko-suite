@@ -485,25 +485,38 @@ describe('SubAgentManager', () => {
   });
 
   describe('cancelRun', () => {
-    it('should cancel all SubAgents for one conversation run', async () => {
-      const slowExecutor = {
-        execute: vi
-          .fn()
-          .mockImplementation(() => new Promise((resolve) => setTimeout(resolve, 10000))),
-        abort: vi.fn(),
-        getState: vi.fn().mockReturnValue('running'),
-      };
-      (deps.createAgent as ReturnType<typeof vi.fn>).mockReturnValue(slowExecutor);
+    it('should cancel only SubAgents owned by one conversation run', async () => {
+      const aborts = new Map<string, ReturnType<typeof vi.fn>[]>();
+      (deps.createAgent as ReturnType<typeof vi.fn>).mockImplementation(
+        (_config: unknown, _service: unknown, context: { conversationId: string }) => {
+          const abort = vi.fn();
+          const conversationAborts = aborts.get(context.conversationId) ?? [];
+          conversationAborts.push(abort);
+          aborts.set(context.conversationId, conversationAborts);
+          return {
+            execute: vi.fn(() => new Promise(() => {})),
+            abort,
+            getState: vi.fn().mockReturnValue('running'),
+          };
+        },
+      );
 
       await manager.spawn(subAgentScope('cancel-all-1'), createTestConfig({ id: 'cancel-all-1' }));
       await manager.spawn(subAgentScope('cancel-all-2'), createTestConfig({ id: 'cancel-all-2' }));
+      const otherConversationScope = subAgentScope('cancel-all-1', 'conv-2', 'run-1', 'parent-1');
+      await manager.spawn(otherConversationScope, createTestConfig({ id: 'cancel-all-1' }));
 
-      await new Promise((r) => setTimeout(r, 50));
+      await new Promise((r) => setTimeout(r, 10));
 
       manager.cancelRun({ conversationId: 'conv-1', runId: 'run-1' });
 
-      // Both should have abort called
-      expect(slowExecutor.abort).toHaveBeenCalledTimes(2);
+      expect(aborts.get('conv-1')).toHaveLength(2);
+      for (const abort of aborts.get('conv-1') ?? []) {
+        expect(abort).toHaveBeenCalledOnce();
+      }
+      expect(aborts.get('conv-2')).toHaveLength(1);
+      expect(aborts.get('conv-2')?.[0]).not.toHaveBeenCalled();
+      expect(manager.getStatus(otherConversationScope)).toBe('running');
     });
   });
 
