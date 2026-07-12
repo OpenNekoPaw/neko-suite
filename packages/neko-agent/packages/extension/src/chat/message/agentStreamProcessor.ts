@@ -25,6 +25,8 @@ import {
   type CollectedToolCall,
   type IPerceptionPipeline,
   type AgentTurnTimelineAccumulator,
+  type ConversationProjectionStore,
+  type ConversationTurnProjection,
 } from '@neko/agent/runtime';
 import type { AgentContentAccessRuntime } from '@neko/agent/runtime';
 import type { AgentEvent } from '@neko/agent';
@@ -59,6 +61,7 @@ import {
   AgentTimelineDeliveryChannel,
   type AgentTimelineDeliveryMetrics,
   type AgentTimelineDeliveryResult,
+  type AgentTimelineSnapshotSource,
 } from './agentTimelineDeliveryScheduler';
 
 const logger = getLogger('AgentStreamProcessor');
@@ -153,6 +156,8 @@ export interface AgentStreamProcessorDeps {
   localResourceAccess?: AgentLocalResourceAccess;
   /** Unified content access runtime for stable ResourceRef projection. */
   contentAccessRuntime?: AgentContentAccessRuntime;
+  /** Resolves the authoritative projection owned by the conversation runtime. */
+  getConversationProjection: (conversationId: string) => ConversationProjectionStore;
   /** Reads the current estimated conversation context tokens after stream completion. */
   getContextTokenCount?: (conversationId: string) => number;
   /** Optional host-side automation for reviewable entity memory contribution envelopes. */
@@ -181,6 +186,7 @@ interface ActiveTimelineChannel {
   readonly endpoint: { current: vscode.Webview };
   readonly channel: AgentTimelineDeliveryChannel;
   readonly accumulator: AgentTurnTimelineAccumulator;
+  readonly projection: ConversationProjectionStore;
 }
 
 export class AgentStreamProcessor {
@@ -217,6 +223,12 @@ export class AgentStreamProcessor {
     const channelKey = toTimelineChannelKey(conversationId, turnId, callbacks.messageId);
     this.disposeTimelineChannelsForConversation(conversationId);
 
+    const conversationProjection = this.deps.getConversationProjection(conversationId);
+    if (conversationProjection.conversationId !== conversationId) {
+      throw new Error(
+        `Agent stream projection owner mismatch: expected ${conversationId}, received ${conversationProjection.conversationId}.`,
+      );
+    }
     const timelineAccumulator = createAgentTurnTimelineAccumulator({
       conversationId,
       messageId: callbacks.messageId,
@@ -246,6 +258,7 @@ export class AgentStreamProcessor {
       endpoint,
       channel: timelineChannel,
       accumulator: timelineAccumulator,
+      projection: conversationProjection,
     });
 
     let terminalTimelineDelivery: AgentTimelineDeliveryResult | undefined;
@@ -256,6 +269,7 @@ export class AgentStreamProcessor {
 
     const postProjectedMessage = async (message: AgentEventStreamRuntimeMessage) => {
       if (message.type === 'agentTurnTimelineUpdate') {
+        conversationProjection.apply(message);
         const delivery = await timelineChannel.enqueue(message);
         if (message.completion) terminalTimelineDelivery = delivery;
         return;
@@ -404,7 +418,9 @@ export class AgentStreamProcessor {
 
     const flushedDelivery = await timelineChannel.flush();
     const effectiveTerminalDelivery = terminalTimelineDelivery ?? flushedDelivery;
-    const resynchronization = await timelineChannel.snapshot(timelineAccumulator.snapshot());
+    const resynchronization = await timelineChannel.snapshot(
+      requireTurnProjectionSnapshot(conversationProjection, turnId, callbacks.messageId),
+    );
 
     if (this.deps.getContextTokenCount && isActiveTurn()) {
       try {
@@ -576,7 +592,13 @@ export class AgentStreamProcessor {
       return buildSnapshotDiagnostic(request, 'identity-mismatch');
     }
     active.endpoint.current = webview;
-    const snapshot = await active.channel.snapshot(active.accumulator.snapshot());
+    const turnSnapshot = findTurnProjectionSnapshot(
+      active.projection,
+      request.turnId,
+      request.messageId,
+    );
+    if (!turnSnapshot) return buildSnapshotDiagnostic(request, 'turn-snapshot-unavailable');
+    const snapshot = await active.channel.snapshot(turnSnapshot);
     return snapshot.available
       ? snapshot.message
       : buildSnapshotDiagnostic(request, snapshot.diagnostic);
@@ -617,6 +639,44 @@ export class AgentStreamProcessor {
       `webview-${Date.now().toString(36)}-${this.nextTimelineConnectionEpoch++}`
     );
   }
+}
+
+function requireTurnProjectionSnapshot(
+  projection: ConversationProjectionStore,
+  turnId: string,
+  messageId: string,
+): AgentTimelineSnapshotSource {
+  const snapshot = findTurnProjectionSnapshot(projection, turnId, messageId);
+  if (!snapshot) {
+    throw new Error(
+      `Conversation projection ${projection.conversationId} has no turn ${turnId}/${messageId}.`,
+    );
+  }
+  return snapshot;
+}
+
+function findTurnProjectionSnapshot(
+  projection: ConversationProjectionStore,
+  turnId: string,
+  messageId: string,
+): AgentTimelineSnapshotSource | undefined {
+  const turn = projection
+    .snapshot()
+    .turns.find((candidate) => candidate.turnId === turnId && candidate.messageId === messageId);
+  return turn ? toTimelineSnapshotSource(projection.conversationId, turn) : undefined;
+}
+
+function toTimelineSnapshotSource(
+  conversationId: string,
+  turn: ConversationTurnProjection,
+): AgentTimelineSnapshotSource {
+  return {
+    conversationId,
+    turnId: turn.turnId,
+    messageId: turn.messageId,
+    items: turn.items,
+    ...(turn.completion ? { completion: turn.completion } : {}),
+  };
 }
 
 function toTimelineChannelKey(conversationId: string, turnId: string, messageId: string): string {

@@ -17,6 +17,7 @@ import {
   createAgentRuntimeManager,
   type AgentPendingMessageItem,
   type AgentRuntimeManager,
+  type ConversationProjectionStore,
 } from '@neko/agent/runtime';
 import { type AgentHistoryWithToolContextMessage, type SkillInjection } from '@neko/agent';
 import { AgentRunner, IAgentRunner } from './agentRunner';
@@ -34,6 +35,9 @@ export interface IAgentManager extends vscode.Disposable {
    * 获取指定会话的 Agent（不创建）
    */
   get(conversationId: string): IAgentRunner | undefined;
+
+  /** Get the authoritative render projection owned by the conversation runtime. */
+  getOrCreateProjection(conversationId: string): ConversationProjectionStore;
 
   /**
    * 检查指定会话是否有 Agent 在运行
@@ -243,6 +247,10 @@ export class AgentManager implements IAgentManager {
 
   get(conversationId: string): IAgentRunner | undefined {
     return this._runtime.get(conversationId);
+  }
+
+  getOrCreateProjection(conversationId: string): ConversationProjectionStore {
+    return this._runtime.getOrCreateContext(conversationId).projection;
   }
 
   isRunning(conversationId: string): boolean {

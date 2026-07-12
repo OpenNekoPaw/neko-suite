@@ -9,10 +9,6 @@ import type {
 } from '@neko-agent/types';
 import type { AgentEvent } from '../../session/types';
 import { applyToolResultBackfillToResult } from '../tool-result-backfill';
-import {
-  applyAgentTurnProjectionOperations,
-  cloneAgentTurnProjectionItem,
-} from '../projection/agent-turn-projection';
 import type { ConversationProjectionUpdate } from '../projection/conversation-projection-store';
 import {
   AGENT_ERROR_WITHOUT_DETAIL_CODE,
@@ -30,14 +26,6 @@ export interface AgentTurnTimelineAccumulatorUpdate extends ConversationProjecti
   readonly completion?: AgentTurnTimelineCompletion;
 }
 
-export interface AgentTurnTimelineAccumulatorSnapshot {
-  readonly conversationId: string;
-  readonly turnId: string;
-  readonly messageId: string;
-  readonly items: readonly AgentTurnTimelineItem[];
-  readonly completion?: AgentTurnTimelineCompletion;
-}
-
 export interface AgentTurnTimelineAccumulator {
   project(event: AgentEvent, eventTime: number): AgentTurnTimelineAccumulatorUpdate | null;
   projectWorkItem(workItem: AgentWorkItem): AgentTurnTimelineAccumulatorUpdate | null;
@@ -45,7 +33,6 @@ export interface AgentTurnTimelineAccumulator {
     contentBlocks: readonly ContentBlock[],
     status?: AgentTurnTimelineCompletionStatus,
   ): AgentTurnTimelineAccumulatorUpdate | null;
-  snapshot(): AgentTurnTimelineAccumulatorSnapshot;
   dispose(): void;
 }
 
@@ -65,8 +52,6 @@ export function createAgentTurnTimelineAccumulator(input: {
     Extract<AgentTurnTimelineItem, { readonly kind: 'tool_call' }>
   >();
   const workItemsById = new Map<string, AgentTurnTimelineItem>();
-  const items = new Map<string, AgentTurnTimelineItem>();
-  let completion: AgentTurnTimelineCompletion | undefined;
   let lifecycle: 'active' | 'completed' | 'disposed' = 'active';
 
   const nextSequence = (): number => {
@@ -124,8 +109,6 @@ export function createAgentTurnTimelineAccumulator(input: {
     nextCompletion?: AgentTurnTimelineCompletion,
   ): AgentTurnTimelineAccumulatorUpdate | null => {
     if (operations.length === 0 && !nextCompletion) return null;
-    applyAgentTurnProjectionOperations(items, operations);
-    if (nextCompletion) completion = cloneValue(nextCompletion);
     return {
       type: 'agentTurnTimelineUpdate',
       conversationId: input.conversationId,
@@ -419,28 +402,12 @@ export function createAgentTurnTimelineAccumulator(input: {
       workItemsById.set(workItem.id, cloneValue(item));
       return buildUpdate([{ operation: 'upsert', item }]);
     },
-    snapshot() {
-      if (lifecycle === 'disposed') {
-        throw new Error('Agent Timeline accumulator is disposed.');
-      }
-      return {
-        conversationId: input.conversationId,
-        turnId,
-        messageId: input.messageId,
-        items: Array.from(items.values())
-          .sort((left, right) => left.sequence - right.sequence)
-          .map((item) => cloneAgentTurnProjectionItem(item)),
-        ...(completion ? { completion: cloneValue(completion) } : {}),
-      };
-    },
     dispose() {
       lifecycle = 'disposed';
       activeTextItem = null;
       activeThinkingItem = null;
       toolItemsByToolCallId.clear();
       workItemsById.clear();
-      items.clear();
-      completion = undefined;
     },
   };
 }

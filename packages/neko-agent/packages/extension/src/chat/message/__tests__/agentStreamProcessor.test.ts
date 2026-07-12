@@ -3,10 +3,11 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { AgentStreamProcessor } from '../agentStreamProcessor';
+import { AgentStreamProcessor, type AgentStreamProcessorDeps } from '../agentStreamProcessor';
 import type { AgentTurnTimelineItem, AgentTurnTimelineMessage } from '@neko-agent/types';
 import type { EntityMemoryContribution } from '@neko/shared';
 import { evaluateAgentTaskResultDelivery, normalizeAgentTaskResultObservation } from '@neko/agent';
+import { createConversationProjectionStore } from '@neko/agent/runtime';
 
 vi.mock('vscode', () => ({
   Uri: {
@@ -113,6 +114,23 @@ function createDeferred<T>() {
   return { promise, resolve, reject };
 }
 
+type TestAgentStreamProcessorDeps = Omit<AgentStreamProcessorDeps, 'getConversationProjection'> &
+  Partial<Pick<AgentStreamProcessorDeps, 'getConversationProjection'>>;
+
+function createAgentStreamProcessor(deps: TestAgentStreamProcessorDeps = {}): AgentStreamProcessor {
+  const projections = new Map<string, ReturnType<typeof createConversationProjectionStore>>();
+  const getConversationProjection =
+    deps.getConversationProjection ??
+    ((conversationId: string) => {
+      const existing = projections.get(conversationId);
+      if (existing) return existing;
+      const created = createConversationProjectionStore(conversationId);
+      projections.set(conversationId, created);
+      return created;
+    });
+  return new AgentStreamProcessor({ ...deps, getConversationProjection });
+}
+
 /**
  * Helper to create an async iterable from an array of events
  */
@@ -131,7 +149,7 @@ describe('AgentStreamProcessor', () => {
     vi.clearAllMocks();
     webview = createMockWebview();
     callbacks = createMockCallbacks();
-    processor = new AgentStreamProcessor({});
+    processor = createAgentStreamProcessor({});
   });
 
   describe('processStream', () => {
@@ -221,7 +239,7 @@ describe('AgentStreamProcessor', () => {
       let now = 1_000;
       const nowSpy = vi.spyOn(Date, 'now').mockImplementation(() => now);
       const conversations = { upsertMessageToConversation: vi.fn() };
-      processor = new AgentStreamProcessor({ conversations: conversations as any });
+      processor = createAgentStreamProcessor({ conversations: conversations as any });
       async function* delayedEvents() {
         yield { type: 'text' as const, content: 'before dispose' };
         await resume.promise;
@@ -309,7 +327,7 @@ describe('AgentStreamProcessor', () => {
         })),
         upsertMessageToConversation: vi.fn(),
       };
-      processor = new AgentStreamProcessor({ conversations: conversations as any });
+      processor = createAgentStreamProcessor({ conversations: conversations as any });
 
       await processor.processStream(
         webview as any,
@@ -468,7 +486,7 @@ describe('AgentStreamProcessor', () => {
           ],
         }),
       };
-      processor = new AgentStreamProcessor({
+      processor = createAgentStreamProcessor({
         entityMemoryContributionAutomation: automation,
       });
       const events = toAsyncIterable([
@@ -543,7 +561,7 @@ describe('AgentStreamProcessor', () => {
           ],
         }),
       };
-      processor = new AgentStreamProcessor({
+      processor = createAgentStreamProcessor({
         entityMemoryContributionAutomation: automation,
       });
       const text =
@@ -638,7 +656,7 @@ describe('AgentStreamProcessor', () => {
           ],
         }),
       };
-      processor = new AgentStreamProcessor({
+      processor = createAgentStreamProcessor({
         entityMemoryContributionAutomation: automation,
       });
       const text =
@@ -740,7 +758,7 @@ describe('AgentStreamProcessor', () => {
           decisions: [{ kind: 'matched-candidate', candidateId: 'candidate:hero' }],
         }),
       };
-      processor = new AgentStreamProcessor({
+      processor = createAgentStreamProcessor({
         entityMemoryContributionAutomation: automation,
       });
       const text =
@@ -794,7 +812,7 @@ describe('AgentStreamProcessor', () => {
       const localResourceAccess = {
         toWebviewUri: vi.fn((_webview, filePath: string) => `webview-uri:${filePath}`),
       };
-      processor = new AgentStreamProcessor({
+      processor = createAgentStreamProcessor({
         localResourceAccess: localResourceAccess as any,
       });
       const events = toAsyncIterable([
@@ -871,7 +889,7 @@ describe('AgentStreamProcessor', () => {
       const dashboardWorkItems = {
         acceptWebviewMessage: vi.fn(),
       };
-      processor = new AgentStreamProcessor({
+      processor = createAgentStreamProcessor({
         localResourceAccess: localResourceAccess as any,
         contentAccessRuntime: contentAccessRuntime as any,
         dashboardWorkItems: dashboardWorkItems as any,
@@ -1008,7 +1026,7 @@ describe('AgentStreamProcessor', () => {
           sizeBytes: 2048,
         })),
       };
-      processor = new AgentStreamProcessor({
+      processor = createAgentStreamProcessor({
         localResourceAccess: localResourceAccess as any,
         contentAccessRuntime: contentAccessRuntime as any,
       });
@@ -1108,7 +1126,7 @@ describe('AgentStreamProcessor', () => {
       const localResourceAccess = {
         toWebviewUri: vi.fn((_webview, filePath: string) => `webview-uri:${filePath}`),
       };
-      processor = new AgentStreamProcessor({
+      processor = createAgentStreamProcessor({
         localResourceAccess: localResourceAccess as any,
       });
       const imagePath = '/tmp/page-1.jpg';
@@ -1317,7 +1335,7 @@ describe('AgentStreamProcessor', () => {
     });
 
     it('should refresh context token count from the session after stream completion', async () => {
-      processor = new AgentStreamProcessor({
+      processor = createAgentStreamProcessor({
         getContextTokenCount: vi.fn().mockReturnValue(2400),
       });
       const events = toAsyncIterable([
@@ -1484,7 +1502,7 @@ describe('AgentStreamProcessor', () => {
         },
       };
       const handleTerminalTask = vi.fn(async () => undefined);
-      processor = new AgentStreamProcessor({
+      processor = createAgentStreamProcessor({
         platform: platform as any,
         taskResultObservations: { handleTerminalTask },
       });
@@ -1643,7 +1661,7 @@ describe('AgentStreamProcessor', () => {
           followUpPrompts.push(decision.followUpRequest.prompt);
         }
       });
-      processor = new AgentStreamProcessor({
+      processor = createAgentStreamProcessor({
         platform: platform as any,
         mediaDeliveryHost: mediaDeliveryHost as any,
         taskResultObservations: { handleTerminalTask },
@@ -1772,7 +1790,7 @@ describe('AgentStreamProcessor', () => {
           },
         })),
       };
-      processor = new AgentStreamProcessor({
+      processor = createAgentStreamProcessor({
         platform: platform as any,
         mediaDeliveryHost: mediaDeliveryHost as any,
         mediaBackfill: {
@@ -1913,7 +1931,7 @@ describe('AgentStreamProcessor', () => {
           },
         })),
       };
-      processor = new AgentStreamProcessor({
+      processor = createAgentStreamProcessor({
         platform: platform as any,
         mediaDeliveryHost: mediaDeliveryHost as any,
         mediaBackfill: {
@@ -1991,7 +2009,7 @@ describe('AgentStreamProcessor', () => {
           saveOutputs: vi.fn(),
         },
       };
-      processor = new AgentStreamProcessor({ platform: platform as any });
+      processor = createAgentStreamProcessor({ platform: platform as any });
 
       const processing = processor.processStream(
         webview as any,
@@ -2052,7 +2070,7 @@ describe('AgentStreamProcessor', () => {
           saveOutputs: vi.fn(),
         },
       };
-      processor = new AgentStreamProcessor({ platform: platform as any });
+      processor = createAgentStreamProcessor({ platform: platform as any });
 
       const processing = processor.processStream(
         webview as any,
@@ -2107,7 +2125,7 @@ describe('AgentStreamProcessor', () => {
           saveOutputs: vi.fn(),
         },
       };
-      processor = new AgentStreamProcessor({ platform: platform as any });
+      processor = createAgentStreamProcessor({ platform: platform as any });
 
       const events = (conversationId: string, taskId: string) =>
         toAsyncIterable([
@@ -2169,7 +2187,7 @@ describe('AgentStreamProcessor', () => {
 
   describe('Timeline delivery scheduling and resynchronization', () => {
     it('bounds postMessage batches for a 4,000-fragment text stream and preserves exact source', async () => {
-      processor = new AgentStreamProcessor({
+      processor = createAgentStreamProcessor({
         createTimelineConnectionEpoch: () => 'epoch-burst',
       });
       const source = 'x'.repeat(4_000);
@@ -2198,7 +2216,7 @@ describe('AgentStreamProcessor', () => {
     });
 
     it('releases Timeline channels on conversation clear and Extension disposal', async () => {
-      processor = new AgentStreamProcessor({
+      processor = createAgentStreamProcessor({
         createTimelineConnectionEpoch: () => 'epoch-lifecycle',
       });
       await processor.processStream(
@@ -2253,7 +2271,7 @@ describe('AgentStreamProcessor', () => {
 
     it('retains only the latest turn channel for one conversation', async () => {
       let epoch = 0;
-      processor = new AgentStreamProcessor({
+      processor = createAgentStreamProcessor({
         createTimelineConnectionEpoch: () => `epoch-${++epoch}`,
       });
       await processor.processStream(
@@ -2301,7 +2319,7 @@ describe('AgentStreamProcessor', () => {
     });
 
     it('rebinds a recreated Webview with the retained epoch and rejects epoch mismatch', async () => {
-      processor = new AgentStreamProcessor({
+      processor = createAgentStreamProcessor({
         createTimelineConnectionEpoch: () => 'epoch-snapshot',
       });
       await processor.processStream(
@@ -2345,7 +2363,7 @@ describe('AgentStreamProcessor', () => {
 
   describe('updateToolResultWithUrls', () => {
     it('should do nothing without conversations', () => {
-      processor = new AgentStreamProcessor({});
+      processor = createAgentStreamProcessor({});
       // Should not throw
       processor.updateToolResultWithUrls('conv-1', 'task-1', ['/path/to/file.png']);
     });
@@ -2374,7 +2392,7 @@ describe('AgentStreamProcessor', () => {
         updateMessagesForConversation: vi.fn(),
       };
 
-      processor = new AgentStreamProcessor({ conversations: conversations as any });
+      processor = createAgentStreamProcessor({ conversations: conversations as any });
       processor.updateToolResultWithUrls('conv-1', 'task-2', ['/out/video.mp4']);
 
       expect(conversations.updateMessagesForConversation).toHaveBeenCalled();
@@ -2404,7 +2422,7 @@ describe('AgentStreamProcessor', () => {
         updateMessagesForConversation: vi.fn(),
       };
 
-      processor = new AgentStreamProcessor({ conversations: conversations as any });
+      processor = createAgentStreamProcessor({ conversations: conversations as any });
       processor.updateToolResultWithUrls('conv-1', 'task-1', ['/out/file.png']);
 
       expect(conversations.updateMessagesForConversation).not.toHaveBeenCalled();
@@ -2416,7 +2434,7 @@ describe('AgentStreamProcessor', () => {
         updateMessagesForConversation: vi.fn(),
       };
 
-      processor = new AgentStreamProcessor({ conversations: conversations as any });
+      processor = createAgentStreamProcessor({ conversations: conversations as any });
       // Should not throw
       processor.updateToolResultWithUrls('conv-missing', 'task-1', ['/file.png']);
       expect(conversations.updateMessagesForConversation).not.toHaveBeenCalled();

@@ -756,7 +756,6 @@ export {
 export {
   createAgentTurnTimelineAccumulator,
   type AgentTurnTimelineAccumulator,
-  type AgentTurnTimelineAccumulatorSnapshot,
   type AgentTurnTimelineAccumulatorUpdate,
 } from './stream/agent-turn-timeline-accumulator';
 

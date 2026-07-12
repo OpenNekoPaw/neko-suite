@@ -1,6 +1,42 @@
 import { describe, expect, it } from 'vitest';
 import type { AgentTurnTimelineItem, AgentWorkItem, ContentBlock } from '@neko-agent/types';
-import { createAgentTurnTimelineAccumulator } from '../agent-turn-timeline-accumulator';
+import {
+  createAgentTurnTimelineAccumulator as createAgentTurnTimelineProjector,
+  type AgentTurnTimelineAccumulatorUpdate,
+} from '../agent-turn-timeline-accumulator';
+import { createConversationProjectionStore } from '../../projection/conversation-projection-store';
+
+function createAgentTurnTimelineAccumulator(input: {
+  readonly conversationId: string;
+  readonly messageId: string;
+  readonly now?: () => number;
+}) {
+  const projector = createAgentTurnTimelineProjector(input);
+  const projection = createConversationProjectionStore(input.conversationId);
+  const apply = (update: AgentTurnTimelineAccumulatorUpdate | null) => {
+    if (update) projection.apply(update);
+    return update;
+  };
+  return {
+    project: (...args: Parameters<typeof projector.project>) => apply(projector.project(...args)),
+    projectWorkItem: (...args: Parameters<typeof projector.projectWorkItem>) =>
+      apply(projector.projectWorkItem(...args)),
+    complete: (...args: Parameters<typeof projector.complete>) =>
+      apply(projector.complete(...args)),
+    snapshot: () => {
+      const snapshot = projection.snapshot();
+      const turn = snapshot.turns.find((candidate) => candidate.messageId === input.messageId);
+      if (!turn) {
+        throw new Error(`Expected projection for ${input.conversationId}/${input.messageId}.`);
+      }
+      return { conversationId: snapshot.conversationId, ...turn };
+    },
+    dispose: () => {
+      projector.dispose();
+      projection.dispose();
+    },
+  };
+}
 
 function textItem(snapshot: { readonly items: readonly AgentTurnTimelineItem[] }) {
   const item = snapshot.items.find((candidate) => candidate.kind === 'assistant_text');
@@ -177,14 +213,20 @@ describe('AgentTurnTimelineAccumulator', () => {
     if (typeof nested !== 'object' || nested === null || !('value' in nested)) {
       throw new Error('Expected nested tool argument.');
     }
-    nested.value = 'mutated';
-    workItem.payload.workItem.task.steps?.push({
-      id: 'step-2',
-      name: 'Mutated',
-      status: 'failed',
-    });
+    expect(() => {
+      nested.value = 'mutated';
+    }).toThrow(TypeError);
+    expect(() => {
+      workItem.payload.workItem.task.steps?.push({
+        id: 'step-2',
+        name: 'Mutated',
+        status: 'failed',
+      });
+    }).toThrow(TypeError);
     const finalBlock = snapshot.completion?.finalContentBlocks?.[0];
-    if (finalBlock) finalBlock.content = 'mutated';
+    expect(() => {
+      if (finalBlock) finalBlock.content = 'mutated';
+    }).toThrow(TypeError);
 
     const next = accumulator.snapshot();
     const nextTool = next.items.find((item) => item.kind === 'tool_call');

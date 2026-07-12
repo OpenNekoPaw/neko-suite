@@ -1,6 +1,10 @@
 import { createHash } from 'node:crypto';
 import * as vscode from 'vscode';
 import type { AgentEvent } from '@neko/agent';
+import {
+  createConversationProjectionStore,
+  type ConversationProjectionStore,
+} from '@neko/agent/runtime';
 import type {
   AgentTurnTimelineDiagnostic,
   AgentTurnTimelineMessage,
@@ -66,6 +70,29 @@ export interface StreamLifecycleAcceptanceControllerOptions {
   readonly createRunId?: () => string;
 }
 
+function createOwnedAcceptanceProcessor(): StreamLifecycleAcceptanceProcessor {
+  const projections = new Map<string, ConversationProjectionStore>();
+  const processor = new AgentStreamProcessor({
+    getConversationProjection: (conversationId) => {
+      const existing = projections.get(conversationId);
+      if (existing) return existing;
+      const created = createConversationProjectionStore(conversationId);
+      projections.set(conversationId, created);
+      return created;
+    },
+  });
+  return {
+    processStream: (...args) => processor.processStream(...args),
+    requestTimelineSnapshot: (...args) => processor.requestTimelineSnapshot(...args),
+    getTimelineDeliveryMetrics: (identity) => processor.getTimelineDeliveryMetrics(identity),
+    dispose: () => {
+      processor.dispose();
+      for (const projection of projections.values()) projection.dispose();
+      projections.clear();
+    },
+  };
+}
+
 interface ActiveAcceptanceRun {
   readonly identity: StreamLifecycleAcceptanceIdentity;
   readonly processor: StreamLifecycleAcceptanceProcessor;
@@ -91,7 +118,7 @@ export class StreamLifecycleAcceptanceController
   private disposed = false;
 
   constructor(options: StreamLifecycleAcceptanceControllerOptions = {}) {
-    this.createProcessor = options.createProcessor ?? (() => new AgentStreamProcessor({}));
+    this.createProcessor = options.createProcessor ?? createOwnedAcceptanceProcessor;
     this.createRunId = options.createRunId ?? (() => Date.now().toString(36));
   }
 

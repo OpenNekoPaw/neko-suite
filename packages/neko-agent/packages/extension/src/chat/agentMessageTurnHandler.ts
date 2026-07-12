@@ -159,6 +159,14 @@ export class AgentMessageTurnHandler {
       ...(this._options.taskResultObservationCoordinator
         ? { taskResultObservations: this._options.taskResultObservationCoordinator }
         : {}),
+      getConversationProjection: (conversationId) => {
+        if (!agentManager) {
+          throw new Error(
+            `Agent stream ${conversationId} requires a conversation runtime projection owner.`,
+          );
+        }
+        return agentManager.getOrCreateProjection(conversationId);
+      },
       ...(agentManager
         ? {
             getContextTokenCount: (conversationId) =>
