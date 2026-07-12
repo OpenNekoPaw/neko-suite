@@ -20,6 +20,13 @@ The Agent Webview SHALL create one `TabRenderRuntime` per open Tab binding. Each
 - **AND** historical snapshot responses SHALL update only the named conversation cache without changing foreground activation
 - **AND** ordinary Tab switching SHALL NOT repeat those restore requests
 
+#### Scenario: Webview realm restores independent Tab drafts
+- **WHEN** a Webview realm is recreated while multiple open Tabs own unsent composer text or future-turn configuration
+- **THEN** each new Tab runtime SHALL restore only the draft whose `tabId` and `conversationId` both match its immutable binding
+- **AND** typing or configuration changes in one Tab SHALL NOT overwrite another Tab's persisted draft
+- **AND** projection, history, attachments, references, queued edits, focus, menus, diagnostics, and runtime handles SHALL NOT be persisted in host state
+- **AND** an unknown draft schema or owner mismatch SHALL fail visibly rather than fall back to the active Tab
+
 ### Requirement: Tab activation changes visibility only
 Activating a Tab SHALL change which keyed Tab subtree is visible. Activation MUST NOT copy save/restore state through a shared input component, rebind Agent runtime ownership, mutate conversation configuration, or flush, discard, attach, detach, or reset another Tab's projection channel.
 

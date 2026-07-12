@@ -171,7 +171,7 @@ export interface TabRenderRuntimeRegistry {
   get(tabId: string): TabRenderRuntime | undefined;
   getByConversation(conversationId: string): readonly TabRenderRuntime[];
   require(tabId: string): TabRenderRuntime;
-  reconcile(bindings: readonly TabRenderBinding[], activeTabId: string | null): void;
+  reconcile(bindings: readonly TabRenderBinding[], activeTabId: string | null): boolean;
   dispose(): void;
 }
 
@@ -493,8 +493,9 @@ class DefaultTabRenderRuntimeRegistry implements TabRenderRuntimeRegistry {
     return runtime;
   }
 
-  reconcile(bindings: readonly TabRenderBinding[], activeTabId: string | null): void {
+  reconcile(bindings: readonly TabRenderBinding[], activeTabId: string | null): boolean {
     this.assertActive();
+    let changed = false;
     const nextBindings = new Map<string, TabRenderBinding>();
     for (const binding of bindings) {
       assertBinding(binding);
@@ -520,6 +521,7 @@ class DefaultTabRenderRuntimeRegistry implements TabRenderRuntimeRegistry {
       if (!nextBindings.has(tabId)) {
         runtime.dispose();
         this.runtimes.delete(tabId);
+        changed = true;
       }
     }
 
@@ -529,9 +531,17 @@ class DefaultTabRenderRuntimeRegistry implements TabRenderRuntimeRegistry {
         runtime = createTabRenderRuntime(binding);
         runtime.markReady();
         this.runtimes.set(binding.tabId, runtime);
+        changed = true;
+      }
+      if (
+        runtime.store.getSnapshot().visibility !==
+        (binding.tabId === activeTabId ? 'visible' : 'hidden')
+      ) {
+        changed = true;
       }
       runtime.setVisible(binding.tabId === activeTabId);
     }
+    return changed;
   }
 
   dispose(): void {

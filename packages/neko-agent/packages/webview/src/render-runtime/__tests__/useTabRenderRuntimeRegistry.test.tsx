@@ -1,7 +1,8 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { OpenTab } from '@neko-agent/types';
 import { useTabRenderRuntimeRegistry } from '../useTabRenderRuntimeRegistry';
+import { TAB_RENDER_REALM_STATE_VERSION } from '../tab-render-realm-state';
 
 const tabA: OpenTab = { id: 'tab-a', title: 'A', conversationId: 'conv-a' };
 const tabB: OpenTab = { id: 'tab-b', title: 'B', conversationId: 'conv-b' };
@@ -29,5 +30,47 @@ describe('useTabRenderRuntimeRegistry', () => {
       expect(runtimeA.lifecycle).toBe('disposed');
       expect(runtimeB.lifecycle).toBe('disposed');
     });
+  });
+
+  it('restores host state before publishing reconciled Tab runtimes', () => {
+    const getState = vi.fn(() => ({
+      schemaVersion: TAB_RENDER_REALM_STATE_VERSION,
+      drafts: [
+        {
+          tabId: 'tab-a',
+          conversationId: 'conv-a',
+          inputValue: 'restored draft',
+          selectedModel: '',
+          mediaModelSelection: { image: 'none', video: 'none', audio: 'none' },
+          mediaUnderstandingSelection: { image: 'auto', video: 'auto', audio: 'auto' },
+          sessionMode: 'agent',
+          executionMode: 'ask',
+          promptMode: 'default',
+          generationCategory: 'image',
+          generationParams: {
+            ratio: '16:9',
+            resolution: '1080p',
+            videoDuration: 'auto',
+            videoFps: 24,
+            audioDuration: 'auto',
+            audioType: 'sfx',
+          },
+          llmConfig: {},
+        },
+      ],
+    }));
+    const host = {
+      getState,
+      setState: vi.fn(),
+    };
+
+    const { result, unmount } = renderHook(() =>
+      useTabRenderRuntimeRegistry([tabA], 'tab-a', host),
+    );
+
+    expect(result.current.require('tab-a').store.getSnapshot().state.inputValue).toBe(
+      'restored draft',
+    );
+    unmount();
   });
 });
