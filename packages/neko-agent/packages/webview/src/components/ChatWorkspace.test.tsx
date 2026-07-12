@@ -529,9 +529,6 @@ describe('ChatWorkspace pending send', () => {
       <ChatWorkspace
         {...createProps({
           tabRenderStore: runtimeA.store,
-          activeConversationId: 'conv-a',
-          activeConversationIdRef: createRefWithCurrent<string | null>('conv-a'),
-          activeTabConversationId: 'conv-a',
         })}
       />,
     );
@@ -541,9 +538,6 @@ describe('ChatWorkspace pending send', () => {
       <ChatWorkspace
         {...createProps({
           tabRenderStore: runtimeB.store,
-          activeConversationId: 'conv-b',
-          activeConversationIdRef: createRefWithCurrent<string | null>('conv-b'),
-          activeTabConversationId: 'conv-b',
         })}
       />,
     );
@@ -560,9 +554,6 @@ describe('ChatWorkspace pending send', () => {
       <ChatWorkspace
         {...createProps({
           tabRenderStore: runtimeA.store,
-          activeConversationId: 'conv-a',
-          activeConversationIdRef: createRefWithCurrent<string | null>('conv-a'),
-          activeTabConversationId: 'conv-a',
           onModelSelect,
         })}
       />,
@@ -577,9 +568,6 @@ describe('ChatWorkspace pending send', () => {
       <ChatWorkspace
         {...createProps({
           tabRenderStore: runtimeB.store,
-          activeConversationId: 'conv-b',
-          activeConversationIdRef: createRefWithCurrent<string | null>('conv-b'),
-          activeTabConversationId: 'conv-b',
           onModelSelect,
         })}
       />,
@@ -592,14 +580,11 @@ describe('ChatWorkspace pending send', () => {
   it('keeps LLM configuration and composer menus in their owning Tab store while switching', () => {
     const runtimeA = createTabRenderRuntime({ tabId: 'tab-a', conversationId: 'conv-a' });
     const runtimeB = createTabRenderRuntime({ tabId: 'tab-b', conversationId: 'conv-b' });
-    const propsFor = (runtime: typeof runtimeA, conversationId: string) =>
+    const propsFor = (runtime: typeof runtimeA) =>
       createProps({
         tabRenderStore: runtime.store,
-        activeConversationId: conversationId,
-        activeConversationIdRef: createRefWithCurrent<string | null>(conversationId),
-        activeTabConversationId: conversationId,
       });
-    const { getByTestId, rerender } = render(<ChatWorkspace {...propsFor(runtimeA, 'conv-a')} />);
+    const { getByTestId, rerender } = render(<ChatWorkspace {...propsFor(runtimeA)} />);
 
     fireEvent.click(getByTestId('set-deep-llm-config'));
     fireEvent.click(getByTestId('open-slash-menu'));
@@ -608,12 +593,12 @@ describe('ChatWorkspace pending send', () => {
     expect(getByTestId('composer-menu-state').textContent).toBe('true:sto:2');
     expect(getByTestId('control-menu-state').textContent).toBe('llm-creativity:image:video');
 
-    rerender(<ChatWorkspace {...propsFor(runtimeB, 'conv-b')} />);
+    rerender(<ChatWorkspace {...propsFor(runtimeB)} />);
     expect(getByTestId('llm-config-state').textContent).toBe('balanced:standard:creative');
     expect(getByTestId('composer-menu-state').textContent).toBe('false::0');
     expect(getByTestId('control-menu-state').textContent).toBe('none:llm:none');
 
-    rerender(<ChatWorkspace {...propsFor(runtimeA, 'conv-a')} />);
+    rerender(<ChatWorkspace {...propsFor(runtimeA)} />);
     expect(getByTestId('llm-config-state').textContent).toBe('deep:detailed:stable');
     expect(getByTestId('composer-menu-state').textContent).toBe('true:sto:2');
     expect(getByTestId('control-menu-state').textContent).toBe('llm-creativity:image:video');
@@ -626,9 +611,6 @@ describe('ChatWorkspace pending send', () => {
       <ChatWorkspace
         {...createProps({
           tabRenderStore: runtimeA.store,
-          activeConversationId: 'conv-a',
-          activeConversationIdRef: createRefWithCurrent<string | null>('conv-a'),
-          activeTabConversationId: 'conv-a',
         })}
       />,
     );
@@ -641,9 +623,6 @@ describe('ChatWorkspace pending send', () => {
       <ChatWorkspace
         {...createProps({
           tabRenderStore: runtimeB.store,
-          activeConversationId: 'conv-a',
-          activeConversationIdRef: createRefWithCurrent<string | null>('conv-a'),
-          activeTabConversationId: 'conv-a',
         })}
       />,
     );
@@ -655,9 +634,6 @@ describe('ChatWorkspace pending send', () => {
       <ChatWorkspace
         {...createProps({
           tabRenderStore: runtimeA.store,
-          activeConversationId: 'conv-a',
-          activeConversationIdRef: createRefWithCurrent<string | null>('conv-a'),
-          activeTabConversationId: 'conv-a',
         })}
       />,
     );
@@ -676,9 +652,6 @@ describe('ChatWorkspace pending send', () => {
       <ChatWorkspace
         {...createProps({
           tabRenderStore: runtimeA.store,
-          activeConversationId: 'conv-a',
-          activeConversationIdRef: createRefWithCurrent<string | null>('conv-a'),
-          activeTabConversationId: 'conv-a',
         })}
       />,
     );
@@ -692,9 +665,6 @@ describe('ChatWorkspace pending send', () => {
       <ChatWorkspace
         {...createProps({
           tabRenderStore: runtimeB.store,
-          activeConversationId: 'conv-b',
-          activeConversationIdRef: createRefWithCurrent<string | null>('conv-b'),
-          activeTabConversationId: 'conv-b',
         })}
       />,
     );
@@ -712,9 +682,6 @@ describe('ChatWorkspace pending send', () => {
       <ChatWorkspace
         {...createProps({
           tabRenderStore: storeA,
-          activeConversationId: 'conv-a',
-          activeConversationIdRef: createRefWithCurrent<string | null>('conv-a'),
-          activeTabConversationId: 'conv-a',
           settings: createSettingsWithImageModel(),
         })}
       />,
@@ -728,9 +695,6 @@ describe('ChatWorkspace pending send', () => {
       <ChatWorkspace
         {...createProps({
           tabRenderStore: storeB,
-          activeConversationId: 'conv-b',
-          activeConversationIdRef: createRefWithCurrent<string | null>('conv-b'),
-          activeTabConversationId: 'conv-b',
           settings: createSettingsWithImageModel(),
         })}
       />,
@@ -742,9 +706,6 @@ describe('ChatWorkspace pending send', () => {
       <ChatWorkspace
         {...createProps({
           tabRenderStore: storeA,
-          activeConversationId: 'conv-a',
-          activeConversationIdRef: createRefWithCurrent<string | null>('conv-a'),
-          activeTabConversationId: 'conv-a',
           settings: createSettingsWithImageModel(),
         })}
       />,

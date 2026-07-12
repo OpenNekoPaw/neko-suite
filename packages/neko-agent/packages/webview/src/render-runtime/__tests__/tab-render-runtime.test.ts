@@ -211,14 +211,14 @@ describe('TabRenderRuntimeRegistry', () => {
       attachedFiles: [{ id: 'asset-b', name: 'b.wav', type: 'audio', data: 'data-b' }],
       selectedModel: 'model-b',
       generationParams: { ...state.generationParams, resolution: '1080p' },
-      llmConfig: { ...state.llmConfig, verbosityPreset: 'verbose' },
+      llmConfig: { ...state.llmConfig, verbosityPreset: 'detailed' },
       focus: { target: 'input', requestRevision: 7 },
       viewport: { followMode: 'detached', anchorMessageId: 'message-b', anchorOffset: 24 },
     }));
     runtimeC.store.updateState((state) => ({
       inputValue: 'draft-c',
       selectedModel: 'model-c',
-      llmConfig: { ...state.llmConfig, creativityPreset: 'precise' },
+      llmConfig: { ...state.llmConfig, creativityPreset: 'wild' },
       viewport: { followMode: 'follow-tail' },
     }));
 

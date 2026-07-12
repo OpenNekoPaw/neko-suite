@@ -1,3 +1,4 @@
+import type { TaskRunScope } from '@neko/shared';
 import { describe, it, expect, vi, beforeEach, beforeAll } from 'vitest';
 
 const { mockPostMessage, mockGetState, mockSetState, mockVSCodeApi } = vi.hoisted(() => {
@@ -290,31 +291,31 @@ describe('messages', () => {
         expect(mockPostMessage).toHaveBeenCalledWith({ type: 'getAgentStates' });
       });
 
-      it('should post cancelTask', () => {
-        VSCodeMessages.cancelTask('task-123', 'conv-1');
+      it('should post cancelTask with complete owner scope', () => {
+        const taskScope = createTaskRunScope();
+        VSCodeMessages.cancelTask(taskScope);
         expect(mockPostMessage).toHaveBeenCalledWith({
           type: 'cancelTask',
-          taskId: 'task-123',
-          conversationId: 'conv-1',
+          taskScope,
         });
       });
 
-      it('should post viewTaskResult', () => {
-        VSCodeMessages.viewTaskResult('task-123', 'conv-1', 'generated-assets/asset-1.png');
+      it('should post viewTaskResult with complete owner scope', () => {
+        const taskScope = createTaskRunScope();
+        VSCodeMessages.viewTaskResult(taskScope, 'generated-assets/asset-1.png');
         expect(mockPostMessage).toHaveBeenCalledWith({
           type: 'viewTaskResult',
-          taskId: 'task-123',
-          conversationId: 'conv-1',
+          taskScope,
           resultRef: 'generated-assets/asset-1.png',
         });
       });
 
-      it('should post retryTask', () => {
-        VSCodeMessages.retryTask('task-123', 'conv-1');
+      it('should post retryTask with complete owner scope', () => {
+        const taskScope = createTaskRunScope();
+        VSCodeMessages.retryTask(taskScope);
         expect(mockPostMessage).toHaveBeenCalledWith({
           type: 'retryTask',
-          taskId: 'task-123',
-          conversationId: 'conv-1',
+          taskScope,
         });
       });
     });
@@ -442,3 +443,13 @@ describe('messages', () => {
     });
   });
 });
+
+function createTaskRunScope(): TaskRunScope {
+  return {
+    conversationId: 'conv-1',
+    runId: 'run-1',
+    parentRunId: 'parent-run-1',
+    childRunId: 'task-123',
+    childKind: 'task',
+  };
+}

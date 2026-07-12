@@ -64,6 +64,13 @@ describe('message presenter', () => {
       success: true,
       data: {
         subAgentId: 'sub-1',
+        scope: {
+          conversationId: 'conv-1',
+          runId: 'run-1',
+          parentRunId: 'parent-run-1',
+          childRunId: 'sub-1',
+          childKind: 'subagent',
+        },
         status: 'completed',
         description: 'Review implementation',
         response: 'Looks good',
@@ -256,6 +263,13 @@ describe('message presenter', () => {
       data: {
         backgroundMode: true,
         taskId: 'task-1',
+        taskScope: {
+          conversationId: 'conv-1',
+          runId: 'run-1',
+          parentRunId: 'parent-run-1',
+          childRunId: 'task-1',
+          childKind: 'task',
+        },
         type: 'video',
         status: 'completed',
         message: 'A cinematic cat',
