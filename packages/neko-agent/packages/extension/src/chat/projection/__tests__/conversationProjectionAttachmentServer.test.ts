@@ -361,6 +361,28 @@ describe('ConversationProjectionAttachmentServer', () => {
     ).rejects.toThrow('disposed');
   });
 
+  it('abandons a replaced Webview realm without delivering detach frames', async () => {
+    const projection = createConversationProjectionStore('conversation-a');
+    const frames: HostFrame[] = [];
+    const server = createConversationProjectionAttachmentServer({
+      endpointEpoch: 'endpoint-1',
+      resolveProjection: () => projection,
+      postMessage: async (frame) => {
+        frames.push(frame);
+        return true;
+      },
+      reportError: vi.fn(),
+    });
+
+    await server.attach({ type: 'projectionAttach', key: keyA });
+    await server.abandon();
+
+    expect(frames.map((frame) => frame.type)).toEqual(['projectionSnapshot']);
+    await expect(server.attach({ type: 'projectionAttach', key: keyA })).rejects.toThrow(
+      'disposed',
+    );
+  });
+
   it('rejects an ACK from a different attachment without releasing queued patches', async () => {
     const projection = createConversationProjectionStore('conversation-a');
     const frames: HostFrame[] = [];

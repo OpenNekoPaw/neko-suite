@@ -19,6 +19,7 @@ function createDeps() {
     attach: vi.fn().mockResolvedValue(undefined),
     acknowledge: vi.fn().mockResolvedValue(undefined),
     detach: vi.fn().mockResolvedValue(undefined),
+    abandon: vi.fn().mockResolvedValue(undefined),
     dispose: vi.fn().mockResolvedValue(undefined),
   };
   const announceProjectionEndpoint = vi.fn();

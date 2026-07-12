@@ -40,6 +40,7 @@ export interface ConversationProjectionAttachmentServer {
   attach(request: ProjectionAttachRequest): Promise<void>;
   acknowledge(acknowledgement: ProjectionSnapshotAcknowledgement): Promise<void>;
   detach(message: ProjectionDetachMessage): Promise<void>;
+  abandon(): Promise<void>;
   dispose(): Promise<void>;
 }
 
@@ -119,18 +120,30 @@ class DefaultConversationProjectionAttachmentServer implements ConversationProje
     await attachment.close();
   }
 
-  async dispose(): Promise<void> {
+  abandon(): Promise<void> {
+    return this.shutdown(false);
+  }
+
+  dispose(): Promise<void> {
+    return this.shutdown(true);
+  }
+
+  private async shutdown(notifyClient: boolean): Promise<void> {
     if (this.disposed) return;
     this.disposed = true;
     const attachments = Array.from(this.attachmentsById.values());
     await Promise.all(
       attachments.map(async (attachment) => {
         try {
-          await attachment.notifyDetach({
-            type: 'projectionDetach',
-            key: attachment.key,
-            reason: 'endpoint-replaced',
-          });
+          if (notifyClient) {
+            await attachment.notifyDetach({
+              type: 'projectionDetach',
+              key: attachment.key,
+              reason: 'endpoint-replaced',
+            });
+          } else {
+            await attachment.close();
+          }
         } finally {
           this.removeAttachment(attachment);
         }

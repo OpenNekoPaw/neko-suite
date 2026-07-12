@@ -1370,6 +1370,69 @@ describe('chatProvider', () => {
     provider.dispose();
   });
 
+  it('replaces the projection endpoint once when the same Webview mounts a new realm', async () => {
+    const webview = vscode.createMockWebview();
+    const provider = new ChatViewProvider(vscode.Uri.file('/ext/neko-agent'), createMockContext(), {
+      localResourceAccess: createImmediateLocalResourceAccess(),
+    });
+
+    provider.resolveWebviewView(
+      {
+        webview,
+        visible: true,
+        onDidChangeVisibility: vi.fn(() => ({ dispose: vi.fn() })),
+      } as never,
+      {} as never,
+      {} as never,
+    );
+    await Promise.resolve();
+    const receiveMessage = vi.mocked(webview.onDidReceiveMessage).mock.calls[0]?.[0] as
+      ((message: unknown) => void | Promise<void>) | undefined;
+
+    await receiveMessage?.({
+      type: 'projectionEndpointDiscover',
+      protocolVersion: 1,
+      realmId: 'realm-a',
+    });
+    await receiveMessage?.({
+      type: 'projectionEndpointDiscover',
+      protocolVersion: 1,
+      realmId: 'realm-a',
+    });
+    await receiveMessage?.({
+      type: 'projectionEndpointDiscover',
+      protocolVersion: 1,
+      realmId: 'realm-b',
+    });
+
+    const endpointMessages = vi
+      .mocked(webview.postMessage)
+      .mock.calls.map(([message]) => message)
+      .filter(
+        (
+          message,
+        ): message is {
+          type: 'projectionEndpointReady';
+          protocolVersion: 1;
+          realmId: string;
+          endpointEpoch: string;
+        } =>
+          typeof message === 'object' &&
+          message !== null &&
+          'type' in message &&
+          message.type === 'projectionEndpointReady',
+      );
+    const firstRealmMessages = endpointMessages.filter((message) => message.realmId === 'realm-a');
+    const secondRealmMessage = endpointMessages.find((message) => message.realmId === 'realm-b');
+
+    expect(firstRealmMessages).toHaveLength(2);
+    expect(firstRealmMessages[1]?.endpointEpoch).toBe(firstRealmMessages[0]?.endpointEpoch);
+    expect(secondRealmMessage?.endpointEpoch).toEqual(expect.any(String));
+    expect(secondRealmMessage?.endpointEpoch).not.toBe(firstRealmMessages[0]?.endpointEpoch);
+
+    provider.dispose();
+  });
+
   it('clears the agent editable keyboard context when the assistant view is hidden', async () => {
     const webview = vscode.createMockWebview();
     let visibilityListener: (() => void) | undefined;

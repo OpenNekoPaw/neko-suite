@@ -360,6 +360,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
   private _webviewBindingGeneration = 0;
   private _projectionAttachmentServer?: ConversationProjectionAttachmentServer;
   private _projectionEndpointEpoch?: string;
+  private _projectionEndpointRealmId?: string;
   private readonly _reportedProjectionErrors = new WeakSet<Error>();
 
   // Lazy getter for plugin slash commands (set by the command host after registry is ready)
@@ -944,26 +945,11 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
     }
     const endpointEpoch = randomUUID();
     this._projectionEndpointEpoch = endpointEpoch;
-    this._projectionAttachmentServer = createConversationProjectionAttachmentServer({
+    this._projectionEndpointRealmId = undefined;
+    this._projectionAttachmentServer = this._createProjectionAttachmentServer(
+      webview,
       endpointEpoch,
-      resolveProjection: (conversationId) => {
-        if (!this._agentManager) {
-          throw new Error('AgentManager is required to resolve conversation projection authority.');
-        }
-        return this._agentManager.getOrCreateProjection(conversationId);
-      },
-      postMessage: async (frame) => {
-        const projectedFrame = await projectConversationProjectionAttachmentFrameForWebview(frame, {
-          webview,
-          localResourceAccess: this._localResourceAccess,
-          contentAccessRuntime: getCapabilityRuntimeBindings().contentAccessRuntime,
-          localMediaCaller: 'neko-agent.projection-attachment',
-          documentResourceCaller: 'neko-agent.projection-document-resource',
-        });
-        return Boolean(await webview.postMessage(projectedFrame));
-      },
-      reportError: (error, key) => this._reportProjectionProtocolError(webview, error, key),
-    });
+    );
 
     // Register webview for broadcasts (skills, commands, etc.)
     const postMessageFn = (msg: unknown) => webview.postMessage(msg);
@@ -1047,6 +1033,34 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
     );
   }
 
+  private _createProjectionAttachmentServer(
+    webview: vscode.Webview,
+    endpointEpoch: string,
+  ): ConversationProjectionAttachmentServer {
+    const server = createConversationProjectionAttachmentServer({
+      endpointEpoch,
+      resolveProjection: (conversationId) => {
+        if (!this._agentManager) {
+          throw new Error('AgentManager is required to resolve conversation projection authority.');
+        }
+        return this._agentManager.getOrCreateProjection(conversationId);
+      },
+      postMessage: async (frame) => {
+        if (this._projectionAttachmentServer !== server) return true;
+        const projectedFrame = await projectConversationProjectionAttachmentFrameForWebview(frame, {
+          webview,
+          localResourceAccess: this._localResourceAccess,
+          contentAccessRuntime: getCapabilityRuntimeBindings().contentAccessRuntime,
+          localMediaCaller: 'neko-agent.projection-attachment',
+          documentResourceCaller: 'neko-agent.projection-document-resource',
+        });
+        return Boolean(await webview.postMessage(projectedFrame));
+      },
+      reportError: (error, key) => this._reportProjectionProtocolError(webview, error, key),
+    });
+    return server;
+  }
+
   private _announceProjectionEndpoint(
     webview: vscode.Webview,
     protocolVersion: number,
@@ -1069,11 +1083,31 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
       );
       return;
     }
+    if (this._projectionEndpointRealmId !== realmId) {
+      const replacedRealm = this._projectionEndpointRealmId !== undefined;
+      this._projectionEndpointRealmId = realmId;
+      if (replacedRealm) {
+        const previousServer = this._projectionAttachmentServer;
+        const replacementEpoch = randomUUID();
+        this._projectionEndpointEpoch = replacementEpoch;
+        this._projectionAttachmentServer = this._createProjectionAttachmentServer(
+          webview,
+          replacementEpoch,
+        );
+        void previousServer?.abandon().catch((error: unknown) => {
+          logger.error('Failed to abandon replaced Webview projection realm', error);
+        });
+      }
+    }
+    const currentEndpointEpoch = this._projectionEndpointEpoch;
+    if (!currentEndpointEpoch) {
+      throw new Error('Projection endpoint epoch disappeared during realm discovery.');
+    }
     void webview.postMessage({
       type: 'projectionEndpointReady',
       protocolVersion: AGENT_WEBVIEW_PROTOCOL_VERSION,
       realmId,
-      endpointEpoch,
+      endpointEpoch: currentEndpointEpoch,
     });
     if (this._webviewReady) return;
     this._webviewReady = true;
@@ -1560,6 +1594,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
     this._webviewBindingGeneration += 1;
     this._webviewReady = false;
     this._projectionEndpointEpoch = undefined;
+    this._projectionEndpointRealmId = undefined;
     const projectionAttachmentServer = this._projectionAttachmentServer;
     this._projectionAttachmentServer = undefined;
     if (projectionAttachmentServer) {
