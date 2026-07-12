@@ -10,6 +10,7 @@ import type {
   ITaskRecoveryStorage,
   SerializableTask,
   TaskLifecycleMetadata,
+  TaskRunScope,
   ResourceRef,
   ImageOperationId,
   VideoOperationId,
@@ -355,6 +356,8 @@ export interface MediaRoutingResult {
  * Media generation task
  */
 export interface MediaTask {
+  /** Complete internal task identity and owner scope. */
+  scope: TaskRunScope;
   /** Task ID */
   id: string;
   /** Generation type */
@@ -400,15 +403,18 @@ export interface MediaTaskManagerDeps extends ITaskManager {
   /** Register a task executor for a type */
   registerExecutor?(type: string, executor: unknown): void;
   /** Save recovery info for crash recovery */
-  saveRecoveryInfo?(taskId: string, externalTaskId: string, providerId: string): Promise<void>;
+  saveRecoveryInfo?(scope: TaskRunScope, externalTaskId: string, providerId: string): Promise<void>;
   /** Delete recovery info after completion */
-  deleteRecoveryInfo?(taskId: string): Promise<void>;
+  deleteRecoveryInfo?(scope: TaskRunScope): Promise<void>;
   /** Get recovery storage */
   getRecoveryStorage?(): ITaskRecoveryStorage | undefined;
   /** Update task lifecycle metadata */
-  updateLifecycle?(id: string, lifecycle: Partial<TaskLifecycleMetadata>): Promise<boolean>;
+  updateLifecycle?(
+    scope: TaskRunScope,
+    lifecycle: Partial<TaskLifecycleMetadata>,
+  ): Promise<boolean>;
   /** Update task output data */
-  updateOutputData?(id: string, outputData: Record<string, unknown>): Promise<boolean>;
+  updateOutputData?(scope: TaskRunScope, outputData: Record<string, unknown>): Promise<boolean>;
   /** Upsert an externally resumed task result into the shared task plane */
   upsertExternalTask?(task: SerializableTask): Promise<void>;
 }

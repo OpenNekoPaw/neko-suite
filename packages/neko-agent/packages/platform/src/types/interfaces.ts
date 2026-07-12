@@ -6,6 +6,7 @@
  * not concrete implementations.
  */
 
+import type { TaskRunScope } from '@neko/shared';
 import type { ChatMessage, ModelInfo } from './adapter';
 import type {
   ServiceOptions,
@@ -116,26 +117,26 @@ export interface IMediaGenerationService {
   /**
    * Wait for a task to complete
    */
-  waitForTask(taskId: string, timeoutMs?: number): Promise<MediaTask>;
+  waitForTask(taskScope: TaskRunScope, timeoutMs?: number): Promise<MediaTask>;
 
   /**
    * Cancel a running task
    */
-  cancelTask(taskId: string): Promise<boolean>;
+  cancelTask(taskScope: TaskRunScope): Promise<boolean>;
 
   /**
    * Delete a task from storage
    */
-  deleteTask(taskId: string): Promise<boolean>;
+  deleteTask(taskScope: TaskRunScope): Promise<boolean>;
 
   /**
    * Get task status
    */
-  getTask(taskId: string): Promise<MediaTask | undefined>;
+  getTask(taskScope: TaskRunScope): Promise<MediaTask | undefined>;
 
   /**
    * Subscribe to task progress updates
    * @returns Unsubscribe function
    */
-  onProgress(taskId: string, callback: (task: MediaTask) => void): () => void;
+  onProgress(taskScope: TaskRunScope, callback: (task: MediaTask) => void): () => void;
 }

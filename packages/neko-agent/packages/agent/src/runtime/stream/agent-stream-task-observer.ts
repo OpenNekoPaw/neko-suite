@@ -1,6 +1,9 @@
 import type { TaskCreatedMessage, TaskUpdatedMessage } from '@neko-agent/types';
-import type { TaskRunLease } from '@neko/shared';
-import type { BackgroundTaskProgressPatch, BackgroundTaskView } from '../../task/task-view-projector';
+import type { TaskRunLease, TaskRunScope } from '@neko/shared';
+import type {
+  BackgroundTaskProgressPatch,
+  BackgroundTaskView,
+} from '../../task/task-view-projector';
 import type { AgentEvent } from '../../session/types';
 import {
   type AgentStreamBackgroundTaskPersistInput,
@@ -11,6 +14,7 @@ import {
 export interface AgentStreamBackgroundTaskDeliveryContext {
   readonly lease: TaskRunLease;
   readonly conversationId: string;
+  readonly taskScope: TaskRunScope;
   readonly taskId: string;
   readonly toolCallId?: string;
   readonly taskType: BackgroundTaskView['type'];
@@ -20,6 +24,7 @@ export interface AgentStreamBackgroundTaskDeliveryContext {
 export interface AgentStreamBackgroundTaskWaitInput {
   readonly lease: TaskRunLease;
   readonly conversationId: string;
+  readonly taskScope: TaskRunScope;
   readonly taskId: string;
   readonly toolCallId?: string;
   readonly taskType: BackgroundTaskView['type'];
@@ -38,12 +43,14 @@ export interface AgentStreamBackgroundTaskProgressEvent<
 > {
   readonly lease: TaskRunLease;
   readonly conversationId: string;
+  readonly taskScope: TaskRunScope;
   readonly task: AgentStreamBackgroundTaskObservedProgress<TDeliveryPlan>;
   readonly sourceTask: TSourceTask;
 }
 
 export interface AgentStreamBackgroundTaskIgnoredEvent<TSourceTask = unknown> {
   readonly lease: TaskRunLease;
+  readonly taskScope: TaskRunScope;
   readonly taskId: string;
   readonly conversationId: string;
   readonly sourceTask: TSourceTask;
@@ -54,6 +61,7 @@ export interface AgentStreamBackgroundTaskProgressErrorEvent<
   TDeliveryPlan = unknown,
 > {
   readonly lease: TaskRunLease;
+  readonly taskScope: TaskRunScope;
   readonly taskId: string;
   readonly conversationId: string;
   readonly sourceTask: TSourceTask;
@@ -67,6 +75,7 @@ export interface AgentStreamBackgroundTaskStaleEvent<TSourceTask = unknown> {
   readonly reason: AgentStreamBackgroundTaskStaleReason;
   readonly expectedLease: TaskRunLease;
   readonly lease: TaskRunLease;
+  readonly taskScope: TaskRunScope;
   readonly taskId: string;
   readonly conversationId: string;
   readonly sourceTask: TSourceTask;
@@ -78,6 +87,7 @@ export interface AgentStreamBackgroundTaskTerminalEvent<
 > {
   readonly lease: TaskRunLease;
   readonly conversationId: string;
+  readonly taskScope: TaskRunScope;
   readonly taskId: string;
   readonly parentMessageId: string;
   readonly parentToolCallId?: string;
@@ -91,6 +101,7 @@ export interface ObserveAgentStreamBackgroundTaskProgressInput<
   TDeliveryPlan = unknown,
 > {
   readonly lease: TaskRunLease;
+  readonly taskScope: TaskRunScope;
   readonly taskId: string;
   readonly conversationId: string;
   readonly unsubscribeOnIgnoredConversation: boolean;
@@ -145,9 +156,7 @@ export interface StartAgentStreamBackgroundTaskObserverInput<
   readonly onProgressDeliveryError?: (
     event: AgentStreamBackgroundTaskProgressErrorEvent<TSourceTask, TDeliveryPlan>,
   ) => void;
-  readonly onStaleTaskProgress?: (
-    event: AgentStreamBackgroundTaskStaleEvent<TSourceTask>,
-  ) => void;
+  readonly onStaleTaskProgress?: (event: AgentStreamBackgroundTaskStaleEvent<TSourceTask>) => void;
   readonly now?: () => number;
 }
 
@@ -157,6 +166,7 @@ export type StartAgentStreamBackgroundTaskObserverResult =
     }
   | {
       readonly started: true;
+      readonly taskScope: TaskRunScope;
       readonly taskId: string;
       readonly task: BackgroundTaskView;
       readonly completion: Promise<AgentStreamBackgroundTaskCompletion>;
@@ -207,6 +217,7 @@ export function startAgentStreamBackgroundTaskObserver<
   if (!observeProgress) {
     return {
       started: true,
+      taskScope: start.task.scope,
       taskId: start.taskId,
       task: start.task,
       completion: Promise.resolve({ status: 'observer-unavailable' }),
@@ -229,6 +240,7 @@ export function startAgentStreamBackgroundTaskObserver<
   const context: AgentStreamBackgroundTaskDeliveryContext = {
     lease,
     conversationId: input.conversationId,
+    taskScope: start.task.scope,
     taskId: start.taskId,
     ...(start.toolCallId ? { toolCallId: start.toolCallId } : {}),
     taskType: start.taskType,
@@ -238,12 +250,14 @@ export function startAgentStreamBackgroundTaskObserver<
   const deliverObservedProgress = async (params: {
     readonly lease: TaskRunLease;
     readonly conversationId: string;
+    readonly taskScope: TaskRunScope;
     readonly task: AgentStreamBackgroundTaskObservedProgress<TDeliveryPlan>;
     readonly sourceTask: TSourceTask;
   }): Promise<void> => {
     if (params.conversationId !== input.conversationId) {
       input.onIgnoredConversationTask?.({
         lease,
+        taskScope: start.task.scope,
         taskId: start.taskId,
         conversationId: input.conversationId,
         sourceTask: params.sourceTask,
@@ -256,6 +270,7 @@ export function startAgentStreamBackgroundTaskObserver<
         reason: 'lease-mismatch',
         expectedLease: lease,
         lease: params.lease,
+        taskScope: start.task.scope,
         taskId: start.taskId,
         conversationId: input.conversationId,
         sourceTask: params.sourceTask,
@@ -267,6 +282,7 @@ export function startAgentStreamBackgroundTaskObserver<
         reason: 'settled',
         expectedLease: lease,
         lease: params.lease,
+        taskScope: start.task.scope,
         taskId: start.taskId,
         conversationId: input.conversationId,
         sourceTask: params.sourceTask,
@@ -289,6 +305,7 @@ export function startAgentStreamBackgroundTaskObserver<
       input.persistResultUrls?.({
         lease,
         conversationId: input.conversationId,
+        taskScope: start.task.scope,
         taskId: start.taskId,
         ...(start.toolCallId ? { toolCallId: start.toolCallId } : {}),
         urls: projection.persistResultUrls,
@@ -300,6 +317,7 @@ export function startAgentStreamBackgroundTaskObserver<
       await input.onTerminalTask?.({
         lease,
         conversationId: input.conversationId,
+        taskScope: start.task.scope,
         taskId: start.taskId,
         parentMessageId: input.messageId,
         ...(start.toolCallId ? { parentToolCallId: start.toolCallId } : {}),
@@ -312,6 +330,7 @@ export function startAgentStreamBackgroundTaskObserver<
   };
 
   const unsubscribe = observeProgress({
+    taskScope: start.task.scope,
     taskId: start.taskId,
     lease,
     conversationId: input.conversationId,
@@ -338,6 +357,7 @@ export function startAgentStreamBackgroundTaskObserver<
       .waitForCompletion({
         conversationId: input.conversationId,
         lease,
+        taskScope: start.task.scope,
         taskId: start.taskId,
         ...(start.toolCallId ? { toolCallId: start.toolCallId } : {}),
         taskType: start.taskType,
@@ -348,6 +368,7 @@ export function startAgentStreamBackgroundTaskObserver<
         await deliverObservedProgress({
           lease,
           conversationId: input.conversationId,
+          taskScope: start.task.scope,
           sourceTask: task,
           task: await input.createProgressDelivery(task, context),
         });
@@ -381,6 +402,7 @@ export function startAgentStreamBackgroundTaskObserver<
 
   return {
     started: true,
+    taskScope: start.task.scope,
     taskId: start.taskId,
     task: start.task,
     completion,

@@ -1,5 +1,10 @@
 import type { Task as IdcTask, TaskStatus as IdcTaskStatus } from '@neko-agent/types';
-import type { SerializableTask } from '@neko/shared';
+import {
+  formatRunScope,
+  type ConversationRunScope,
+  type SerializableTask,
+  type TaskRunScope,
+} from '@neko/shared';
 import type {
   CreationProjectedTaskArtifactBinding,
   CreationProjectedTaskUpsertInput,
@@ -7,7 +12,7 @@ import type {
 import type { ICreationProjectedTaskStore } from './task-manager';
 
 export interface ICreationTaskProjectionStore extends ICreationProjectedTaskStore {
-  delete(id: string): Promise<boolean>;
+  delete(scope: TaskRunScope): Promise<boolean>;
 }
 
 export interface ICreationTaskProjection {
@@ -18,7 +23,7 @@ export interface ICreationTaskProjection {
     task: IdcTask;
     artifact?: CreationProjectedTaskArtifactBinding;
   }): Promise<readonly string[]>;
-  clearRun(runId: string, runStartedAt?: number): Promise<void>;
+  clearRun(scope: ConversationRunScope, runStartedAt?: number): Promise<void>;
 }
 
 export interface CreationTaskProjectionConfig {
@@ -27,7 +32,7 @@ export interface CreationTaskProjectionConfig {
 
 class TaskManagerCreationTaskProjection implements ICreationTaskProjection {
   private readonly _store: ICreationTaskProjectionStore;
-  private readonly _projectedIdsByRun = new Map<string, Set<string>>();
+  private readonly _projectedScopesByRun = new Map<string, Map<string, TaskRunScope>>();
 
   constructor(config: CreationTaskProjectionConfig) {
     this._store = config.store;
@@ -40,8 +45,9 @@ class TaskManagerCreationTaskProjection implements ICreationTaskProjection {
     task: IdcTask;
     artifact?: CreationProjectedTaskArtifactBinding;
   }): Promise<readonly string[]> {
-    const runKey = createProjectionRunKey(input.runId, input.runStartedAt);
-    const nextIds = new Set<string>();
+    const owner = { conversationId: input.conversationId, runId: input.runId };
+    const runKey = createProjectionRunKey(owner, input.runStartedAt);
+    const nextScopes = new Map<string, TaskRunScope>();
 
     for (const item of input.task.items) {
       const projected = toProjectedTask(
@@ -52,24 +58,30 @@ class TaskManagerCreationTaskProjection implements ICreationTaskProjection {
         item,
         input.artifact,
       );
-      nextIds.add(projected.id);
+      nextScopes.set(projected.id, {
+        ...owner,
+        parentRunId: input.runId,
+        childRunId: projected.id,
+        childKind: 'task',
+      });
       await this._store.upsertCreationProjectedTask(projected);
     }
 
-    const previousIds = this._projectedIdsByRun.get(runKey) ?? new Set<string>();
-    for (const staleId of previousIds) {
-      if (!nextIds.has(staleId)) {
-        await this._store.delete(staleId);
+    const previousScopes =
+      this._projectedScopesByRun.get(runKey) ?? new Map<string, TaskRunScope>();
+    for (const [staleId, staleScope] of previousScopes) {
+      if (!nextScopes.has(staleId)) {
+        await this._store.delete(staleScope);
       }
     }
 
-    this._projectedIdsByRun.set(runKey, nextIds);
-    return [...nextIds];
+    this._projectedScopesByRun.set(runKey, nextScopes);
+    return [...nextScopes.keys()];
   }
 
-  async clearRun(runId: string, runStartedAt?: number): Promise<void> {
-    await this._store.clearCreationProjectedTasksForRun(runId, runStartedAt);
-    this._projectedIdsByRun.delete(createProjectionRunKey(runId, runStartedAt));
+  async clearRun(scope: ConversationRunScope, runStartedAt?: number): Promise<void> {
+    await this._store.clearCreationProjectedTasksForRun(scope, runStartedAt);
+    this._projectedScopesByRun.delete(createProjectionRunKey(scope, runStartedAt));
   }
 }
 
@@ -112,8 +124,9 @@ function createProjectedTaskId(runId: string, itemId: string): string {
   return `creation:${runId}:${itemId}`;
 }
 
-function createProjectionRunKey(runId: string, runStartedAt?: number): string {
-  return runStartedAt === undefined ? runId : `${runId}@${runStartedAt}`;
+function createProjectionRunKey(scope: ConversationRunScope, runStartedAt?: number): string {
+  const runKey = formatRunScope(scope);
+  return runStartedAt === undefined ? runKey : `${runKey}@${runStartedAt}`;
 }
 
 function toProjectedTaskStatus(status: IdcTaskStatus): SerializableTask['status'] {

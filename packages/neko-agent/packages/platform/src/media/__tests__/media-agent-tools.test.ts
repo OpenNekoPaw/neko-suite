@@ -23,7 +23,17 @@ function createTask(
   type: MediaTask['type'],
   request: Record<string, unknown>,
 ): MediaTask {
+  const metadata = request.metadata as Record<string, unknown> | undefined;
+  const conversationId = (metadata?.conversationId as string | undefined) ?? 'conv-1';
+  const runId = (metadata?.runId as string | undefined) ?? 'run-1';
   return {
+    scope: {
+      conversationId,
+      runId,
+      parentRunId: runId,
+      childRunId: id,
+      childKind: 'task',
+    },
     id,
     type,
     status: 'pending',
@@ -34,6 +44,24 @@ function createTask(
     updatedAt: new Date(0),
     request: request as never,
   };
+}
+
+type ToolExecuteOptions = NonNullable<Parameters<ToolRegistry['execute']>[2]>;
+
+function executeAgentTool(
+  registry: ToolRegistry,
+  name: string,
+  args: Record<string, unknown>,
+  options: ToolExecuteOptions = {},
+) {
+  return registry.execute(name, args, {
+    ...options,
+    trace: {
+      conversationId: 'conv-1',
+      runId: 'run-1',
+      ...options.trace,
+    },
+  });
 }
 
 describe('registerMediaAgentTools', () => {
@@ -97,7 +125,7 @@ describe('registerMediaAgentTools', () => {
     const media = createMediaMock();
     registerMediaAgentTools(registry, media as never);
 
-    const result = await registry.execute('GenerateImage', {
+    const result = await executeAgentTool(registry, 'GenerateImage', {
       prompt: 'A lighthouse at dusk',
       providerId: 'openai-provider',
       modelId: 'dalle-model',
@@ -140,7 +168,8 @@ describe('registerMediaAgentTools', () => {
     const media = createMediaMock();
     registerMediaAgentTools(registry, media as never);
 
-    const result = await registry.execute(
+    const result = await executeAgentTool(
+      registry,
       'GenerateImage',
       {
         prompt: 'A playful cat',
@@ -173,7 +202,8 @@ describe('registerMediaAgentTools', () => {
     const media = createMediaMock();
     registerMediaAgentTools(registry, media as never);
 
-    const result = await registry.execute(
+    const result = await executeAgentTool(
+      registry,
       'GenerateImage',
       {
         prompt: 'A playful cat',
@@ -201,7 +231,7 @@ describe('registerMediaAgentTools', () => {
     );
   });
 
-  it('creates a distinct run lease for Agent background media tasks when the turn trace has no run id', async () => {
+  it('fails visibly when an Agent media tool has no run ownership', async () => {
     const registry = new ToolRegistry();
     const media = createMediaMock();
     registerMediaAgentTools(registry, media as never);
@@ -221,68 +251,53 @@ describe('registerMediaAgentTools', () => {
       },
     );
 
-    const request = media.generateImage.mock.calls[0]?.[0] as
-      { metadata?: Record<string, unknown> } | undefined;
-    const data = result.data as Record<string, unknown>;
-
-    expect(result.success).toBe(true);
-    expect(request?.metadata).toEqual(
-      expect.objectContaining({
-        conversationId: 'conv-turn-only',
-        runId: expect.stringMatching(/^run-conv-turn-only-/),
-        resultDeliveryPolicy: { kind: 'auto-resume-agent' },
-      }),
-    );
-    expect(request?.metadata?.runId).not.toBe('turn-conv-turn-only-1');
-    expect(data).toEqual(
-      expect.objectContaining({
-        backgroundMode: true,
-        conversationId: 'conv-turn-only',
-        runId: request?.metadata?.runId,
-      }),
-    );
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('runId ownership');
+    expect(media.generateImage).not.toHaveBeenCalled();
   });
 
-  it('creates unique run leases for concurrent Agent background media tasks in the same millisecond', async () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date('2026-01-01T00:00:00.000Z'));
-    try {
-      const registry = new ToolRegistry();
-      const media = createMediaMock();
-      registerMediaAgentTools(registry, media as never);
+  it('preserves explicit concurrent run ownership without generating fallback ids', async () => {
+    const registry = new ToolRegistry();
+    const media = createMediaMock();
+    registerMediaAgentTools(registry, media as never);
 
-      const [first, second] = await Promise.all([
-        registry.execute(
-          'GenerateImage',
-          {
-            prompt: 'First frame',
-            providerId: 'openai-provider',
-            modelId: 'dalle-model',
-          },
-          { trace: { conversationId: 'conv-concurrent', turnId: 'turn-concurrent' } },
-        ),
-        registry.execute(
-          'GenerateImage',
-          {
-            prompt: 'Second frame',
-            providerId: 'openai-provider',
-            modelId: 'dalle-model',
-          },
-          { trace: { conversationId: 'conv-concurrent', turnId: 'turn-concurrent' } },
-        ),
-      ]);
+    const [first, second] = await Promise.all([
+      executeAgentTool(
+        registry,
+        'GenerateImage',
+        {
+          prompt: 'First frame',
+          providerId: 'openai-provider',
+          modelId: 'dalle-model',
+        },
+        { trace: { conversationId: 'conv-concurrent', runId: 'run-a' } },
+      ),
+      executeAgentTool(
+        registry,
+        'GenerateImage',
+        {
+          prompt: 'Second frame',
+          providerId: 'openai-provider',
+          modelId: 'dalle-model',
+        },
+        { trace: { conversationId: 'conv-concurrent', runId: 'run-b' } },
+      ),
+    ]);
 
-      const firstRunId = (first.data as Record<string, unknown>).runId;
-      const secondRunId = (second.data as Record<string, unknown>).runId;
-
-      expect(first.success).toBe(true);
-      expect(second.success).toBe(true);
-      expect(firstRunId).toEqual(expect.stringMatching(/^run-conv-concurrent-/));
-      expect(secondRunId).toEqual(expect.stringMatching(/^run-conv-concurrent-/));
-      expect(firstRunId).not.toBe(secondRunId);
-    } finally {
-      vi.useRealTimers();
-    }
+    expect(first.success).toBe(true);
+    expect(second.success).toBe(true);
+    expect(first.data).toEqual(expect.objectContaining({ runId: 'run-a' }));
+    expect(second.data).toEqual(expect.objectContaining({ runId: 'run-b' }));
+    expect(media.generateImage.mock.calls[0]?.[0]).toEqual(
+      expect.objectContaining({
+        metadata: expect.objectContaining({ conversationId: 'conv-concurrent', runId: 'run-a' }),
+      }),
+    );
+    expect(media.generateImage.mock.calls[1]?.[0]).toEqual(
+      expect.objectContaining({
+        metadata: expect.objectContaining({ conversationId: 'conv-concurrent', runId: 'run-b' }),
+      }),
+    );
   });
 
   it('marks Agent-submitted audio media tasks for auto-resume when the runtime trace has a conversation id', async () => {
@@ -290,7 +305,8 @@ describe('registerMediaAgentTools', () => {
     const media = createMediaMock();
     registerMediaAgentTools(registry, media as never);
 
-    const result = await registry.execute(
+    const result = await executeAgentTool(
+      registry,
       'GenerateMusic',
       {
         prompt: 'Gentle piano theme',
@@ -323,7 +339,7 @@ describe('registerMediaAgentTools', () => {
     const media = createMediaMock();
     registerMediaAgentTools(registry, media as never);
 
-    const result = await registry.execute('GenerateVideo', {
+    const result = await executeAgentTool(registry, 'GenerateVideo', {
       taskRef: 'docs/tasks/cat-detective.md',
       taskMarkdown: [
         '# Task: Cat Detective Video',
@@ -388,7 +404,7 @@ describe('registerMediaAgentTools', () => {
     const media = createMediaMock();
     registerMediaAgentTools(registry, media as never);
 
-    const result = await registry.execute('GenerateImage', {
+    const result = await executeAgentTool(registry, 'GenerateImage', {
       taskRef: 'docs/tasks/native-image.md',
       taskMarkdown: ['# Task', '', '## Goal', 'A quiet forest shrine'].join('\n'),
       providerAdaptationMode: 'native',
@@ -417,7 +433,7 @@ describe('registerMediaAgentTools', () => {
     const media = createMediaMock();
     registerMediaAgentTools(registry, media as never);
 
-    const result = await registry.execute('GenerateImage', {
+    const result = await executeAgentTool(registry, 'GenerateImage', {
       prompt: 'A lighthouse at dusk',
     });
 
@@ -431,7 +447,7 @@ describe('registerMediaAgentTools', () => {
     const media = createMediaMock();
     registerMediaAgentTools(registry, media as never);
 
-    const result = await registry.execute('GenerateImage', {
+    const result = await executeAgentTool(registry, 'GenerateImage', {
       prompt: 'A lighthouse at dusk',
       providerId: 'openai-provider',
       modelId: 'dalle-model',
@@ -448,7 +464,7 @@ describe('registerMediaAgentTools', () => {
     const media = createMediaMock();
     registerMediaAgentTools(registry, media as never);
 
-    const result = await registry.execute('GenerateImage', {
+    const result = await executeAgentTool(registry, 'GenerateImage', {
       prompt: 'Clean the panel',
       negativePrompt: 'speech bubbles',
       referenceImageUri: '${PROJECT}/refs/panel.png',
@@ -485,7 +501,7 @@ describe('registerMediaAgentTools', () => {
     const media = createMediaMock();
     registerMediaAgentTools(registry, media as never);
 
-    const result = await registry.execute('TransformImage', {
+    const result = await executeAgentTool(registry, 'TransformImage', {
       editInstruction: 'Remove dialogue bubbles.',
       providerId: 'edit-provider',
       modelId: 'edit-model',
@@ -514,7 +530,7 @@ describe('registerMediaAgentTools', () => {
       expect.objectContaining({ type: 'array' }),
     );
 
-    const result = await registry.execute('TransformImage', {
+    const result = await executeAgentTool(registry, 'TransformImage', {
       planId: 'prep-1',
       sceneId: 'scene-1',
       shotId: 'shot-1',
@@ -567,7 +583,7 @@ describe('registerMediaAgentTools', () => {
     const media = createMediaMock();
     registerMediaAgentTools(registry, media as never);
 
-    const result = await registry.execute('GenerateVideo', {
+    const result = await executeAgentTool(registry, 'GenerateVideo', {
       prompt: 'A spaceship launch',
       providerId: 'runway-provider',
       modelId: 'runway-model',
@@ -588,7 +604,7 @@ describe('registerMediaAgentTools', () => {
     const media = createMediaMock();
     registerMediaAgentTools(registry, media as never);
 
-    const result = await registry.execute('GenerateVideo', {
+    const result = await executeAgentTool(registry, 'GenerateVideo', {
       prompt: 'Animate the prepared comic keyframe',
       referenceImageUri: '${PROJECT}/resolved/keyframe-1.png',
       aspectRatio: '16:9',
@@ -629,7 +645,7 @@ describe('registerMediaAgentTools', () => {
     const startFrameRef = createResourceRef('asset:image:first-frame');
     const endFrameRef = createResourceRef('asset:image:end-frame');
 
-    const result = await registry.execute('GenerateVideo', {
+    const result = await executeAgentTool(registry, 'GenerateVideo', {
       prompt: 'Animate between the approved keyframes',
       operation: 'generate-from-keyframes',
       startFrameRef,
@@ -653,7 +669,7 @@ describe('registerMediaAgentTools', () => {
     const media = createMediaMock();
     registerMediaAgentTools(registry, media as never);
 
-    const result = await registry.execute('GenerateVideo', {
+    const result = await executeAgentTool(registry, 'GenerateVideo', {
       prompt: 'Animate the shot',
       operation: 'generate-from-keyframes',
       startFrameRef: { id: 'canvas-node-runtime-handle' },
@@ -672,7 +688,8 @@ describe('registerMediaAgentTools', () => {
     const media = createMediaMock();
     registerMediaAgentTools(registry, media as never);
 
-    const result = await registry.execute(
+    const result = await executeAgentTool(
+      registry,
       'GenerateImage',
       { prompt: 'A mountain village' },
       {
@@ -698,7 +715,7 @@ describe('registerMediaAgentTools', () => {
     const media = createMediaMock();
     registerMediaAgentTools(registry, media as never);
 
-    const result = await registry.execute('GenerateVideo', {
+    const result = await executeAgentTool(registry, 'GenerateVideo', {
       prompt: 'A spaceship launch',
       providerId: 'runway-provider',
     });
@@ -713,7 +730,8 @@ describe('registerMediaAgentTools', () => {
     const media = createMediaMock();
     registerMediaAgentTools(registry, media as never);
 
-    const result = await registry.execute(
+    const result = await executeAgentTool(
+      registry,
       'GenerateTTS',
       { text: 'hello' },
       {

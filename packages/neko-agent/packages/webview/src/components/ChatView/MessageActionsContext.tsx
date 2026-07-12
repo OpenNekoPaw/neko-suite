@@ -9,7 +9,7 @@ import { createContext, useContext, useMemo, type ReactNode } from 'react';
 import type { AgentWorkItem } from '@/components/AgentWorkItem';
 import type { PluginsAvailable } from '@/components/ChatView/SendToMenu';
 import type { AmbientCanvasNodeProjection } from '@/presenters/plugin-transfer-presenter';
-import type { AgentContextPayload } from '@neko/shared';
+import type { AgentContextPayload, TaskRunScope } from '@neko/shared';
 
 export interface MessageActionsContextValue {
   activeConversationId?: string | null;
@@ -19,9 +19,9 @@ export interface MessageActionsContextValue {
   contextChips?: readonly AgentContextPayload[];
   ambientNodes?: readonly AmbientCanvasNodeProjection[];
   // Task actions
-  onCancelTask?: (taskId: string) => void;
-  onRetryTask?: (taskId: string) => void;
-  onViewTaskResult?: (taskId: string, resultRef?: string) => void;
+  onCancelTask?: (taskScope: TaskRunScope) => void;
+  onRetryTask?: (taskScope: TaskRunScope) => void;
+  onViewTaskResult?: (taskScope: TaskRunScope, resultRef?: string) => void;
   // Diff actions
   onAcceptDiff?: (filePath: string) => void;
   onRejectDiff?: (filePath: string) => void;

@@ -8,6 +8,7 @@
 
 import {
   deriveAgentTraceContext,
+  requireToolExecutionRunScope,
   withAgentTrace,
   type Tool,
   type ToolResult,
@@ -62,36 +63,10 @@ interface SubAgentOwnerScope {
 }
 
 function requireSubAgentOwnerScope(options: ToolExecuteOptions | undefined): SubAgentOwnerScope {
-  const metadata = options?.metadata ?? {};
-  const metadataConversationId = readNonEmptyString(metadata.conversationId);
-  const traceConversationId = readNonEmptyString(options?.trace?.conversationId);
-  if (
-    metadataConversationId &&
-    traceConversationId &&
-    metadataConversationId !== traceConversationId
-  ) {
-    throw new Error(
-      `SubAgent owner mismatch: metadata conversation ${metadataConversationId} does not match trace conversation ${traceConversationId}.`,
-    );
-  }
-  const conversationId = metadataConversationId ?? traceConversationId;
-  if (!conversationId || conversationId === 'unknown') {
-    throw new Error('Missing conversationId for SubAgent task');
-  }
-
-  const metadataRunId = readNonEmptyString(metadata.runId);
-  const traceRunId = readNonEmptyString(options?.trace?.runId);
-  if (metadataRunId && traceRunId && metadataRunId !== traceRunId) {
-    throw new Error(
-      `SubAgent owner mismatch: metadata run ${metadataRunId} does not match trace run ${traceRunId}.`,
-    );
-  }
-  const runId = metadataRunId ?? traceRunId;
-  if (!runId) throw new Error('Missing runId for SubAgent task');
-
-  const parentRunId = readNonEmptyString(metadata.parentAgentId);
+  const runScope = requireToolExecutionRunScope(options);
+  const parentRunId = readNonEmptyString(options?.metadata?.parentAgentId);
   if (!parentRunId) throw new Error('Missing parentAgentId for SubAgent task');
-  return { conversationId, runId, parentRunId };
+  return { ...runScope, parentRunId };
 }
 
 function createSubAgentScope(owner: SubAgentOwnerScope, childRunId: string): ChildRunScope {
@@ -294,7 +269,7 @@ Launch multiple SubAgents in a single turn for independent tasks:
             const result = await subAgentManager.getResult(resumeScope);
             return {
               success: result.status === 'completed',
-              data: result,
+              data: { ...result, scope: resumeScope, subAgentId: resume },
               error: result.error,
             };
           } catch (error) {
@@ -308,7 +283,7 @@ Launch multiple SubAgents in a single turn for independent tasks:
         // Return current status for non-running states
         return {
           success: true,
-          data: { status, id: resume },
+          data: { scope: resumeScope, status, id: resume, subAgentId: resume },
         };
       }
 
@@ -401,6 +376,7 @@ Launch multiple SubAgents in a single turn for independent tasks:
           data: {
             ...resultMetadata,
             ...result,
+            scope,
             subAgentId,
             continuation: buildSubAgentResultContinuationSummary(subAgentId, result),
           },
@@ -521,6 +497,7 @@ export function createTaskOutputTool(subAgentManager: ISubAgentManager): Tool {
         return {
           success: true,
           data: {
+            scope,
             status: 'running',
             taskId: task_id,
             subAgentId: task_id,
@@ -546,6 +523,7 @@ export function createTaskOutputTool(subAgentManager: ISubAgentManager): Tool {
           success: result.status === 'completed',
           data: {
             ...result,
+            scope,
             subAgentId: task_id,
             continuation: buildSubAgentResultContinuationSummary(task_id, result),
           },

@@ -4,6 +4,7 @@ import {
   createMediaProductionWorkflowRun,
   startMediaProductionStage,
   type Task,
+  type TaskRunScope,
 } from '@neko/shared';
 import {
   MEDIA_PRODUCTION_WORKFLOW_STATE_OUTPUT_KEY,
@@ -48,6 +49,7 @@ function createTask(state = createState()): Task {
     ownerRunStartedAt: 100,
   });
   return {
+    scope: taskScope(),
     id: 'task-workflow-1',
     type: 'workflow',
     status: 'running',
@@ -92,7 +94,7 @@ describe('task-backed media production workflow state', () => {
     let task = createTask();
     const port = {
       get: vi.fn(async () => task),
-      updateOutputData: vi.fn(async (_id: string, data: Record<string, unknown>) => {
+      updateOutputData: vi.fn(async (_scope: TaskRunScope, data: Record<string, unknown>) => {
         task = {
           ...task,
           output: { data: { ...((task.output?.data as object | undefined) ?? {}), ...data } },
@@ -102,17 +104,17 @@ describe('task-backed media production workflow state', () => {
     };
     const store = new TaskBackedMediaProductionWorkflowStateStore(port);
     const running = startMediaProductionStage({
-      state: await store.load(task.id),
+      state: await store.load(task.scope),
       stageId: 'source-normalization',
       startedAt: '2026-07-12T00:00:01.000Z',
     });
 
-    await store.save(task.id, running);
+    await store.save(task.scope, running);
 
-    expect(port.updateOutputData).toHaveBeenCalledWith(task.id, {
+    expect(port.updateOutputData).toHaveBeenCalledWith(task.scope, {
       [MEDIA_PRODUCTION_WORKFLOW_STATE_OUTPUT_KEY]: running,
     });
-    expect(await store.load(task.id)).toEqual(running);
+    expect(await store.load(task.scope)).toEqual(running);
     expect(readMediaProductionWorkflowTaskState(JSON.parse(JSON.stringify(task)) as Task)).toEqual(
       running,
     );
@@ -126,9 +128,19 @@ describe('task-backed media production workflow state', () => {
     };
     const store = new TaskBackedMediaProductionWorkflowStateStore(port);
 
-    await expect(store.load(task.id)).rejects.toThrow('is not a media production workflow task');
+    await expect(store.load(task.scope)).rejects.toThrow('is not a media production workflow task');
     await expect(
-      store.save(task.id, { ...createState(), workflowRunId: 'workflow-other' }),
+      store.save(task.scope, { ...createState(), workflowRunId: 'workflow-other' }),
     ).rejects.toThrow('is not a media production workflow task');
   });
 });
+
+function taskScope(): TaskRunScope {
+  return {
+    conversationId: 'conversation-1',
+    runId: 'agent-run-1',
+    parentRunId: 'agent-run-1',
+    childRunId: 'task-workflow-1',
+    childKind: 'task',
+  };
+}

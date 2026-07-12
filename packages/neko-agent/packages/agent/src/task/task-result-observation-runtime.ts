@@ -1,9 +1,10 @@
+import { formatChildRunScope } from '@neko/shared';
 import type {
   AgentTaskResultDeliveryPolicy,
   AgentTaskResultFollowUpRequest,
   AgentTaskResultSource,
   Task,
-  TaskRunLease,
+  TaskRunScope,
   TaskStatus,
 } from '@neko/shared';
 import type {
@@ -14,6 +15,7 @@ import type { TaskResultObservationJournalEntry } from '../session/task-result-o
 import {
   createAgentTaskResultObservationCoordinator,
   type AgentTaskResultObservationCoordinatorDiagnostic,
+  type HandleAgentChildRunResultTerminalInput,
 } from './task-result-observation-coordinator';
 
 const TERMINAL_TASK_STATUSES: readonly TaskStatus[] = ['completed', 'failed', 'cancelled'];
@@ -21,7 +23,7 @@ const TERMINAL_TASK_STATUSES: readonly TaskStatus[] = ['completed', 'failed', 'c
 export interface AgentTaskResultObservationRuntimeTaskPort {
   list(status?: TaskStatus): Promise<readonly Task[]>;
   onTerminalTask(
-    callback: (event: { readonly task: Task; readonly lease?: TaskRunLease }) => void,
+    callback: (event: { readonly task: Task; readonly scope: TaskRunScope }) => void,
     options?: { readonly replayExisting?: boolean },
   ): () => void;
 }
@@ -55,7 +57,7 @@ export interface AgentTaskResultObservationJournalPort {
 
 export interface AgentTaskResultObservationRuntimeTaskManagerTerminalInput {
   readonly task: Task;
-  readonly lease?: TaskRunLease;
+  readonly scope: TaskRunScope;
 }
 
 export interface AgentTaskResultObservationRuntimeOptions {
@@ -71,7 +73,7 @@ export interface AgentTaskResultObservationRuntimeOptions {
 }
 
 export interface AgentTaskResultObservationTerminalOptions {
-  readonly lease?: TaskRunLease;
+  readonly scope?: TaskRunScope;
   readonly source?: AgentTaskResultSource;
   readonly parentMessageId?: string;
   readonly parentToolCallId?: string;
@@ -93,7 +95,7 @@ export class AgentTaskResultObservationRuntime {
             if (!this.shouldObserveTaskManagerTerminalTask(event)) {
               return;
             }
-            void this.handleTerminalTask(event.task, { lease: event.lease });
+            void this.handleTerminalTask(event.task, { scope: event.scope });
           });
   }
 
@@ -115,7 +117,7 @@ export class AgentTaskResultObservationRuntime {
       TERMINAL_TASK_STATUSES.map((status) => this.options.tasks.list(status)),
     );
     for (const task of taskGroups.flat()) {
-      if (!this.shouldObserveTaskManagerTerminalTask({ task })) {
+      if (!this.shouldObserveTaskManagerTerminalTask({ task, scope: task.scope })) {
         continue;
       }
       await this.handleTerminalTask(task);
@@ -131,6 +133,32 @@ export class AgentTaskResultObservationRuntime {
     const current = previous
       .catch(() => undefined)
       .then(() => this.handleTerminalTaskSerialized(task, options));
+    this.terminalTaskHandling.set(key, current);
+    try {
+      await current;
+    } finally {
+      if (this.terminalTaskHandling.get(key) === current) {
+        this.terminalTaskHandling.delete(key);
+      }
+    }
+  }
+
+  async handleTerminalChildRun(input: HandleAgentChildRunResultTerminalInput): Promise<void> {
+    const key = formatChildRunScope(input.scope);
+    const previous = this.terminalTaskHandling.get(key) ?? Promise.resolve();
+    const current = previous
+      .catch(() => undefined)
+      .then(async () => {
+        const coordinator = createAgentTaskResultObservationCoordinator({
+          recorder: { record: (recordInput) => this.recordObservation(recordInput) },
+          followUpScheduler: {
+            askUserToContinue: (request) => this.askUserToContinue(request),
+            autoResumeAgent: (request) => this.autoResumeAgent(request),
+          },
+          onDiagnostic: (diagnostic) => this.emitDiagnostic(diagnostic),
+        });
+        await coordinator.handleTerminalChildRun(input);
+      });
     this.terminalTaskHandling.set(key, current);
     try {
       await current;
@@ -159,7 +187,7 @@ export class AgentTaskResultObservationRuntime {
 
     await coordinator.handleTerminalTask({
       task,
-      ...(options.lease ? { lease: options.lease } : {}),
+      ...(options.scope ? { scope: options.scope } : {}),
       source: options.source ?? 'task-manager',
       ...(options.parentMessageId ? { parentMessageId: options.parentMessageId } : {}),
       ...(options.parentToolCallId ? { parentToolCallId: options.parentToolCallId } : {}),
@@ -267,7 +295,6 @@ function createTerminalTaskObservationKey(
   task: Task,
   options: AgentTaskResultObservationTerminalOptions,
 ): string {
-  const conversationId = options.lease?.conversationId ?? task.lifecycle?.ownerConversationId ?? '';
-  const runId = options.lease?.runId ?? task.lifecycle?.ownerRunId ?? '';
-  return `${conversationId}:${runId}:${task.id}:${task.status}`;
+  const scope = options.scope ?? task.scope;
+  return `${scope.conversationId}:${scope.runId}:${scope.parentRunId}:${scope.childRunId}:${task.status}`;
 }

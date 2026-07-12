@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { observeMediaTaskProgress, runMediaTurn, submitMediaTurn } from '../media-turn-dispatcher';
+import type { TaskRunScope } from '@neko/shared';
 import type { MediaTask, MediaProgressCallback } from '../types';
 
 describe('submitMediaTurn', () => {
@@ -182,7 +183,7 @@ describe('observeMediaTaskProgress', () => {
 
     observeMediaTaskProgress({
       media,
-      taskId: 'task-1',
+      taskScope: createMediaTask({ id: 'task-1' }).scope,
       conversationId: 'conv-1',
       createTaskView: (task) => ({ id: task.id, status: task.status }),
       onTaskProgress,
@@ -204,7 +205,7 @@ describe('observeMediaTaskProgress', () => {
 
     observeMediaTaskProgress({
       media,
-      taskId: 'task-1',
+      taskScope: createMediaTask({ id: 'task-1' }).scope,
       conversationId: 'conv-1',
       createTaskView: (task) => ({ id: task.id, status: task.status }),
       onTaskProgress: vi.fn(),
@@ -238,7 +239,7 @@ function createMediaServiceMock() {
     generateVideo: vi.fn(),
     generateAudio: vi.fn(),
     getTask: vi.fn().mockResolvedValue(undefined),
-    onProgress: vi.fn((_taskId: string, callback: MediaProgressCallback) => {
+    onProgress: vi.fn((_taskScope: TaskRunScope, callback: MediaProgressCallback) => {
       progressCallbacks.push(callback);
       return unsubscribeProgress;
     }),
@@ -260,8 +261,17 @@ function createMediaTask(
   } = {},
 ): MediaTask {
   const now = new Date('2026-01-01T00:00:00.000Z');
+  const id = overrides.id ?? 'task-1';
+  const conversationId = overrides.conversationId ?? 'conv-1';
   return {
-    id: overrides.id ?? 'task-1',
+    scope: {
+      conversationId,
+      runId: `run-${conversationId}`,
+      parentRunId: `run-${conversationId}`,
+      childRunId: id,
+      childKind: 'task',
+    },
+    id,
     type: 'text-to-image',
     status: overrides.status ?? 'pending',
     progress: overrides.progress ?? 0,
@@ -272,7 +282,8 @@ function createMediaTask(
     request: {
       prompt: 'cat',
       metadata: {
-        conversationId: overrides.conversationId ?? 'conv-1',
+        conversationId,
+        runId: `run-${conversationId}`,
       },
     },
   };

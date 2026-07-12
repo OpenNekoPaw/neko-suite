@@ -2,11 +2,14 @@ import type {
   AgentTaskResultDeliveryPolicy,
   AgentTaskResultFollowUpRequest,
   AgentTaskResultSource,
+  AgentTaskResultTerminalStatus,
+  ChildRunScope,
   Task,
-  TaskRunLease,
+  TaskRunScope,
 } from '@neko/shared';
 import {
   getAgentTaskResultDeliveryPolicy,
+  normalizeAgentChildRunResultObservation,
   normalizeAgentTaskResultObservation,
   type AgentTaskResultDeliveryDecision,
   AgentTaskResultObservationError,
@@ -44,10 +47,27 @@ export interface AgentTaskResultFollowUpScheduler {
 
 export interface HandleAgentTaskResultTerminalInput {
   readonly task: Task;
-  readonly lease?: TaskRunLease;
+  readonly scope?: TaskRunScope;
   readonly source: AgentTaskResultSource;
   readonly parentMessageId?: string;
   readonly parentToolCallId?: string;
+  readonly deliveryPolicy?: AgentTaskResultDeliveryPolicy;
+  readonly now?: number;
+}
+
+export interface HandleAgentChildRunResultTerminalInput {
+  readonly scope: ChildRunScope;
+  readonly childId: string;
+  readonly childType: string;
+  readonly status: AgentTaskResultTerminalStatus;
+  readonly source: AgentTaskResultSource;
+  readonly parentMessageId?: string;
+  readonly parentToolCallId?: string;
+  readonly outputData?: unknown;
+  readonly error?: string;
+  readonly createdAt: number;
+  readonly completedAt: number;
+  readonly runStartedAt?: number;
   readonly deliveryPolicy?: AgentTaskResultDeliveryPolicy;
   readonly now?: number;
 }
@@ -75,7 +95,7 @@ export class AgentTaskResultObservationCoordinator {
       const observation = normalizeAgentTaskResultObservation({
         task: input.task,
         source: input.source,
-        ...(input.lease ? { lease: input.lease } : {}),
+        ...(input.scope ? { scope: input.scope } : {}),
         ...(input.parentMessageId ? { parentMessageId: input.parentMessageId } : {}),
         ...(input.parentToolCallId ? { parentToolCallId: input.parentToolCallId } : {}),
         now: input.now,
@@ -109,6 +129,55 @@ export class AgentTaskResultObservationCoordinator {
       this.options.onDiagnostic?.(diagnostic);
       return { status: 'diagnostic', diagnostic };
     }
+  }
+
+  async handleTerminalChildRun(
+    input: HandleAgentChildRunResultTerminalInput,
+  ): Promise<HandleAgentTaskResultTerminalResult> {
+    try {
+      const observation = normalizeAgentChildRunResultObservation(input);
+      const recording = await this.options.recorder.record({
+        observation,
+        ...(input.outputData !== undefined ? { outputData: input.outputData } : {}),
+        deliveryPolicy: input.deliveryPolicy,
+        now: input.now,
+      });
+      const followUpResult = recording.followUpRecorded
+        ? await this.dispatchFollowUp(recording.deliveryDecision)
+        : null;
+      if (followUpResult) return followUpResult;
+      return {
+        status:
+          recording.followUpRecorded &&
+          (recording.deliveryDecision.kind === 'ask-user-to-continue' ||
+            recording.deliveryDecision.kind === 'auto-resume-agent')
+            ? 'recorded-and-followup-requested'
+            : 'recorded',
+        recording,
+        deliveryDecision: recording.deliveryDecision,
+      };
+    } catch (error) {
+      const diagnostic = this.toChildRunDiagnostic(input, error);
+      this.options.onDiagnostic?.(diagnostic);
+      return { status: 'diagnostic', diagnostic };
+    }
+  }
+
+  private toChildRunDiagnostic(
+    input: HandleAgentChildRunResultTerminalInput,
+    error: unknown,
+  ): AgentTaskResultObservationCoordinatorDiagnostic {
+    return {
+      code: error instanceof AgentTaskResultObservationError ? error.code : 'recording-failed',
+      conversationId: input.scope.conversationId,
+      runId: input.scope.runId,
+      taskId: input.childId,
+      message:
+        error instanceof Error
+          ? error.message
+          : 'Failed to record Agent child-run result observation',
+      error,
+    };
   }
 
   private async dispatchFollowUp(

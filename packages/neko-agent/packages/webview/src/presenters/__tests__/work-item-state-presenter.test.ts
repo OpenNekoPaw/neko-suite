@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import type { AgentBackgroundTask, AgentWorkItemStore } from '@neko-agent/types';
+import {
+  getAgentWorkItemRuntimeKey,
+  type AgentBackgroundTask,
+  type AgentWorkItemStore,
+} from '@neko-agent/types';
+import { formatTaskRunScope, type ChildRunScope, type TaskRunScope } from '@neko/shared';
 import {
   backgroundTaskToWorkItem,
   projectMediaTaskToWorkItem,
@@ -16,6 +21,12 @@ import {
   upsertWorkItemsForConversation,
   workItemToBackgroundTask,
 } from '../work-item-state-presenter';
+
+const OWNER = {
+  conversationId: 'conv-1',
+  runId: 'run-1',
+  parentRunId: 'run-1',
+} as const;
 
 describe('work-item-state-presenter', () => {
   it('merges task work items while preserving parent links', () => {
@@ -40,7 +51,7 @@ describe('work-item-state-presenter', () => {
     const store = upsertWorkItemsForConversation(new Map(), 'conv-1', [initial]);
     const merged = upsertWorkItemsForConversation(store, 'conv-1', [updated]);
 
-    expect(merged.get('conv-1')?.get('task-1')).toMatchObject({
+    expect(merged.get('conv-1')?.get(getAgentWorkItemRuntimeKey(initial))).toMatchObject({
       status: 'completed',
       progress: 100,
       parentMessageId: 'msg-1',
@@ -51,8 +62,10 @@ describe('work-item-state-presenter', () => {
   });
 
   it('preserves subagent links and finalizes running steps across progress updates', () => {
+    const scope = subAgentScope('sub-1');
     const started = projectSubAgentEventToWorkItem({
       type: 'started',
+      scope,
       subAgentId: 'sub-1',
       parentAgentId: 'parent-1',
       conversationId: 'conv-1',
@@ -65,6 +78,7 @@ describe('work-item-state-presenter', () => {
     });
     const progress = projectSubAgentEventToWorkItem({
       type: 'progress',
+      scope,
       subAgentId: 'sub-1',
       parentAgentId: 'parent-1',
       conversationId: 'conv-1',
@@ -76,6 +90,7 @@ describe('work-item-state-presenter', () => {
     });
     const completed = projectSubAgentEventToWorkItem({
       type: 'completed',
+      scope,
       subAgentId: 'sub-1',
       parentAgentId: 'parent-1',
       conversationId: 'conv-1',
@@ -94,7 +109,7 @@ describe('work-item-state-presenter', () => {
     const withProgress = upsertWorkItemsForConversation(store, 'conv-1', [progress]);
     const merged = upsertWorkItemsForConversation(withProgress, 'conv-1', [completed]);
 
-    expect(merged.get('conv-1')?.get('sub-1')).toMatchObject({
+    expect(merged.get('conv-1')?.get(getAgentWorkItemRuntimeKey(started))).toMatchObject({
       status: 'completed',
       progress: 100,
       parentMessageId: 'msg-1',
@@ -137,6 +152,7 @@ describe('work-item-state-presenter', () => {
       conversationId: 'conv-1',
       task: {
         id: 'media-task',
+        scope: taskScope('media-task'),
         type: 'image',
         status: 'processing',
         progress: 25,
@@ -149,6 +165,7 @@ describe('work-item-state-presenter', () => {
     });
     const subAgent = projectSubAgentEventToWorkItem({
       type: 'started',
+      scope: subAgentScope('subagent-task'),
       subAgentId: 'subagent-task',
       parentAgentId: 'parent-a',
       conversationId: 'conv-1',
@@ -175,29 +192,33 @@ describe('work-item-state-presenter', () => {
     ]);
 
     const items = store.get('conv-1');
-    expect(items?.has('stale-task')).toBe(false);
-    expect(items?.get('live-task')).toMatchObject({
+    expect(items?.has(getAgentWorkItemRuntimeKey(staleTask))).toBe(false);
+    expect(items?.get(getAgentWorkItemRuntimeKey(liveTask))).toMatchObject({
       kind: 'tool-background-task',
       status: 'processing',
       progress: 50,
     });
-    expect(items?.get('media-task')).toMatchObject({ kind: 'media-task' });
-    expect(items?.get('subagent-task')).toMatchObject({ kind: 'subagent' });
-    expect(items?.get('linked-task')).toMatchObject({
+    expect(items?.get(getAgentWorkItemRuntimeKey(mediaTask))).toMatchObject({ kind: 'media-task' });
+    expect(items?.get(getAgentWorkItemRuntimeKey(subAgent))).toMatchObject({ kind: 'subagent' });
+    expect(items?.get(getAgentWorkItemRuntimeKey(linkedTask))).toMatchObject({
       kind: 'tool-background-task',
       parentMessageId: 'msg-1',
       parentToolCallId: 'tool-1',
     });
   });
 
-  it('queries, replaces, and removes work items by conversation', () => {
+  it('queries, replaces, and removes work items by conversation and complete task scope', () => {
     const task = backgroundTaskToWorkItem(
       createBackgroundTask('task-1', 'Generate cat'),
       'conv-1',
       'tool-background-task',
     );
     const other = backgroundTaskToWorkItem(
-      createBackgroundTask('task-2', 'Generate dog'),
+      createBackgroundTask('task-2', 'Generate dog', {
+        conversationId: 'conv-2',
+        runId: 'run-2',
+        parentRunId: 'run-2',
+      }),
       'conv-2',
       'tool-background-task',
     );
@@ -210,18 +231,71 @@ describe('work-item-state-presenter', () => {
     expect(getTaskWorkItemById(getWorkItemsForConversation(store, 'conv-1'), 'task-1')).toBe(task);
     expect(workItemToBackgroundTask(task)).toBe(task.task);
 
-    store = removeWorkItemForConversation(store, 'conv-1', 'task-1');
+    store = removeWorkItemForConversation(store, 'conv-1', task.task.scope);
     expect(getWorkItemsForConversation(store, 'conv-1')).toEqual([]);
     expect(getWorkItemsForConversation(store, 'conv-2')).toEqual([other]);
 
     store = removeConversationWorkItems(store, 'conv-2');
     expect(getWorkItemsForConversation(store, 'conv-2')).toEqual([]);
   });
+
+  it('keeps equal local task IDs isolated by their complete run scope', () => {
+    const first = backgroundTaskToWorkItem(
+      createBackgroundTask('shared-id', 'First', {
+        conversationId: 'conv-1',
+        runId: 'run-a',
+        parentRunId: 'run-a',
+      }),
+      'conv-1',
+      'tool-background-task',
+    );
+    const second = backgroundTaskToWorkItem(
+      createBackgroundTask('shared-id', 'Second', {
+        conversationId: 'conv-1',
+        runId: 'run-b',
+        parentRunId: 'run-b',
+      }),
+      'conv-1',
+      'tool-background-task',
+    );
+
+    let store = upsertWorkItemsForConversation(new Map(), 'conv-1', [first, second]);
+    expect(store.get('conv-1')?.size).toBe(2);
+
+    store = removeWorkItemForConversation(store, 'conv-1', first.task.scope);
+
+    expect(store.get('conv-1')?.has(formatTaskRunScope(first.task.scope))).toBe(false);
+    expect(store.get('conv-1')?.get(formatTaskRunScope(second.task.scope))).toBe(second);
+  });
 });
 
-function createBackgroundTask(id: string, prompt: string): AgentBackgroundTask {
+function taskScope(
+  childRunId: string,
+  owner: Pick<TaskRunScope, 'conversationId' | 'runId' | 'parentRunId'> = OWNER,
+): TaskRunScope {
+  return {
+    ...owner,
+    childRunId,
+    childKind: 'task',
+  };
+}
+
+function subAgentScope(childRunId: string): ChildRunScope {
+  return {
+    ...OWNER,
+    childRunId,
+    childKind: 'subagent',
+  };
+}
+
+function createBackgroundTask(
+  id: string,
+  prompt: string,
+  owner: Pick<TaskRunScope, 'conversationId' | 'runId' | 'parentRunId'> = OWNER,
+): AgentBackgroundTask {
   return {
     id,
+    scope: taskScope(id, owner),
     type: 'image',
     name: prompt,
     prompt,

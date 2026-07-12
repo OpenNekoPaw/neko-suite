@@ -11,6 +11,7 @@
  */
 
 import type { Tool, ToolCategory } from './tool';
+import type { TaskRunScope } from './task';
 import type { ToolGroup } from './tool-group';
 import type { Skill } from './skill';
 import type { LoadingTier } from './loading-tier';
@@ -203,24 +204,36 @@ export interface ICapabilityMediaService {
    * `referenceImageUri` / `maskUri` / `controlImageUri` for extension-host
    * file-backed inputs that the platform materializes before provider execution.
    */
-  generateImage(request: { prompt: string; [key: string]: unknown }): Promise<{ id: string }>;
-  generateVideo(request: { prompt: string; [key: string]: unknown }): Promise<{ id: string }>;
+  generateImage(request: {
+    prompt: string;
+    [key: string]: unknown;
+  }): Promise<{ id: string; scope: TaskRunScope }>;
+  generateVideo(request: {
+    prompt: string;
+    [key: string]: unknown;
+  }): Promise<{ id: string; scope: TaskRunScope }>;
   generateMusic?(request: {
     prompt: string;
     duration?: number;
     style?: string;
-  }): Promise<{ id: string }>;
-  generateSFX?(request: { prompt: string; duration?: number }): Promise<{ id: string }>;
-  generateVoice?(request: { text: string; voiceId?: string }): Promise<{ id: string }>;
+  }): Promise<{ id: string; scope: TaskRunScope }>;
+  generateSFX?(request: {
+    prompt: string;
+    duration?: number;
+  }): Promise<{ id: string; scope: TaskRunScope }>;
+  generateVoice?(request: {
+    text: string;
+    voiceId?: string;
+  }): Promise<{ id: string; scope: TaskRunScope }>;
   waitForTask(
-    taskId: string,
+    taskScope: TaskRunScope,
     timeout?: number,
   ): Promise<{
     status: string;
     outputs?: Array<{ url: string; mimeType?: string }>;
   }>;
   /** Cancel a running media task when the underlying platform supports it. */
-  cancelTask?(taskId: string): Promise<boolean>;
+  cancelTask?(taskScope: TaskRunScope): Promise<boolean>;
 }
 
 /**

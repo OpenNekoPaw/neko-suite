@@ -8,10 +8,12 @@ import type {
   AgentTaskResultRefKind,
   AgentTaskResultSource,
   AgentTaskResultTerminalStatus,
+  ChildRunScope,
   EvidenceSource,
   PerceptionEvidence,
   Task,
   TaskRunLease,
+  TaskRunScope,
   TaskStatus,
 } from '@neko/shared';
 import { extractTaskRunLease, isResourceRef } from '@neko/shared';
@@ -41,9 +43,25 @@ export interface NormalizeAgentTaskResultObservationInput {
   readonly source: AgentTaskResultSource;
   readonly parentMessageId?: string;
   readonly parentToolCallId?: string;
-  readonly lease?: TaskRunLease;
+  readonly scope?: TaskRunScope;
   readonly resultRefs?: readonly AgentTaskResultRef[];
   readonly now?: number;
+}
+
+export interface NormalizeAgentChildRunResultObservationInput {
+  readonly scope: ChildRunScope;
+  readonly childId: string;
+  readonly childType: string;
+  readonly status: AgentTaskResultTerminalStatus;
+  readonly source: AgentTaskResultSource;
+  readonly parentMessageId?: string;
+  readonly parentToolCallId?: string;
+  readonly outputData?: unknown;
+  readonly error?: string;
+  readonly resultRefs?: readonly AgentTaskResultRef[];
+  readonly createdAt: number;
+  readonly completedAt: number;
+  readonly runStartedAt?: number;
 }
 
 export interface AgentTaskResultObservationRecords {
@@ -87,7 +105,7 @@ export function normalizeAgentTaskResultObservation(
       { taskId: task.id, conversationId: ownerConversationId },
     );
   }
-  assertTaskRunLeaseMatches(task.id, lease, input.lease);
+  assertTaskRunScopeMatches(task, input.scope);
 
   const outputData = task.output?.data;
   const resultRefs = normalizeAgentTaskResultRefs([
@@ -113,6 +131,52 @@ export function normalizeAgentTaskResultObservation(
     ...(error ? { error } : {}),
     createdAt: task.createdAt,
     completedAt: task.updatedAt || input.now || Date.now(),
+  };
+}
+
+export function normalizeAgentChildRunResultObservation(
+  input: NormalizeAgentChildRunResultObservationInput,
+): AgentTaskResultObservation {
+  if (input.scope.childRunId !== input.childId) {
+    throw new AgentTaskResultObservationError(
+      'run-lease-mismatch',
+      `Child run scope ${input.scope.childRunId} cannot authorize result ${input.childId}`,
+      { scope: input.scope, childId: input.childId },
+    );
+  }
+  assertTerminalTaskStatus(input.status, input.childId);
+  const resultRefs = normalizeAgentTaskResultRefs([
+    ...(input.resultRefs ?? []),
+    ...extractAgentTaskResultRefs(input.outputData),
+  ]);
+
+  return {
+    id: createAgentTaskResultObservationId(
+      input.scope.conversationId,
+      input.scope.runId,
+      input.childId,
+      input.status,
+    ),
+    conversationId: input.scope.conversationId,
+    runId: input.scope.runId,
+    ...(input.runStartedAt !== undefined ? { runStartedAt: input.runStartedAt } : {}),
+    taskId: input.childId,
+    source: input.source,
+    taskType: input.childType,
+    status: input.status,
+    ...(input.parentMessageId ? { parentMessageId: input.parentMessageId } : {}),
+    ...(input.parentToolCallId ? { parentToolCallId: input.parentToolCallId } : {}),
+    summary: buildAgentChildRunResultSummary(
+      input.childId,
+      input.childType,
+      input.status,
+      input.error,
+      resultRefs,
+    ),
+    ...(resultRefs.length > 0 ? { resultRefs } : {}),
+    ...(input.error ? { error: input.error } : {}),
+    createdAt: input.createdAt,
+    completedAt: input.completedAt,
   };
 }
 
@@ -274,30 +338,25 @@ function assertTerminalTaskStatus(
   });
 }
 
-function assertTaskRunLeaseMatches(
-  taskId: string,
-  taskLease: TaskRunLease,
-  eventLease: TaskRunLease | undefined,
-): void {
-  if (!eventLease) {
+function assertTaskRunScopeMatches(task: Task, eventScope: TaskRunScope | undefined): void {
+  if (!eventScope) {
     return;
   }
+  const taskScope = task.scope;
   if (
-    taskLease.conversationId === eventLease.conversationId &&
-    taskLease.runId === eventLease.runId &&
-    (eventLease.runStartedAt === undefined || taskLease.runStartedAt === eventLease.runStartedAt)
+    taskScope.conversationId === eventScope.conversationId &&
+    taskScope.runId === eventScope.runId &&
+    taskScope.parentRunId === eventScope.parentRunId &&
+    taskScope.childRunId === eventScope.childRunId &&
+    taskScope.childKind === eventScope.childKind
   ) {
     return;
   }
 
   throw new AgentTaskResultObservationError(
     'run-lease-mismatch',
-    `Task ${taskId} terminal event lease does not match the task owner run lease`,
-    {
-      taskId,
-      taskLease,
-      eventLease,
-    },
+    `Task ${task.id} terminal event scope does not match the task owner scope`,
+    { taskId: task.id, taskScope, eventScope },
   );
 }
 
@@ -482,6 +541,26 @@ function looksLikeLocalPathOrDisplayUri(value: string): boolean {
     value.startsWith('vscode-webview-resource:') ||
     value.startsWith('data:')
   );
+}
+
+function buildAgentChildRunResultSummary(
+  childId: string,
+  childType: string,
+  status: AgentTaskResultTerminalStatus,
+  error: string | undefined,
+  refs: readonly AgentTaskResultRef[],
+): string {
+  if (status === 'completed') {
+    const suffix =
+      refs.length > 0
+        ? ` with ${refs.length} stable result reference${refs.length === 1 ? '' : 's'}`
+        : '';
+    return `Task ${childId} (${childType}) completed${suffix}.`;
+  }
+  if (status === 'failed') {
+    return `Task ${childId} (${childType}) failed${error ? `: ${error}` : '.'}`;
+  }
+  return `Task ${childId} (${childType}) was cancelled.`;
 }
 
 function buildAgentTaskResultSummary(

@@ -20,6 +20,7 @@ import type {
   SubAgentWorkItemEvent,
   ToolCall,
 } from '@neko-agent/types';
+import type { ChildRunScope, TaskRunScope } from '@neko/shared';
 import {
   projectBackgroundTaskToWorkItem,
   projectMediaTaskToWorkItem,
@@ -198,7 +199,9 @@ describe('work item message handlers', () => {
       {
         type: 'tasksUpdated',
         conversationId: 'conv-b',
-        workItems: [createTaskWorkItem('conv-b', createBackgroundTask('task-b', 'Generate B'))],
+        workItems: [
+          createTaskWorkItem('conv-b', createBackgroundTask('task-b', 'Generate B', 'conv-b')),
+        ],
       },
       harness.context,
     );
@@ -216,12 +219,12 @@ describe('work item message handlers', () => {
       harness.context,
     );
 
-    expect(harness.workItems().get('conv-a')?.get('task-a')).toMatchObject({
+    expect(findWorkItem(harness.workItems(), 'conv-a', 'task-a')).toMatchObject({
       conversationId: 'conv-a',
       status: 'completed',
       progress: 100,
     });
-    expect(harness.workItems().get('conv-b')?.get('task-b')).toMatchObject({
+    expect(findWorkItem(harness.workItems(), 'conv-b', 'task-b')).toMatchObject({
       conversationId: 'conv-b',
       status: 'queued',
     });
@@ -258,7 +261,7 @@ describe('work item message handlers', () => {
       harness.context,
     );
 
-    expect(harness.workItems().get('conv-a')?.get('task-a')).toMatchObject({
+    expect(findWorkItem(harness.workItems(), 'conv-a', 'task-a')).toMatchObject({
       status: 'processing',
       progress: 50,
       parentMessageId: 'msg-a',
@@ -292,6 +295,7 @@ describe('work item message handlers', () => {
     );
     const subAgentEvent = {
       type: 'started',
+      scope: subAgentScope('conv-a', 'parent-a', 'subagent-task'),
       subAgentId: 'subagent-task',
       parentAgentId: 'parent-a',
       conversationId: 'conv-a',
@@ -339,16 +343,19 @@ describe('work item message handlers', () => {
       harness.context,
     );
 
-    const items = harness.workItems().get('conv-a');
-    expect(items?.has('stale-task')).toBe(false);
-    expect(items?.get('live-task')).toMatchObject({
+    expect(findWorkItem(harness.workItems(), 'conv-a', 'stale-task')).toBeUndefined();
+    expect(findWorkItem(harness.workItems(), 'conv-a', 'live-task')).toMatchObject({
       kind: 'tool-background-task',
       status: 'processing',
       progress: 50,
     });
-    expect(items?.get('media-task')).toMatchObject({ kind: 'media-task' });
-    expect(items?.get('subagent-task')).toMatchObject({ kind: 'subagent' });
-    expect(items?.get('linked-task')).toMatchObject({
+    expect(findWorkItem(harness.workItems(), 'conv-a', 'media-task')).toMatchObject({
+      kind: 'media-task',
+    });
+    expect(findWorkItem(harness.workItems(), 'conv-a', 'subagent-task')).toMatchObject({
+      kind: 'subagent',
+    });
+    expect(findWorkItem(harness.workItems(), 'conv-a', 'linked-task')).toMatchObject({
       kind: 'tool-background-task',
       parentMessageId: 'msg-a',
       parentToolCallId: 'tool-a',
@@ -390,7 +397,7 @@ describe('work item message handlers', () => {
       queuedMessageCount: 0,
       queuedMessages: [],
     });
-    expect(harness.workItems().get('conv-b')?.get('media-b')).toMatchObject({
+    expect(findWorkItem(harness.workItems(), 'conv-b', 'media-b')).toMatchObject({
       kind: 'media-task',
       conversationId: 'conv-b',
     });
@@ -1055,7 +1062,7 @@ describe('work item message handlers', () => {
     expect(harness.messages()).not.toEqual(
       expect.arrayContaining([expect.objectContaining({ id: 'media-task-media-a' })]),
     );
-    expect(harness.workItems().get('conv-a')?.get('media-a')).toMatchObject({
+    expect(findWorkItem(harness.workItems(), 'conv-a', 'media-a')).toMatchObject({
       kind: 'media-task',
       parentToolCallId: 'tool-a',
     });
@@ -1110,7 +1117,7 @@ describe('work item message handlers', () => {
     expect(harness.messages()).not.toEqual(
       expect.arrayContaining([expect.objectContaining({ id: 'media-task-media-a' })]),
     );
-    expect(harness.workItems().get('conv-a')?.get('media-a')).toBeUndefined();
+    expect(findWorkItem(harness.workItems(), 'conv-a', 'media-a')).toBeUndefined();
   });
 
   it('ignores duplicate active media messages after canonical timeline media arrived', () => {
@@ -1465,7 +1472,7 @@ describe('work item message handlers', () => {
       'active timeline task updates must arrive as agentTurnTimeline',
     );
     expect(harness.messages()[0]?.contentBlocks?.map((block) => block.id)).toEqual(['text-before']);
-    expect(harness.workItems().get('conv-a')?.get('task-a')).toBeUndefined();
+    expect(findWorkItem(harness.workItems(), 'conv-a', 'task-a')).toBeUndefined();
   });
 
   it('renders explicit turn-level active timeline media tasks from canonical timeline events', () => {
@@ -1567,7 +1574,7 @@ describe('work item message handlers', () => {
       isThinking: false,
       streamingMessageId: null,
     });
-    expect(harness.workItems().get('conv-a')?.get('media-a')).toMatchObject({
+    expect(findWorkItem(harness.workItems(), 'conv-a', 'media-a')).toMatchObject({
       status: 'completed',
       progress: 100,
     });
@@ -2131,6 +2138,7 @@ describe('work item message handlers', () => {
 
     const subAgentEvent = {
       type: 'started',
+      scope: subAgentScope('conv-b', 'parent-b', 'sub-b'),
       subAgentId: 'sub-b',
       parentAgentId: 'parent-b',
       conversationId: 'conv-b',
@@ -2159,7 +2167,7 @@ describe('work item message handlers', () => {
       id: 'msg-b',
       workItemIds: ['sub-b'],
     });
-    expect(harness.workItems().get('conv-b')?.get('sub-b')).toMatchObject({
+    expect(findWorkItem(harness.workItems(), 'conv-b', 'sub-b')).toMatchObject({
       kind: 'subagent',
       conversationId: 'conv-b',
       parentToolCallId: 'tool-b',
@@ -2199,6 +2207,7 @@ describe('work item message handlers', () => {
 
     const subAgentEvent = {
       type: 'started',
+      scope: subAgentScope('conv-a', 'parent-a', 'sub-a'),
       subAgentId: 'sub-a',
       parentAgentId: 'parent-a',
       conversationId: 'conv-a',
@@ -2227,7 +2236,7 @@ describe('work item message handlers', () => {
       id: 'msg-a',
       workItemIds: ['sub-a'],
     });
-    expect(harness.workItems().get('conv-a')?.get('sub-a')).toMatchObject({
+    expect(findWorkItem(harness.workItems(), 'conv-a', 'sub-a')).toMatchObject({
       kind: 'subagent',
       conversationId: 'conv-a',
       parentToolCallId: 'tool-a',
@@ -2239,6 +2248,7 @@ describe('work item message handlers', () => {
 
     const subAgentEvent = {
       type: 'started',
+      scope: subAgentScope('conv-b', 'parent-b', 'sub-b'),
       subAgentId: 'sub-b',
       parentAgentId: 'parent-b',
       conversationId: 'conv-b',
@@ -2271,8 +2281,41 @@ function dispatch(
   registration?.handler(message, context);
 }
 
-function createBackgroundTask(id: string, prompt: string): AgentBackgroundTask {
+function findWorkItem(store: AgentWorkItemStore, conversationId: string, localId: string) {
+  return Array.from(store.get(conversationId)?.values() ?? []).find((item) => item.id === localId);
+}
+
+function taskScope(conversationId: string, childRunId: string): TaskRunScope {
   return {
+    conversationId,
+    runId: `run:${conversationId}`,
+    parentRunId: `run:${conversationId}`,
+    childRunId,
+    childKind: 'task',
+  };
+}
+
+function subAgentScope(
+  conversationId: string,
+  parentRunId: string,
+  childRunId: string,
+): ChildRunScope {
+  return {
+    conversationId,
+    runId: `run:${conversationId}`,
+    parentRunId,
+    childRunId,
+    childKind: 'subagent',
+  };
+}
+
+function createBackgroundTask(
+  id: string,
+  prompt: string,
+  conversationId = 'conv-a',
+): AgentBackgroundTask {
+  return {
+    scope: taskScope(conversationId, id),
     id,
     type: 'image',
     name: prompt,
@@ -2300,10 +2343,12 @@ function createTaskWorkItem(
 }
 
 function createMediaTask(
+  conversationId: string,
   id: string,
   overrides: Partial<Pick<AgentMediaTaskView, 'status' | 'progress'>> = {},
 ): AgentMediaTaskView {
   return {
+    scope: taskScope(conversationId, id),
     id,
     type: 'image',
     status: overrides.status ?? 'processing',
@@ -2328,7 +2373,10 @@ function createMediaWorkItem(
 ) {
   return projectMediaTaskToWorkItem({
     conversationId,
-    task: createMediaTask(id, { status: options.status, progress: options.progress }),
+    task: createMediaTask(conversationId, id, {
+      status: options.status,
+      progress: options.progress,
+    }),
     parentMessageId: options.parentMessageId,
     parentToolCallId: options.parentToolCallId,
   });

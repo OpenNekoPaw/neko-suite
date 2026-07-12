@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import type { Task } from '@neko/shared';
+import type { Task, TaskRunScope } from '@neko/shared';
 import type {
   AgentConversationInterruptedEvent,
   AgentConversationInterruptionReason,
@@ -19,7 +19,7 @@ export interface TaskLifecycleQueryPort {
 }
 
 export interface TaskLifecycleCancelPort {
-  cancel(taskId: string): Promise<unknown>;
+  cancel(scope: TaskRunScope): Promise<unknown>;
 }
 
 export interface SubAgentLifecycleCancelPort {
@@ -57,7 +57,7 @@ export class TaskLifecycleCoordinator implements vscode.Disposable {
     const cancelTargets = tasks.filter((task) => shouldCancelForInterruption(task, event));
 
     await Promise.allSettled([
-      ...cancelTargets.map((task) => this.options.taskCancellation.cancel(task.id)),
+      ...cancelTargets.map((task) => this.options.taskCancellation.cancel(task.scope)),
       this.options.subAgents?.cancelConversation?.(event.conversationId, event.reason) ??
         Promise.resolve(),
     ]);

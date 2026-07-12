@@ -6,6 +6,7 @@ import type {
   ToolCategory,
   ToolDefinition,
   ToolResult,
+  TaskRunScope,
 } from '@neko/shared';
 import { createPlatform, type PlatformOptions } from '../index';
 import type { IUserConfigManager, UserConfig } from '../config/user-config';
@@ -34,7 +35,11 @@ describe('platform task manager startup', () => {
 
 function createTaskManager(calls: string[]): NonNullable<PlatformOptions['taskManager']> {
   return {
-    submit: vi.fn(async () => 'task-1'),
+    submit: vi.fn(async (_input, owner): Promise<TaskRunScope> => ({
+      ...owner,
+      childRunId: 'task-1',
+      childKind: 'task',
+    })),
     get: vi.fn(async () => undefined),
     cancel: vi.fn(async () => false),
     delete: vi.fn(async () => false),
@@ -71,6 +76,17 @@ function createUserConfigManager(): IUserConfigManager {
     load: () => config,
     loadRaw: () => ({}),
     save: vi.fn(async () => undefined),
+    updateProviderOverride: vi.fn(async () => undefined),
+    addProvider: vi.fn(async () => undefined),
+    removeProvider: vi.fn(async () => undefined),
+    addModel: vi.fn(async () => undefined),
+    removeModel: vi.fn(async () => undefined),
+    updateMCPServerOverride: vi.fn(async () => undefined),
+    addMCPServer: vi.fn(async () => undefined),
+    removeMCPServer: vi.fn(async () => undefined),
+    clear: vi.fn(async () => undefined),
+    updateScalar: vi.fn(async () => undefined),
+    updateScalars: vi.fn(async () => undefined),
   };
 }
 
@@ -87,7 +103,7 @@ function createToolRegistry(): IToolRegistry {
     has: (name) => tools.has(name),
     list: () => Array.from(tools.values()),
     listByCategory: (_category: ToolCategory) => [],
-    execute: async (): Promise<ToolResult> => ({ data: null }),
+    execute: async (): Promise<ToolResult> => ({ success: true, data: null }),
     toToolDefinitions: (): ToolDefinition[] => [],
   };
 }

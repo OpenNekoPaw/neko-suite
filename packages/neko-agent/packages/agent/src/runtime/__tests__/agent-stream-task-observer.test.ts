@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import type { TaskRunScope } from '@neko/shared';
 import {
   startAgentStreamBackgroundTaskObserver,
   type ObserveAgentStreamBackgroundTaskProgressInput,
@@ -8,11 +9,29 @@ interface SourceTask {
   readonly id: string;
 }
 
+function taskScope(
+  conversationId = 'conv-1',
+  runId = 'run-1',
+  childRunId = 'task-1',
+): TaskRunScope {
+  return {
+    conversationId,
+    runId,
+    parentRunId: runId,
+    childRunId,
+    childKind: 'task',
+  };
+}
+
 function createLease(conversationId = 'conv-1', runId = 'run-1') {
   return { conversationId, runId, runStartedAt: 101 };
 }
 
-function createBackgroundToolResultEvent(taskId = 'task-1') {
+function createBackgroundToolResultEvent(
+  taskId = 'task-1',
+  conversationId = 'conv-1',
+  runId = 'run-1',
+) {
   return {
     type: 'tool_result' as const,
     toolResult: {
@@ -21,6 +40,7 @@ function createBackgroundToolResultEvent(taskId = 'task-1') {
       data: {
         backgroundMode: true,
         taskId,
+        taskScope: taskScope(conversationId, runId, taskId),
         type: 'image',
         message: 'Generate a cat',
         routedTo: { provider: 'openai' },
@@ -127,6 +147,7 @@ describe('agent stream task observer runtime', () => {
     expect(observerInput).toBeDefined();
     await observerInput!.onTaskProgress({
       lease: createLease(),
+      taskScope: taskScope(),
       conversationId: 'conv-1',
       sourceTask: { id: 'task-1' },
       task: {
@@ -157,6 +178,7 @@ describe('agent stream task observer runtime', () => {
     expect(persistResultUrls).toHaveBeenCalledWith({
       lease: createLease(),
       conversationId: 'conv-1',
+      taskScope: taskScope(),
       taskId: 'task-1',
       toolCallId: 'tool-1',
       urls: ['/tmp/cat.png'],
@@ -202,6 +224,7 @@ describe('agent stream task observer runtime', () => {
 
     await observerInput!.onTaskProgress({
       lease: createLease(),
+      taskScope: taskScope(),
       conversationId: 'conv-1',
       sourceTask: { id: 'task-1' },
       task: {
@@ -218,6 +241,7 @@ describe('agent stream task observer runtime', () => {
     expect(onTerminalTask).toHaveBeenCalledWith({
       lease: createLease(),
       conversationId: 'conv-1',
+      taskScope: taskScope(),
       taskId: 'task-1',
       parentMessageId: 'msg-stream',
       parentToolCallId: 'tool-1',
@@ -260,6 +284,7 @@ describe('agent stream task observer runtime', () => {
 
     observerInput!.onTaskProgress({
       lease: createLease('conv-other', 'run-other'),
+      taskScope: taskScope('conv-other', 'run-other'),
       conversationId: 'conv-other',
       sourceTask: { id: 'task-1' },
       task: {
@@ -275,6 +300,7 @@ describe('agent stream task observer runtime', () => {
     expect(postMessage).toHaveBeenCalledTimes(1);
     expect(onIgnoredConversationTask).toHaveBeenCalledWith({
       lease: createLease(),
+      taskScope: taskScope(),
       taskId: 'task-1',
       conversationId: 'conv-1',
       sourceTask: { id: 'task-1' },
@@ -314,6 +340,7 @@ describe('agent stream task observer runtime', () => {
 
     await observerInput!.onTaskProgress({
       lease: createLease('conv-1', 'run-other'),
+      taskScope: taskScope('conv-1', 'run-other'),
       conversationId: 'conv-1',
       sourceTask: { id: 'task-1' },
       task: {
@@ -331,6 +358,7 @@ describe('agent stream task observer runtime', () => {
       reason: 'lease-mismatch',
       expectedLease: createLease('conv-1', 'run-1'),
       lease: createLease('conv-1', 'run-other'),
+      taskScope: taskScope(),
       taskId: 'task-1',
       conversationId: 'conv-1',
       sourceTask: { id: 'task-1' },
@@ -370,6 +398,7 @@ describe('agent stream task observer runtime', () => {
 
     await observerInput!.onTaskProgress({
       lease: createLease(),
+      taskScope: taskScope(),
       conversationId: 'conv-1',
       sourceTask: { id: 'task-1' },
       task: {
@@ -383,6 +412,7 @@ describe('agent stream task observer runtime', () => {
     });
     await observerInput!.onTaskProgress({
       lease: createLease(),
+      taskScope: taskScope(),
       conversationId: 'conv-1',
       sourceTask: { id: 'task-1' },
       task: {
@@ -400,6 +430,7 @@ describe('agent stream task observer runtime', () => {
       reason: 'settled',
       expectedLease: createLease(),
       lease: createLease(),
+      taskScope: taskScope(),
       taskId: 'task-1',
       conversationId: 'conv-1',
       sourceTask: { id: 'task-1' },
@@ -446,6 +477,7 @@ describe('agent stream task observer runtime', () => {
 
     await observerInput!.onTaskProgress({
       lease: createLease(),
+      taskScope: taskScope(),
       conversationId: 'conv-1',
       sourceTask: { id: 'task-1' },
       task: {
@@ -464,6 +496,7 @@ describe('agent stream task observer runtime', () => {
       reason: 'settled',
       expectedLease: createLease(),
       lease: createLease(),
+      taskScope: taskScope(),
       taskId: 'task-1',
       conversationId: 'conv-1',
       sourceTask: { id: 'task-1' },
@@ -480,7 +513,7 @@ describe('agent stream task observer runtime', () => {
       lease: createLease('conv-a', 'run-a'),
       conversationId: 'conv-a',
       messageId: 'msg-a',
-      event: createBackgroundToolResultEvent('task-a'),
+      event: createBackgroundToolResultEvent('task-a', 'conv-a', 'run-a'),
       postMessage,
       observeProgress: (input) => {
         observerA = input;
@@ -505,7 +538,7 @@ describe('agent stream task observer runtime', () => {
       lease: createLease('conv-b', 'run-b'),
       conversationId: 'conv-b',
       messageId: 'msg-b',
-      event: createBackgroundToolResultEvent('task-b'),
+      event: createBackgroundToolResultEvent('task-b', 'conv-b', 'run-b'),
       postMessage,
       observeProgress: (input) => {
         observerB = input;
@@ -528,6 +561,7 @@ describe('agent stream task observer runtime', () => {
 
     await observerA!.onTaskProgress({
       lease: createLease('conv-a', 'run-a'),
+      taskScope: taskScope('conv-a', 'run-a', 'task-a'),
       conversationId: 'conv-a',
       sourceTask: { id: 'task-a' },
       task: {
@@ -541,6 +575,7 @@ describe('agent stream task observer runtime', () => {
     });
     await observerB!.onTaskProgress({
       lease: createLease('conv-b', 'run-b'),
+      taskScope: taskScope('conv-b', 'run-b', 'task-b'),
       conversationId: 'conv-b',
       sourceTask: { id: 'task-b' },
       task: {
@@ -554,6 +589,7 @@ describe('agent stream task observer runtime', () => {
     });
     await observerA!.onTaskProgress({
       lease: createLease('conv-b', 'run-b'),
+      taskScope: taskScope('conv-b', 'run-b', 'task-b'),
       conversationId: 'conv-b',
       sourceTask: { id: 'task-b' },
       task: {

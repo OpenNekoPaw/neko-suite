@@ -1,4 +1,5 @@
 import type { AgentTaskResultDeliveryPolicy } from './agent-task-result-observation';
+import type { ChildRunScope, ConversationRunScope } from './agent-runtime-scope';
 
 /**
  * Task Types - Async task management (core types)
@@ -10,6 +11,21 @@ import type { AgentTaskResultDeliveryPolicy } from './agent-task-result-observat
 /**
  * Task type
  */
+
+/** Complete owner identity required for Task control and persistence. */
+export interface TaskRunScope extends ChildRunScope {
+  readonly childKind: 'task';
+}
+
+/** Owner scope supplied before TaskManager allocates the local child id. */
+export interface TaskRunOwnerScope extends ConversationRunScope {
+  readonly parentRunId: string;
+}
+
+export function formatTaskRunScope(scope: TaskRunScope): string {
+  return `${scope.conversationId}/${scope.runId}/${scope.parentRunId}/task:${scope.childRunId}`;
+}
+
 export type TaskType =
   | 'image_generation'
   | 'video_generation'
@@ -199,7 +215,9 @@ export interface TaskOutput {
  * Task definition
  */
 export interface Task {
-  /** Unique task ID */
+  /** Complete authoritative Task identity. */
+  scope: TaskRunScope;
+  /** Local display ID; never sufficient for control. */
   id: string;
   /** Task type */
   type: TaskType;
@@ -233,32 +251,34 @@ export type TaskProgressCallback = (task: Task) => void;
  */
 export interface ITaskManager {
   /** Submit a new task */
-  submit(input: TaskInput): Promise<string>;
+  submit(input: TaskInput, owner: TaskRunOwnerScope): Promise<TaskRunScope>;
 
   /** Get task by ID */
-  get(id: string): Promise<Task | undefined>;
+  get(scope: TaskRunScope): Promise<Task | undefined>;
 
   /** Cancel a task */
-  cancel(id: string): Promise<boolean>;
+  cancel(scope: TaskRunScope): Promise<boolean>;
 
   /** Delete a task */
-  delete(id: string): Promise<boolean>;
+  delete(scope: TaskRunScope): Promise<boolean>;
 
   /** Wait for task completion */
-  waitForCompletion(id: string, timeoutMs?: number): Promise<Task>;
+  waitForCompletion(scope: TaskRunScope, timeoutMs?: number): Promise<Task>;
 
   /** List tasks by status */
   list(status?: TaskStatus): Promise<Task[]>;
 
   /** Subscribe to task progress */
-  onProgress(id: string, callback: TaskProgressCallback): () => void;
+  onProgress(scope: TaskRunScope, callback: TaskProgressCallback): () => void;
 }
 
 /**
  * Serializable task data for persistence
  */
 export interface SerializableTask {
-  /** Unique task ID */
+  /** Complete authoritative Task identity. */
+  scope: TaskRunScope;
+  /** Local display ID; never sufficient for control. */
   id: string;
   /** Task type */
   type: TaskType;
@@ -290,13 +310,13 @@ export interface ITaskStorage {
   save(task: SerializableTask): Promise<void>;
 
   /** Load task by ID */
-  load(id: string): Promise<SerializableTask | undefined>;
+  load(scope: TaskRunScope): Promise<SerializableTask | undefined>;
 
   /** Load all pending/running tasks for recovery */
   loadPending(): Promise<SerializableTask[]>;
 
   /** Delete a task */
-  delete(id: string): Promise<void>;
+  delete(scope: TaskRunScope): Promise<void>;
 
   /** Cleanup old completed/failed tasks */
   cleanup(olderThanMs: number): Promise<number>;
@@ -310,7 +330,9 @@ export interface ITaskStorage {
  * Only stores essential data needed to resume polling after restart
  */
 export interface TaskRecoveryInfo {
-  /** Internal task ID */
+  /** Complete authoritative Task identity. */
+  scope: TaskRunScope;
+  /** Local display ID copied from scope.childRunId for provider diagnostics. */
   taskId: string;
   /** External platform task ID (e.g., Runway task ID) */
   externalTaskId: string;
@@ -335,13 +357,13 @@ export interface ITaskRecoveryStorage {
   save(info: TaskRecoveryInfo): Promise<void>;
 
   /** Load recovery info by task ID */
-  load(taskId: string): Promise<TaskRecoveryInfo | undefined>;
+  load(scope: TaskRunScope): Promise<TaskRecoveryInfo | undefined>;
 
   /** Load all pending recovery infos */
   loadAll(): Promise<TaskRecoveryInfo[]>;
 
   /** Delete recovery info */
-  delete(taskId: string): Promise<void>;
+  delete(scope: TaskRunScope): Promise<void>;
 
   /** Clear all recovery infos */
   clear(): Promise<void>;
@@ -352,8 +374,8 @@ export interface TaskLifecycleReport {
 }
 
 export interface TaskExecutionContext {
-  /** Internal task id for runtime-only coordination */
-  readonly taskId: string;
+  /** Complete internal task identity for runtime-only coordination. */
+  readonly scope: TaskRunScope;
   /** Runtime-only cancellation signal. Never persist this object. */
   readonly signal: AbortSignal;
   /** Report lifecycle changes from executor/provider boundaries */

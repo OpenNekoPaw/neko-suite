@@ -24,12 +24,13 @@ describe('task view projector', () => {
     expect(filterTasksForConversation([taskA, taskB], 'conv-a')).toEqual([taskA]);
   });
 
-  it('extracts conversation id from media task request metadata', () => {
+  it('uses the authoritative task scope instead of media request metadata', () => {
     const task = createTask({
+      scope: taskScope('task-1', 'conv-media'),
       payload: {
         request: {
           prompt: 'Generate a cat image',
-          metadata: { conversationId: 'conv-media' },
+          metadata: { conversationId: 'payload-conversation-must-not-own-task' },
         },
       },
     });
@@ -56,6 +57,7 @@ describe('task view projector', () => {
     });
 
     expect(toBackgroundTaskView(task)).toEqual({
+      scope: taskScope('task-1'),
       id: 'task-1',
       type: 'image',
       name: 'Generate a cat image',
@@ -240,6 +242,7 @@ describe('task view projector', () => {
         {
           backgroundMode: true,
           taskId: 'task-1',
+          taskScope: taskScope('task-1'),
           type: 'video',
           message: 'Generate a cinematic city flythrough',
           routedTo: { provider: 'runway' },
@@ -247,6 +250,7 @@ describe('task view projector', () => {
         { now: () => Date.UTC(2026, 0, 1, 0, 0, 0) },
       ),
     ).toEqual({
+      scope: taskScope('task-1'),
       id: 'task-1',
       type: 'video',
       name: 'Generate a cinematic city flythrough',
@@ -265,6 +269,7 @@ describe('task view projector', () => {
       {
         backgroundMode: true,
         taskId: 'task-1',
+        taskScope: taskScope('task-1'),
         type: 'video',
         message: 'Generate a cinematic city flythrough',
         routedTo: { provider: 'runway' },
@@ -365,6 +370,7 @@ describe('task view projector', () => {
         now: () => Date.UTC(2026, 0, 1, 0, 0, 3),
       }),
     ).toEqual({
+      scope: taskScope('task-1'),
       id: 'task-1',
       type: 'image',
       name: 'Generate a cat image',
@@ -384,6 +390,7 @@ describe('task view projector', () => {
     const task = createBackgroundTaskViewFromToolResultData({
       backgroundMode: true,
       taskId: 'task-1',
+      taskScope: taskScope('task-1'),
       type: 'image',
       message: 'Generate a cat',
     });
@@ -405,14 +412,19 @@ describe('task view projector', () => {
 });
 
 function createTask(overrides: Partial<Task> & { payload?: Record<string, unknown> } = {}): Task {
+  const id = overrides.id ?? 'task-1';
   const payload = overrides.payload ?? { conversationId: 'conv-1' };
   const input = overrides.input ?? {
     type: overrides.type ?? 'image_generation',
     payload,
   };
+  const conversationId =
+    overrides.scope?.conversationId ??
+    (typeof payload.conversationId === 'string' ? payload.conversationId : 'conv-1');
 
   return {
-    id: overrides.id ?? 'task-1',
+    scope: overrides.scope ?? taskScope(id, conversationId),
+    id,
     type: overrides.type ?? input.type,
     status: overrides.status ?? 'completed',
     input,
@@ -421,5 +433,16 @@ function createTask(overrides: Partial<Task> & { payload?: Record<string, unknow
     createdAt: overrides.createdAt ?? 1000,
     updatedAt: overrides.updatedAt ?? 2000,
     error: overrides.error,
+  };
+}
+
+function taskScope(childRunId: string, conversationId = 'conv-1'): TaskRunScope {
+  const runId = `run:${conversationId}`;
+  return {
+    conversationId,
+    runId,
+    parentRunId: runId,
+    childRunId,
+    childKind: 'task',
   };
 }

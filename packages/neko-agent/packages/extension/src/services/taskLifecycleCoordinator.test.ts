@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { Task } from '@neko/shared';
+import type { Task, TaskRunScope } from '@neko/shared';
 import {
   shouldCancelForInterruption,
   TaskLifecycleCoordinator,
@@ -35,7 +35,7 @@ describe('TaskLifecycleCoordinator', () => {
     await Promise.resolve();
 
     expect(cancel).toHaveBeenCalledTimes(1);
-    expect(cancel).toHaveBeenCalledWith('token-task');
+    expect(cancel).toHaveBeenCalledWith(taskScope('token-task', 'conv-1'));
 
     coordinator.dispose();
   });
@@ -63,6 +63,7 @@ function createTask(
   interruptPolicy: Task['lifecycle']['interruptPolicy'],
 ): Task {
   return {
+    scope: taskScope(id, conversationId),
     id,
     type: 'custom',
     status: 'running',
@@ -77,5 +78,16 @@ function createTask(
       interruptPolicy,
       recoverPolicy: 'retry-executor',
     },
+  };
+}
+
+function taskScope(childRunId: string, conversationId: string): TaskRunScope {
+  const runId = `run:${conversationId}`;
+  return {
+    conversationId,
+    runId,
+    parentRunId: runId,
+    childRunId,
+    childKind: 'task',
   };
 }

@@ -7,9 +7,11 @@
 
 import {
   isGeneratedDraftRef,
+  validateChildRunScope,
   isPublicGeneratedAssetResultUri,
   type Task,
   type TaskStatus,
+  type TaskRunScope,
 } from '@neko/shared';
 import type { AgentBackgroundTask } from '@neko-agent/types';
 
@@ -18,6 +20,7 @@ export type BackgroundTaskViewStatus =
   'queued' | 'processing' | 'completed' | 'failed' | 'cancelled';
 
 export interface BackgroundTaskView {
+  scope: TaskRunScope;
   id: string;
   type: BackgroundTaskViewType;
   name: string;
@@ -51,13 +54,7 @@ export interface BackgroundTaskFailureUpdateOptions {
 }
 
 export function getTaskConversationId(task: Task | undefined): string | undefined {
-  const payload = task?.input.payload;
-  const direct = getStringValue(payload, 'conversationId');
-  if (direct) return direct;
-
-  const request = isRecord(payload?.request) ? payload.request : undefined;
-  const metadata = isRecord(request?.metadata) ? request.metadata : undefined;
-  return getStringValue(metadata, 'conversationId');
+  return task?.scope.conversationId;
 }
 
 export function matchesTaskConversation(task: Task, conversationId: string): boolean {
@@ -73,6 +70,7 @@ export function toBackgroundTaskView(task: Task): BackgroundTaskView {
   const prompt = getStringValue(payload, 'prompt');
 
   return {
+    scope: task.scope,
     id: task.id,
     type: toBackgroundTaskViewType(task),
     name: getDisplayName(task, payload, prompt),
@@ -131,6 +129,15 @@ export function createBackgroundTaskViewFromToolResultData(
   if (!isRecord(data) || data.backgroundMode !== true || typeof data.taskId !== 'string') {
     return null;
   }
+  const scopeResult = validateChildRunScope(data.taskScope);
+  if (
+    !scopeResult.ok ||
+    scopeResult.scope.childKind !== 'task' ||
+    scopeResult.scope.childRunId !== data.taskId
+  ) {
+    return null;
+  }
+  const scope = scopeResult.scope as TaskRunScope;
 
   const type = toBackgroundTaskViewTypeHint(getStringValue(data, 'type'));
   const message = getStringValue(data, 'message') ?? '';
@@ -139,6 +146,7 @@ export function createBackgroundTaskViewFromToolResultData(
   const timestamp = new Date(options.now?.() ?? Date.now()).toISOString();
 
   return {
+    scope,
     id: data.taskId,
     type,
     name: message.slice(0, 50) || `${type} generation`,

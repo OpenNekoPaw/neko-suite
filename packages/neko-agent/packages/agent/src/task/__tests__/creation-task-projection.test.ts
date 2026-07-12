@@ -114,7 +114,13 @@ describe('TaskManagerCreationTaskProjection', () => {
       },
     });
 
-    expect(store.delete).toHaveBeenCalledWith('creation:run-2:a');
+    expect(store.delete).toHaveBeenCalledWith({
+      conversationId: 'conv-1',
+      runId: 'run-2',
+      parentRunId: 'run-2',
+      childRunId: 'creation:run-2:a',
+      childKind: 'task',
+    });
     expect(store.upsertCreationProjectedTask).toHaveBeenLastCalledWith(
       expect.objectContaining({
         id: 'creation:run-2:b',
@@ -123,7 +129,7 @@ describe('TaskManagerCreationTaskProjection', () => {
     );
   });
 
-  it('clears persisted creation projected tasks by legacy trace run even without in-memory projection state', async () => {
+  it('clears persisted creation projected tasks by authoritative run scope without in-memory projection state', async () => {
     const store = {
       upsertCreationProjectedTask: vi.fn().mockResolvedValue(undefined),
       clearCreationProjectedTasksForRun: vi
@@ -133,9 +139,12 @@ describe('TaskManagerCreationTaskProjection', () => {
     };
     const projection = createTaskManagerCreationTaskProjection({ store });
 
-    await projection.clearRun('run-3', 301);
+    await projection.clearRun({ conversationId: 'conv-1', runId: 'run-3' }, 301);
 
-    expect(store.clearCreationProjectedTasksForRun).toHaveBeenCalledWith('run-3', 301);
+    expect(store.clearCreationProjectedTasksForRun).toHaveBeenCalledWith(
+      { conversationId: 'conv-1', runId: 'run-3' },
+      301,
+    );
     expect(store.delete).not.toHaveBeenCalled();
   });
 });

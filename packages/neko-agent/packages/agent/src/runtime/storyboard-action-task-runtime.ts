@@ -14,6 +14,7 @@ import type {
   CanvasStoryboardSemanticPromptDocument,
   CanvasStoryboardShotTarget,
   CanvasStoryboardTaskRef,
+  TaskRunScope,
 } from '@neko/shared';
 import {
   CANVAS_STORYBOARD_ADVANCED_PARAMETER_IDS,
@@ -47,6 +48,7 @@ export interface CanvasStoryboardAgentTaskInternalExecution {
 }
 
 export interface CreateCanvasStoryboardAgentTaskInput {
+  readonly scope: TaskRunScope;
   readonly intent: CanvasStoryboardActionIntent;
   readonly conversationId: string;
   readonly provider?: CanvasStoryboardAgentTaskProviderMetadata;
@@ -136,11 +138,13 @@ export function createCanvasStoryboardAgentTaskProjection(
   const now = input.now?.() ?? Date.now();
   const timestamp = new Date(now).toISOString();
   const taskId = input.taskId ?? createStoryboardTaskId(input.intent, now);
+  assertStoryboardTaskScope(input.scope, input.conversationId, taskId);
   const providerId = input.provider?.providerId ?? 'neko-agent';
   const providerName =
     input.provider?.providerName ?? input.provider?.modelId ?? providerId ?? 'Neko Agent';
   const status = input.status ?? 'queued';
   const task: AgentBackgroundTask = {
+    scope: input.scope,
     id: taskId,
     type: inferStoryboardTaskType(input.intent),
     name: formatStoryboardTaskName(input.intent),
@@ -177,6 +181,22 @@ export function createCanvasStoryboardAgentTaskProjection(
   };
 
   return { task, workItem, taskRef, taskKind };
+}
+
+function assertStoryboardTaskScope(
+  scope: TaskRunScope,
+  conversationId: string,
+  taskId: string,
+): void {
+  if (
+    scope.childKind !== 'task' ||
+    scope.conversationId !== conversationId ||
+    scope.childRunId !== taskId
+  ) {
+    throw new Error(
+      `Storyboard task scope mismatch: ${scope.conversationId}/${scope.childRunId} cannot own ${conversationId}/${taskId}.`,
+    );
+  }
 }
 
 export function projectCanvasStoryboardExecutableActionInput(

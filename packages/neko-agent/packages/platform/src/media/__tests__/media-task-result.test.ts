@@ -36,9 +36,10 @@ describe('media-task-result', () => {
   it('saves completed outputs and registers generated assets', async () => {
     const saveOutputs = vi.fn().mockResolvedValue(['/repo/.neko/.cache/generated/image.png']);
     const assetIndex = { add: vi.fn() };
+    const task = makeTask({ status: 'completed' });
 
     const result = await finalizeCompletedMediaTaskOutputs({
-      task: makeTask({ status: 'completed' }),
+      task,
       taskType: 'image',
       outputDir: '/repo/.neko/.cache/generated',
       saveOutputs,
@@ -47,7 +48,7 @@ describe('media-task-result', () => {
       computeContentDigest: vi.fn().mockResolvedValue('sha256:image'),
     });
 
-    expect(saveOutputs).toHaveBeenCalledWith('task-1', '/repo/.neko/.cache/generated', {
+    expect(saveOutputs).toHaveBeenCalledWith(task.scope, '/repo/.neko/.cache/generated', {
       transcodeFile: undefined,
     });
     expect(result.resultUrls).toEqual(['generated-assets/asset-1.png']);
@@ -113,5 +114,14 @@ function makeTask(overrides: Partial<MediaTask> = {}): MediaTask {
     ],
     request: { prompt: 'cat' },
     ...overrides,
+    scope:
+      overrides.scope ??
+      ({
+        conversationId: 'conv-1',
+        runId: 'run-1',
+        parentRunId: 'run-1',
+        childRunId: overrides.id ?? 'task-1',
+        childKind: 'task',
+      } as const),
   };
 }

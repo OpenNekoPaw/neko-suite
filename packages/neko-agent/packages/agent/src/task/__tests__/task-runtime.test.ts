@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi, type Mocked } from 'vitest';
 import type { AgentMediaTaskView } from '@neko-agent/types';
-import type { Task, TaskStatus } from '@neko/shared';
+import type { Task, TaskRunScope, TaskStatus } from '@neko/shared';
 import {
   runCancelTaskRuntime,
   runClearCompletedTasksRuntime,
@@ -75,14 +75,14 @@ describe('task runtime', () => {
     media.cancelTask.mockResolvedValue(createMediaTaskView({ id: 'media-1', status: 'cancelled' }));
 
     const result = await runCancelTaskRuntime(
-      { taskId: 'media-1', conversationId: 'conv-1' },
+      { scope: taskScope('media-1'), taskId: 'media-1', conversationId: 'conv-1' },
       { taskManager, media },
       effects,
     );
 
     expect(result.kind).toBe('cancelled-media');
     expect(taskManager.cancel).not.toHaveBeenCalled();
-    expect(media.cancelTask).toHaveBeenCalledWith('media-1');
+    expect(media.cancelTask).toHaveBeenCalledWith(taskScope('media-1'));
     expect(postMessage).toHaveBeenCalledWith(
       expect.objectContaining({
         type: 'mediaTaskProgress',
@@ -107,7 +107,7 @@ describe('task runtime', () => {
     };
 
     const result = await runCancelTaskRuntime(
-      { taskId: 'task-1', conversationId: 'conv-1' },
+      { scope: taskScope('task-1'), taskId: 'task-1', conversationId: 'conv-1' },
       {
         taskManager,
         hostPrivateLeaseGuard: {
@@ -137,7 +137,7 @@ describe('task runtime', () => {
     taskManager.submit.mockRejectedValue(new Error('quota exceeded'));
 
     const result = await runRetryTaskRuntime(
-      { taskId: 'task-1', conversationId: 'conv-1' },
+      { scope: taskScope('task-1'), taskId: 'task-1', conversationId: 'conv-1' },
       { taskManager },
       effects,
     );
@@ -168,16 +168,17 @@ describe('task runtime', () => {
     );
 
     const result = await runRemoveTaskRuntime(
-      { taskId: 'task-1', conversationId: 'conv-1' },
+      { scope: taskScope('task-1'), taskId: 'task-1', conversationId: 'conv-1' },
       { taskManager, media },
       effects,
     );
 
     expect(result.kind).toBe('removed');
-    expect(taskManager.delete).toHaveBeenCalledWith('task-1');
-    expect(media.deleteTask).toHaveBeenCalledWith('task-1');
+    expect(taskManager.delete).toHaveBeenCalledWith(taskScope('task-1'));
+    expect(media.deleteTask).toHaveBeenCalledWith(taskScope('task-1'));
     expect(postMessage).toHaveBeenCalledWith({
       type: 'taskRemoved',
+      taskScope: taskScope('task-1'),
       conversationId: 'conv-1',
       taskId: 'task-1',
     });
@@ -193,7 +194,7 @@ describe('task runtime', () => {
     );
 
     const result = await runViewTaskResultRuntime(
-      { taskId: 'task-1', conversationId: 'conv-1' },
+      { scope: taskScope('task-1'), taskId: 'task-1', conversationId: 'conv-1' },
       { taskManager },
       effects,
     );
@@ -212,7 +213,12 @@ describe('task runtime', () => {
     );
 
     const result = await runViewTaskResultRuntime(
-      { taskId: 'task-1', conversationId: 'conv-1', resultRef: 'generated-assets/asset-1.png' },
+      {
+        scope: taskScope('task-1'),
+        taskId: 'task-1',
+        conversationId: 'conv-1',
+        resultRef: 'generated-assets/asset-1.png',
+      },
       { taskManager },
       effects,
     );
@@ -260,10 +266,10 @@ describe('task runtime', () => {
       conversationId: 'conv-1',
       taskIds: ['done-1', 'failed-1', 'cancelled-1'],
     });
-    expect(taskManager.delete).toHaveBeenCalledWith('done-1');
-    expect(taskManager.delete).toHaveBeenCalledWith('failed-1');
-    expect(taskManager.delete).toHaveBeenCalledWith('cancelled-1');
-    expect(taskManager.delete).not.toHaveBeenCalledWith('failed-2');
+    expect(taskManager.delete).toHaveBeenCalledWith(taskScope('done-1'));
+    expect(taskManager.delete).toHaveBeenCalledWith(taskScope('failed-1'));
+    expect(taskManager.delete).toHaveBeenCalledWith(taskScope('cancelled-1'));
+    expect(taskManager.delete).not.toHaveBeenCalledWith(taskScope('failed-2', 'conv-2'));
     expect(postMessage).toHaveBeenCalledWith({
       type: 'tasksUpdated',
       conversationId: 'conv-1',
@@ -287,7 +293,7 @@ function createTaskManager(): MockTaskManager & TaskRuntimeTaskManager {
     list: vi.fn().mockResolvedValue([]),
     get: vi.fn().mockResolvedValue(undefined),
     cancel: vi.fn().mockResolvedValue(true),
-    submit: vi.fn().mockResolvedValue('retry-task-1'),
+    submit: vi.fn().mockResolvedValue(taskScope('retry-task-1')),
     delete: vi.fn().mockResolvedValue(true),
   };
 }
@@ -301,14 +307,19 @@ function createMediaGateway(): MockMediaGateway & TaskRuntimeMediaGateway {
 }
 
 function createTask(overrides: Partial<Task> & { payload?: Record<string, unknown> } = {}): Task {
+  const id = overrides.id ?? 'task-1';
   const payload = overrides.payload ?? { conversationId: 'conv-1' };
   const input = overrides.input ?? {
     type: overrides.type ?? 'image_generation',
     payload,
   };
+  const conversationId =
+    overrides.scope?.conversationId ??
+    (typeof payload.conversationId === 'string' ? payload.conversationId : 'conv-1');
 
   return {
-    id: overrides.id ?? 'task-1',
+    scope: overrides.scope ?? taskScope(id, conversationId),
+    id,
     type: overrides.type ?? input.type,
     status: overrides.status ?? 'completed',
     input,
@@ -324,6 +335,7 @@ function createMediaTaskView(
   overrides: Partial<AgentMediaTaskView> & { id: string },
 ): AgentMediaTaskView {
   return {
+    scope: overrides.scope ?? taskScope(overrides.id),
     id: overrides.id,
     type: overrides.type ?? 'image',
     status: overrides.status ?? 'running',
@@ -336,5 +348,16 @@ function createMediaTaskView(
     outputs: overrides.outputs,
     result: overrides.result,
     error: overrides.error,
+  };
+}
+
+function taskScope(childRunId: string, conversationId = 'conv-1'): TaskRunScope {
+  const runId = `run:${conversationId}`;
+  return {
+    conversationId,
+    runId,
+    parentRunId: runId,
+    childRunId,
+    childKind: 'task',
   };
 }

@@ -19,14 +19,16 @@ import type {
   SerializableTask,
   TaskExecutor,
   TaskLifecycleMetadata,
-  TaskRunLease,
+  TaskRunOwnerScope,
+  TaskRunScope,
+  ConversationRunScope,
 } from '@neko/shared';
 import {
   BaseError,
   ConcurrencyPool,
   KeyedConcurrencyPool,
   createTaskLifecycleMetadata,
-  extractTaskRunLease,
+  formatTaskRunScope,
   sleepWithAbort,
   withTimeout,
 } from '@neko/shared';
@@ -45,31 +47,31 @@ const logger = getLogger('TaskManager');
 export interface ICreationProjectedTaskStore {
   upsertCreationProjectedTask(task: CreationProjectedTaskUpsertInput): Promise<void>;
   clearCreationProjectedTasksForRun(
-    runId: string,
+    scope: ConversationRunScope,
     runStartedAt?: number,
   ): Promise<readonly string[]>;
 }
 
 export interface IRuntimeTaskManager extends ITaskManager, ICreationProjectedTaskStore {
   initialize(): Promise<void>;
-  resumePendingTasks(): Promise<string[]>;
+  resumePendingTasks(): Promise<TaskRunScope[]>;
   dispose(): Promise<void>;
   registerExecutor(type: TaskType, executor: TaskExecutor): void;
   onTerminalTask(
     callback: TaskTerminalCallback,
     options?: TaskTerminalSubscriptionOptions,
   ): () => void;
-  saveRecoveryInfo(taskId: string, externalTaskId: string, providerId: string): Promise<void>;
-  deleteRecoveryInfo(taskId: string): Promise<void>;
+  saveRecoveryInfo(scope: TaskRunScope, externalTaskId: string, providerId: string): Promise<void>;
+  deleteRecoveryInfo(scope: TaskRunScope): Promise<void>;
   getRecoveryStorage(): ITaskRecoveryStorage;
-  updateLifecycle(id: string, lifecycle: Partial<TaskLifecycleMetadata>): Promise<boolean>;
-  updateOutputData(id: string, outputData: Record<string, unknown>): Promise<boolean>;
+  updateLifecycle(scope: TaskRunScope, lifecycle: Partial<TaskLifecycleMetadata>): Promise<boolean>;
+  updateOutputData(scope: TaskRunScope, outputData: Record<string, unknown>): Promise<boolean>;
   upsertExternalTask(task: SerializableTask): Promise<void>;
 }
 
 export interface TaskTerminalEvent {
   readonly task: Task;
-  readonly lease: TaskRunLease;
+  readonly scope: TaskRunScope;
 }
 
 export type TaskTerminalCallback = (event: TaskTerminalEvent) => void;
@@ -177,11 +179,12 @@ export class TaskManager implements IRuntimeTaskManager {
     const storedTasks = await this.storage.loadAll();
 
     for (const task of storedTasks) {
-      this.tasks.set(task.id, task);
+      this.tasks.set(formatTaskRunScope(task.scope), task);
       // Update counter to avoid ID collisions
       const match = task.id.match(/task_\d+_(\d+)/);
-      if (match) {
-        const counter = parseInt(match[1], 10);
+      const counterText = match?.[1];
+      if (counterText) {
+        const counter = parseInt(counterText, 10);
         if (counter >= this.taskCounter) {
           this.taskCounter = counter;
         }
@@ -193,9 +196,9 @@ export class TaskManager implements IRuntimeTaskManager {
    * Resume pending/running tasks after restart
    * Returns the list of resumed task IDs
    */
-  async resumePendingTasks(): Promise<string[]> {
+  async resumePendingTasks(): Promise<TaskRunScope[]> {
     const pendingTasks = await this.storage.loadPending();
-    const resumedIds: string[] = [];
+    const resumedScopes: TaskRunScope[] = [];
 
     for (const task of pendingTasks) {
       // Mark running tasks as pending for retry
@@ -206,31 +209,31 @@ export class TaskManager implements IRuntimeTaskManager {
       }
 
       // Update in-memory state
-      this.tasks.set(task.id, task);
+      this.tasks.set(formatTaskRunScope(task.scope), task);
 
-      const recoveryInfo = await this.recoveryStorage.load(task.id).catch(() => undefined);
+      const recoveryInfo = await this.recoveryStorage.load(task.scope).catch(() => undefined);
       const lifecycle = createTaskLifecycleMetadata(task.lifecycle);
       if (
         lifecycle.recoverPolicy === 'snapshot-only' ||
         (recoveryInfo && lifecycle.recoverPolicy === 'resume-polling')
       ) {
-        resumedIds.push(task.id);
+        resumedScopes.push(task.scope);
         continue;
       }
 
       // Re-execute only retryable executor work. Snapshot-only workflows are
       // resumed explicitly from their persisted stage artifacts by their owner.
       this.executeTask(task).catch((error) => {
-        this.updateTask(task.id, {
+        this.updateTask(task.scope, {
           status: 'failed',
           error: error instanceof Error ? error.message : String(error),
         });
       });
 
-      resumedIds.push(task.id);
+      resumedScopes.push(task.scope);
     }
 
-    return resumedIds;
+    return resumedScopes;
   }
 
   /**
@@ -242,9 +245,9 @@ export class TaskManager implements IRuntimeTaskManager {
     // Also remove from in-memory map
     if (cleaned > 0) {
       const cutoff = Date.now() - this.retentionPeriodMs;
-      for (const [id, task] of this.tasks.entries()) {
+      for (const [key, task] of this.tasks.entries()) {
         if (isTaskCleanupCandidate(task, cutoff)) {
-          this.tasks.delete(id);
+          this.tasks.delete(key);
         }
       }
     }
@@ -319,18 +322,19 @@ export class TaskManager implements IRuntimeTaskManager {
    * Call this when an external platform returns a task ID
    */
   async saveRecoveryInfo(
-    taskId: string,
+    scope: TaskRunScope,
     externalTaskId: string,
     providerId: string,
   ): Promise<void> {
-    const task = this.tasks.get(taskId);
+    const task = this.tasks.get(formatTaskRunScope(scope));
     if (!task) {
-      logger.warn('Cannot save recovery info: task not found', { taskId });
+      logger.warn('Cannot save recovery info: task not found', { scope });
       return;
     }
 
     const info: TaskRecoveryInfo = {
-      taskId,
+      scope,
+      taskId: scope.childRunId,
       externalTaskId,
       providerId,
       taskType: task.type,
@@ -340,15 +344,15 @@ export class TaskManager implements IRuntimeTaskManager {
     };
 
     await this.recoveryStorage.save(info);
-    logger.debug('Saved recovery info', { taskId, externalTaskId, providerId });
+    logger.debug('Saved recovery info', { scope, externalTaskId, providerId });
   }
 
   /**
    * Delete recovery info for a task
    * Call this when a task completes, fails, or is cancelled
    */
-  async deleteRecoveryInfo(taskId: string): Promise<void> {
-    await this.recoveryStorage.delete(taskId);
+  async deleteRecoveryInfo(scope: TaskRunScope): Promise<void> {
+    await this.recoveryStorage.delete(scope);
   }
 
   /**
@@ -377,24 +381,28 @@ export class TaskManager implements IRuntimeTaskManager {
   /**
    * Submit a new task
    */
-  async submit(input: TaskInput): Promise<string> {
+  async submit(input: TaskInput, owner: TaskRunOwnerScope): Promise<TaskRunScope> {
     const id = this.generateTaskId();
     const now = Date.now();
+    const scope: TaskRunScope = { ...owner, childRunId: id, childKind: 'task' };
 
     const task: Task = {
+      scope,
       id,
       type: input.type,
       status: 'pending',
       input,
-      lifecycle: input.lifecycle
-        ? createTaskLifecycleMetadata(input.lifecycle)
-        : createTaskLifecycleMetadata(),
+      lifecycle: createTaskLifecycleMetadata({
+        ...input.lifecycle,
+        ownerConversationId: owner.conversationId,
+        ownerRunId: owner.runId,
+      }),
       progress: 0,
       createdAt: now,
       updatedAt: now,
     };
 
-    this.tasks.set(id, task);
+    this.tasks.set(formatTaskRunScope(scope), task);
 
     logger.debug('Submitting task', {
       id,
@@ -416,32 +424,33 @@ export class TaskManager implements IRuntimeTaskManager {
         id,
         error: error instanceof Error ? error.message : String(error),
       });
-      this.updateTask(id, {
+      this.updateTask(scope, {
         status: 'failed',
         error: error instanceof Error ? error.message : String(error),
       });
     });
 
-    return id;
+    return scope;
   }
 
   /**
-   * Get task by ID
+   * Get task by complete scope
    */
-  async get(id: string): Promise<Task | undefined> {
-    return this.tasks.get(id);
+  async get(scope: TaskRunScope): Promise<Task | undefined> {
+    return this.tasks.get(formatTaskRunScope(scope));
   }
 
   /**
    * Cancel a task
    */
-  async cancel(id: string): Promise<boolean> {
-    const task = this.tasks.get(id);
+  async cancel(scope: TaskRunScope): Promise<boolean> {
+    const key = formatTaskRunScope(scope);
+    const task = this.tasks.get(key);
     if (!task) return false;
 
     if (task.status === 'pending' || task.status === 'running') {
-      this.executionControllers.get(id)?.abort();
-      this.updateTask(id, { status: 'cancelled' });
+      this.executionControllers.get(key)?.abort();
+      this.updateTask(scope, { status: 'cancelled' });
       return true;
     }
 
@@ -451,13 +460,14 @@ export class TaskManager implements IRuntimeTaskManager {
   /**
    * Wait for task completion
    */
-  async waitForCompletion(id: string, timeoutMs: number = 300000): Promise<Task> {
-    const task = this.tasks.get(id);
+  async waitForCompletion(scope: TaskRunScope, timeoutMs: number = 300000): Promise<Task> {
+    const key = formatTaskRunScope(scope);
+    const task = this.tasks.get(key);
     if (!task) {
       throw new BaseError({
         category: 'not_found',
         code: 'TASK_NOT_FOUND',
-        message: `Task ${id} not found`,
+        message: `Task ${formatTaskRunScope(scope)} not found`,
         retryable: false,
       });
     }
@@ -471,21 +481,21 @@ export class TaskManager implements IRuntimeTaskManager {
         resolve,
         reject,
         timer: setTimeout(() => {
-          this.removeCompletionWaiter(id, waiter);
+          this.removeCompletionWaiter(key, waiter);
           reject(
             new BaseError({
               category: 'timeout',
               code: 'TASK_TIMEOUT',
-              message: `Task ${id} timed out after ${timeoutMs}ms`,
+              message: `Task ${formatTaskRunScope(scope)} timed out after ${timeoutMs}ms`,
               retryable: false,
             }),
           );
         }, timeoutMs),
       };
 
-      const waiters = this.completionWaiters.get(id) ?? new Set<CompletionWaiter>();
+      const waiters = this.completionWaiters.get(key) ?? new Set<CompletionWaiter>();
       waiters.add(waiter);
-      this.completionWaiters.set(id, waiters);
+      this.completionWaiters.set(key, waiters);
     });
   }
 
@@ -500,27 +510,28 @@ export class TaskManager implements IRuntimeTaskManager {
   /**
    * Delete a task
    */
-  async delete(id: string): Promise<boolean> {
-    const task = this.tasks.get(id) ?? (await this.storage.load(id));
+  async delete(scope: TaskRunScope): Promise<boolean> {
+    const key = formatTaskRunScope(scope);
+    const task = this.tasks.get(key) ?? (await this.storage.load(scope));
     if (!task) return false;
 
     // Remove from in-memory map
-    this.tasks.delete(id);
+    this.tasks.delete(key);
 
     // Remove from storage
-    await this.storage.delete(id);
+    await this.storage.delete(scope);
 
     // Remove recovery info
-    await this.recoveryStorage.delete(id);
+    await this.recoveryStorage.delete(scope);
 
     // Clean up callbacks
-    this.progressCallbacks.delete(id);
+    this.progressCallbacks.delete(key);
     this.rejectCompletionWaiters(
-      id,
+      key,
       new BaseError({
         category: 'not_found',
         code: 'TASK_DELETED',
-        message: `Task ${id} was deleted`,
+        message: `Task ${formatTaskRunScope(scope)} was deleted`,
         retryable: false,
       }),
     );
@@ -531,8 +542,11 @@ export class TaskManager implements IRuntimeTaskManager {
   /**
    * Update task output data (e.g., to store local file paths)
    */
-  async updateOutputData(id: string, outputData: Record<string, unknown>): Promise<boolean> {
-    const task = this.tasks.get(id);
+  async updateOutputData(
+    scope: TaskRunScope,
+    outputData: Record<string, unknown>,
+  ): Promise<boolean> {
+    const task = this.tasks.get(formatTaskRunScope(scope));
     if (!task) return false;
 
     // Merge new output data with existing
@@ -544,15 +558,18 @@ export class TaskManager implements IRuntimeTaskManager {
       },
     };
 
-    this.updateTask(id, { output: updatedOutput });
+    this.updateTask(scope, { output: updatedOutput });
     return true;
   }
 
-  async updateLifecycle(id: string, lifecycle: Partial<TaskLifecycleMetadata>): Promise<boolean> {
-    const task = this.tasks.get(id);
+  async updateLifecycle(
+    scope: TaskRunScope,
+    lifecycle: Partial<TaskLifecycleMetadata>,
+  ): Promise<boolean> {
+    const task = this.tasks.get(formatTaskRunScope(scope));
     if (!task) return false;
 
-    this.updateTask(id, {
+    this.updateTask(scope, {
       lifecycle: createTaskLifecycleMetadata({
         ...task.lifecycle,
         ...lifecycle,
@@ -568,13 +585,14 @@ export class TaskManager implements IRuntimeTaskManager {
    * surface without delegating execution to TaskManager executors.
    */
   async upsertExternalTask(task: SerializableTask): Promise<void> {
-    const existing = this.tasks.get(task.id);
+    const key = formatTaskRunScope(task.scope);
+    const existing = this.tasks.get(key);
     const nextTask: Task = {
       ...task,
       createdAt: existing?.createdAt ?? task.createdAt,
     };
 
-    this.tasks.set(task.id, nextTask);
+    this.tasks.set(key, nextTask);
     await this.storage.save(nextTask as SerializableTask);
     this._notifyProgress(nextTask);
     if (isTerminalStatus(nextTask.status) && (!existing || !isTerminalStatus(existing.status))) {
@@ -597,19 +615,18 @@ export class TaskManager implements IRuntimeTaskManager {
    * ids are still recognized here only to clean pre-migration local state.
    */
   async clearCreationProjectedTasksForRun(
-    runId: string,
+    scope: ConversationRunScope,
     runStartedAt?: number,
   ): Promise<readonly string[]> {
     const storedTasks = await this.storage.loadAll();
-    const ids = storedTasks
-      .filter((task) => isCreationProjectedTaskBoundToRun(task, runId, runStartedAt))
-      .map((task) => task.id);
-
-    for (const id of ids) {
-      await this.delete(id);
+    const tasks = storedTasks.filter((task) =>
+      isCreationProjectedTaskBoundToRun(task, scope, runStartedAt),
+    );
+    for (const task of tasks) {
+      await this.delete(task.scope);
     }
 
-    return ids;
+    return tasks.map((task) => task.id);
   }
 
   /**
@@ -618,16 +635,17 @@ export class TaskManager implements IRuntimeTaskManager {
    * the callback is invoked immediately with the current task state so that
    * late subscribers (e.g. fast synchronous image generation) never miss it.
    */
-  onProgress(id: string, callback: TaskProgressCallback): () => void {
-    let callbacks = this.progressCallbacks.get(id);
+  onProgress(scope: TaskRunScope, callback: TaskProgressCallback): () => void {
+    const key = formatTaskRunScope(scope);
+    let callbacks = this.progressCallbacks.get(key);
     if (!callbacks) {
       callbacks = new Set();
-      this.progressCallbacks.set(id, callbacks);
+      this.progressCallbacks.set(key, callbacks);
     }
     callbacks.add(callback);
 
     // Replay terminal state for late subscribers
-    const existing = this.tasks.get(id);
+    const existing = this.tasks.get(key);
     if (
       existing &&
       (existing.status === 'completed' ||
@@ -644,7 +662,7 @@ export class TaskManager implements IRuntimeTaskManager {
     return () => {
       callbacks?.delete(callback);
       if (callbacks?.size === 0) {
-        this.progressCallbacks.delete(id);
+        this.progressCallbacks.delete(key);
       }
     };
   }
@@ -706,24 +724,15 @@ export class TaskManager implements IRuntimeTaskManager {
 
   private async executeTaskCore(task: Task, executor: TaskExecutor): Promise<void> {
     // Check if task was cancelled before starting execution
-    const currentTask = this.tasks.get(task.id);
+    const currentTask = this.tasks.get(formatTaskRunScope(task.scope));
     if (currentTask?.status === 'cancelled') {
       return;
     }
 
     const controller = new AbortController();
-    this.executionControllers.set(task.id, controller);
+    this.executionControllers.set(formatTaskRunScope(task.scope), controller);
 
-    this.updateTask(task.id, { status: 'running' });
-
-    // Inject taskId into payload for recovery support
-    const inputWithTaskId: TaskInput = {
-      ...task.input,
-      payload: {
-        ...task.input.payload,
-        __taskId: task.id,
-      },
-    };
+    this.updateTask(task.scope, { status: 'running' });
 
     const startTime = Date.now();
     let retries = 0;
@@ -731,31 +740,34 @@ export class TaskManager implements IRuntimeTaskManager {
 
     while (retries <= maxRetries) {
       // Check if cancelled
-      const currentTask = this.tasks.get(task.id);
+      const currentTask = this.tasks.get(formatTaskRunScope(task.scope));
       if (currentTask?.status === 'cancelled') {
         return;
       }
 
       try {
         const output = await executor(
-          inputWithTaskId,
+          task.input,
           (progress) => {
             if (!controller.signal.aborted) {
-              this.updateTask(task.id, { progress });
+              this.updateTask(task.scope, { progress });
             }
           },
           {
-            taskId: task.id,
+            scope: task.scope,
             signal: controller.signal,
             reportLifecycle: (update) => {
               if (update.lifecycle) {
-                void this.updateLifecycle(task.id, update.lifecycle);
+                void this.updateLifecycle(task.scope, update.lifecycle);
               }
             },
           },
         );
 
-        if (controller.signal.aborted || this.tasks.get(task.id)?.status === 'cancelled') {
+        if (
+          controller.signal.aborted ||
+          this.tasks.get(formatTaskRunScope(task.scope))?.status === 'cancelled'
+        ) {
           return;
         }
 
@@ -763,7 +775,7 @@ export class TaskManager implements IRuntimeTaskManager {
 
         // Check if executor returned an error (API error, not exception)
         if (output.error) {
-          this.updateTask(task.id, {
+          this.updateTask(task.scope, {
             status: 'failed',
             error: output.error,
             output: {
@@ -779,7 +791,7 @@ export class TaskManager implements IRuntimeTaskManager {
           return;
         }
 
-        this.updateTask(task.id, {
+        this.updateTask(task.scope, {
           status: 'completed',
           progress: 100,
           output: {
@@ -795,7 +807,10 @@ export class TaskManager implements IRuntimeTaskManager {
 
         return;
       } catch (error) {
-        if (controller.signal.aborted || this.tasks.get(task.id)?.status === 'cancelled') {
+        if (
+          controller.signal.aborted ||
+          this.tasks.get(formatTaskRunScope(task.scope))?.status === 'cancelled'
+        ) {
           return;
         }
         retries++;
@@ -808,11 +823,12 @@ export class TaskManager implements IRuntimeTaskManager {
       }
     }
 
-    this.executionControllers.delete(task.id);
+    this.executionControllers.delete(formatTaskRunScope(task.scope));
   }
 
-  private updateTask(id: string, updates: Partial<Task>): void {
-    const task = this.tasks.get(id);
+  private updateTask(scope: TaskRunScope, updates: Partial<Task>): void {
+    const key = formatTaskRunScope(scope);
+    const task = this.tasks.get(key);
     if (!task) return;
     const wasTerminal = isTerminalStatus(task.status);
 
@@ -834,7 +850,7 @@ export class TaskManager implements IRuntimeTaskManager {
       updatedAt: Date.now(),
     };
 
-    this.tasks.set(id, updatedTask);
+    this.tasks.set(key, updatedTask);
 
     // Persist to storage (async, don't block)
     this.storage.save(updatedTask as SerializableTask).catch((err) => {
@@ -843,9 +859,9 @@ export class TaskManager implements IRuntimeTaskManager {
 
     this._notifyProgress(updatedTask);
     if (isTerminalStatus(updatedTask.status)) {
-      this.resolveCompletionWaiters(id, updatedTask);
-      this.executionControllers.delete(id);
-      this.recoveryStorage.delete(id).catch((err) => {
+      this.resolveCompletionWaiters(key, updatedTask);
+      this.executionControllers.delete(key);
+      this.recoveryStorage.delete(scope).catch((err) => {
         logger.error('Failed to delete recovery info for terminal task', { error: err });
       });
       if (!wasTerminal) {
@@ -864,7 +880,7 @@ export class TaskManager implements IRuntimeTaskManager {
       return;
     }
 
-    const callbacks = this.progressCallbacks.get(task.id);
+    const callbacks = this.progressCallbacks.get(formatTaskRunScope(task.scope));
     if (!callbacks) {
       return;
     }
@@ -898,8 +914,8 @@ export class TaskManager implements IRuntimeTaskManager {
   }
 
   private _toTerminalEvent(task: Task): TaskTerminalEvent | null {
-    const lease = extractTaskRunLease(task);
-    if (!lease) {
+    const scope = task.scope;
+    if (!scope) {
       logger.warn('Skipping terminal task observer event without run lease', {
         taskId: task.id,
         conversationId: task.lifecycle?.ownerConversationId,
@@ -908,39 +924,39 @@ export class TaskManager implements IRuntimeTaskManager {
       return null;
     }
 
-    return { task, lease };
+    return { task, scope };
   }
 
-  private removeCompletionWaiter(id: string, waiter: CompletionWaiter): void {
-    const waiters = this.completionWaiters.get(id);
+  private removeCompletionWaiter(key: string, waiter: CompletionWaiter): void {
+    const waiters = this.completionWaiters.get(key);
     if (!waiters) {
       return;
     }
     waiters.delete(waiter);
     clearTimeout(waiter.timer);
     if (waiters.size === 0) {
-      this.completionWaiters.delete(id);
+      this.completionWaiters.delete(key);
     }
   }
 
-  private resolveCompletionWaiters(id: string, task: Task): void {
-    const waiters = this.completionWaiters.get(id);
+  private resolveCompletionWaiters(key: string, task: Task): void {
+    const waiters = this.completionWaiters.get(key);
     if (!waiters) {
       return;
     }
-    this.completionWaiters.delete(id);
+    this.completionWaiters.delete(key);
     for (const waiter of waiters) {
       clearTimeout(waiter.timer);
       waiter.resolve(task);
     }
   }
 
-  private rejectCompletionWaiters(id: string, error: Error): void {
-    const waiters = this.completionWaiters.get(id);
+  private rejectCompletionWaiters(key: string, error: Error): void {
+    const waiters = this.completionWaiters.get(key);
     if (!waiters) {
       return;
     }
-    this.completionWaiters.delete(id);
+    this.completionWaiters.delete(key);
     for (const waiter of waiters) {
       clearTimeout(waiter.timer);
       waiter.reject(error);
@@ -964,30 +980,36 @@ function getFlushPromises(storage: ITaskRecoveryStorage): Promise<unknown>[] {
 }
 
 function isCreationProjectedTaskBoundToRun(
-  task: Pick<SerializableTask, 'id' | 'type' | 'input'>,
-  runId: string,
+  task: Pick<SerializableTask, 'id' | 'type' | 'input' | 'scope'>,
+  owner: ConversationRunScope,
   runStartedAt?: number,
 ): boolean {
-  if (task.type === 'workflow' && task.id.startsWith(`creation:${runId}:`)) {
+  if (task.scope.conversationId !== owner.conversationId || task.scope.runId !== owner.runId) {
+    return false;
+  }
+
+  if (task.type === 'workflow' && task.id.startsWith(`creation:${owner.runId}:`)) {
     if (runStartedAt === undefined) {
       return true;
     }
 
     const idBinding = getCreationProjectedTaskRunBinding(task);
-    return idBinding?.runId === runId && idBinding.runStartedAt === runStartedAt;
+    return idBinding?.runId === owner.runId && idBinding.runStartedAt === runStartedAt;
   }
 
-  if (task.type === 'workflow' && task.id.startsWith(`idc:${runId}:`)) {
+  if (task.type === 'workflow' && task.id.startsWith(`idc:${owner.runId}:`)) {
     if (runStartedAt === undefined) {
       return true;
     }
 
     const migrationBinding = getIdcMigrationProjectedTaskRunBinding(task);
-    return migrationBinding?.runId === runId && migrationBinding.runStartedAt === runStartedAt;
+    return (
+      migrationBinding?.runId === owner.runId && migrationBinding.runStartedAt === runStartedAt
+    );
   }
 
   const binding = getCreationProjectedTaskRunBinding(task);
-  if (!binding || binding.runId !== runId) {
+  if (!binding || binding.runId !== owner.runId) {
     return false;
   }
   if (runStartedAt === undefined) {

@@ -101,7 +101,7 @@ export function createCanvasGenerationRuntime(
       ? {
           media: {
             generateImage: (request) => media.generateImage(request),
-            waitForTask: (taskId, timeoutMs) => media.waitForTask(taskId, timeoutMs),
+            waitForTask: (taskScope, timeoutMs) => media.waitForTask(taskScope, timeoutMs),
           },
         }
       : {}),

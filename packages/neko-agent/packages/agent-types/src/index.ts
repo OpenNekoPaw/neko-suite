@@ -356,6 +356,7 @@ export type {
 } from './artifact-transfer';
 export {
   backgroundTaskToWorkItem,
+  getAgentWorkItemRuntimeKey,
   isSubAgentWorkItem,
   isTaskWorkItem,
   projectBackgroundTaskToWorkItem,

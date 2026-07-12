@@ -7,8 +7,8 @@
  */
 
 import {
-  createAgentRunId,
   createTool,
+  requireToolExecutionRunScope,
   isResourceRef,
   isVideoOperationId,
   type ResourceRef,
@@ -27,7 +27,7 @@ import type { ImageGenerationRequest } from './types';
 
 interface ImageToolRequestInput {
   readonly args: Record<string, unknown>;
-  readonly lease?: TaskRunLease;
+  readonly lease: TaskRunLease;
   readonly target: GenerationTargetMetadata;
   readonly resolved: ResolvedGenerationPrompt;
   readonly transformMetadata?: Record<string, unknown>;
@@ -312,7 +312,7 @@ function buildImageGenerationRequest(input: ImageToolRequestInput): ImageGenerat
 }
 
 function buildImageToolMetadata(input: {
-  readonly lease?: TaskRunLease;
+  readonly lease: TaskRunLease;
   readonly resolved: ResolvedGenerationPrompt;
   readonly target: GenerationTargetMetadata;
   readonly transformMetadata?: Record<string, unknown>;
@@ -347,9 +347,8 @@ function mergeRuntimeUnderstandingModels(
 
 function mergeAgentMediaTaskMetadata(
   metadata: Record<string, unknown> | undefined,
-  lease: TaskRunLease | undefined,
-): Record<string, unknown> | undefined {
-  if (!lease) return metadata;
+  lease: TaskRunLease,
+): Record<string, unknown> {
   return {
     ...(metadata ?? {}),
     conversationId: lease.conversationId,
@@ -359,13 +358,7 @@ function mergeAgentMediaTaskMetadata(
   };
 }
 
-function buildAgentBackgroundTaskLeaseData(
-  lease: TaskRunLease | undefined,
-): Record<string, unknown> {
-  if (!lease) {
-    return {};
-  }
-
+function buildAgentBackgroundTaskLeaseData(lease: TaskRunLease): Record<string, unknown> {
   return {
     conversationId: lease.conversationId,
     runId: lease.runId,
@@ -377,32 +370,8 @@ function createAgentMediaTaskResultDeliveryPolicy(): AgentTaskResultDeliveryPoli
   return { kind: 'auto-resume-agent' };
 }
 
-let agentBackgroundRunSequence = 0;
-
-function createAgentBackgroundTaskLease(
-  options: ToolExecuteOptions | undefined,
-): TaskRunLease | undefined {
-  const conversationId = options?.trace?.conversationId;
-  if (!conversationId) {
-    return undefined;
-  }
-  const traceRunId = options.trace?.runId;
-  if (traceRunId) {
-    return { conversationId, runId: traceRunId };
-  }
-
-  const runStartedAt = Date.now();
-  return {
-    conversationId,
-    runId: createAgentBackgroundRunId(conversationId, runStartedAt),
-    runStartedAt,
-  };
-}
-
-function createAgentBackgroundRunId(conversationId: string, startedAt: number): string {
-  agentBackgroundRunSequence =
-    agentBackgroundRunSequence >= Number.MAX_SAFE_INTEGER ? 1 : agentBackgroundRunSequence + 1;
-  return `${createAgentRunId(conversationId, startedAt)}-${agentBackgroundRunSequence.toString(36)}`;
+function createAgentBackgroundTaskLease(options: ToolExecuteOptions | undefined): TaskRunLease {
+  return requireToolExecutionRunScope(options);
 }
 
 function readImageReferenceInputs(args: Record<string, unknown>): Record<string, unknown> {
@@ -1063,6 +1032,7 @@ export function registerMediaAgentTools(
             data: {
               backgroundMode: true,
               ...buildAgentBackgroundTaskLeaseData(lease),
+              taskScope: task.scope,
               taskId: task.id,
               type: 'image',
               status: 'queued',
@@ -1328,6 +1298,7 @@ export function registerMediaAgentTools(
             data: {
               backgroundMode: true,
               ...buildAgentBackgroundTaskLeaseData(lease),
+              taskScope: task.scope,
               taskId: task.id,
               type: 'image-transform',
               status: 'queued',
@@ -1540,6 +1511,7 @@ export function registerMediaAgentTools(
             data: {
               backgroundMode: true,
               ...buildAgentBackgroundTaskLeaseData(lease),
+              taskScope: task.scope,
               taskId: task.id,
               type: 'video',
               status: 'queued',
@@ -1637,6 +1609,7 @@ export function registerMediaAgentTools(
             data: {
               backgroundMode: true,
               ...buildAgentBackgroundTaskLeaseData(lease),
+              taskScope: task.scope,
               taskId: task.id,
               type: 'audio',
               status: 'queued',
@@ -1744,6 +1717,7 @@ export function registerMediaAgentTools(
             data: {
               backgroundMode: true,
               ...buildAgentBackgroundTaskLeaseData(lease),
+              taskScope: task.scope,
               taskId: task.id,
               type: 'audio',
               status: 'queued',

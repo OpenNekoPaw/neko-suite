@@ -1,7 +1,13 @@
 import type { MediaGenerationService } from './media-generation-service';
 import type { MediaTask } from './types';
+import type { TaskRunScope } from '@neko/shared';
 import { isTerminalMediaTaskStatus } from './media-task-progress-plan';
 import { matchesMediaTaskConversation } from './media-task-view';
+
+export type MediaTurnService = Pick<
+  MediaGenerationService,
+  'generateImage' | 'generateVideo' | 'generateAudio' | 'getTask' | 'onProgress'
+>;
 
 export type MediaTurnCategory = 'image' | 'video' | 'audio' | 'music';
 
@@ -19,7 +25,7 @@ export interface SubmitMediaTurnInput {
 }
 
 export async function submitMediaTurn(
-  media: MediaGenerationService,
+  media: MediaTurnService,
   input: SubmitMediaTurnInput,
 ): Promise<MediaTask> {
   const metadata = {
@@ -66,7 +72,7 @@ export interface MediaTurnProgressErrorEvent<TTaskView> {
 }
 
 export interface RunMediaTurnInput<TTaskView> extends SubmitMediaTurnInput {
-  readonly media: MediaGenerationService;
+  readonly media: MediaTurnService;
   readonly createTaskView: (task: MediaTask) => TTaskView | Promise<TTaskView>;
   readonly createRecoveryTaskView?: (task: MediaTask) => TTaskView;
   readonly onTaskCreated: (event: MediaTurnDeliveryEvent<TTaskView>) => void | Promise<void>;
@@ -82,8 +88,8 @@ export interface RunMediaTurnResult {
 }
 
 export interface ObserveMediaTaskProgressInput<TTaskView> {
-  readonly media: MediaGenerationService;
-  readonly taskId: string;
+  readonly media: MediaTurnService;
+  readonly taskScope: TaskRunScope;
   readonly conversationId?: string;
   readonly createTaskView: (task: MediaTask) => TTaskView | Promise<TTaskView>;
   readonly createRecoveryTaskView?: (task: MediaTask) => TTaskView;
@@ -134,7 +140,7 @@ export async function runMediaTurn<TTaskView>(
     }
   };
 
-  unsubscribe = media.onProgress(task.id, async (updated) => {
+  unsubscribe = media.onProgress(task.scope, async (updated) => {
     try {
       await deliverProgress(updated);
     } catch (error) {
@@ -159,7 +165,7 @@ export async function runMediaTurn<TTaskView>(
     }
   });
 
-  const currentTask = await media.getTask(task.id);
+  const currentTask = await media.getTask(task.scope);
   if (currentTask && conversationId && !matchesMediaTaskConversation(currentTask, conversationId)) {
     input.onIgnoredConversationTask?.({
       taskId: currentTask.id,
@@ -185,7 +191,7 @@ export async function runMediaTurn<TTaskView>(
 export function observeMediaTaskProgress<TTaskView>(
   input: ObserveMediaTaskProgressInput<TTaskView>,
 ): () => void {
-  const { media, taskId, conversationId, createTaskView, createRecoveryTaskView } = input;
+  const { media, taskScope, conversationId, createTaskView, createRecoveryTaskView } = input;
   let terminalDelivered = false;
   let unsubscribe: () => void = () => undefined;
 
@@ -219,7 +225,7 @@ export function observeMediaTaskProgress<TTaskView>(
     }
   };
 
-  unsubscribe = media.onProgress(taskId, async (updated) => {
+  unsubscribe = media.onProgress(taskScope, async (updated) => {
     try {
       await deliverProgress(updated);
     } catch (error) {

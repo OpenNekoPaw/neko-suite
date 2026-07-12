@@ -769,19 +769,19 @@ export function ChatWorkspace({
         pluginsAvailable={pluginsAvailable}
         contextChips={contextChips}
         ambientNodes={ambientNodes}
-        onCancelTask={(taskId) => {
-          if (!isCharacterRoleSession && sessionMutationConversationId) {
-            AgentHostMessages.cancelTask(taskId, sessionMutationConversationId);
+        onCancelTask={(taskScope) => {
+          if (!isCharacterRoleSession) {
+            AgentHostMessages.cancelTask(taskScope);
           }
         }}
-        onRetryTask={(taskId) => {
-          if (!isCharacterRoleSession && sessionMutationConversationId) {
-            AgentHostMessages.retryTask(taskId, sessionMutationConversationId);
+        onRetryTask={(taskScope) => {
+          if (!isCharacterRoleSession) {
+            AgentHostMessages.retryTask(taskScope);
           }
         }}
-        onViewTaskResult={(taskId, resultRef) => {
-          if (!isCharacterRoleSession && sessionMutationConversationId) {
-            AgentHostMessages.viewTaskResult(taskId, sessionMutationConversationId, resultRef);
+        onViewTaskResult={(taskScope, resultRef) => {
+          if (!isCharacterRoleSession) {
+            AgentHostMessages.viewTaskResult(taskScope, resultRef);
           }
         }}
         onInputChange={setInputValue}

@@ -3,6 +3,7 @@
  */
 
 import type { BackgroundTask } from '@/components/TaskListView';
+import type { TaskRunScope } from '@neko/shared';
 import { useTranslation } from '@/i18n/I18nContext';
 import { projectBackgroundTaskBatch } from '@/presenters/work-item-presenter';
 import {
@@ -15,9 +16,9 @@ import {
 
 interface BatchTaskCardProps {
   tasks: BackgroundTask[];
-  onCancel?: (taskId: string) => void;
+  onCancel?: (taskScope: TaskRunScope) => void;
   onCancelAll?: () => void;
-  onViewResult?: (taskId: string) => void;
+  onViewResult?: (taskScope: TaskRunScope) => void;
 }
 
 export function BatchTaskCard({
@@ -104,7 +105,7 @@ export function BatchTaskCard({
               </span>
               {row.showViewResult && onViewResult && (
                 <button
-                  onClick={() => onViewResult(row.task.id)}
+                  onClick={() => onViewResult(row.task.scope)}
                   className="text-[var(--vscode-textLink-foreground)] hover:underline"
                 >
                   {t('common.view')}

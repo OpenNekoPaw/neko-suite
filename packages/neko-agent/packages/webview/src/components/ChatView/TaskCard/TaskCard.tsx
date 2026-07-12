@@ -6,6 +6,7 @@
 
 import { useState, useCallback, type ReactNode } from 'react';
 import type { BackgroundTask } from '@/components/TaskListView';
+import type { TaskRunScope } from '@neko/shared';
 import { useTranslation } from '@/i18n/I18nContext';
 import { RichContentRenderer } from '@/components/ChatView/RichContent';
 import type { PluginsAvailable } from '@/components/ChatView/SendToMenu';
@@ -32,9 +33,9 @@ import {
 
 interface TaskCardProps {
   task: BackgroundTask;
-  onCancel?: (taskId: string) => void;
-  onRetry?: (taskId: string) => void;
-  onViewResult?: (taskId: string, resultRef?: string) => void;
+  onCancel?: (taskScope: TaskRunScope) => void;
+  onRetry?: (taskScope: TaskRunScope) => void;
+  onViewResult?: (taskScope: TaskRunScope, resultRef?: string) => void;
   /** Available neko-suite plugins for "Send to" buttons (ADR-5) */
   plugins?: PluginsAvailable;
 }
@@ -122,7 +123,7 @@ export function TaskCard({ task, onCancel, onRetry, onViewResult }: TaskCardProp
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                onCancel(task.id);
+                onCancel(task.scope);
               }}
               className="agent-danger-link inline-flex h-6 shrink-0 cursor-pointer items-center rounded px-1.5 text-[10px]"
               title={t('tasks.cancel')}
@@ -136,7 +137,7 @@ export function TaskCard({ task, onCancel, onRetry, onViewResult }: TaskCardProp
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                onRetry(task.id);
+                onRetry(task.scope);
               }}
               className={compactActionClass}
               title={t('tasks.retry')}
@@ -165,7 +166,7 @@ export function TaskCard({ task, onCancel, onRetry, onViewResult }: TaskCardProp
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                onViewResult(task.id, resultReference ?? undefined);
+                onViewResult(task.scope, resultReference ?? undefined);
               }}
               className={compactActionClass}
               title={t('tasks.viewInVSCode')}

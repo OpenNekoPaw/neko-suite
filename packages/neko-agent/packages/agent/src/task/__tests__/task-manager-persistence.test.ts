@@ -7,7 +7,44 @@ import { TaskManager } from '../task-manager';
 import { MemoryTaskStorage } from '../task-storage';
 import { MemoryTaskRecoveryStorage } from '../task-recovery-storage';
 import { toSerializableCreationProjectedTask } from '../creation-projected-task';
-import type { ITaskStorage, SerializableTask, TaskExecutor } from '@neko/shared';
+import type {
+  ConversationRunScope,
+  ITaskStorage,
+  SerializableTask,
+  TaskExecutor,
+  TaskRunOwnerScope,
+  TaskRunScope,
+} from '@neko/shared';
+
+const OWNER: TaskRunOwnerScope = {
+  conversationId: 'conv-persistence',
+  runId: 'run-persistence',
+  parentRunId: 'run-persistence',
+};
+
+function taskScope(childRunId: string, owner: TaskRunOwnerScope = OWNER): TaskRunScope {
+  return {
+    ...owner,
+    childRunId,
+    childKind: 'task',
+  };
+}
+
+const RESTORE_RUN: ConversationRunScope = {
+  conversationId: 'conv-restore',
+  runId: 'run-restore',
+};
+
+const RESTORE_OWNER: TaskRunOwnerScope = {
+  ...RESTORE_RUN,
+  parentRunId: RESTORE_RUN.runId,
+};
+
+const LEGACY_OWNER: TaskRunOwnerScope = {
+  conversationId: 'conv-legacy',
+  runId: 'run-legacy',
+  parentRunId: 'run-legacy',
+};
 
 describe('TaskManager Persistence', () => {
   let manager: TaskManager;
@@ -35,10 +72,13 @@ describe('TaskManager Persistence', () => {
       const executor: TaskExecutor = vi.fn().mockImplementation(() => new Promise(() => {}));
       manager.registerExecutor('custom', executor);
 
-      const taskId = await manager.submit({
-        type: 'custom',
-        payload: { test: true },
-      });
+      const taskId = await manager.submit(
+        {
+          type: 'custom',
+          payload: { test: true },
+        },
+        OWNER,
+      );
 
       const persisted = await storage.load(taskId);
       expect(persisted).toBeDefined();
@@ -51,10 +91,13 @@ describe('TaskManager Persistence', () => {
       const executor: TaskExecutor = vi.fn().mockResolvedValue({ data: 'done' });
       manager.registerExecutor('custom', executor);
 
-      const taskId = await manager.submit({
-        type: 'custom',
-        payload: {},
-      });
+      const taskId = await manager.submit(
+        {
+          type: 'custom',
+          payload: {},
+        },
+        OWNER,
+      );
 
       // Wait for execution
       await vi.advanceTimersByTimeAsync(0);
@@ -68,10 +111,13 @@ describe('TaskManager Persistence', () => {
       const executor: TaskExecutor = vi.fn().mockRejectedValue(new Error('Test error'));
       manager.registerExecutor('custom', executor);
 
-      const taskId = await manager.submit({
-        type: 'custom',
-        payload: {},
-      });
+      const taskId = await manager.submit(
+        {
+          type: 'custom',
+          payload: {},
+        },
+        OWNER,
+      );
 
       await vi.advanceTimersByTimeAsync(0);
 
@@ -84,10 +130,13 @@ describe('TaskManager Persistence', () => {
       const executor: TaskExecutor = vi.fn().mockImplementation(() => new Promise(() => {}));
       manager.registerExecutor('custom', executor);
 
-      const taskId = await manager.submit({
-        type: 'custom',
-        payload: {},
-      });
+      const taskId = await manager.submit(
+        {
+          type: 'custom',
+          payload: {},
+        },
+        OWNER,
+      );
 
       await manager.cancel(taskId);
 
@@ -100,6 +149,7 @@ describe('TaskManager Persistence', () => {
     it('should load tasks from storage on initialize', async () => {
       // Pre-populate storage
       await storage.save({
+        scope: taskScope('task_1000_1'),
         id: 'task_1000_1',
         type: 'custom',
         status: 'completed',
@@ -111,13 +161,14 @@ describe('TaskManager Persistence', () => {
 
       await manager.initialize();
 
-      const task = await manager.get('task_1000_1');
+      const task = await manager.get(taskScope('task_1000_1'));
       expect(task).toBeDefined();
       expect(task?.status).toBe('completed');
     });
 
     it('should restore task counter to avoid ID collisions', async () => {
       await storage.save({
+        scope: taskScope('task_1000_999'),
         id: 'task_1000_999',
         type: 'custom',
         status: 'completed',
@@ -132,13 +183,16 @@ describe('TaskManager Persistence', () => {
 
       await manager.initialize();
 
-      const newTaskId = await manager.submit({
-        type: 'custom',
-        payload: {},
-      });
+      const newTaskScope = await manager.submit(
+        {
+          type: 'custom',
+          payload: {},
+        },
+        OWNER,
+      );
 
       // New task ID should have counter > 999
-      const match = newTaskId.match(/task_\d+_(\d+)/);
+      const match = newTaskScope.childRunId.match(/task_\d+_(\d+)/);
       expect(match).toBeTruthy();
       expect(parseInt(match![1], 10)).toBeGreaterThan(999);
     });
@@ -183,6 +237,7 @@ describe('TaskManager Persistence', () => {
         }),
       );
       await storage.save({
+        scope: taskScope('task_other'),
         id: 'task_other',
         type: 'custom',
         status: 'completed',
@@ -192,14 +247,16 @@ describe('TaskManager Persistence', () => {
         updatedAt: 2,
       });
 
-      const deletedIds = await manager.clearCreationProjectedTasksForRun('run-restore', 111);
+      const deletedIds = await manager.clearCreationProjectedTasksForRun(RESTORE_RUN, 111);
 
       expect(deletedIds).toEqual(['creation:run-restore:item-1']);
-      expect(await storage.load('creation:run-restore:item-1')).toBeUndefined();
-      expect(await storage.load('creation:run-restore:item-2')).toEqual(
+      expect(
+        await storage.load(taskScope('creation:run-restore:item-1', RESTORE_OWNER)),
+      ).toBeUndefined();
+      expect(await storage.load(taskScope('creation:run-restore:item-2', RESTORE_OWNER))).toEqual(
         expect.objectContaining({ id: 'creation:run-restore:item-2' }),
       );
-      expect(await storage.load('task_other')).toEqual(
+      expect(await storage.load(taskScope('task_other'))).toEqual(
         expect.objectContaining({ id: 'task_other' }),
       );
     });
@@ -224,6 +281,7 @@ describe('TaskManager Persistence', () => {
         }),
       );
       await storage.save({
+        scope: taskScope('creation:run-restore:item-corrupt'),
         id: 'creation:run-restore:item-corrupt',
         type: 'workflow',
         status: 'running',
@@ -258,20 +316,23 @@ describe('TaskManager Persistence', () => {
         }),
       );
 
-      const deletedIds = await manager.clearCreationProjectedTasksForRun('run-restore', 111);
+      const deletedIds = await manager.clearCreationProjectedTasksForRun(RESTORE_RUN, 111);
 
       expect(deletedIds).toEqual(['creation:run-restore:item-1']);
-      expect(await storage.load('creation:run-restore:item-1')).toBeUndefined();
-      expect(await storage.load('creation:run-restore:item-corrupt')).toEqual(
+      expect(
+        await storage.load(taskScope('creation:run-restore:item-1', RESTORE_OWNER)),
+      ).toBeUndefined();
+      expect(await storage.load(taskScope('creation:run-restore:item-corrupt'))).toEqual(
         expect.objectContaining({ id: 'creation:run-restore:item-corrupt' }),
       );
-      expect(await storage.load('creation:run-restore:item-2')).toEqual(
+      expect(await storage.load(taskScope('creation:run-restore:item-2', RESTORE_OWNER))).toEqual(
         expect.objectContaining({ id: 'creation:run-restore:item-2' }),
       );
     });
 
     it('clears legacy idc-prefixed projected tasks from pre-migration storage', async () => {
       await storage.save({
+        scope: taskScope('idc:run-legacy:item-1', LEGACY_OWNER),
         id: 'idc:run-legacy:item-1',
         type: 'workflow',
         status: 'completed',
@@ -293,10 +354,13 @@ describe('TaskManager Persistence', () => {
         updatedAt: 20,
       });
 
-      const deletedIds = await manager.clearCreationProjectedTasksForRun('run-legacy', 333);
+      const deletedIds = await manager.clearCreationProjectedTasksForRun(
+        { conversationId: 'conv-legacy', runId: 'run-legacy' },
+        333,
+      );
 
       expect(deletedIds).toEqual(['idc:run-legacy:item-1']);
-      expect(await storage.load('idc:run-legacy:item-1')).toBeUndefined();
+      expect(await storage.load(taskScope('idc:run-legacy:item-1', LEGACY_OWNER))).toBeUndefined();
     });
   });
 
@@ -307,6 +371,7 @@ describe('TaskManager Persistence', () => {
 
       // Pre-populate with pending task
       await storage.save({
+        scope: taskScope('pending_task'),
         id: 'pending_task',
         type: 'custom',
         status: 'pending',
@@ -322,7 +387,7 @@ describe('TaskManager Persistence', () => {
       // Allow async executeTask to complete
       await vi.runAllTimersAsync();
 
-      expect(resumed).toEqual(['pending_task']);
+      expect(resumed).toEqual([taskScope('pending_task')]);
       expect(executor).toHaveBeenCalled();
     });
 
@@ -331,6 +396,7 @@ describe('TaskManager Persistence', () => {
       manager.registerExecutor('custom', executor);
 
       await storage.save({
+        scope: taskScope('running_task'),
         id: 'running_task',
         type: 'custom',
         status: 'running',
@@ -343,10 +409,10 @@ describe('TaskManager Persistence', () => {
       await manager.initialize();
       const resumed = await manager.resumePendingTasks();
 
-      expect(resumed).toEqual(['running_task']);
+      expect(resumed).toEqual([taskScope('running_task')]);
 
       // Check that retryCount was incremented
-      const persisted = await storage.load('running_task');
+      const persisted = await storage.load(taskScope('running_task'));
       expect(persisted?.retryCount).toBe(1);
     });
 
@@ -355,6 +421,7 @@ describe('TaskManager Persistence', () => {
       manager.registerExecutor('custom', executor);
 
       await storage.save({
+        scope: taskScope('completed_task'),
         id: 'completed_task',
         type: 'custom',
         status: 'completed',
@@ -376,6 +443,7 @@ describe('TaskManager Persistence', () => {
       manager.registerExecutor('workflow', executor);
 
       await storage.save({
+        scope: taskScope('media_production_workflow'),
         id: 'media_production_workflow',
         type: 'workflow',
         status: 'running',
@@ -402,9 +470,9 @@ describe('TaskManager Persistence', () => {
       const resumed = await manager.resumePendingTasks();
       await vi.runAllTimersAsync();
 
-      expect(resumed).toEqual(['media_production_workflow']);
+      expect(resumed).toEqual([taskScope('media_production_workflow')]);
       expect(executor).not.toHaveBeenCalled();
-      expect(await storage.load('media_production_workflow')).toEqual(
+      expect(await storage.load(taskScope('media_production_workflow'))).toEqual(
         expect.objectContaining({ status: 'pending', retryCount: 1 }),
       );
     });
@@ -414,6 +482,7 @@ describe('TaskManager Persistence', () => {
       manager.registerExecutor('custom', executor);
 
       await storage.save({
+        scope: taskScope('external_wait_task'),
         id: 'external_wait_task',
         type: 'custom',
         status: 'running',
@@ -435,6 +504,7 @@ describe('TaskManager Persistence', () => {
         },
       });
       await recoveryStorage.save({
+        scope: taskScope('external_wait_task'),
         taskId: 'external_wait_task',
         externalTaskId: 'provider-task-1',
         providerId: 'provider-1',
@@ -447,7 +517,7 @@ describe('TaskManager Persistence', () => {
       await manager.initialize();
       const resumed = await manager.resumePendingTasks();
 
-      expect(resumed).toEqual(['external_wait_task']);
+      expect(resumed).toEqual([taskScope('external_wait_task')]);
       expect(executor).not.toHaveBeenCalled();
     });
   });
@@ -459,6 +529,7 @@ describe('TaskManager Persistence', () => {
       const oldTime = Date.now() - 10 * 24 * 60 * 60 * 1000; // 10 days ago
 
       await storage.save({
+        scope: taskScope('old_task'),
         id: 'old_task',
         type: 'custom',
         status: 'completed',
@@ -479,7 +550,7 @@ describe('TaskManager Persistence', () => {
 
       expect(cleaned).toBe(1);
 
-      const task = await manager2.get('old_task');
+      const task = await manager2.get(taskScope('old_task'));
       expect(task).toBeUndefined();
 
       await manager2.dispose();
@@ -491,6 +562,7 @@ describe('TaskManager Persistence', () => {
       const oldTime = Date.now() - 10 * 24 * 60 * 60 * 1000;
 
       await storage.save({
+        scope: taskScope('old_task'),
         id: 'old_task',
         type: 'custom',
         status: 'failed',
@@ -510,11 +582,11 @@ describe('TaskManager Persistence', () => {
       await manager2.cleanupOldTasks();
 
       // Check storage
-      const storedTask = await storage.load('old_task');
+      const storedTask = await storage.load(taskScope('old_task'));
       expect(storedTask).toBeUndefined();
 
       // Check memory
-      const memTask = await manager2.get('old_task');
+      const memTask = await manager2.get(taskScope('old_task'));
       expect(memTask).toBeUndefined();
 
       await manager2.dispose();
@@ -544,10 +616,13 @@ describe('TaskManager Persistence', () => {
       );
       manager.registerExecutor('custom', executor);
 
-      const taskId = await manager.submit({
-        type: 'custom',
-        payload: {},
-      });
+      const taskId = await manager.submit(
+        {
+          type: 'custom',
+          payload: {},
+        },
+        OWNER,
+      );
       await vi.advanceTimersByTimeAsync(0);
 
       expect((await manager.get(taskId))?.status).toBe('running');
@@ -564,10 +639,13 @@ describe('TaskManager Persistence', () => {
       const executor: TaskExecutor = vi.fn().mockImplementation(() => new Promise(() => {}));
       manager.registerExecutor('custom', executor);
 
-      const taskId = await manager.submit({
-        type: 'custom',
-        payload: {},
-      });
+      const taskId = await manager.submit(
+        {
+          type: 'custom',
+          payload: {},
+        },
+        OWNER,
+      );
       const unsubscribe = manager.onProgress(taskId, progress);
 
       await vi.advanceTimersByTimeAsync(0);
@@ -583,10 +661,13 @@ describe('TaskManager Persistence', () => {
       const executor: TaskExecutor = vi.fn().mockImplementation(() => new Promise(() => {}));
       manager.registerExecutor('custom', executor);
 
-      const taskId = await manager.submit({
-        type: 'custom',
-        payload: {},
-      });
+      const taskId = await manager.submit(
+        {
+          type: 'custom',
+          payload: {},
+        },
+        OWNER,
+      );
       await vi.advanceTimersByTimeAsync(0);
 
       const waiter = manager.waitForCompletion(taskId, 5000);
@@ -616,7 +697,7 @@ describe('TaskManager with custom storage', () => {
     const executor: TaskExecutor = vi.fn().mockResolvedValue({});
     manager.registerExecutor('custom', executor);
 
-    await manager.submit({ type: 'custom', payload: {} });
+    await manager.submit({ type: 'custom', payload: {} }, OWNER);
 
     expect(customStorage.save).toHaveBeenCalled();
     await manager.dispose();

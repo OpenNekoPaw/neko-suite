@@ -7,6 +7,8 @@ import type {
   SubAgentWorkItem,
   TaskWorkItem,
 } from '@neko-agent/types';
+import { validateChildRunScope } from '@neko-agent/types';
+import type { TaskRunScope } from '@neko/shared';
 import {
   backgroundTaskToWorkItem,
   isSubAgentWorkItem,
@@ -111,11 +113,23 @@ export function projectSubAgentToolResultToWorkItem(
   const subagentType = readString(data, 'subagentType') ?? readString(data, 'type');
   const runMode = readSubAgentRunMode(data);
   const modelTier = readString(data, 'modelTier') ?? readString(data, 'model');
+  const scopeResult = validateChildRunScope(data?.scope);
+  if (
+    !scopeResult.ok ||
+    scopeResult.scope.childKind !== 'subagent' ||
+    scopeResult.scope.childRunId !== input.id ||
+    scopeResult.scope.conversationId !== input.conversationId
+  ) {
+    throw new Error(
+      `SubAgent work item requires matching scope for ${input.conversationId}/${input.id}.`,
+    );
+  }
 
   return {
     id: input.id,
     conversationId: input.conversationId,
     kind: 'subagent',
+    scope: scopeResult.scope,
     parentMessageId: input.parentMessageId,
     parentToolCallId: input.parentToolCallId ?? null,
     title: description ?? message ?? `SubAgent ${input.id}`,
@@ -414,6 +428,20 @@ function projectCompletedBackgroundTaskFromToolResult(
   const taskId = readString(data, 'taskId');
   if (!taskId) return null;
 
+  const scopeResult = validateChildRunScope(data.taskScope);
+  if (
+    !scopeResult.ok ||
+    scopeResult.scope.childKind !== 'task' ||
+    scopeResult.scope.childRunId !== taskId
+  ) {
+    return null;
+  }
+
+  const taskScope: TaskRunScope = {
+    ...scopeResult.scope,
+    childKind: 'task',
+  };
+
   const urls = readStringArray(data, 'urls');
   const singleUrl = readString(data, 'url');
   if (singleUrl) {
@@ -436,6 +464,7 @@ function projectCompletedBackgroundTaskFromToolResult(
   const timestamp = new Date(options.now?.() ?? Date.now()).toISOString();
 
   return {
+    scope: taskScope,
     id: taskId,
     type: inferAgentWorkItemTaskType(toolName, data),
     name: readString(data, 'name') ?? prompt,

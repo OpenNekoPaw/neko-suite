@@ -32,6 +32,7 @@ import {
   type AgentTaskResultDeliveryPolicy,
   type GeneratedAsset,
   type Task,
+  type TaskRunScope,
   type ToolResultBackfillPayload,
 } from '@neko/shared';
 import {
@@ -164,6 +165,7 @@ export interface AgentStreamProcessorDeps {
       task: Task,
       options: {
         readonly source: 'media-task';
+        readonly scope?: TaskRunScope;
         readonly parentMessageId?: string;
         readonly parentToolCallId?: string;
         readonly deliveryPolicy?: AgentTaskResultDeliveryPolicy;
@@ -305,7 +307,7 @@ export class AgentStreamProcessor {
                   AgentStreamBackgroundTaskObservedProgress<MediaTaskProgressDeliveryPlan>
                 >({
                   media,
-                  taskId: input.taskId,
+                  taskScope: input.taskScope,
                   conversationId: input.conversationId,
                   unsubscribeOnIgnoredConversation: input.unsubscribeOnIgnoredConversation,
                   createRecoveryTaskView: (task) => input.createRecoveryTaskView(task),
@@ -313,6 +315,7 @@ export class AgentStreamProcessor {
                   onIgnoredConversationTask: ({ taskId, conversationId, mediaTask }) => {
                     input.onIgnoredConversationTask?.({
                       lease: input.lease,
+                      taskScope: input.taskScope,
                       taskId,
                       conversationId,
                       sourceTask: mediaTask,
@@ -327,6 +330,7 @@ export class AgentStreamProcessor {
                   }) => {
                     input.onProgressDeliveryError?.({
                       lease: input.lease,
+                      taskScope: input.taskScope,
                       taskId,
                       conversationId,
                       sourceTask: mediaTask,
@@ -338,11 +342,12 @@ export class AgentStreamProcessor {
                     input.onTaskProgress({
                       lease: input.lease,
                       conversationId,
+                      taskScope: input.taskScope,
                       task,
                       sourceTask: mediaTask,
                     }),
                 }),
-              waitForCompletion: (input) => waitForMediaTask(media, input.taskId, input.signal),
+              waitForCompletion: (input) => waitForMediaTask(media, input.taskScope, input.signal),
             }
           : {}),
         createRecoveryProgress: (task) => createMediaTaskProgressView({ task }),
@@ -489,6 +494,7 @@ export class AgentStreamProcessor {
       }),
       {
         source: 'media-task',
+        scope: event.taskScope,
         parentMessageId: event.parentMessageId,
         ...(event.parentToolCallId ? { parentToolCallId: event.parentToolCallId } : {}),
         ...(deliveryPolicy ? { deliveryPolicy } : {}),
@@ -552,7 +558,7 @@ export class AgentStreamProcessor {
         ...(input.understandingModels ? { understandingModels: input.understandingModels } : {}),
         policy: {
           timing: 'on-completion',
-          layers: [0],
+          layers: [0, 2],
           reason: 'completed media task output',
         },
       });
@@ -763,7 +769,7 @@ function projectStreamMessageResourcesForWebview(
 
 function waitForMediaTask(
   media: Platform['media'],
-  taskId: string,
+  taskScope: TaskRunScope,
   signal: AbortSignal,
 ): Promise<MediaTask> {
   if (!media) {
@@ -776,7 +782,7 @@ function waitForMediaTask(
   return new Promise<MediaTask>((resolve, reject) => {
     const abort = () => reject(new DOMException('Media task wait was cancelled.', 'AbortError'));
     signal.addEventListener('abort', abort, { once: true });
-    media.waitForTask(taskId).then(
+    media.waitForTask(taskScope).then(
       (task) => {
         signal.removeEventListener('abort', abort);
         resolve(task);

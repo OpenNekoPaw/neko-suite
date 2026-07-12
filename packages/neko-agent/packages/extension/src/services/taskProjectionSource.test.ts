@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { AgentBackgroundTask, TaskWorkItem } from '@neko-agent/types';
+import type { TaskRunScope } from '@neko/shared';
 import { AgentTaskProjectionSource } from './taskProjectionSource';
 
 describe('AgentTaskProjectionSource', () => {
@@ -25,7 +26,7 @@ describe('AgentTaskProjectionSource', () => {
       ),
     ).toEqual(
       expect.objectContaining({
-        taskId: 'neko-agent:media-1',
+        taskId: `neko-agent:${taskRuntimeKey('media-1')}`,
         status: 'done',
         actions: [],
         outputs: expect.arrayContaining([
@@ -63,6 +64,7 @@ function createTaskWorkItem(
   },
 ): TaskWorkItem {
   const task: AgentBackgroundTask = {
+    scope: overrides.task?.scope ?? taskScope(overrides.id),
     id: overrides.id,
     type: 'image',
     name: 'Generate image',
@@ -93,4 +95,19 @@ function createTaskWorkItem(
     updatedAt: task.updatedAt,
     task,
   };
+}
+
+function taskScope(childRunId: string): TaskRunScope {
+  return {
+    conversationId: 'conv-1',
+    runId: 'run-1',
+    parentRunId: 'run-1',
+    childRunId,
+    childKind: 'task',
+  };
+}
+
+function taskRuntimeKey(childRunId: string): string {
+  const scope = taskScope(childRunId);
+  return `${scope.conversationId}/${scope.runId}/${scope.parentRunId}/task:${scope.childRunId}`;
 }

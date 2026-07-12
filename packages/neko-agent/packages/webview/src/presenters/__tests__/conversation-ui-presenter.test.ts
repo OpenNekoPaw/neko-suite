@@ -254,6 +254,7 @@ describe('conversation UI presenter', () => {
                 backgroundMode: true,
                 status: 'completed',
                 taskId: 'task-1',
+                taskScope: taskScope('task-1'),
                 urls: ['webview://new-asset.png'],
               },
             },
@@ -532,6 +533,16 @@ describe('conversation UI presenter', () => {
   });
 });
 
+function taskScope(childRunId: string) {
+  return {
+    conversationId: 'conv-1',
+    runId: 'run-1',
+    parentRunId: 'run-1',
+    childRunId,
+    childKind: 'task' as const,
+  };
+}
+
 function createCompletedBackgroundTaskMessage(): Message {
   return {
     id: 'assistant-1',
@@ -553,6 +564,7 @@ function createCompletedBackgroundTaskMessage(): Message {
               backgroundMode: true,
               status: 'completed',
               taskId: 'task-1',
+              taskScope: taskScope('task-1'),
               urls: ['webview://asset.png'],
             },
           },
@@ -612,6 +624,13 @@ function workItem(id: string, conversationId: string): AgentWorkItem {
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-01T00:00:00.000Z',
     task: {
+      scope: {
+        conversationId,
+        runId: `run:${conversationId}`,
+        parentRunId: `run:${conversationId}`,
+        childRunId: id,
+        childKind: 'task',
+      },
       id,
       type: 'image',
       name: id,

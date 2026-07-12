@@ -5,6 +5,8 @@ import type {
   VisualIdentityDraft,
   RenderableGeneratedAsset,
   RenderableGeneratedDraft,
+  ChildRunScope,
+  TaskRunScope,
 } from '@neko/shared';
 import type { AgentLegacyCreationTrace } from './legacy-trace';
 export type AgentWorkItemTaskStatus =
@@ -24,6 +26,7 @@ export interface AgentWorkItemTaskStep {
 }
 
 export interface AgentBackgroundTask {
+  scope: TaskRunScope;
   id: string;
   type: AgentWorkItemTaskType;
   name: string;
@@ -79,6 +82,7 @@ export interface TaskWorkItem extends AgentWorkItemBase {
 
 export interface SubAgentWorkItem extends AgentWorkItemBase {
   kind: 'subagent';
+  scope: ChildRunScope;
   subAgent: {
     parentAgentId: string;
     type?: string;
@@ -147,6 +151,7 @@ export interface AgentMediaTaskCreativeEntityContext {
 }
 
 export interface AgentMediaTaskView {
+  scope: TaskRunScope;
   id: string;
   type: string;
   status: string;
@@ -170,6 +175,7 @@ export type SubAgentRuntimeStatus = 'pending' | 'running' | 'completed' | 'faile
 
 export interface SubAgentWorkItemEvent {
   type: SubAgentWorkItemEventType;
+  scope: ChildRunScope;
   subAgentId: string;
   parentAgentId: string;
   conversationId: string;

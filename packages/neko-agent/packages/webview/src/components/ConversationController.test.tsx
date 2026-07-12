@@ -1423,8 +1423,16 @@ function contextPayload(id: string, label: string): AgentContextPayload {
 }
 
 function createWorkItem(conversationId: string, title: string): AgentWorkItem {
+  const childRunId = `${conversationId}-work`;
   return {
-    id: `${conversationId}-work`,
+    scope: {
+      conversationId,
+      runId: `run:${conversationId}`,
+      parentRunId: 'agent-main',
+      childRunId,
+      childKind: 'subagent',
+    },
+    id: childRunId,
     conversationId,
     kind: 'subagent',
     parentMessageId: null,

@@ -16,7 +16,7 @@ import type { EntryPromptMenu, SelectedFileReference } from '@/components/ChatVi
 import { DropZone } from '@/components/ChatView/DropZone';
 import type { PluginsAvailable } from '@/components/ChatView/SendToMenu';
 import type { AgentWorkItem, SubAgentWorkItem } from '@/components/AgentWorkItem';
-import type { AgentContextPayload } from '@neko/shared';
+import type { AgentContextPayload, TaskRunScope } from '@neko/shared';
 import type { AmbientCanvasNodeProjection } from '@/presenters/plugin-transfer-presenter';
 import type { ActivationProgressTimeline } from '@/presenters/activation-progress-presenter';
 import type { ActiveSkillIndicator } from '@/components/ChatView/SkillIndicator';
@@ -57,9 +57,9 @@ interface ChatViewProps {
   pluginsAvailable?: PluginsAvailable;
   contextChips?: readonly AgentContextPayload[];
   ambientNodes?: readonly AmbientCanvasNodeProjection[];
-  onCancelTask?: (taskId: string) => void;
-  onRetryTask?: (taskId: string) => void;
-  onViewTaskResult?: (taskId: string, resultRef?: string) => void;
+  onCancelTask?: (taskScope: TaskRunScope) => void;
+  onRetryTask?: (taskScope: TaskRunScope) => void;
+  onViewTaskResult?: (taskScope: TaskRunScope, resultRef?: string) => void;
   // Code diff actions
   onAcceptDiff?: (filePath: string) => void;
   onRejectDiff?: (filePath: string) => void;
@@ -282,9 +282,9 @@ function ConversationWorkItemShelf({
 }: {
   readonly workItems: readonly AgentWorkItem[];
   readonly pluginsAvailable?: PluginsAvailable;
-  readonly onCancelTask?: (taskId: string) => void;
-  readonly onRetryTask?: (taskId: string) => void;
-  readonly onViewTaskResult?: (taskId: string, resultRef?: string) => void;
+  readonly onCancelTask?: (taskScope: TaskRunScope) => void;
+  readonly onRetryTask?: (taskScope: TaskRunScope) => void;
+  readonly onViewTaskResult?: (taskScope: TaskRunScope, resultRef?: string) => void;
 }) {
   if (workItems.length === 0) return null;
   const taskItems = workItems.filter(isTaskWorkItem);
@@ -305,7 +305,7 @@ function ConversationWorkItemShelf({
         <BatchTaskCard
           tasks={taskItems.map((item) => item.task)}
           onCancel={onCancelTask}
-          onCancelAll={() => taskItems.forEach((item) => onCancelTask?.(item.id))}
+          onCancelAll={() => taskItems.forEach((item) => onCancelTask?.(item.task.scope))}
           onViewResult={onViewTaskResult}
         />
       )}

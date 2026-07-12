@@ -6,8 +6,10 @@ import {
   type DashboardTaskRef,
   type DashboardTaskSource,
 } from '@neko/shared/types/dashboard-task';
+import { formatTaskRunScope, type TaskRunScope } from '@neko/shared';
 import {
   type AgentTurnTimelineMessage,
+  getAgentWorkItemRuntimeKey,
   isTaskWorkItem,
   type AgentWorkItem,
   type MediaTaskCreatedMessage,
@@ -95,7 +97,7 @@ export class AgentDashboardWorkItemSource implements DashboardTaskSource, vscode
         this.upsertWorkItem(message.conversationId, message.workItem);
         return;
       case 'taskRemoved':
-        this.removeWorkItem(message.conversationId, message.taskId);
+        this.removeWorkItem(message.conversationId, message.taskScope);
         return;
       default:
         assertNever(message);
@@ -120,7 +122,7 @@ export class AgentDashboardWorkItemSource implements DashboardTaskSource, vscode
       if (!this.deps.platform?.media) {
         throw new Error('Agent media task service is unavailable.');
       }
-      const cancelled = await this.deps.platform.media.cancelTask(item.id);
+      const cancelled = await this.deps.platform.media.cancelTask(item.task.scope);
       if (cancelled === false) {
         throw new Error(`Media task was not cancelled: ${item.id}`);
       }
@@ -130,7 +132,7 @@ export class AgentDashboardWorkItemSource implements DashboardTaskSource, vscode
     if (!this.deps.taskManager) {
       throw new Error('Agent task manager is unavailable.');
     }
-    await this.deps.taskManager.cancel(item.id);
+    await this.deps.taskManager.cancel(item.task.scope);
   }
 
   async retry(task: DashboardTaskRef): Promise<void> {
@@ -142,12 +144,16 @@ export class AgentDashboardWorkItemSource implements DashboardTaskSource, vscode
       throw new Error('Agent task manager is unavailable.');
     }
 
-    const sourceTask = await this.deps.taskManager.get(item.id);
+    const sourceTask = await this.deps.taskManager.get(item.task.scope);
     if (!sourceTask) {
       throw new Error(`Task unavailable for retry: ${item.id}`);
     }
 
-    await this.deps.taskManager.submit(sourceTask.input);
+    await this.deps.taskManager.submit(sourceTask.input, {
+      conversationId: sourceTask.scope.conversationId,
+      runId: sourceTask.scope.runId,
+      parentRunId: sourceTask.scope.parentRunId,
+    });
   }
 
   dispose(): void {
@@ -157,10 +163,10 @@ export class AgentDashboardWorkItemSource implements DashboardTaskSource, vscode
 
   private replaceBackgroundTasks(message: TasksUpdatedMessage): void {
     const conversationItems = new Map(this.workItemsByConversation.get(message.conversationId));
-    const incomingIds = new Set(message.workItems.map((item) => item.id));
+    const incomingKeys = new Set(message.workItems.map(getAgentWorkItemRuntimeKey));
 
     for (const [itemId, item] of conversationItems) {
-      if (item.kind === 'tool-background-task' && !incomingIds.has(itemId)) {
+      if (item.kind === 'tool-background-task' && !incomingKeys.has(itemId)) {
         conversationItems.delete(itemId);
         this.emitter.fire({
           type: 'removed',
@@ -170,7 +176,7 @@ export class AgentDashboardWorkItemSource implements DashboardTaskSource, vscode
     }
 
     for (const item of message.workItems) {
-      conversationItems.set(item.id, item);
+      conversationItems.set(getAgentWorkItemRuntimeKey(item), item);
       this.emitUpsert(item);
     }
 
@@ -179,9 +185,10 @@ export class AgentDashboardWorkItemSource implements DashboardTaskSource, vscode
 
   private upsertWorkItem(conversationId: string, item: AgentWorkItem): void {
     const conversationItems = new Map(this.workItemsByConversation.get(conversationId));
-    const existing = conversationItems.get(item.id);
+    const key = getAgentWorkItemRuntimeKey(item);
+    const existing = conversationItems.get(key);
     const merged = existing ? mergeWorkItem(existing, item) : item;
-    conversationItems.set(item.id, merged);
+    conversationItems.set(key, merged);
     this.workItemsByConversation.set(conversationId, conversationItems);
     this.emitUpsert(merged, existing);
   }
@@ -199,14 +206,15 @@ export class AgentDashboardWorkItemSource implements DashboardTaskSource, vscode
     }
   }
 
-  private removeWorkItem(conversationId: string, taskId: string): void {
+  private removeWorkItem(conversationId: string, taskScope: TaskRunScope): void {
     const conversationItems = this.workItemsByConversation.get(conversationId);
-    const item = conversationItems?.get(taskId);
+    const itemKey = formatTaskRunScope(taskScope);
+    const item = conversationItems?.get(itemKey);
     if (!conversationItems || !item) {
       return;
     }
 
-    conversationItems.delete(taskId);
+    conversationItems.delete(itemKey);
     this.emitter.fire({
       type: 'removed',
       task: this.projection.toDashboardTask(item),

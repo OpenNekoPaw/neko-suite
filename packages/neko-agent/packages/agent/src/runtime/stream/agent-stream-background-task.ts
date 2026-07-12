@@ -4,7 +4,7 @@ import type {
   TaskCreatedMessage,
   TaskUpdatedMessage,
 } from '@neko-agent/types';
-import type { TaskRunLease } from '@neko/shared';
+import type { TaskRunLease, TaskRunScope } from '@neko/shared';
 import {
   buildTaskCreatedMessage,
   buildTaskUpdatedMessage,
@@ -63,6 +63,7 @@ export interface PersistAgentStreamBackgroundTaskResultUrlsInput {
 export interface AgentStreamBackgroundTaskPersistInput<TDeliveryPlan = unknown> {
   readonly lease: TaskRunLease;
   readonly conversationId: string;
+  readonly taskScope: TaskRunScope;
   readonly taskId: string;
   readonly toolCallId?: string;
   readonly urls: readonly string[];
@@ -145,6 +146,7 @@ export function persistAgentStreamBackgroundTaskResultUrls(
 
 function toAgentBackgroundTask(task: BackgroundTaskView): AgentBackgroundTask {
   return {
+    scope: task.scope,
     id: task.id,
     type: task.type,
     name: task.name,

@@ -1,4 +1,10 @@
-import type { Draft, ExecutionArtifactWrittenEvent, ExecutionPlan, Task } from '@neko-agent/types';
+import type {
+  ConversationRunScope,
+  Draft,
+  ExecutionArtifactWrittenEvent,
+  ExecutionPlan,
+  Task,
+} from '@neko-agent/types';
 import type { CreationProjectedTaskArtifactBinding } from '../task/creation-projected-task';
 import {
   toArtifactScopeBinding,
@@ -195,7 +201,7 @@ export class SessionArtifactFacade {
       });
   }
 
-  queueTaskProjectionClear(runId: string, runStartedAt?: number): void {
+  queueTaskProjectionClear(scope: ConversationRunScope, runStartedAt?: number): void {
     const projection = this._taskProjection;
     if (!projection) {
       return;
@@ -203,10 +209,12 @@ export class SessionArtifactFacade {
 
     this._taskProjectionPending = this._taskProjectionPending
       .then(async () => {
-        await projection.clearRun(runId, runStartedAt);
+        await projection.clearRun(scope, runStartedAt);
       })
       .catch((error) => {
-        this._warn(`Creation task projection cleanup failed for ${runId}: ${String(error)}`);
+        this._warn(
+          `Creation task projection cleanup failed for ${scope.conversationId}/${scope.runId}: ${String(error)}`,
+        );
       });
   }
 

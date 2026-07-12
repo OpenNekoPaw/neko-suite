@@ -1,4 +1,9 @@
-import { isGeneratedDraftRef, isPublicGeneratedAssetResultUri } from '@neko/shared';
+import {
+  formatChildRunScope,
+  formatTaskRunScope,
+  isGeneratedDraftRef,
+  isPublicGeneratedAssetResultUri,
+} from '@neko/shared';
 import type {
   AgentBackgroundTask,
   AgentMediaTaskResult,
@@ -67,6 +72,12 @@ export function backgroundTaskToWorkItem(
   };
 }
 
+export function getAgentWorkItemRuntimeKey(item: AgentWorkItem): string {
+  return isTaskWorkItem(item)
+    ? formatTaskRunScope(item.task.scope)
+    : formatChildRunScope(item.scope);
+}
+
 export function isTaskWorkItem(item: AgentWorkItem): item is TaskWorkItem {
   return item.kind === 'media-task' || item.kind === 'tool-background-task';
 }
@@ -95,6 +106,7 @@ export function projectMediaTaskToBackgroundTask(task: AgentMediaTaskView): Agen
   const name = promptText.length > 50 ? `${promptText.slice(0, 47)}...` : promptText;
 
   return {
+    scope: task.scope,
     id: task.id,
     type: toAgentWorkItemTaskType(task.type),
     name,
@@ -160,6 +172,7 @@ export function projectSubAgentEventToWorkItem(
   const step = projectSubAgentEventStep(event, status);
 
   return {
+    scope: event.scope,
     id: event.subAgentId,
     conversationId: event.conversationId,
     ...(legacyTrace ? { legacyTrace } : {}),

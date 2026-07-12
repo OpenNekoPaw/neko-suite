@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { Task } from '@neko/shared';
+import type { Task, TaskRunScope } from '@neko/shared';
 import {
   createAgentTaskResultObservationRuntime,
   type AgentTaskResultObservationRuntimeTaskPort,
@@ -7,7 +7,9 @@ import {
 
 describe('AgentTaskResultObservationRuntime', () => {
   it('records terminal task observations and dispatches auto-resume through injected host ports', async () => {
-    const terminalListeners: Array<(event: { readonly task: Task }) => void> = [];
+    const terminalListeners: Array<
+      (event: { readonly task: Task; readonly scope: TaskRunScope }) => void
+    > = [];
     const tasks: AgentTaskResultObservationRuntimeTaskPort = {
       onTerminalTask: (listener) => {
         terminalListeners.push(listener);
@@ -44,7 +46,10 @@ describe('AgentTaskResultObservationRuntime', () => {
       continuation: { dispatchIdleAgentTurn },
     });
 
-    terminalListeners[0]?.({ task: createTaskWithAutoResumePolicy() });
+    {
+      const task = createTaskWithAutoResumePolicy();
+      terminalListeners[0]?.({ task, scope: task.scope });
+    }
     await runtime.flush();
 
     expect(recordTaskResultObservation).toHaveBeenCalledOnce();
@@ -65,7 +70,9 @@ describe('AgentTaskResultObservationRuntime', () => {
   });
 
   it('lets the host skip TaskManager terminal observations during subscription and reconciliation', async () => {
-    const terminalListeners: Array<(event: { readonly task: Task }) => void> = [];
+    const terminalListeners: Array<
+      (event: { readonly task: Task; readonly scope: TaskRunScope }) => void
+    > = [];
     const task = createTaskWithAutoResumePolicy();
     const tasks: AgentTaskResultObservationRuntimeTaskPort = {
       onTerminalTask: (listener) => {
@@ -104,7 +111,7 @@ describe('AgentTaskResultObservationRuntime', () => {
       shouldObserveTaskManagerTerminalTask,
     });
 
-    terminalListeners[0]?.({ task });
+    terminalListeners[0]?.({ task, scope: task.scope });
     await runtime.flush();
     await runtime.reconcileTerminalTasks();
 
@@ -201,14 +208,26 @@ describe('AgentTaskResultObservationRuntime', () => {
   });
 });
 
+function taskScope(childRunId: string): TaskRunScope {
+  return {
+    conversationId: 'conv-1',
+    runId: 'run-1',
+    parentRunId: 'run-1',
+    childRunId,
+    childKind: 'task',
+  };
+}
+
 function createTaskWithAutoResumePolicy(
   options: {
     readonly id?: string;
     readonly group?: NonNullable<Task['lifecycle']>['resultDeliveryGroup'];
   } = {},
 ): Task {
+  const id = options.id ?? 'task-1';
   return {
-    id: options.id ?? 'task-1',
+    scope: taskScope(id),
+    id,
     type: 'image_generation',
     status: 'completed',
     input: {

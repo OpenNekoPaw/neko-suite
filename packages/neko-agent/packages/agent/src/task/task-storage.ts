@@ -2,7 +2,12 @@
  * Task Storage - Persistence layer for tasks
  */
 
-import type { ITaskStorage, SerializableTask } from '@neko/shared';
+import {
+  formatTaskRunScope,
+  type ITaskStorage,
+  type SerializableTask,
+  type TaskRunScope,
+} from '@neko/shared';
 import * as nodeFs from 'node:fs';
 import * as nodePath from 'node:path';
 import { getLogger } from '../utils/logger';
@@ -29,11 +34,11 @@ export class MemoryTaskStorage implements ITaskStorage {
   private tasks: Map<string, SerializableTask> = new Map();
 
   async save(task: SerializableTask): Promise<void> {
-    this.tasks.set(task.id, { ...task });
+    this.tasks.set(formatTaskRunScope(task.scope), { ...task });
   }
 
-  async load(id: string): Promise<SerializableTask | undefined> {
-    const task = this.tasks.get(id);
+  async load(scope: TaskRunScope): Promise<SerializableTask | undefined> {
+    const task = this.tasks.get(formatTaskRunScope(scope));
     return task ? { ...task } : undefined;
   }
 
@@ -45,8 +50,8 @@ export class MemoryTaskStorage implements ITaskStorage {
     return Array.from(this.tasks.values()).map((t) => ({ ...t }));
   }
 
-  async delete(id: string): Promise<void> {
-    this.tasks.delete(id);
+  async delete(scope: TaskRunScope): Promise<void> {
+    this.tasks.delete(formatTaskRunScope(scope));
   }
 
   async cleanup(olderThanMs: number): Promise<number> {
@@ -56,7 +61,7 @@ export class MemoryTaskStorage implements ITaskStorage {
     });
 
     for (const task of plan.removed) {
-      this.tasks.delete(task.id);
+      this.tasks.delete(formatTaskRunScope(task.scope));
     }
 
     return plan.removed.length;
@@ -78,7 +83,8 @@ export class StateTaskStorage implements ITaskStorage {
 
   async save(task: SerializableTask): Promise<void> {
     const tasks = await this.loadAll();
-    const index = tasks.findIndex((item) => item.id === task.id);
+    const key = formatTaskRunScope(task.scope);
+    const index = tasks.findIndex((item) => formatTaskRunScope(item.scope) === key);
     if (index >= 0) {
       tasks[index] = { ...task };
     } else {
@@ -87,9 +93,10 @@ export class StateTaskStorage implements ITaskStorage {
     await this.writeAll(tasks);
   }
 
-  async load(id: string): Promise<SerializableTask | undefined> {
+  async load(scope: TaskRunScope): Promise<SerializableTask | undefined> {
     const tasks = await this.loadAll();
-    const task = tasks.find((item) => item.id === id);
+    const key = formatTaskRunScope(scope);
+    const task = tasks.find((item) => formatTaskRunScope(item.scope) === key);
     return task ? { ...task } : undefined;
   }
 
@@ -102,9 +109,10 @@ export class StateTaskStorage implements ITaskStorage {
     return tasks.map((task) => ({ ...task }));
   }
 
-  async delete(id: string): Promise<void> {
+  async delete(scope: TaskRunScope): Promise<void> {
+    const key = formatTaskRunScope(scope);
     const tasks = await this.loadAll();
-    await this.writeAll(tasks.filter((task) => task.id !== id));
+    await this.writeAll(tasks.filter((task) => formatTaskRunScope(task.scope) !== key));
   }
 
   async cleanup(olderThanMs: number): Promise<number> {
@@ -159,12 +167,12 @@ export class WorkspaceVisibleAgentTaskStorage implements ITaskStorage {
     await this.save(record.task);
   }
 
-  async load(id: string): Promise<SerializableTask | undefined> {
-    return this.storage.load(id);
+  async load(scope: TaskRunScope): Promise<SerializableTask | undefined> {
+    return this.storage.load(scope);
   }
 
-  async loadRecord(id: string): Promise<WorkspaceVisibleAgentTaskRecord | undefined> {
-    const task = await this.load(id);
+  async loadRecord(scope: TaskRunScope): Promise<WorkspaceVisibleAgentTaskRecord | undefined> {
+    const task = await this.load(scope);
     return task
       ? createWorkspaceVisibleAgentTaskRecord({ workspaceRoot: this.workspaceRoot, task })
       : undefined;
@@ -185,8 +193,8 @@ export class WorkspaceVisibleAgentTaskStorage implements ITaskStorage {
     );
   }
 
-  async delete(id: string): Promise<void> {
-    await this.storage.delete(id);
+  async delete(scope: TaskRunScope): Promise<void> {
+    await this.storage.delete(scope);
   }
 
   async cleanup(olderThanMs: number): Promise<number> {
@@ -256,13 +264,13 @@ export class FileTaskStorage implements ITaskStorage {
 
   async save(task: SerializableTask): Promise<void> {
     await this.ensureInitialized();
-    this.cache.set(task.id, { ...task });
+    this.cache.set(formatTaskRunScope(task.scope), { ...task });
     this.scheduleSave();
   }
 
-  async load(id: string): Promise<SerializableTask | undefined> {
+  async load(scope: TaskRunScope): Promise<SerializableTask | undefined> {
     await this.ensureInitialized();
-    const task = this.cache.get(id);
+    const task = this.cache.get(formatTaskRunScope(scope));
     return task ? { ...task } : undefined;
   }
 
@@ -276,9 +284,9 @@ export class FileTaskStorage implements ITaskStorage {
     return Array.from(this.cache.values()).map((t) => ({ ...t }));
   }
 
-  async delete(id: string): Promise<void> {
+  async delete(scope: TaskRunScope): Promise<void> {
     await this.ensureInitialized();
-    this.cache.delete(id);
+    this.cache.delete(formatTaskRunScope(scope));
     this.scheduleSave();
   }
 
@@ -290,7 +298,7 @@ export class FileTaskStorage implements ITaskStorage {
     });
 
     for (const task of plan.removed) {
-      this.cache.delete(task.id);
+      this.cache.delete(formatTaskRunScope(task.scope));
     }
 
     if (plan.removed.length > 0) {
@@ -341,7 +349,7 @@ export class FileTaskStorage implements ITaskStorage {
         const { tasks, revision } = parseFileTaskStorageContent(content);
         this.loadedRevision = revision;
         for (const task of tasks) {
-          this.cache.set(task.id, task);
+          this.cache.set(formatTaskRunScope(task.scope), task);
         }
       }
     } catch (error) {

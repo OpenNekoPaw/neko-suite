@@ -6,6 +6,7 @@ import {
   type DashboardTaskOutputRef,
 } from '@neko/shared/types/dashboard-task';
 import {
+  getAgentWorkItemRuntimeKey,
   isTaskWorkItem,
   type AgentWorkItem,
   type AgentWorkItemTaskStatus,
@@ -26,7 +27,7 @@ export class AgentTaskProjectionSource {
   constructor(private readonly options: AgentTaskProjectionSourceOptions) {}
 
   toDashboardTask(item: AgentWorkItem): DashboardTask {
-    const sourceTaskId = item.id;
+    const sourceTaskId = getAgentWorkItemRuntimeKey(item);
     const status = toDashboardStatus(item.status);
     const outputs = this.toOutputRefs(item);
 

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { Task } from '@neko/shared';
+import type { Task, TaskRunScope } from '@neko/shared';
 import { createAgentTaskResultObservationCoordinator } from '../task-result-observation-coordinator';
 
 describe('AgentTaskResultObservationCoordinator', () => {
@@ -113,7 +113,7 @@ describe('AgentTaskResultObservationCoordinator', () => {
     expect(onDiagnostic).toHaveBeenCalledOnce();
   });
 
-  it('returns a diagnostic when the terminal event lease does not match the task owner', async () => {
+  it('returns a diagnostic when the terminal event scope does not match the task owner', async () => {
     const onDiagnostic = vi.fn();
     const record = vi.fn();
     const coordinator = createAgentTaskResultObservationCoordinator({
@@ -123,8 +123,8 @@ describe('AgentTaskResultObservationCoordinator', () => {
 
     const result = await coordinator.handleTerminalTask({
       task: createTask(),
-      lease: {
-        conversationId: 'conv-1',
+      scope: {
+        ...taskScope('task-1'),
         runId: 'run-other',
       },
       source: 'task-manager',
@@ -135,7 +135,7 @@ describe('AgentTaskResultObservationCoordinator', () => {
       diagnostic: {
         code: 'run-lease-mismatch',
         conversationId: 'conv-1',
-        runId: 'run-other',
+        runId: 'run-1',
         taskId: 'task-1',
       },
     });
@@ -144,9 +144,21 @@ describe('AgentTaskResultObservationCoordinator', () => {
   });
 });
 
-function createTask(overrides: Partial<Task> = {}): Task {
+function taskScope(childRunId: string): TaskRunScope {
   return {
-    id: 'task-1',
+    conversationId: 'conv-1',
+    runId: 'run-1',
+    parentRunId: 'run-1',
+    childRunId,
+    childKind: 'task',
+  };
+}
+
+function createTask(overrides: Partial<Task> = {}): Task {
+  const id = overrides.id ?? 'task-1';
+  return {
+    scope: overrides.scope ?? taskScope(id),
+    id,
     type: 'image_generation',
     status: 'completed',
     input: {

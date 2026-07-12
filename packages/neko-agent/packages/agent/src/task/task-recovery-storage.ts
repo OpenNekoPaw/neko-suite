@@ -5,8 +5,14 @@
  * Does NOT store full task state - that's handled by external platforms.
  */
 
-import type { ITaskRecoveryStorage, TaskRecoveryInfo } from '@neko/shared';
-import { isTaskType } from '@neko/shared';
+import {
+  formatTaskRunScope,
+  isTaskType,
+  validateChildRunScope,
+  type ITaskRecoveryStorage,
+  type TaskRecoveryInfo,
+  type TaskRunScope,
+} from '@neko/shared';
 import { getLogger } from '../utils/logger';
 import {
   assertJsonFileRevisionCurrent,
@@ -25,11 +31,11 @@ export class MemoryTaskRecoveryStorage implements ITaskRecoveryStorage {
   private infos: Map<string, TaskRecoveryInfo> = new Map();
 
   async save(info: TaskRecoveryInfo): Promise<void> {
-    this.infos.set(info.taskId, { ...info });
+    this.infos.set(formatTaskRunScope(info.scope), { ...info });
   }
 
-  async load(taskId: string): Promise<TaskRecoveryInfo | undefined> {
-    const info = this.infos.get(taskId);
+  async load(scope: TaskRunScope): Promise<TaskRecoveryInfo | undefined> {
+    const info = this.infos.get(formatTaskRunScope(scope));
     return info ? { ...info } : undefined;
   }
 
@@ -37,8 +43,8 @@ export class MemoryTaskRecoveryStorage implements ITaskRecoveryStorage {
     return Array.from(this.infos.values()).map((info) => ({ ...info }));
   }
 
-  async delete(taskId: string): Promise<void> {
-    this.infos.delete(taskId);
+  async delete(scope: TaskRunScope): Promise<void> {
+    this.infos.delete(formatTaskRunScope(scope));
   }
 
   async clear(): Promise<void> {
@@ -61,7 +67,8 @@ export class StateTaskRecoveryStorage implements ITaskRecoveryStorage {
 
   async save(info: TaskRecoveryInfo): Promise<void> {
     const infos = await this.loadAll();
-    const index = infos.findIndex((item) => item.taskId === info.taskId);
+    const key = formatTaskRunScope(info.scope);
+    const index = infos.findIndex((item) => formatTaskRunScope(item.scope) === key);
     if (index >= 0) {
       infos[index] = { ...info };
     } else {
@@ -70,9 +77,10 @@ export class StateTaskRecoveryStorage implements ITaskRecoveryStorage {
     await this.writeAll(infos);
   }
 
-  async load(taskId: string): Promise<TaskRecoveryInfo | undefined> {
+  async load(scope: TaskRunScope): Promise<TaskRecoveryInfo | undefined> {
     const infos = await this.loadAll();
-    const info = infos.find((item) => item.taskId === taskId);
+    const key = formatTaskRunScope(scope);
+    const info = infos.find((item) => formatTaskRunScope(item.scope) === key);
     return info ? { ...info } : undefined;
   }
 
@@ -87,9 +95,10 @@ export class StateTaskRecoveryStorage implements ITaskRecoveryStorage {
     }
   }
 
-  async delete(taskId: string): Promise<void> {
+  async delete(scope: TaskRunScope): Promise<void> {
+    const key = formatTaskRunScope(scope);
     const infos = await this.loadAll();
-    await this.writeAll(infos.filter((info) => info.taskId !== taskId));
+    await this.writeAll(infos.filter((info) => formatTaskRunScope(info.scope) !== key));
   }
 
   async clear(): Promise<void> {
@@ -156,13 +165,13 @@ export class FileTaskRecoveryStorage implements ITaskRecoveryStorage {
 
   async save(info: TaskRecoveryInfo): Promise<void> {
     await this.ensureInitialized();
-    this.cache.set(info.taskId, { ...info });
+    this.cache.set(formatTaskRunScope(info.scope), { ...info });
     this.scheduleSave();
   }
 
-  async load(taskId: string): Promise<TaskRecoveryInfo | undefined> {
+  async load(scope: TaskRunScope): Promise<TaskRecoveryInfo | undefined> {
     await this.ensureInitialized();
-    const info = this.cache.get(taskId);
+    const info = this.cache.get(formatTaskRunScope(scope));
     return info ? { ...info } : undefined;
   }
 
@@ -171,9 +180,9 @@ export class FileTaskRecoveryStorage implements ITaskRecoveryStorage {
     return Array.from(this.cache.values()).map((info) => ({ ...info }));
   }
 
-  async delete(taskId: string): Promise<void> {
+  async delete(scope: TaskRunScope): Promise<void> {
     await this.ensureInitialized();
-    this.cache.delete(taskId);
+    this.cache.delete(formatTaskRunScope(scope));
     this.scheduleSave();
   }
 
@@ -202,11 +211,7 @@ export class FileTaskRecoveryStorage implements ITaskRecoveryStorage {
       loadedRevision: this.loadedRevision,
       fsOps: this.options,
     });
-    const writeMetadata = createJsonFileWriteMetadata(
-      this.writerId,
-      this.loadedRevision,
-      this.now,
-    );
+    const writeMetadata = createJsonFileWriteMetadata(this.writerId, this.loadedRevision, this.now);
     const data = {
       version: 1,
       writeMetadata,
@@ -241,7 +246,7 @@ export class FileTaskRecoveryStorage implements ITaskRecoveryStorage {
           throw new Error('Recovery file does not contain valid task recovery records');
         }
         for (const info of data) {
-          this.cache.set(info.taskId, info);
+          this.cache.set(formatTaskRunScope(info.scope), info);
         }
       }
     } catch (error) {
@@ -323,8 +328,12 @@ function parseTaskRecoveryInfo(value: unknown): TaskRecoveryInfo | null {
   if (!isRecord(value)) {
     return null;
   }
+  const scopeResult = validateChildRunScope(value.scope);
   if (
+    !scopeResult.ok ||
+    scopeResult.scope.childKind !== 'task' ||
     typeof value.taskId !== 'string' ||
+    value.taskId !== scopeResult.scope.childRunId ||
     typeof value.externalTaskId !== 'string' ||
     typeof value.providerId !== 'string' ||
     !isTaskType(value.taskType) ||
@@ -337,6 +346,7 @@ function parseTaskRecoveryInfo(value: unknown): TaskRecoveryInfo | null {
     return null;
   }
   return {
+    scope: scopeResult.scope as TaskRunScope,
     taskId: value.taskId,
     externalTaskId: value.externalTaskId,
     providerId: value.providerId,

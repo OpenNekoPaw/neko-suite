@@ -100,7 +100,7 @@ describe('TaskCard result actions', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'View in VSCode' }));
 
-    expect(onViewResult).toHaveBeenCalledWith('task-1', 'generated-assets/asset-1.png');
+    expect(onViewResult).toHaveBeenCalledWith(taskScope('task-1'), 'generated-assets/asset-1.png');
   });
 
   it('shows storyboard generation progress, provider metadata and task steps in Agent UI', () => {
@@ -122,8 +122,19 @@ describe('TaskCard result actions', () => {
   });
 });
 
+function taskScope(childRunId: string) {
+  return {
+    conversationId: 'conv-1',
+    runId: 'run-1',
+    parentRunId: 'run-1',
+    childRunId,
+    childKind: 'task' as const,
+  };
+}
+
 function createCompletedImageTask(): BackgroundTask {
   return {
+    scope: taskScope('task-1'),
     id: 'task-1',
     type: 'image',
     name: 'Generated frame',
@@ -161,6 +172,7 @@ function createCompletedImageTask(): BackgroundTask {
 
 function createRunningStoryboardVideoTask(): BackgroundTask {
   return {
+    scope: taskScope('storyboard-generate-video-shot-1'),
     id: 'storyboard-generate-video-shot-1',
     type: 'video',
     name: 'Canvas storyboard: Generate Video for shot 1',

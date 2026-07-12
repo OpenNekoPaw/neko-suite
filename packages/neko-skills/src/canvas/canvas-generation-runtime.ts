@@ -2,6 +2,8 @@ import {
   projectShotDataPrompt,
   type CanvasShotPromptProjectableData,
   type CanvasStoryboardPromptState,
+  type ConversationRunScope,
+  type TaskRunScope,
 } from '@neko/shared';
 import type { ReferenceDescriptor } from '@neko/shared';
 
@@ -55,6 +57,7 @@ export interface CanvasIpAdapterReference {
 }
 
 export interface CanvasGenerationInput {
+  readonly ownerScope: ConversationRunScope;
   readonly nodeId: string;
   readonly cellId?: string;
   readonly prompt: string;
@@ -108,6 +111,7 @@ export interface CanvasMediaOutput {
 }
 
 export interface CanvasMediaTask {
+  readonly scope: TaskRunScope;
   readonly id: string;
   readonly status: 'pending' | 'processing' | 'completed' | 'failed' | 'cancelled' | string;
   readonly outputs?: readonly CanvasMediaOutput[];
@@ -115,7 +119,7 @@ export interface CanvasMediaTask {
 
 export interface CanvasMediaService {
   generateImage(request: CanvasImageGenerationRequest): Promise<CanvasMediaTask>;
-  waitForTask(taskId: string, timeoutMs?: number): Promise<CanvasMediaTask>;
+  waitForTask(taskScope: TaskRunScope, timeoutMs?: number): Promise<CanvasMediaTask>;
 }
 
 export interface CanvasReferenceNode {
@@ -239,7 +243,7 @@ export class CanvasGenerationRuntime {
 
     this.emitProgress(input, task.id, 'generating');
 
-    const completed = await this.deps.media.waitForTask(task.id, CANVAS_GENERATION_TIMEOUT_MS);
+    const completed = await this.deps.media.waitForTask(task.scope, CANVAS_GENERATION_TIMEOUT_MS);
     const firstOutput = completed.outputs?.[0];
     if (completed.status !== 'completed' || !firstOutput) {
       this.emitProgress(input, task.id, 'error');
@@ -492,6 +496,7 @@ export function buildCanvasImageGenerationRequest(
 ): CanvasImageGenerationRequest {
   const referenceDescriptors = collectCanvasGenerationReferenceDescriptors(input);
   const metadata: Record<string, unknown> = {
+    ...input.ownerScope,
     nodeId: input.nodeId,
     sourceNodeId: input.sourceNodeId ?? input.nodeId,
   };

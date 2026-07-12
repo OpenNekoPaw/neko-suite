@@ -7,6 +7,8 @@ import type {
   AgentWorkItemTaskStepStatus,
   TaskWorkItem,
 } from '@neko-agent/types';
+import { getAgentWorkItemRuntimeKey } from '@neko-agent/types';
+import { formatTaskRunScope, type TaskRunScope } from '@neko/shared';
 
 export function workItemToBackgroundTask(item: AgentWorkItem): AgentBackgroundTask | null {
   if (item.kind === 'subagent') return null;
@@ -52,8 +54,9 @@ export function upsertWorkItemsForConversation(
   const conversationItems = new Map(next.get(conversationId) ?? []);
 
   for (const item of items) {
-    const existing = conversationItems.get(item.id);
-    conversationItems.set(item.id, existing ? mergeWorkItem(existing, item) : item);
+    const key = getAgentWorkItemRuntimeKey(item);
+    const existing = conversationItems.get(key);
+    conversationItems.set(key, existing ? mergeWorkItem(existing, item) : item);
   }
 
   next.set(conversationId, conversationItems);
@@ -66,7 +69,7 @@ export function replaceWorkItemsForConversation(
   items: AgentWorkItem[],
 ): AgentWorkItemStore {
   const next = new Map(previous);
-  next.set(conversationId, new Map(items.map((item) => [item.id, item])));
+  next.set(conversationId, new Map(items.map((item) => [getAgentWorkItemRuntimeKey(item), item])));
   return next;
 }
 
@@ -77,17 +80,18 @@ export function mergeBackgroundTaskSnapshotForConversation(
 ): AgentWorkItemStore {
   const next = new Map(previous);
   const conversationItems = new Map(next.get(conversationId) ?? []);
-  const incomingIds = new Set(items.map((item) => item.id));
+  const incomingKeys = new Set(items.map(getAgentWorkItemRuntimeKey));
 
   for (const [itemId, item] of conversationItems) {
-    if (!incomingIds.has(itemId) && isUnlinkedToolBackgroundTask(item)) {
+    if (!incomingKeys.has(itemId) && isUnlinkedToolBackgroundTask(item)) {
       conversationItems.delete(itemId);
     }
   }
 
   for (const item of items) {
-    const existing = conversationItems.get(item.id);
-    conversationItems.set(item.id, existing ? mergeWorkItem(existing, item) : item);
+    const key = getAgentWorkItemRuntimeKey(item);
+    const existing = conversationItems.get(key);
+    conversationItems.set(key, existing ? mergeWorkItem(existing, item) : item);
   }
 
   next.set(conversationId, conversationItems);
@@ -97,14 +101,15 @@ export function mergeBackgroundTaskSnapshotForConversation(
 export function removeWorkItemForConversation(
   previous: AgentWorkItemStore,
   conversationId: string,
-  itemId: string,
+  taskScope: TaskRunScope,
 ): AgentWorkItemStore {
+  const itemKey = formatTaskRunScope(taskScope);
   const current = previous.get(conversationId);
-  if (!current?.has(itemId)) return previous;
+  if (!current?.has(itemKey)) return previous;
 
   const next = new Map(previous);
   const conversationItems = new Map(current);
-  conversationItems.delete(itemId);
+  conversationItems.delete(itemKey);
   next.set(conversationId, conversationItems);
   return next;
 }

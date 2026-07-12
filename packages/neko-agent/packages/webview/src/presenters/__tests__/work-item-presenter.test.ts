@@ -490,8 +490,19 @@ describe('work-item-presenter', () => {
   });
 });
 
+function taskScope(childRunId: string) {
+  return {
+    conversationId: 'conv-1',
+    runId: 'run-1',
+    parentRunId: 'run-1',
+    childRunId,
+    childKind: 'task' as const,
+  };
+}
+
 function createBackgroundTask(id: string, prompt: string): AgentBackgroundTask {
   return {
+    scope: taskScope(id),
     id,
     type: 'image',
     name: prompt,
@@ -507,6 +518,13 @@ function createBackgroundTask(id: string, prompt: string): AgentBackgroundTask {
 
 function createSubAgentWorkItem(id: string, parentToolCallId: string | null): SubAgentWorkItem {
   return {
+    scope: {
+      conversationId: 'conv-1',
+      runId: 'run-1',
+      parentRunId: 'parent-a',
+      childRunId: id,
+      childKind: 'subagent',
+    },
     id,
     conversationId: 'conv-1',
     kind: 'subagent',

@@ -28,7 +28,7 @@ import type {
   SendMessageWebviewMessage,
   WebviewToExtensionMessage,
 } from '@neko-agent/types';
-import type { DocumentLocator, DocumentSourceRef } from '@neko/shared';
+import type { DocumentLocator, DocumentSourceRef, TaskRunScope } from '@neko/shared';
 import type { AgentContextType } from '@neko/shared';
 
 export type { AgentHostRuntimeAdapter, AgentHostRuntimeSubscription, VSCodeAPI };
@@ -289,19 +289,18 @@ export const AgentHostMessages = {
    * Cancel a running task
    * @param taskId - The task ID to cancel
    */
-  cancelTask: (taskId: string, conversationId: string) => {
-    postConversationMessage({ type: 'cancelTask', taskId, conversationId });
+  cancelTask: (taskScope: TaskRunScope) => {
+    postWebviewMessage({ type: 'cancelTask', taskScope });
   },
 
   /**
    * View a task's result
    * @param taskId - The task ID
    */
-  viewTaskResult: (taskId: string, conversationId: string, resultRef?: string) => {
-    postConversationMessage({
+  viewTaskResult: (taskScope: TaskRunScope, resultRef?: string) => {
+    postWebviewMessage({
       type: 'viewTaskResult',
-      taskId,
-      conversationId,
+      taskScope,
       ...(resultRef ? { resultRef } : {}),
     });
   },
@@ -603,8 +602,8 @@ export const AgentHostMessages = {
   },
 
   /** Retry a failed background task */
-  retryTask: (taskId: string, conversationId: string) => {
-    postConversationMessage({ type: 'retryTask', taskId, conversationId });
+  retryTask: (taskScope: TaskRunScope) => {
+    postWebviewMessage({ type: 'retryTask', taskScope });
   },
 
   /** Download a Mermaid diagram as SVG file */

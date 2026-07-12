@@ -19,15 +19,10 @@ import {
   type TaskResultOpenPlan,
   type TaskRuntimeDeps,
   type TaskRuntimeEffects,
-  type TaskRuntimeMediaGateway,
   type TaskRuntimeMessage,
 } from '@neko/agent';
 import type { Platform } from '@neko/platform';
-import {
-  createMediaTaskActionCandidate,
-  createMediaTaskView,
-} from '@neko/platform/media/media-task-view';
-import type { ITaskManager as TaskManager } from '@neko/shared';
+import type { ITaskManager as TaskManager, TaskRunScope } from '@neko/shared';
 import { getLogger } from '../../base';
 import type { AgentDashboardWorkItemSource } from '../../services/dashboardWorkItemSource';
 import type { AgentLocalResourceAccess } from '../../services/localResourceAccess';
@@ -76,14 +71,10 @@ export class TaskHandler {
   /**
    * Handle task cancellation
    */
-  async handleCancelTask(
-    webview: vscode.Webview,
-    taskId: string,
-    conversationId: string,
-  ): Promise<void> {
+  async handleCancelTask(webview: vscode.Webview, scope: TaskRunScope): Promise<void> {
     await this._runTaskRuntime(() =>
       runCancelTaskRuntime(
-        { taskId, conversationId },
+        { scope, taskId: scope.childRunId, conversationId: scope.conversationId },
         this._createTaskRuntimeDeps(),
         this._createTaskRuntimeEffects(webview),
       ),
@@ -93,14 +84,10 @@ export class TaskHandler {
   /**
    * Handle task retry — re-submit the failed task with the same payload
    */
-  async handleRetryTask(
-    webview: vscode.Webview,
-    taskId: string,
-    conversationId: string,
-  ): Promise<void> {
+  async handleRetryTask(webview: vscode.Webview, scope: TaskRunScope): Promise<void> {
     await this._runTaskRuntime(() =>
       runRetryTaskRuntime(
-        { taskId, conversationId },
+        { scope, taskId: scope.childRunId, conversationId: scope.conversationId },
         this._createTaskRuntimeDeps(),
         this._createTaskRuntimeEffects(webview),
       ),
@@ -110,14 +97,15 @@ export class TaskHandler {
   /**
    * Handle viewing task result
    */
-  async handleViewTaskResult(
-    taskId: string,
-    conversationId: string,
-    resultRef?: string,
-  ): Promise<void> {
+  async handleViewTaskResult(scope: TaskRunScope, resultRef?: string): Promise<void> {
     await this._runTaskRuntime(() =>
       runViewTaskResultRuntime(
-        { taskId, conversationId, ...(resultRef ? { resultRef } : {}) },
+        {
+          scope,
+          taskId: scope.childRunId,
+          conversationId: scope.conversationId,
+          ...(resultRef ? { resultRef } : {}),
+        },
         this._createTaskRuntimeDeps(),
         this._createTaskRuntimeEffects(),
       ),
@@ -128,10 +116,8 @@ export class TaskHandler {
    * Bridge runtime dependencies to extension-owned services.
    */
   private _createTaskRuntimeDeps(): TaskRuntimeDeps {
-    const media = this._createTaskRuntimeMediaGateway();
     return {
       ...(this.deps.taskManager ? { taskManager: this.deps.taskManager } : {}),
-      ...(media ? { media } : {}),
       ...(this.deps.hostPrivateTaskLeaseGuard
         ? { hostPrivateLeaseGuard: this.deps.hostPrivateTaskLeaseGuard }
         : {}),
@@ -156,21 +142,6 @@ export class TaskHandler {
         logger.debug('Ignoring media task delete failure during task cleanup', { taskId, error });
       },
       onHostPrivateLeaseDiagnostic: (diagnostic) => this.logHostPrivateLeaseDiagnostic(diagnostic),
-    };
-  }
-
-  private _createTaskRuntimeMediaGateway(): TaskRuntimeMediaGateway | undefined {
-    const media = this.deps.platform?.media;
-    if (!media) return undefined;
-
-    return {
-      getCandidate: async (taskId) => createMediaTaskActionCandidate(await media.getTask(taskId)),
-      cancelTask: async (taskId) => {
-        await media.cancelTask(taskId);
-        const updated = await media.getTask(taskId);
-        return updated ? createMediaTaskView(updated) : undefined;
-      },
-      deleteTask: (taskId) => media.deleteTask(taskId),
     };
   }
 

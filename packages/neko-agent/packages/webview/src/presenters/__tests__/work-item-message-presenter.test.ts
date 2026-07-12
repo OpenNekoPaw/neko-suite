@@ -30,6 +30,13 @@ describe('work-item-message-presenter', () => {
         parentMessageId: 'msg-2',
         parentToolCallId: 'tool-2',
         data: {
+          scope: {
+            conversationId: 'conv-1',
+            runId: 'run-1',
+            parentRunId: 'parent-2',
+            childRunId: 'sub-2',
+            childKind: 'subagent',
+          },
           status: 'completed',
           response: 'Looks good',
           description: 'Reviewer',
@@ -53,6 +60,39 @@ describe('work-item-message-presenter', () => {
         response: 'Looks good',
       },
     });
+  });
+
+  it('rejects subagent results without complete runtime ownership', () => {
+    expect(() =>
+      projectSubAgentToolResultToWorkItem({
+        id: 'sub-2',
+        conversationId: 'conv-1',
+        parentMessageId: 'msg-2',
+        parentToolCallId: 'tool-2',
+        data: { status: 'completed' },
+      }),
+    ).toThrow(/requires matching scope/);
+  });
+
+  it('rejects subagent scope from another conversation', () => {
+    expect(() =>
+      projectSubAgentToolResultToWorkItem({
+        id: 'sub-2',
+        conversationId: 'conv-1',
+        parentMessageId: 'msg-2',
+        parentToolCallId: 'tool-2',
+        data: {
+          scope: {
+            conversationId: 'conv-2',
+            runId: 'run-1',
+            parentRunId: 'parent-2',
+            childRunId: 'sub-2',
+            childKind: 'subagent',
+          },
+          status: 'completed',
+        },
+      }),
+    ).toThrow(/requires matching scope/);
   });
 
   it('extracts subagent ids from tool result payloads', () => {
@@ -260,6 +300,13 @@ describe('work-item-message-presenter', () => {
                 data: {
                   backgroundMode: true,
                   taskId: 'task-1',
+                  taskScope: {
+                    conversationId: 'conv-1',
+                    runId: 'run-1',
+                    parentRunId: 'run-1',
+                    childRunId: 'task-1',
+                    childKind: 'task',
+                  },
                   type: 'video',
                   status: 'completed',
                   message: 'A cinematic cat',
@@ -280,6 +327,13 @@ describe('work-item-message-presenter', () => {
       }),
     ).toEqual([
       {
+        scope: {
+          conversationId: 'conv-1',
+          runId: 'run-1',
+          parentRunId: 'run-1',
+          childRunId: 'task-1',
+          childKind: 'task',
+        },
         id: 'task-1',
         type: 'video',
         name: 'A cinematic cat',
@@ -322,6 +376,13 @@ describe('work-item-message-presenter', () => {
               result: {
                 success: true,
                 data: {
+                  scope: {
+                    conversationId: 'conv-1',
+                    runId: 'run-1',
+                    parentRunId: 'parent-1',
+                    childRunId: 'sub-1',
+                    childKind: 'subagent',
+                  },
                   subAgentId: 'sub-1',
                   status: 'completed',
                   description: 'Review implementation',
@@ -379,6 +440,13 @@ describe('work-item-message-presenter', () => {
                   data: {
                     backgroundMode: true,
                     taskId: 'task-1',
+                    taskScope: {
+                      conversationId: 'conv-1',
+                      runId: 'run-1',
+                      parentRunId: 'run-1',
+                      childRunId: 'task-1',
+                      childKind: 'task',
+                    },
                     status: 'completed',
                     url: 'webview://audio.mp3',
                   },
@@ -445,6 +513,13 @@ function createSubAgentWorkItem(id: string, parentToolCallId: string | null): Su
     id,
     conversationId: 'conv-a',
     kind: 'subagent',
+    scope: {
+      conversationId: 'conv-a',
+      runId: 'run-a',
+      parentRunId: 'parent-a',
+      childRunId: id,
+      childKind: 'subagent',
+    },
     parentMessageId: 'msg-a',
     parentToolCallId,
     title: id,
@@ -460,6 +535,13 @@ function createSubAgentWorkItem(id: string, parentToolCallId: string | null): Su
 
 function createBackgroundTask(id: string, prompt: string): AgentBackgroundTask {
   return {
+    scope: {
+      conversationId: 'conv-1',
+      runId: 'run-1',
+      parentRunId: 'run-1',
+      childRunId: id,
+      childKind: 'task',
+    },
     id,
     type: 'image',
     name: prompt,

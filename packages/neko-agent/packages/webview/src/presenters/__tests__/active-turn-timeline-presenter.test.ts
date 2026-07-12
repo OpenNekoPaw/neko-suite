@@ -1251,7 +1251,8 @@ function workItem(
   kind: 'media-task' | 'tool-background-task',
   parentToolCallId: string | undefined,
   overrides: Partial<TaskWorkItem> = {},
-) {
+): TaskWorkItem {
+  const { task: taskOverrides, ...itemOverrides } = overrides;
   return {
     id,
     conversationId: 'conv-1',
@@ -1259,23 +1260,30 @@ function workItem(
     parentMessageId: 'msg-1',
     parentToolCallId: parentToolCallId ?? null,
     title: id,
-    status: 'processing' as const,
+    status: 'processing',
     progress: 10,
     createdAt: '2026-04-29T00:00:00.000Z',
     updatedAt: '2026-04-29T00:00:01.000Z',
+    ...itemOverrides,
     task: {
       id,
-      type: 'image' as const,
+      type: 'image',
       name: id,
       prompt: id,
       providerId: 'local',
       providerName: 'Neko',
-      status: 'processing' as const,
+      status: 'processing',
       progress: 10,
       createdAt: '2026-04-29T00:00:00.000Z',
       updatedAt: '2026-04-29T00:00:01.000Z',
-      ...overrides.task,
+      ...taskOverrides,
+      scope: taskOverrides?.scope ?? {
+        conversationId: 'conv-1',
+        runId: 'run-1',
+        parentRunId: 'run-1',
+        childRunId: id,
+        childKind: 'task',
+      },
     },
-    ...overrides,
   };
 }

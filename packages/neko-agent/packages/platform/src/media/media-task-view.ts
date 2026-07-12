@@ -1,4 +1,8 @@
-import { isPublicGeneratedAssetResultUri, type RenderableGeneratedAsset } from '@neko/shared';
+import {
+  isPublicGeneratedAssetResultUri,
+  type RenderableGeneratedAsset,
+  type TaskRunScope,
+} from '@neko/shared';
 import {
   buildMediaTaskCreativeEntityContext,
   type MediaTaskCreativeEntityContext,
@@ -7,11 +11,7 @@ import type { MediaGenerationType, MediaOutput, MediaTask, MediaTaskStatus } fro
 
 export type MediaBackgroundTaskType = 'image' | 'video' | 'audio';
 export type MediaBackgroundTaskStatus =
-  | 'queued'
-  | 'processing'
-  | 'completed'
-  | 'failed'
-  | 'cancelled';
+  'queued' | 'processing' | 'completed' | 'failed' | 'cancelled';
 
 export function toMediaBackgroundTaskType(type: MediaGenerationType): MediaBackgroundTaskType {
   switch (type) {
@@ -52,6 +52,7 @@ export function matchesMediaTaskConversation(
 }
 
 export interface MediaTaskActionCandidate {
+  scope: TaskRunScope;
   id: string;
   conversationId?: string;
   resultUrl?: string;
@@ -67,6 +68,7 @@ export function createMediaTaskActionCandidate(
   const resultUrl = task.outputs?.find((output) => isStableMediaTaskResultUrl(output.url))?.url;
   const creativeEntity = buildMediaTaskCreativeEntityContext({ task });
   return {
+    scope: task.scope,
     id: task.id,
     ...(conversationId ? { conversationId } : {}),
     ...(resultUrl ? { resultUrl } : {}),
@@ -84,6 +86,7 @@ export interface MediaTaskProgressViewInput {
 }
 
 export interface MediaTaskProgressView {
+  scope: TaskRunScope;
   id: string;
   type: MediaBackgroundTaskType;
   status: MediaBackgroundTaskStatus;
@@ -121,6 +124,7 @@ export interface MediaTaskViewOptions {
 }
 
 export interface MediaTaskView {
+  scope: TaskRunScope;
   id: string;
   type: MediaBackgroundTaskType;
   status: MediaBackgroundTaskStatus;
@@ -150,6 +154,7 @@ export function createMediaTaskView(
   const result = createMediaTaskResultView(task, options);
 
   return {
+    scope: task.scope,
     id: task.id,
     type: toMediaBackgroundTaskType(task.type),
     status: toMediaBackgroundTaskStatus(task.status),
@@ -212,6 +217,7 @@ export function createMediaTaskProgressView(
     });
 
   return {
+    scope: input.task.scope,
     id: input.task.id,
     type: toMediaBackgroundTaskType(input.task.type),
     status: toMediaBackgroundTaskStatus(input.task.status),

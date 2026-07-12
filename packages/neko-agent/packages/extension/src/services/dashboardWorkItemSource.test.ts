@@ -5,6 +5,7 @@ import type {
   SubAgentWorkItem,
   TaskWorkItem,
 } from '@neko-agent/types';
+import type { ChildRunScope, TaskRunScope } from '@neko/shared';
 import { AgentDashboardWorkItemSource } from './dashboardWorkItemSource';
 
 vi.mock('vscode', () => ({
@@ -57,7 +58,7 @@ describe('AgentDashboardWorkItemSource', () => {
 
     await expect(source.getSnapshot()).resolves.toEqual([
       expect.objectContaining({
-        taskId: 'neko-agent:media-1',
+        taskId: `neko-agent:${taskRuntimeKey('media-1')}`,
         kind: 'media-task',
         status: 'running',
         progress: 45,
@@ -114,7 +115,7 @@ describe('AgentDashboardWorkItemSource', () => {
     const snapshot = await source.getSnapshot();
     expect(snapshot[0]).toEqual(
       expect.objectContaining({
-        taskId: 'neko-agent:tool-1',
+        taskId: `neko-agent:${taskRuntimeKey('tool-1')}`,
         kind: 'tool-background-task',
         status: 'error',
         actions: ['retry'],
@@ -136,23 +137,31 @@ describe('AgentDashboardWorkItemSource', () => {
 
     source.acceptWebviewMessage({
       type: 'agentTurnTimeline',
+      schemaVersion: 2,
+      connectionEpoch: 'epoch-1',
       conversationId: 'conv-1',
       turnId: 'turn-1',
       messageId: 'msg-1',
-      events: [
+      batchKind: 'delta',
+      deliveryRevision: 1,
+      operations: [
         {
-          conversationId: 'conv-1',
-          turnId: 'turn-1',
-          messageId: 'msg-1',
-          itemId: 'tool-background-task-tool-timeline-1',
-          sequence: 2,
-          kind: 'task',
-          status: 'pending',
-          parentAnchor: 'tool_call',
-          parentToolCallId: 'tool-call-1',
-          payload: { workItem },
-          createdAt: 1,
-          updatedAt: 1,
+          operation: 'upsert',
+          item: {
+            conversationId: 'conv-1',
+            turnId: 'turn-1',
+            messageId: 'msg-1',
+            itemId: 'tool-background-task-tool-timeline-1',
+            sequence: 2,
+            itemRevision: 1,
+            kind: 'task',
+            status: 'pending',
+            parentAnchor: 'tool_call',
+            parentToolCallId: 'tool-call-1',
+            payload: { workItem },
+            createdAt: 1,
+            updatedAt: 1,
+          },
         },
       ],
     });
@@ -160,7 +169,7 @@ describe('AgentDashboardWorkItemSource', () => {
     const snapshot = await source.getSnapshot();
     expect(snapshot[0]).toEqual(
       expect.objectContaining({
-        taskId: 'neko-agent:tool-timeline-1',
+        taskId: `neko-agent:${taskRuntimeKey('tool-timeline-1')}`,
         kind: 'tool-background-task',
         status: 'running',
         progress: 45,
@@ -176,6 +185,7 @@ describe('AgentDashboardWorkItemSource', () => {
       conversationId: 'conv-1',
       event: {
         type: 'progress',
+        scope: subAgentScope('sub-1'),
         subAgentId: 'sub-1',
         parentAgentId: 'agent-1',
         conversationId: 'conv-1',
@@ -187,7 +197,7 @@ describe('AgentDashboardWorkItemSource', () => {
     const snapshot = await source.getSnapshot();
     expect(snapshot[0]).toEqual(
       expect.objectContaining({
-        taskId: 'neko-agent:sub-1',
+        taskId: `neko-agent:${subAgentRuntimeKey('sub-1')}`,
         kind: 'subagent',
         status: 'running',
         actions: [],
@@ -200,9 +210,12 @@ describe('AgentDashboardWorkItemSource', () => {
   it('delegates cancel and retry to owning agent services', async () => {
     const platform = { media: { cancelTask: vi.fn(async () => true) } };
     const taskManager = {
-      get: vi.fn(async () => ({ input: { type: 'tool', payload: {} } })),
+      get: vi.fn(async () => ({
+        scope: taskScope('tool-1'),
+        input: { type: 'tool', payload: {} },
+      })),
       cancel: vi.fn(async () => undefined),
-      submit: vi.fn(async () => 'retry-1'),
+      submit: vi.fn(async () => taskScope('retry-1')),
     };
     const source = new AgentDashboardWorkItemSource({
       platform: platform as never,
@@ -224,12 +237,15 @@ describe('AgentDashboardWorkItemSource', () => {
       }),
     });
 
-    await source.cancel({ source: 'neko-agent', sourceTaskId: 'media-1' });
-    await source.retry({ source: 'neko-agent', sourceTaskId: 'tool-1' });
+    await source.cancel({ source: 'neko-agent', sourceTaskId: taskRuntimeKey('media-1') });
+    await source.retry({ source: 'neko-agent', sourceTaskId: taskRuntimeKey('tool-1') });
 
-    expect(platform.media.cancelTask).toHaveBeenCalledWith('media-1');
-    expect(taskManager.get).toHaveBeenCalledWith('tool-1');
-    expect(taskManager.submit).toHaveBeenCalledWith({ type: 'tool', payload: {} });
+    expect(platform.media.cancelTask).toHaveBeenCalledWith(taskScope('media-1'));
+    expect(taskManager.get).toHaveBeenCalledWith(taskScope('tool-1'));
+    expect(taskManager.submit).toHaveBeenCalledWith(
+      { type: 'tool', payload: {} },
+      { conversationId: 'conv-1', runId: 'run-1', parentRunId: 'run-1' },
+    );
     source.dispose();
   });
 
@@ -265,6 +281,7 @@ function createTaskWorkItem(
   },
 ): TaskWorkItem {
   const task: AgentBackgroundTask = {
+    scope: overrides.task?.scope ?? taskScope(overrides.id),
     id: overrides.id,
     type: 'image',
     name: 'Generate image',
@@ -302,6 +319,7 @@ function createSubAgentWorkItem(): SubAgentWorkItem {
     id: 'sub-1',
     conversationId: 'conv-1',
     kind: 'subagent',
+    scope: subAgentScope('sub-1'),
     parentMessageId: null,
     parentToolCallId: null,
     title: 'Subagent',
@@ -313,4 +331,34 @@ function createSubAgentWorkItem(): SubAgentWorkItem {
       parentAgentId: 'agent-1',
     },
   } satisfies AgentWorkItem as SubAgentWorkItem;
+}
+
+function taskScope(childRunId: string): TaskRunScope {
+  return {
+    conversationId: 'conv-1',
+    runId: 'run-1',
+    parentRunId: 'run-1',
+    childRunId,
+    childKind: 'task',
+  };
+}
+
+function subAgentScope(childRunId: string): ChildRunScope {
+  return {
+    conversationId: 'conv-1',
+    runId: 'run-1',
+    parentRunId: 'run-1',
+    childRunId,
+    childKind: 'subagent',
+  };
+}
+
+function taskRuntimeKey(childRunId: string): string {
+  const scope = taskScope(childRunId);
+  return `${scope.conversationId}/${scope.runId}/${scope.parentRunId}/task:${scope.childRunId}`;
+}
+
+function subAgentRuntimeKey(childRunId: string): string {
+  const scope = subAgentScope(childRunId);
+  return `${scope.conversationId}/${scope.runId}/${scope.parentRunId}/subagent:${scope.childRunId}`;
 }

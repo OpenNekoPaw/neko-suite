@@ -7,7 +7,7 @@
  * This service now accepts ITaskManager interface for flexibility.
  */
 
-import type { Task, ITaskManager } from '@neko/shared';
+import type { Task, ITaskManager, TaskRunOwnerScope, TaskRunScope } from '@neko/shared';
 import type {
   MediaGenerationType,
   MediaTask,
@@ -33,7 +33,7 @@ import {
  */
 export interface IMediaTaskManager extends ITaskManager {
   /** Update task output data (e.g., to store local file paths) */
-  updateOutputData?(id: string, outputData: Record<string, unknown>): Promise<boolean>;
+  updateOutputData?(scope: TaskRunScope, outputData: Record<string, unknown>): Promise<boolean>;
 }
 
 /**
@@ -91,9 +91,9 @@ export class MediaGenerationService {
   /**
    * Wait for a task to complete
    */
-  async waitForTask(taskId: string, timeoutMs?: number): Promise<MediaTask> {
+  async waitForTask(taskScope: TaskRunScope, timeoutMs?: number): Promise<MediaTask> {
     const task = await this.taskManager.waitForCompletion(
-      taskId,
+      taskScope,
       timeoutMs ?? this.defaultTimeoutMs,
     );
     return this.convertToMediaTask(task);
@@ -102,16 +102,16 @@ export class MediaGenerationService {
   /**
    * Cancel a running task
    */
-  async cancelTask(taskId: string): Promise<boolean> {
-    return this.taskManager.cancel(taskId);
+  async cancelTask(taskScope: TaskRunScope): Promise<boolean> {
+    return this.taskManager.cancel(taskScope);
   }
 
   /**
    * Delete a task (remove from storage)
    */
-  async deleteTask(taskId: string): Promise<boolean> {
+  async deleteTask(taskScope: TaskRunScope): Promise<boolean> {
     if (this.taskManager.delete) {
-      return this.taskManager.delete(taskId);
+      return this.taskManager.delete(taskScope);
     }
     return false;
   }
@@ -120,9 +120,9 @@ export class MediaGenerationService {
    * Update task outputs with local file paths
    * Call this after downloading remote outputs to local storage
    */
-  async updateTaskOutputs(taskId: string, outputs: MediaOutput[]): Promise<boolean> {
+  async updateTaskOutputs(taskScope: TaskRunScope, outputs: MediaOutput[]): Promise<boolean> {
     if (this.taskManager.updateOutputData) {
-      return this.taskManager.updateOutputData(taskId, { outputs });
+      return this.taskManager.updateOutputData(taskScope, { outputs });
     }
     return false;
   }
@@ -140,29 +140,29 @@ export class MediaGenerationService {
    * @returns Local file paths (same length/order as task outputs)
    */
   async saveOutputs(
-    taskId: string,
+    taskScope: TaskRunScope,
     outputDir: string,
     options?: DownloadMediaOptions,
   ): Promise<string[]> {
-    const task = await this.getTask(taskId);
+    const task = await this.getTask(taskScope);
     if (!task?.outputs || task.outputs.length === 0) return [];
 
-    return downloadMediaOutputs(taskId, task.type, task.outputs, outputDir, options);
+    return downloadMediaOutputs(taskScope.childRunId, task.type, task.outputs, outputDir, options);
   }
 
   /**
    * Get task status
    */
-  async getTask(taskId: string): Promise<MediaTask | undefined> {
-    const task = await this.taskManager.get(taskId);
+  async getTask(taskScope: TaskRunScope): Promise<MediaTask | undefined> {
+    const task = await this.taskManager.get(taskScope);
     return task ? this.convertToMediaTask(task) : undefined;
   }
 
   /**
    * Subscribe to task progress
    */
-  onProgress(taskId: string, callback: MediaProgressCallback): () => void {
-    return this.taskManager.onProgress(taskId, (task) => {
+  onProgress(taskScope: TaskRunScope, callback: MediaProgressCallback): () => void {
+    return this.taskManager.onProgress(taskScope, (task) => {
       callback(this.convertToMediaTask(task));
     });
   }
@@ -224,11 +224,13 @@ export class MediaGenerationService {
     );
 
     // Submit to task manager
-    const taskId = await this.taskManager.submit(taskInput);
+    const owner = this.readMediaTaskOwner(request.metadata);
+    const taskScope = await this.taskManager.submit(taskInput, owner);
 
     // Return initial task state
     return {
-      id: taskId,
+      scope: taskScope,
+      id: taskScope.childRunId,
       type: generationType,
       status: 'pending',
       progress: 0,
@@ -266,6 +268,7 @@ export class MediaGenerationService {
         : undefined;
 
     return {
+      scope: task.scope,
       id: task.id,
       type: payload.generationType,
       status: this.mapTaskStatus(task.status),
@@ -278,6 +281,23 @@ export class MediaGenerationService {
       error,
       request: payload.request,
     };
+  }
+
+  private readMediaTaskOwner(metadata: Record<string, unknown> | undefined): TaskRunOwnerScope {
+    const conversationId = this.readRequiredMetadataString(metadata, 'conversationId');
+    const runId = this.readRequiredMetadataString(metadata, 'runId');
+    return { conversationId, runId, parentRunId: runId };
+  }
+
+  private readRequiredMetadataString(
+    metadata: Record<string, unknown> | undefined,
+    key: 'conversationId' | 'runId',
+  ): string {
+    const value = metadata?.[key];
+    if (typeof value !== 'string' || !value.trim()) {
+      throw new Error(`Media generation requires non-empty metadata.${key} task ownership`);
+    }
+    return value.trim();
   }
 
   /**

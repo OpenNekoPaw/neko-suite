@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import type { TaskRunScope } from '@neko/shared';
 import { createTableHeavyStreamFixture } from '../../../../../test-utils/src/fixtures';
 import type { AgentEvent } from '../../session/types';
 import type {
@@ -15,6 +16,20 @@ import {
 
 interface SourceTask {
   readonly id: string;
+}
+
+function taskScope(
+  conversationId = 'conv-1',
+  runId = 'run-1',
+  childRunId = 'task-1',
+): TaskRunScope {
+  return {
+    conversationId,
+    runId,
+    parentRunId: runId,
+    childRunId,
+    childKind: 'task',
+  };
 }
 
 async function* toAsyncIterable<T>(items: readonly T[]): AsyncIterable<T> {
@@ -34,6 +49,7 @@ function createBackgroundToolResultEvent(conversationId = 'conv-1', runId = 'run
         conversationId,
         runId,
         taskId: 'task-1',
+        taskScope: taskScope(conversationId, runId),
         type: 'image',
         message: 'Generate a cat',
         routedTo: { provider: 'openai' },
@@ -765,6 +781,7 @@ describe('agent event stream runtime processor', () => {
         conversationId: 'conv-1',
         runId: 'run-1',
       },
+      taskScope: taskScope(),
       conversationId: 'conv-1',
       sourceTask: { id: 'task-1' },
       task: {
@@ -807,6 +824,7 @@ describe('agent event stream runtime processor', () => {
         conversationId: 'conv-1',
         runId: 'run-1',
       },
+      taskScope: taskScope(),
       conversationId: 'conv-1',
       sourceTask: { id: 'task-1' },
       task: {
@@ -873,6 +891,7 @@ describe('agent event stream runtime processor', () => {
         conversationId: 'conv-1',
         runId: 'run-1',
       },
+      taskScope: taskScope(),
       conversationId: 'conv-1',
       sourceTask: { id: 'task-1' },
       task: {
@@ -1024,6 +1043,7 @@ describe('agent event stream runtime processor', () => {
         conversationId: 'conv-1',
         runId: 'run-1',
       },
+      taskScope: taskScope(),
       conversationId: 'conv-1',
       sourceTask: { id: 'task-1' },
       task: {

@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { createReadStream } from 'node:fs';
-import type { GeneratedAsset } from '@neko/shared';
+import type { GeneratedAsset, TaskRunScope } from '@neko/shared';
 import type { DownloadMediaOptions } from './media-file-downloader';
 import { buildGeneratedMediaAssets, type GeneratedMediaTaskType } from './media-generated-asset';
 import type { MediaTask } from './types';
@@ -20,7 +20,7 @@ export interface FinalizeCompletedMediaTaskOutputsInput {
   taskType: GeneratedMediaTaskType;
   outputDir?: string;
   saveOutputs?: (
-    taskId: string,
+    taskScope: TaskRunScope,
     outputDir: string,
     options?: DownloadMediaOptions,
   ) => Promise<string[]>;
@@ -62,7 +62,7 @@ export async function finalizeCompletedMediaTaskOutputs(
   }
 
   try {
-    const hostOutputPaths = await input.saveOutputs(input.task.id, input.outputDir, {
+    const hostOutputPaths = await input.saveOutputs(input.task.scope, input.outputDir, {
       transcodeFile: input.transcodeFile,
     });
     if (hostOutputPaths.length === 0) {

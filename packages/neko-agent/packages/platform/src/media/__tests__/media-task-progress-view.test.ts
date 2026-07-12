@@ -33,6 +33,7 @@ describe('buildMediaTaskProgressViewDelivery', () => {
 
     expect(delivery).toEqual({
       view: {
+        scope: createMediaTask().scope,
         id: 'task-1',
         type: 'video',
         status: 'completed',
@@ -85,9 +86,13 @@ describe('buildMediaTaskProgressViewDelivery', () => {
       }),
     });
     expect(delivery.deliveryPlan.notification?.message).not.toContain('.neko/.cache/generated');
-    expect(saveOutputs).toHaveBeenCalledWith('task-1', '/repo/.neko/.cache/generated', {
-      transcodeFile: undefined,
-    });
+    expect(saveOutputs).toHaveBeenCalledWith(
+      createMediaTask().scope,
+      '/repo/.neko/.cache/generated',
+      {
+        transcodeFile: undefined,
+      },
+    );
     expect(assetIndex.add).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'asset-1', path: '/repo/.neko/.cache/generated/video.mp4' }),
     );
@@ -183,6 +188,13 @@ describe('buildMediaTaskProgressViewDelivery', () => {
 function createMediaTask(): MediaTask {
   const now = new Date('2026-01-01T00:00:00.000Z');
   return {
+    scope: {
+      conversationId: 'conv-1',
+      runId: 'run-1',
+      parentRunId: 'run-1',
+      childRunId: 'task-1',
+      childKind: 'task',
+    },
     id: 'task-1',
     type: 'text-to-video',
     status: 'completed',

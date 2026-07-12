@@ -35,10 +35,6 @@ const handleTasksUpdated: MessageHandler<'tasksUpdated'> = (
   context,
 ) => {
   const conversationId = message.conversationId;
-  if (!conversationId) {
-    logger.warn('Ignoring tasksUpdated without conversationId');
-    return;
-  }
 
   context.setWorkItemsByConversation((prev) =>
     mergeBackgroundTaskSnapshotForConversation(
@@ -54,10 +50,6 @@ const handleTasksUpdated: MessageHandler<'tasksUpdated'> = (
  */
 const handleTaskCreated: MessageHandler<'taskCreated'> = (message: TaskCreatedMessage, context) => {
   const conversationId = message.conversationId;
-  if (!conversationId) {
-    logger.warn('Ignoring taskCreated without conversationId', message.workItem);
-    return;
-  }
 
   const activeTimeline = getActiveTimelineForMessage(context, conversationId, message.messageId);
   if (activeTimeline) {
@@ -83,10 +75,6 @@ const handleTaskCreated: MessageHandler<'taskCreated'> = (message: TaskCreatedMe
 const handleTaskUpdated: MessageHandler<'taskUpdated'> = (message: TaskUpdatedMessage, context) => {
   logger.debug('Task updated:', message.workItem);
   const conversationId = message.conversationId;
-  if (!conversationId) {
-    logger.warn('Ignoring taskUpdated without conversationId', message.workItem);
-    return;
-  }
 
   const activeTimeline = getActiveTimelineForMessage(context, conversationId, undefined);
   if (activeTimeline) {
@@ -111,13 +99,9 @@ const handleTaskUpdated: MessageHandler<'taskUpdated'> = (message: TaskUpdatedMe
  */
 const handleTaskRemoved: MessageHandler<'taskRemoved'> = (message: TaskRemovedMessage, context) => {
   const conversationId = message.conversationId;
-  if (!conversationId) {
-    logger.warn('Ignoring taskRemoved without conversationId', { taskId: message.taskId });
-    return;
-  }
 
   context.setWorkItemsByConversation((prev) =>
-    removeWorkItemForConversation(prev, conversationId, message.taskId),
+    removeWorkItemForConversation(prev, conversationId, message.taskScope),
   );
 };
 

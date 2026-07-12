@@ -23,8 +23,14 @@ import type {
   SketchAIOperationType,
   SketchSelectionData,
   NekoProjectAuthoringDiagnostic,
+  TaskRunScope,
+  ToolExecuteOptions,
 } from '@neko/shared';
-import { TOOL_NAMES_SKETCH, createNekoProjectAuthoringDiagnostic } from '@neko/shared';
+import {
+  TOOL_NAMES_SKETCH,
+  createNekoProjectAuthoringDiagnostic,
+  withToolExecutionRunMetadata,
+} from '@neko/shared';
 import { getRootLogger } from './utils/logger';
 
 type SketchAiFeature =
@@ -229,37 +235,37 @@ async function cleanupAIContextSnapshot(
 function registerMediaTaskCancellation(
   api: NekoSketchAPI,
   media: ICapabilityMediaService,
-  taskId: string,
+  task: { readonly id: string; readonly scope: TaskRunScope },
 ): () => void {
   const cancelTask = media.cancelTask?.bind(media);
   if (!api.registerAIRun || !cancelTask) {
     return () => {};
   }
 
-  api.registerAIRun(taskId, async () => {
-    const cancelled = await cancelTask(taskId);
+  api.registerAIRun(task.id, async () => {
+    const cancelled = await cancelTask(task.scope);
     if (!cancelled) {
-      throw new Error(`Media task ${taskId} could not be cancelled.`);
+      throw new Error(`Media task ${task.id} could not be cancelled.`);
     }
   });
 
   return () => {
-    api.unregisterAIRun?.(taskId);
+    api.unregisterAIRun?.(task.id);
   };
 }
 
 async function waitForCancellableMediaTask(
   api: NekoSketchAPI,
   media: ICapabilityMediaService,
-  taskId: string,
+  task: { readonly id: string; readonly scope: TaskRunScope },
   operation: SketchAIOperationType,
   stage: string,
   timeoutMs: number,
 ): Promise<CapabilityMediaTaskResult> {
-  const unregister = registerMediaTaskCancellation(api, media, taskId);
+  const unregister = registerMediaTaskCancellation(api, media, task);
   try {
     await api.reportAIProgress?.({
-      runId: taskId,
+      runId: task.id,
       operation,
       percent: 10,
       stage,
@@ -268,7 +274,7 @@ async function waitForCancellableMediaTask(
     // Progress reporting is best-effort; media execution remains authoritative.
   }
   try {
-    return await media.waitForTask(taskId, timeoutMs);
+    return await media.waitForTask(task.scope, timeoutMs);
   } finally {
     unregister();
   }
@@ -338,7 +344,7 @@ class NekoSketchCapabilityProviderImpl implements AgentCapabilityProvider {
           },
           required: ['prompt'],
         } satisfies ToolParameters,
-        async execute(args) {
+        async execute(args, options?: ToolExecuteOptions) {
           try {
             const inactive = requireActiveSketchEditor(api);
             if (inactive) return inactive;
@@ -353,7 +359,12 @@ class NekoSketchCapabilityProviderImpl implements AgentCapabilityProvider {
             const [w, h] = sizeStr.split('x').map(Number);
             let task;
             try {
-              task = await media.generateImage({ prompt, width: w, height: h });
+              task = await media.generateImage({
+                prompt,
+                width: w,
+                height: h,
+                metadata: withToolExecutionRunMetadata(options),
+              });
             } catch (err) {
               return { success: false, error: `Image generation failed: ${String(err)}` };
             }
@@ -364,7 +375,7 @@ class NekoSketchCapabilityProviderImpl implements AgentCapabilityProvider {
               completed = await waitForCancellableMediaTask(
                 api,
                 media,
-                task.id,
+                task,
                 'generate',
                 'Generating image',
                 3 * 60 * 1000,
@@ -438,7 +449,7 @@ class NekoSketchCapabilityProviderImpl implements AgentCapabilityProvider {
             },
           },
         } satisfies ToolParameters,
-        async execute(args) {
+        async execute(args, options?: ToolExecuteOptions) {
           try {
             const inactive = requireActiveSketchEditor(api);
             if (inactive) return inactive;
@@ -462,6 +473,7 @@ class NekoSketchCapabilityProviderImpl implements AgentCapabilityProvider {
                   negativePrompt,
                   ...imageInput.mediaRequest,
                   outputKind: 'selection-mask',
+                  metadata: withToolExecutionRunMetadata(options),
                 });
               } catch (err) {
                 return { success: false, error: `Smart selection failed: ${String(err)}` };
@@ -472,7 +484,7 @@ class NekoSketchCapabilityProviderImpl implements AgentCapabilityProvider {
                 completed = await waitForCancellableMediaTask(
                   api,
                   media,
-                  task.id,
+                  task,
                   'smart-selection',
                   'Generating selection mask',
                   3 * 60 * 1000,
@@ -547,7 +559,7 @@ class NekoSketchCapabilityProviderImpl implements AgentCapabilityProvider {
           },
           required: ['prompt'],
         } satisfies ToolParameters,
-        async execute(args) {
+        async execute(args, options?: ToolExecuteOptions) {
           try {
             const inactive = requireActiveSketchEditor(api);
             if (inactive) return inactive;
@@ -574,6 +586,7 @@ class NekoSketchCapabilityProviderImpl implements AgentCapabilityProvider {
                   inpaintStrength: strength,
                   width: inpaintInput.bounds.width,
                   height: inpaintInput.bounds.height,
+                  metadata: withToolExecutionRunMetadata(options),
                 });
               } catch (err) {
                 return { success: false, error: `Inpaint generation failed: ${String(err)}` };
@@ -584,7 +597,7 @@ class NekoSketchCapabilityProviderImpl implements AgentCapabilityProvider {
                 completed = await waitForCancellableMediaTask(
                   api,
                   media,
-                  task.id,
+                  task,
                   'inpaint',
                   'Generating inpaint result',
                   3 * 60 * 1000,
@@ -680,7 +693,7 @@ class NekoSketchCapabilityProviderImpl implements AgentCapabilityProvider {
           },
           required: ['style'],
         } satisfies ToolParameters,
-        async execute(args) {
+        async execute(args, options?: ToolExecuteOptions) {
           try {
             const inactive = requireActiveSketchEditor(api);
             if (inactive) return inactive;
@@ -717,6 +730,7 @@ class NekoSketchCapabilityProviderImpl implements AgentCapabilityProvider {
                   ...imageInput.mediaRequest,
                   inpaintStrength: strength,
                   style,
+                  metadata: withToolExecutionRunMetadata(options),
                 });
               } catch (err) {
                 return { success: false, error: `Style transfer failed: ${String(err)}` };
@@ -727,7 +741,7 @@ class NekoSketchCapabilityProviderImpl implements AgentCapabilityProvider {
                 completed = await waitForCancellableMediaTask(
                   api,
                   media,
-                  task.id,
+                  task,
                   'style-transfer',
                   'Generating style transfer result',
                   3 * 60 * 1000,
@@ -807,7 +821,7 @@ class NekoSketchCapabilityProviderImpl implements AgentCapabilityProvider {
             },
           },
         } satisfies ToolParameters,
-        async execute(args) {
+        async execute(args, options?: ToolExecuteOptions) {
           try {
             const inactive = requireActiveSketchEditor(api);
             if (inactive) return inactive;
@@ -830,6 +844,7 @@ class NekoSketchCapabilityProviderImpl implements AgentCapabilityProvider {
                   ...imageInput.mediaRequest,
                   operation: 'upscale',
                   scale,
+                  metadata: withToolExecutionRunMetadata(options),
                 });
               } catch (err) {
                 return { success: false, error: `Upscale failed: ${String(err)}` };
@@ -840,7 +855,7 @@ class NekoSketchCapabilityProviderImpl implements AgentCapabilityProvider {
                 completed = await waitForCancellableMediaTask(
                   api,
                   media,
-                  task.id,
+                  task,
                   'upscale',
                   'Generating upscale result',
                   3 * 60 * 1000,
@@ -915,7 +930,7 @@ class NekoSketchCapabilityProviderImpl implements AgentCapabilityProvider {
             },
           },
         } satisfies ToolParameters,
-        async execute(args) {
+        async execute(args, options?: ToolExecuteOptions) {
           try {
             const inactive = requireActiveSketchEditor(api);
             if (inactive) return inactive;
@@ -938,6 +953,7 @@ class NekoSketchCapabilityProviderImpl implements AgentCapabilityProvider {
                   ...imageInput.mediaRequest,
                   operation: 'lineart-colorize',
                   palette,
+                  metadata: withToolExecutionRunMetadata(options),
                 });
               } catch (err) {
                 return { success: false, error: `Line art colorize failed: ${String(err)}` };
@@ -948,7 +964,7 @@ class NekoSketchCapabilityProviderImpl implements AgentCapabilityProvider {
                 completed = await waitForCancellableMediaTask(
                   api,
                   media,
-                  task.id,
+                  task,
                   'lineart-colorize',
                   'Generating color layer',
                   3 * 60 * 1000,
@@ -1013,7 +1029,7 @@ class NekoSketchCapabilityProviderImpl implements AgentCapabilityProvider {
             },
           },
         } satisfies ToolParameters,
-        async execute(args) {
+        async execute(args, options?: ToolExecuteOptions) {
           try {
             const inactive = requireActiveSketchEditor(api);
             if (inactive) return inactive;
@@ -1049,11 +1065,12 @@ class NekoSketchCapabilityProviderImpl implements AgentCapabilityProvider {
                     prompt: stylePrompt,
                     ...imageInput.mediaRequest,
                     inpaintStrength: 1.0,
+                    metadata: withToolExecutionRunMetadata(options),
                   });
                   const completed = await waitForCancellableMediaTask(
                     api,
                     media,
-                    task.id,
+                    task,
                     'auto-layer',
                     `Extracting ${layerType}`,
                     3 * 60 * 1000,

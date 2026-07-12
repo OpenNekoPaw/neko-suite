@@ -5,10 +5,29 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { TaskManager } from '../task-manager';
 import { isCreationProjectedTaskPayload } from '../creation-projected-task';
-import type { TaskInput, Task, TaskStatus, TaskExecutor } from '@neko/shared';
+import type {
+  TaskInput,
+  Task,
+  TaskStatus,
+  TaskExecutor,
+  TaskRunOwnerScope,
+  TaskRunScope,
+} from '@neko/shared';
+
+const OWNER: TaskRunOwnerScope = {
+  conversationId: 'conversation-1',
+  runId: 'run-1',
+  parentRunId: 'run-1',
+};
+
+function taskScope(childRunId: string, owner: TaskRunOwnerScope = OWNER): TaskRunScope {
+  return { ...owner, childRunId, childKind: 'task' };
+}
 
 describe('TaskManager', () => {
   let manager: TaskManager;
+  const submit = (input: TaskInput, owner: TaskRunOwnerScope = OWNER) =>
+    manager.submit(input, owner);
 
   beforeEach(() => {
     manager = new TaskManager();
@@ -24,7 +43,7 @@ describe('TaskManager', () => {
       const executor: TaskExecutor = vi.fn().mockResolvedValue({ data: 'result' });
       manager.registerExecutor('image_generation', executor);
 
-      const taskId = await manager.submit({
+      const taskId = await submit({
         type: 'image_generation',
         payload: { prompt: 'test' },
       });
@@ -44,12 +63,12 @@ describe('TaskManager', () => {
       );
       manager.registerExecutor('image_generation', executor);
 
-      const taskId = await manager.submit({
+      const taskId = await submit({
         type: 'image_generation',
         payload: { prompt: 'test' },
       });
 
-      expect(taskId).toMatch(/^task_\d+_\d+$/);
+      expect(taskId.childRunId).toMatch(/^task_\d+_\d+$/);
 
       const task = await manager.get(taskId);
       expect(task).toBeDefined();
@@ -61,20 +80,20 @@ describe('TaskManager', () => {
       const executor: TaskExecutor = vi.fn().mockResolvedValue({ data: 'result' });
       manager.registerExecutor('embedding', executor);
 
-      const id1 = await manager.submit({ type: 'embedding', payload: {} });
-      const id2 = await manager.submit({ type: 'embedding', payload: {} });
-      const id3 = await manager.submit({ type: 'embedding', payload: {} });
+      const id1 = await submit({ type: 'embedding', payload: {} });
+      const id2 = await submit({ type: 'embedding', payload: {} });
+      const id3 = await submit({ type: 'embedding', payload: {} });
 
-      expect(id1).not.toBe(id2);
-      expect(id2).not.toBe(id3);
-      expect(id1).not.toBe(id3);
+      expect(id1.childRunId).not.toBe(id2.childRunId);
+      expect(id2.childRunId).not.toBe(id3.childRunId);
+      expect(id1.childRunId).not.toBe(id3.childRunId);
     });
 
     it('should set initial progress to 0', async () => {
       const executor: TaskExecutor = vi.fn().mockImplementation(() => new Promise(() => {}));
       manager.registerExecutor('workflow', executor);
 
-      const taskId = await manager.submit({ type: 'workflow', payload: {} });
+      const taskId = await submit({ type: 'workflow', payload: {} });
       const task = await manager.get(taskId);
 
       expect(task?.progress).toBe(0);
@@ -87,7 +106,7 @@ describe('TaskManager', () => {
       const executor: TaskExecutor = vi.fn().mockResolvedValue({});
       manager.registerExecutor('mcp', executor);
 
-      const taskId = await manager.submit({ type: 'mcp', payload: {} });
+      const taskId = await submit({ type: 'mcp', payload: {} });
       const task = await manager.get(taskId);
 
       expect(task?.createdAt).toBe(now);
@@ -100,27 +119,61 @@ describe('TaskManager', () => {
       const executor: TaskExecutor = vi.fn().mockResolvedValue({});
       manager.registerExecutor('custom', executor);
 
-      const taskId = await manager.submit({
+      const taskId = await submit({
         type: 'custom',
         payload: { key: 'value' },
       });
 
       const task = await manager.get(taskId);
-      expect(task?.id).toBe(taskId);
+      expect(task?.id).toBe(taskId.childRunId);
     });
 
     it('should return undefined for non-existent task', async () => {
-      const task = await manager.get('non-existent-id');
+      const task = await manager.get(taskScope('non-existent-id'));
       expect(task).toBeUndefined();
     });
   });
 
   describe('cancel', () => {
+    it('isolates identical local task IDs by complete owner scope', async () => {
+      const scopeA = taskScope('shared-task', {
+        conversationId: 'conversation-a',
+        runId: 'run-a',
+        parentRunId: 'run-a',
+      });
+      const scopeB = taskScope('shared-task', {
+        conversationId: 'conversation-b',
+        runId: 'run-b',
+        parentRunId: 'run-b',
+      });
+      const createExternalTask = (scope: TaskRunScope): Task => ({
+        scope,
+        id: scope.childRunId,
+        type: 'workflow',
+        status: 'running',
+        input: { type: 'workflow', payload: {} },
+        progress: 50,
+        createdAt: 1,
+        updatedAt: 1,
+      });
+
+      await manager.upsertExternalTask(createExternalTask(scopeA));
+      await manager.upsertExternalTask(createExternalTask(scopeB));
+
+      await expect(manager.cancel(scopeA)).resolves.toBe(true);
+      await expect(manager.get(scopeA)).resolves.toEqual(
+        expect.objectContaining({ scope: scopeA, status: 'cancelled' }),
+      );
+      await expect(manager.get(scopeB)).resolves.toEqual(
+        expect.objectContaining({ scope: scopeB, status: 'running' }),
+      );
+    });
+
     it('should cancel pending task', async () => {
       const executor: TaskExecutor = vi.fn().mockImplementation(() => new Promise(() => {}));
       manager.registerExecutor('video_generation', executor);
 
-      const taskId = await manager.submit({
+      const taskId = await submit({
         type: 'video_generation',
         payload: {},
       });
@@ -142,7 +195,7 @@ describe('TaskManager', () => {
       );
       manager.registerExecutor('audio_generation', executor);
 
-      const taskId = await manager.submit({
+      const taskId = await submit({
         type: 'audio_generation',
         payload: {},
       });
@@ -170,7 +223,7 @@ describe('TaskManager', () => {
       );
       manager.registerExecutor('audio_generation', executor);
 
-      const taskId = await manager.submit({
+      const taskId = await submit({
         type: 'audio_generation',
         payload: {},
       });
@@ -183,7 +236,7 @@ describe('TaskManager', () => {
     });
 
     it('should return false for non-existent task', async () => {
-      const cancelled = await manager.cancel('non-existent');
+      const cancelled = await manager.cancel(taskScope('non-existent'));
       expect(cancelled).toBe(false);
     });
 
@@ -191,7 +244,7 @@ describe('TaskManager', () => {
       const executor: TaskExecutor = vi.fn().mockResolvedValue({ data: 'done' });
       manager.registerExecutor('embedding', executor);
 
-      const taskId = await manager.submit({ type: 'embedding', payload: {} });
+      const taskId = await submit({ type: 'embedding', payload: {} });
 
       // Wait for completion
       await vi.advanceTimersByTimeAsync(0);
@@ -207,7 +260,7 @@ describe('TaskManager', () => {
       const executor: TaskExecutor = vi.fn().mockRejectedValue(new Error('Failed'));
       manager.registerExecutor('workflow', executor);
 
-      const taskId = await manager.submit({ type: 'workflow', payload: {} });
+      const taskId = await submit({ type: 'workflow', payload: {} });
 
       // Wait for failure
       await vi.advanceTimersByTimeAsync(0);
@@ -225,9 +278,9 @@ describe('TaskManager', () => {
       const executor: TaskExecutor = vi.fn().mockResolvedValue({});
       manager.registerExecutor('custom', executor);
 
-      await manager.submit({ type: 'custom', payload: { a: 1 } });
-      await manager.submit({ type: 'custom', payload: { b: 2 } });
-      await manager.submit({ type: 'custom', payload: { c: 3 } });
+      await submit({ type: 'custom', payload: { a: 1 } });
+      await submit({ type: 'custom', payload: { b: 2 } });
+      await submit({ type: 'custom', payload: { c: 3 } });
 
       const tasks = await manager.list();
       expect(tasks.length).toBe(3);
@@ -240,9 +293,9 @@ describe('TaskManager', () => {
       manager.registerExecutor('embedding', completedExecutor);
       manager.registerExecutor('workflow', pendingExecutor);
 
-      await manager.submit({ type: 'embedding', payload: {} });
-      await manager.submit({ type: 'embedding', payload: {} });
-      await manager.submit({ type: 'workflow', payload: {} });
+      await submit({ type: 'embedding', payload: {} });
+      await submit({ type: 'embedding', payload: {} });
+      await submit({ type: 'workflow', payload: {} });
 
       // Allow completed tasks to finish
       await vi.advanceTimersByTimeAsync(0);
@@ -256,7 +309,7 @@ describe('TaskManager', () => {
       const executor: TaskExecutor = vi.fn().mockResolvedValue({});
       manager.registerExecutor('mcp', executor);
 
-      await manager.submit({ type: 'mcp', payload: {} });
+      await submit({ type: 'mcp', payload: {} });
       await vi.advanceTimersByTimeAsync(0);
 
       const failedTasks = await manager.list('failed');
@@ -269,6 +322,11 @@ describe('TaskManager', () => {
       const progressCallback = vi.fn();
 
       await manager.upsertExternalTask({
+        scope: taskScope('creation:run-1:item-1', {
+          conversationId: 'conv-1',
+          runId: 'run-1',
+          parentRunId: 'run-1',
+        }),
         id: 'creation:run-1:item-1',
         type: 'workflow',
         status: 'running',
@@ -280,9 +338,21 @@ describe('TaskManager', () => {
         createdAt: 10,
         updatedAt: 20,
       });
-      const unsubscribe = manager.onProgress('creation:run-1:item-1', progressCallback);
+      const unsubscribe = manager.onProgress(
+        taskScope('creation:run-1:item-1', {
+          conversationId: 'conv-1',
+          runId: 'run-1',
+          parentRunId: 'run-1',
+        }),
+        progressCallback,
+      );
 
       await manager.upsertExternalTask({
+        scope: taskScope('creation:run-1:item-1', {
+          conversationId: 'conv-1',
+          runId: 'run-1',
+          parentRunId: 'run-1',
+        }),
         id: 'creation:run-1:item-1',
         type: 'workflow',
         status: 'completed',
@@ -295,7 +365,13 @@ describe('TaskManager', () => {
         updatedAt: 30,
       });
 
-      const task = await manager.get('creation:run-1:item-1');
+      const task = await manager.get(
+        taskScope('creation:run-1:item-1', {
+          conversationId: 'conv-1',
+          runId: 'run-1',
+          parentRunId: 'run-1',
+        }),
+      );
       expect(task).toEqual(
         expect.objectContaining({
           id: 'creation:run-1:item-1',
@@ -339,7 +415,13 @@ describe('TaskManager', () => {
         },
       });
 
-      const task = await manager.get('creation:run-1:item-1');
+      const task = await manager.get(
+        taskScope('creation:run-1:item-1', {
+          conversationId: 'conv-1',
+          runId: 'run-1',
+          parentRunId: 'run-1',
+        }),
+      );
       expect(task).toEqual(
         expect.objectContaining({
           id: 'creation:run-1:item-1',
@@ -434,19 +516,48 @@ describe('TaskManager', () => {
         },
       });
 
-      const deletedIds = await manager.clearCreationProjectedTasksForRun('run-1', 101);
+      const deletedIds = await manager.clearCreationProjectedTasksForRun(
+        { conversationId: 'conv-1', runId: 'run-1' },
+        101,
+      );
 
       expect(deletedIds).toEqual(['creation:run-1:item-1']);
-      expect(await manager.get('creation:run-1:item-1')).toBeUndefined();
-      expect(await manager.get('creation:run-1:item-2')).toEqual(
-        expect.objectContaining({ id: 'creation:run-1:item-2' }),
-      );
-      expect(await manager.get('creation:run-1:item-no-start')).toEqual(
-        expect.objectContaining({ id: 'creation:run-1:item-no-start' }),
-      );
-      expect(await manager.get('creation:run-2:item-1')).toEqual(
-        expect.objectContaining({ id: 'creation:run-2:item-1' }),
-      );
+      expect(
+        await manager.get(
+          taskScope('creation:run-1:item-1', {
+            conversationId: 'conv-1',
+            runId: 'run-1',
+            parentRunId: 'run-1',
+          }),
+        ),
+      ).toBeUndefined();
+      expect(
+        await manager.get(
+          taskScope('creation:run-1:item-2', {
+            conversationId: 'conv-1',
+            runId: 'run-1',
+            parentRunId: 'run-1',
+          }),
+        ),
+      ).toEqual(expect.objectContaining({ id: 'creation:run-1:item-2' }));
+      expect(
+        await manager.get(
+          taskScope('creation:run-1:item-no-start', {
+            conversationId: 'conv-1',
+            runId: 'run-1',
+            parentRunId: 'run-1',
+          }),
+        ),
+      ).toEqual(expect.objectContaining({ id: 'creation:run-1:item-no-start' }));
+      expect(
+        await manager.get(
+          taskScope('creation:run-2:item-1', {
+            conversationId: 'conv-2',
+            runId: 'run-2',
+            parentRunId: 'run-2',
+          }),
+        ),
+      ).toEqual(expect.objectContaining({ id: 'creation:run-2:item-1' }));
     });
   });
 
@@ -462,7 +573,7 @@ describe('TaskManager', () => {
       });
       manager.registerExecutor('video_generation', executor);
 
-      const taskId = await manager.submit({
+      const taskId = await submit({
         type: 'video_generation',
         payload: {},
       });
@@ -494,7 +605,7 @@ describe('TaskManager', () => {
       });
       manager.registerExecutor('image_generation', executor);
 
-      const taskId = await manager.submit({
+      const taskId = await submit({
         type: 'image_generation',
         payload: {},
       });
@@ -520,7 +631,7 @@ describe('TaskManager', () => {
       });
       manager.registerExecutor('workflow', executor);
 
-      const taskId = await manager.submit({ type: 'workflow', payload: {} });
+      const taskId = await submit({ type: 'workflow', payload: {} });
 
       const unsubscribe = manager.onProgress(taskId, callback);
       await vi.advanceTimersByTimeAsync(0);
@@ -543,7 +654,7 @@ describe('TaskManager', () => {
       });
       manager.registerExecutor('image_generation', executor);
 
-      const taskId = await manager.submit({
+      const taskId = await submit({
         type: 'image_generation',
         payload: { prompt: 'A sunset' },
       });
@@ -560,7 +671,7 @@ describe('TaskManager', () => {
       const executor: TaskExecutor = vi.fn().mockRejectedValue(new Error('Generation failed'));
       manager.registerExecutor('video_generation', executor);
 
-      const taskId = await manager.submit({
+      const taskId = await submit({
         type: 'video_generation',
         payload: {},
       });
@@ -573,7 +684,7 @@ describe('TaskManager', () => {
     });
 
     it('should fail when no executor registered', async () => {
-      const taskId = await manager.submit({
+      const taskId = await submit({
         type: 'custom',
         payload: {},
       });
@@ -595,7 +706,7 @@ describe('TaskManager', () => {
       });
       manager.registerExecutor('embedding', executor);
 
-      const taskId = await manager.submit({ type: 'embedding', payload: {} });
+      const taskId = await submit({ type: 'embedding', payload: {} });
       await vi.advanceTimersByTimeAsync(0);
 
       const task = await manager.get(taskId);
@@ -625,7 +736,7 @@ describe('TaskManager', () => {
       });
       manager.registerExecutor('workflow', executor);
 
-      const taskId = await manager.submit({ type: 'workflow', payload: {} });
+      const taskId = await submit({ type: 'workflow', payload: {} });
 
       // Subscribe before releasing execution
       manager.onProgress(taskId, (task) => {
@@ -662,7 +773,7 @@ describe('TaskManager', () => {
         });
       manager.registerExecutor('video_generation', executor);
 
-      const taskId = await manager.submit({
+      const taskId = await submit({
         type: 'video_generation',
         payload: {},
         lifecycle: {
@@ -696,7 +807,7 @@ describe('TaskManager', () => {
       );
       manager.registerExecutor('mcp', executor);
 
-      const taskId = await manager.submit({ type: 'mcp', payload: {} });
+      const taskId = await submit({ type: 'mcp', payload: {} });
 
       // Let task start
       await vi.advanceTimersByTimeAsync(0);
@@ -722,7 +833,7 @@ describe('TaskManager', () => {
       });
       manager.registerExecutor('image_generation', executor);
 
-      const taskId = await manager.submit({
+      const taskId = await submit({
         type: 'image_generation',
         payload: {},
         options: {
@@ -747,7 +858,7 @@ describe('TaskManager', () => {
       const executor: TaskExecutor = vi.fn().mockRejectedValue(new Error('Permanent failure'));
       manager.registerExecutor('video_generation', executor);
 
-      const taskId = await manager.submit({
+      const taskId = await submit({
         type: 'video_generation',
         payload: {},
         options: {
@@ -780,7 +891,7 @@ describe('TaskManager', () => {
       });
       manager.registerExecutor('embedding', executor);
 
-      const taskId = await manager.submit({
+      const taskId = await submit({
         type: 'embedding',
         payload: {},
         options: {
@@ -810,7 +921,7 @@ describe('TaskManager', () => {
       });
       manager.registerExecutor('workflow', executor);
 
-      const taskId = await manager.submit({ type: 'workflow', payload: {} });
+      const taskId = await submit({ type: 'workflow', payload: {} });
 
       const task = await manager.waitForCompletion(taskId, 5000);
       expect(task.status).toBe('completed');
@@ -822,7 +933,7 @@ describe('TaskManager', () => {
       const executor: TaskExecutor = vi.fn().mockResolvedValue({ data: 'done' });
       manager.registerExecutor('mcp', executor);
 
-      const taskId = await manager.submit({ type: 'mcp', payload: {} });
+      const taskId = await submit({ type: 'mcp', payload: {} });
 
       // Wait a bit for completion
       await new Promise((r) => setTimeout(r, 50));
@@ -843,7 +954,7 @@ describe('TaskManager', () => {
       );
       manager.registerExecutor('custom', executor);
 
-      const taskId = await manager.submit({ type: 'custom', payload: {} });
+      const taskId = await submit({ type: 'custom', payload: {} });
 
       await expect(manager.waitForCompletion(taskId, 200)).rejects.toThrow('timed out');
     });
@@ -851,7 +962,9 @@ describe('TaskManager', () => {
     it('should throw for non-existent task', async () => {
       vi.useRealTimers();
 
-      await expect(manager.waitForCompletion('non-existent')).rejects.toThrow('not found');
+      await expect(manager.waitForCompletion(taskScope('non-existent'))).rejects.toThrow(
+        'not found',
+      );
     });
 
     it('should return on task failure', async () => {
@@ -860,7 +973,7 @@ describe('TaskManager', () => {
       const executor: TaskExecutor = vi.fn().mockRejectedValue(new Error('Task failed'));
       manager.registerExecutor('audio_generation', executor);
 
-      const taskId = await manager.submit({
+      const taskId = await submit({
         type: 'audio_generation',
         payload: {},
       });
@@ -875,7 +988,7 @@ describe('TaskManager', () => {
       const executor: TaskExecutor = vi.fn().mockImplementation(() => new Promise(() => {}));
       manager.registerExecutor('video_generation', executor);
 
-      const taskId = await manager.submit({
+      const taskId = await submit({
         type: 'video_generation',
         payload: {},
       });
@@ -901,7 +1014,7 @@ describe('TaskManager', () => {
       );
       manager.registerExecutor('workflow', executor);
 
-      const taskId = await manager.submit({ type: 'workflow', payload: {} });
+      const taskId = await submit({ type: 'workflow', payload: {} });
       await waitFor(() => expect(finish).toBeTypeOf('function'));
 
       const waiter1 = manager.waitForCompletion(taskId, 5000);

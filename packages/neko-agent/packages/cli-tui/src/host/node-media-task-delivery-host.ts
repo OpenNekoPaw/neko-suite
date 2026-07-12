@@ -1,6 +1,9 @@
 import * as path from 'node:path';
-import type { GeneratedAsset, RenderableGeneratedAsset } from '@neko/shared';
-import { WORKSPACE_GENERATED_ASSET_ROOT, resolveWorkspaceGeneratedAssetRelativeDirectory } from '@neko/shared';
+import type { GeneratedAsset, RenderableGeneratedAsset, TaskRunScope } from '@neko/shared';
+import {
+  WORKSPACE_GENERATED_ASSET_ROOT,
+  resolveWorkspaceGeneratedAssetRelativeDirectory,
+} from '@neko/shared';
 import {
   buildMediaTaskDeliverySettingsPlan,
   buildMediaTaskProgressViewDelivery,
@@ -68,8 +71,8 @@ export class NodeMediaTaskDeliveryHost {
       task,
       taskType,
       outputDir: settingsPlan.outputDir,
-      saveOutputs: (id: string, dir: string, options?: DownloadMediaOptions) =>
-        this.deps.platform?.media?.saveOutputs(id, dir, options) ?? Promise.resolve([]),
+      saveOutputs: (scope: TaskRunScope, dir: string, options?: DownloadMediaOptions) =>
+        this.deps.platform?.media?.saveOutputs(scope, dir, options) ?? Promise.resolve([]),
       assetIndex: this.assetIndex,
       generateAssetId,
       workspaceRoot: settingsPlan.workspaceRoot,

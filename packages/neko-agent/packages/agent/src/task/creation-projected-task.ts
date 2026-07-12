@@ -1,4 +1,4 @@
-import type { SerializableTask, TaskLifecycleMetadata } from '@neko/shared';
+import type { SerializableTask, TaskLifecycleMetadata, TaskRunScope } from '@neko/shared';
 
 export interface CreationProjectedTaskArtifactBinding {
   readonly kind: 'task';
@@ -53,7 +53,15 @@ export function toSerializableCreationProjectedTask(
   input: CreationProjectedTaskUpsertInput,
 ): SerializableTask {
   const lifecycle = toCreationProjectedTaskLifecycle(input.binding);
+  const scope: TaskRunScope = {
+    conversationId: input.binding.conversationId,
+    runId: input.binding.runId,
+    parentRunId: input.binding.runId,
+    childRunId: input.id,
+    childKind: 'task',
+  };
   return {
+    scope,
     id: input.id,
     type: 'workflow',
     status: input.status,

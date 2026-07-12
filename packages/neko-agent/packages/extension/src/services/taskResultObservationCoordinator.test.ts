@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { AgentTaskResultObservation, Task } from '@neko/shared';
+import type { AgentTaskResultObservation, Task, TaskRunScope } from '@neko/shared';
 import type { TaskTerminalEvent } from '@neko/agent';
 import { TaskResultObservationCoordinator } from './taskResultObservationCoordinator';
 
@@ -62,11 +62,7 @@ describe('TaskResultObservationCoordinator', () => {
 
     terminalListener?.({
       task,
-      lease: {
-        conversationId: 'conv-1',
-        runId: 'run-1',
-        runStartedAt: 101,
-      },
+      scope: task.scope,
     });
     await new Promise((resolve) => setTimeout(resolve, 0));
 
@@ -147,11 +143,7 @@ describe('TaskResultObservationCoordinator', () => {
 
     terminalListener?.({
       task,
-      lease: {
-        conversationId: 'conv-1',
-        runId: 'run-1',
-        runStartedAt: 101,
-      },
+      scope: task.scope,
     });
     await new Promise((resolve) => setTimeout(resolve, 0));
 
@@ -387,8 +379,10 @@ function createTaskPort() {
 }
 
 function createTask(overrides: Partial<Task> = {}): Task {
+  const id = overrides.id ?? 'task-1';
   return {
-    id: 'task-1',
+    scope: overrides.scope ?? taskScope(id),
+    id,
     type: 'image_generation',
     status: 'completed',
     input: {
@@ -413,5 +407,15 @@ function createTask(overrides: Partial<Task> = {}): Task {
       recoverPolicy: 'snapshot-only',
     },
     ...overrides,
+  };
+}
+
+function taskScope(childRunId: string): TaskRunScope {
+  return {
+    conversationId: 'conv-1',
+    runId: 'run-1',
+    parentRunId: 'run-1',
+    childRunId,
+    childKind: 'task',
   };
 }

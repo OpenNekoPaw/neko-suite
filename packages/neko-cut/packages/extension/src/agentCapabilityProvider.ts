@@ -22,6 +22,7 @@ import type {
   NekoCutAPI,
   PromptFragment,
   CanvasCutDraftPayload,
+  ToolExecuteOptions,
 } from '@neko/shared';
 import {
   MEDIA_PRODUCTION_ANIMATION_PLAN_PROFILE_ID,
@@ -31,6 +32,7 @@ import {
   TOOL_NAMES_CANVAS,
   TOOL_NAMES_MEDIA,
   TOOL_NAMES_TIMELINE,
+  withToolExecutionRunMetadata,
 } from '@neko/shared';
 import { TimelineToolBridge } from './services/timelineToolBridge';
 
@@ -608,7 +610,7 @@ class NekoCutCapabilityProviderImpl implements AgentCapabilityProvider {
                 },
                 required: ['prompt'],
               },
-              async execute(args: Record<string, unknown>) {
+              async execute(args: Record<string, unknown>, options?: ToolExecuteOptions) {
                 const prompt = args.prompt as string;
                 const durationHint = (args.durationHint as number | undefined) ?? 5;
 
@@ -618,6 +620,7 @@ class NekoCutCapabilityProviderImpl implements AgentCapabilityProvider {
                     prompt,
                     referenceImageBase64: args.referenceImageBase64 as string | undefined,
                     durationSeconds: durationHint,
+                    metadata: withToolExecutionRunMetadata(options),
                   });
                 } catch (err) {
                   return { success: false, error: `Video generation failed: ${String(err)}` };
@@ -625,7 +628,7 @@ class NekoCutCapabilityProviderImpl implements AgentCapabilityProvider {
 
                 let completed;
                 try {
-                  completed = await media.waitForTask(task.id, 10 * 60 * 1000);
+                  completed = await media.waitForTask(task.scope, 10 * 60 * 1000);
                 } catch (err) {
                   return { success: false, error: `Video generation timed out: ${String(err)}` };
                 }

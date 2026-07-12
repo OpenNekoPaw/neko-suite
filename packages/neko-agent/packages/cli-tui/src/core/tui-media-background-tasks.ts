@@ -8,7 +8,7 @@ import {
   type Platform,
 } from '@neko/platform';
 import type { MediaTaskProgressDeliveryPlan } from '@neko/platform/media/media-task-progress-plan';
-import type { Task } from '@neko/shared';
+import type { Task, TaskRunScope } from '@neko/shared';
 import type { NodeMediaTaskDeliveryHost } from '../host/node-media-task-delivery-host';
 
 export interface TuiTaskResultObservationPort {
@@ -16,6 +16,7 @@ export interface TuiTaskResultObservationPort {
     task: Task,
     options: {
       readonly source: 'media-task';
+      readonly scope?: TaskRunScope;
       readonly parentMessageId?: string;
       readonly parentToolCallId?: string;
       readonly deliveryPolicy?: ReturnType<typeof readMediaTaskResultDeliveryPolicy>;
@@ -53,7 +54,7 @@ export function createTuiMediaBackgroundTasks(
     observeProgress: (observerInput) =>
       observeMediaTaskProgress({
         media,
-        taskId: observerInput.taskId,
+        taskScope: observerInput.taskScope,
         conversationId: observerInput.conversationId,
         unsubscribeOnIgnoredConversation: observerInput.unsubscribeOnIgnoredConversation,
         createRecoveryTaskView: (task) => observerInput.createRecoveryTaskView(task),
@@ -61,6 +62,7 @@ export function createTuiMediaBackgroundTasks(
         onIgnoredConversationTask: ({ taskId, conversationId, mediaTask }) => {
           observerInput.onIgnoredConversationTask?.({
             lease: observerInput.lease,
+            taskScope: observerInput.taskScope,
             taskId,
             conversationId,
             sourceTask: mediaTask,
@@ -69,6 +71,7 @@ export function createTuiMediaBackgroundTasks(
         onProgressDeliveryError: ({ taskId, conversationId, mediaTask, error, recoveryTask }) => {
           observerInput.onProgressDeliveryError?.({
             lease: observerInput.lease,
+            taskScope: observerInput.taskScope,
             taskId,
             conversationId,
             sourceTask: mediaTask,
@@ -81,12 +84,14 @@ export function createTuiMediaBackgroundTasks(
           observerInput.onTaskProgress({
             lease: observerInput.lease,
             conversationId,
+            taskScope: observerInput.taskScope,
             task,
             sourceTask: mediaTask,
           });
         },
       }),
-    waitForCompletion: (waitInput) => waitForMediaTask(media, waitInput.taskId, waitInput.signal),
+    waitForCompletion: (waitInput) =>
+      waitForMediaTask(media, waitInput.taskScope, waitInput.signal),
     createRecoveryProgress: (task) => createMediaTaskProgressView({ task }),
     createProgressDelivery: async (task, context) => {
       const delivery = await input.deliveryHost.createProgressViewDelivery(task, context.taskType);
@@ -124,6 +129,7 @@ export function createTuiMediaBackgroundTasks(
         }),
         {
           source: 'media-task',
+          scope: event.taskScope,
           parentMessageId: event.parentMessageId,
           ...(event.parentToolCallId ? { parentToolCallId: event.parentToolCallId } : {}),
           ...(deliveryPolicy ? { deliveryPolicy } : {}),
@@ -135,7 +141,7 @@ export function createTuiMediaBackgroundTasks(
 
 function waitForMediaTask(
   media: NonNullable<Platform['media']>,
-  taskId: string,
+  taskScope: TaskRunScope,
   signal: AbortSignal,
 ): Promise<MediaTask> {
   if (signal.aborted) {
@@ -145,7 +151,7 @@ function waitForMediaTask(
   return new Promise<MediaTask>((resolve, reject) => {
     const abort = () => reject(new DOMException('Media task wait was cancelled.', 'AbortError'));
     signal.addEventListener('abort', abort, { once: true });
-    media.waitForTask(taskId).then(
+    media.waitForTask(taskScope).then(
       (task) => {
         signal.removeEventListener('abort', abort);
         resolve(task);

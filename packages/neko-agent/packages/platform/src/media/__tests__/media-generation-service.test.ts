@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import type { Task } from '@neko/shared';
+import type { Task, TaskRunScope } from '@neko/shared';
 import { MediaGenerationService } from '../media-generation-service';
 import { MediaRoutingManager } from '../routing/media-routing-manager';
 import { MediaTaskExecutor } from '../media-task-executor';
@@ -13,6 +13,17 @@ import { ConfigManager } from '../../config/config-manager';
 import { getMediaAdapterRegistry } from '../adapters/media-adapter-registry';
 import { OpenAICompatMediaAdapter } from '../adapters/openai-compat-media-adapter';
 import type { Provider, Model } from '../../types/provider';
+
+const OWNER_METADATA = { conversationId: 'conv-1', runId: 'run-1' } as const;
+
+function unknownTaskScope(childRunId: string): TaskRunScope {
+  return {
+    ...OWNER_METADATA,
+    parentRunId: OWNER_METADATA.runId,
+    childRunId,
+    childKind: 'task',
+  };
+}
 
 describe('MediaGenerationService', () => {
   let service: MediaGenerationService;
@@ -73,6 +84,7 @@ describe('MediaGenerationService', () => {
     it('should submit image generation task', async () => {
       const request = {
         prompt: 'A beautiful sunset',
+        metadata: OWNER_METADATA,
         width: 1024,
         height: 1024,
       };
@@ -101,11 +113,12 @@ describe('MediaGenerationService', () => {
 
       const task = await newService.generateImage({
         prompt: 'A locked model render',
+        metadata: OWNER_METADATA,
         providerId: 'locked-provider',
         modelId: 'locked-model',
       });
 
-      const queuedTask = await taskManager.get(task.id);
+      const queuedTask = await taskManager.get(task.scope);
       expect(routingManager.selectProvider).toHaveBeenCalledWith(
         'text-to-image',
         undefined,
@@ -153,6 +166,7 @@ describe('MediaGenerationService', () => {
 
       const request = {
         prompt: 'Make it more colorful',
+        metadata: OWNER_METADATA,
         referenceImageUrl: 'https://example.com/image.jpg',
       };
 
@@ -192,6 +206,7 @@ describe('MediaGenerationService', () => {
 
       const request = {
         prompt: 'A rocket launching into space',
+        metadata: OWNER_METADATA,
         duration: 5,
       };
 
@@ -229,6 +244,7 @@ describe('MediaGenerationService', () => {
 
       const request = {
         prompt: 'Animate this image',
+        metadata: OWNER_METADATA,
         referenceImageUrl: 'https://example.com/image.jpg',
       };
 
@@ -266,6 +282,7 @@ describe('MediaGenerationService', () => {
       await expect(
         newService.generateVideo({
           prompt: 'Animate this image',
+          metadata: OWNER_METADATA,
           referenceImageBase64: 'base64',
         }),
       ).resolves.toMatchObject({ type: 'image-to-video' });
@@ -273,6 +290,7 @@ describe('MediaGenerationService', () => {
       await expect(
         newService.generateVideo({
           prompt: 'Animate this image',
+          metadata: OWNER_METADATA,
           referenceImageUri: 'file:///tmp/reference.png',
         }),
       ).resolves.toMatchObject({ type: 'image-to-video' });
@@ -280,6 +298,7 @@ describe('MediaGenerationService', () => {
       await expect(
         newService.generateVideo({
           prompt: 'Animate this image',
+          metadata: OWNER_METADATA,
           startFrameImageBase64: 'base64',
         }),
       ).resolves.toMatchObject({ type: 'image-to-video' });
@@ -315,6 +334,7 @@ describe('MediaGenerationService', () => {
 
       const request = {
         prompt: 'A soothing ambient soundscape',
+        metadata: OWNER_METADATA,
         duration: 30,
       };
 
@@ -352,6 +372,7 @@ describe('MediaGenerationService', () => {
 
       const request = {
         prompt: 'An upbeat electronic track',
+        metadata: OWNER_METADATA,
         isMusic: true,
         genre: 'electronic',
       };
@@ -364,17 +385,17 @@ describe('MediaGenerationService', () => {
 
   describe('getTask', () => {
     it('should return task by ID', async () => {
-      const request = { prompt: 'Test' };
+      const request = { prompt: 'Test', metadata: OWNER_METADATA };
       const submitted = await service.generateImage(request);
 
-      const task = await service.getTask(submitted.id);
+      const task = await service.getTask(submitted.scope);
 
       expect(task).toBeDefined();
       expect(task?.id).toBe(submitted.id);
     });
 
     it('should return undefined for unknown task', async () => {
-      const task = await service.getTask('unknown-task-id');
+      const task = await service.getTask(unknownTaskScope('unknown-task-id'));
 
       expect(task).toBeUndefined();
     });
@@ -382,16 +403,16 @@ describe('MediaGenerationService', () => {
 
   describe('cancelTask', () => {
     it('should cancel a pending task', async () => {
-      const request = { prompt: 'Test' };
+      const request = { prompt: 'Test', metadata: OWNER_METADATA };
       const submitted = await service.generateImage(request);
 
-      const cancelled = await service.cancelTask(submitted.id);
+      const cancelled = await service.cancelTask(submitted.scope);
 
       expect(cancelled).toBe(true);
     });
 
     it('should return false for unknown task', async () => {
-      const cancelled = await service.cancelTask('unknown-task-id');
+      const cancelled = await service.cancelTask(unknownTaskScope('unknown-task-id'));
 
       expect(cancelled).toBe(false);
     });
@@ -399,11 +420,11 @@ describe('MediaGenerationService', () => {
 
   describe('onProgress', () => {
     it('should subscribe to progress updates', async () => {
-      const request = { prompt: 'Test' };
+      const request = { prompt: 'Test', metadata: OWNER_METADATA };
       const submitted = await service.generateImage(request);
 
       const progressCallback = vi.fn();
-      const unsubscribe = service.onProgress(submitted.id, progressCallback);
+      const unsubscribe = service.onProgress(submitted.scope, progressCallback);
 
       expect(typeof unsubscribe).toBe('function');
 

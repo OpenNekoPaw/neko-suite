@@ -11,18 +11,32 @@ import {
   WorkspaceVisibleAgentTaskStorage,
   getWorkspaceVisibleAgentTaskRecordsFilePath,
 } from '../task-storage';
-import type { SerializableTask } from '@neko/shared';
+import type { SerializableTask, TaskRunScope } from '@neko/shared';
 
-const createTask = (overrides: Partial<SerializableTask> = {}): SerializableTask => ({
-  id: `task_${Date.now()}_1`,
-  type: 'custom',
-  status: 'pending',
-  input: { type: 'custom', payload: {} },
-  progress: 0,
-  createdAt: Date.now(),
-  updatedAt: Date.now(),
-  ...overrides,
-});
+function taskScope(childRunId: string): TaskRunScope {
+  return {
+    conversationId: 'conv-storage',
+    runId: 'run-storage',
+    parentRunId: 'run-storage',
+    childRunId,
+    childKind: 'task',
+  };
+}
+
+function createTask(overrides: Partial<SerializableTask> = {}): SerializableTask {
+  const id = overrides.id ?? `task_${Date.now()}_1`;
+  return {
+    id,
+    type: 'custom',
+    status: 'pending',
+    input: { type: 'custom', payload: {} },
+    progress: 0,
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+    ...overrides,
+    scope: overrides.scope ?? taskScope(id),
+  };
+}
 
 describe('MemoryTaskStorage', () => {
   let storage: MemoryTaskStorage;
@@ -36,12 +50,12 @@ describe('MemoryTaskStorage', () => {
       const task = createTask({ id: 'task_1' });
       await storage.save(task);
 
-      const loaded = await storage.load('task_1');
+      const loaded = await storage.load(taskScope('task_1'));
       expect(loaded).toEqual(task);
     });
 
     it('should return undefined for non-existent task', async () => {
-      const loaded = await storage.load('non-existent');
+      const loaded = await storage.load(taskScope('non-existent'));
       expect(loaded).toBeUndefined();
     });
 
@@ -52,7 +66,7 @@ describe('MemoryTaskStorage', () => {
       const updated = { ...task, status: 'completed' as const, progress: 100 };
       await storage.save(updated);
 
-      const loaded = await storage.load('task_1');
+      const loaded = await storage.load(taskScope('task_1'));
       expect(loaded?.status).toBe('completed');
       expect(loaded?.progress).toBe(100);
     });
@@ -61,10 +75,10 @@ describe('MemoryTaskStorage', () => {
       const task = createTask({ id: 'task_1' });
       await storage.save(task);
 
-      const loaded = await storage.load('task_1');
+      const loaded = await storage.load(taskScope('task_1'));
       loaded!.status = 'failed';
 
-      const reloaded = await storage.load('task_1');
+      const reloaded = await storage.load(taskScope('task_1'));
       expect(reloaded?.status).toBe('pending');
     });
   });
@@ -109,14 +123,14 @@ describe('MemoryTaskStorage', () => {
   describe('delete', () => {
     it('should delete a task', async () => {
       await storage.save(createTask({ id: 'task_1' }));
-      await storage.delete('task_1');
+      await storage.delete(taskScope('task_1'));
 
-      const loaded = await storage.load('task_1');
+      const loaded = await storage.load(taskScope('task_1'));
       expect(loaded).toBeUndefined();
     });
 
     it('should not throw when deleting non-existent task', async () => {
-      await expect(storage.delete('non-existent')).resolves.toBeUndefined();
+      await expect(storage.delete(taskScope('non-existent'))).resolves.toBeUndefined();
     });
   });
 
@@ -183,7 +197,7 @@ describe('MemoryTaskStorage', () => {
       const cleaned = await storage.cleanup(7 * 24 * 60 * 60 * 1000);
       expect(cleaned).toBe(0);
 
-      const loaded = await storage.load('old_running');
+      const loaded = await storage.load(taskScope('old_running'));
       expect(loaded).toBeDefined();
     });
 
@@ -223,10 +237,10 @@ describe('StateTaskStorage', () => {
     await storage.save(createTask({ id: 'completed', status: 'completed' }));
     await storage.save(createTask({ id: 'pending', status: 'completed', progress: 100 }));
 
-    expect((await storage.load('pending'))?.progress).toBe(100);
+    expect((await storage.load(taskScope('pending')))?.progress).toBe(100);
     expect((await storage.loadPending()).map((task) => task.id)).toEqual(['running']);
 
-    await storage.delete('running');
+    await storage.delete(taskScope('running'));
     expect((await storage.loadAll()).map((task) => task.id).sort()).toEqual([
       'completed',
       'pending',

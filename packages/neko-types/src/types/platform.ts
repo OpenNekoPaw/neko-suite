@@ -12,6 +12,7 @@
 import type { AgentTraceContext } from './agent-trace';
 import type { CreativeDomainMetadata } from './domain-routing';
 import type { ToolPlanningMetadata } from './tool-planning';
+import type { TaskRunScope } from './task';
 
 /**
  * Chat message format
@@ -245,6 +246,7 @@ export type MediaTaskStatus = 'pending' | 'processing' | 'completed' | 'failed' 
  * Media task
  */
 export interface MediaTask {
+  scope: TaskRunScope;
   id: string;
   type: 'image' | 'video' | 'audio';
   status: MediaTaskStatus;
@@ -334,22 +336,22 @@ export interface IMediaGenerationService {
   /**
    * Wait for task completion
    */
-  waitForTask(taskId: string, timeoutMs?: number): Promise<MediaTask>;
+  waitForTask(taskScope: TaskRunScope, timeoutMs?: number): Promise<MediaTask>;
 
   /**
    * Cancel a task
    */
-  cancelTask(taskId: string): Promise<boolean>;
+  cancelTask(taskScope: TaskRunScope): Promise<boolean>;
 
   /**
    * Get task status
    */
-  getTask(taskId: string): Promise<MediaTask | undefined>;
+  getTask(taskScope: TaskRunScope): Promise<MediaTask | undefined>;
 
   /**
    * Subscribe to task progress
    */
-  onProgress(taskId: string, callback: (task: MediaTask) => void): () => void;
+  onProgress(taskScope: TaskRunScope, callback: (task: MediaTask) => void): () => void;
 }
 
 /**
@@ -361,7 +363,7 @@ export interface IMediaTaskManager {
   /**
    * Get task by ID
    */
-  get(taskId: string): Promise<MediaTask | undefined>;
+  get(scope: TaskRunScope): Promise<MediaTask | undefined>;
 
   /**
    * List tasks
@@ -371,7 +373,7 @@ export interface IMediaTaskManager {
   /**
    * Cancel a task
    */
-  cancel(taskId: string): Promise<boolean>;
+  cancel(scope: TaskRunScope): Promise<boolean>;
 }
 
 /**

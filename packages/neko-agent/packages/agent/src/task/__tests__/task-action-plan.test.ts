@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { Task } from '@neko/shared';
+import type { Task, TaskRunScope } from '@neko/shared';
 import {
   buildCancelTaskActionPlan,
   buildClearCompletedTaskPlan,
@@ -316,14 +316,19 @@ describe('task action plan', () => {
 });
 
 function createTask(overrides: Partial<Task> & { payload?: Record<string, unknown> } = {}): Task {
+  const id = overrides.id ?? 'task-1';
   const payload = overrides.payload ?? { conversationId: 'conv-1' };
   const input = overrides.input ?? {
     type: overrides.type ?? 'image_generation',
     payload,
   };
+  const conversationId =
+    overrides.scope?.conversationId ??
+    (typeof payload.conversationId === 'string' ? payload.conversationId : 'conv-1');
 
   return {
-    id: overrides.id ?? 'task-1',
+    scope: overrides.scope ?? taskScope(id, conversationId),
+    id,
     type: overrides.type ?? input.type,
     status: overrides.status ?? 'completed',
     input,
@@ -332,5 +337,16 @@ function createTask(overrides: Partial<Task> & { payload?: Record<string, unknow
     createdAt: overrides.createdAt ?? 1000,
     updatedAt: overrides.updatedAt ?? 2000,
     error: overrides.error,
+  };
+}
+
+function taskScope(childRunId: string, conversationId = 'conv-1'): TaskRunScope {
+  const runId = `run:${conversationId}`;
+  return {
+    conversationId,
+    runId,
+    parentRunId: runId,
+    childRunId,
+    childKind: 'task',
   };
 }

@@ -57,6 +57,7 @@ import type {
   CanvasDeriveNodeResult,
   CanvasUpdateBlockRequest,
   CanvasUpdateBlockResult,
+  ToolExecuteOptions,
 } from '@neko/shared';
 import {
   TOOL_NAMES_CANVAS,
@@ -93,6 +94,7 @@ import {
   isCanvasMarkdownCapabilityResult,
   validateCanvasAuthoringCatalogRequest,
   validateCanvasAuthoringFieldProfileDescriptor,
+  withToolExecutionRunMetadata,
 } from '@neko/shared';
 import { resolveCharacterBindingsForNames } from '@neko/shared/vscode/extension';
 import { getRootLogger } from './utils/logger';
@@ -4670,7 +4672,7 @@ function createVideoKeyframeTool(
       },
       required: ['nodeId', 'firstFrameNodeId', 'lastFrameNodeId'],
     } satisfies ToolParameters,
-    async execute(args) {
+    async execute(args, options?: ToolExecuteOptions) {
       try {
         const nodeId = args.nodeId as string;
         const firstFrameNodeId = args.firstFrameNodeId as string;
@@ -4746,7 +4748,7 @@ function createVideoKeyframeTool(
             endFrameRef,
             aspectRatio,
             duration,
-            ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
+            metadata: withToolExecutionRunMetadata(options, metadata),
           });
         } catch (err) {
           await api.nodes.update(nodeId, { generationStatus: 'error' });
@@ -4756,7 +4758,7 @@ function createVideoKeyframeTool(
         // Wait for completion (up to 5 minutes)
         let completed;
         try {
-          completed = await media.waitForTask(task.id, 5 * 60 * 1000);
+          completed = await media.waitForTask(task.scope, 5 * 60 * 1000);
         } catch (err) {
           await api.nodes.update(nodeId, { generationStatus: 'error' });
           return { success: false, error: `Video generation timed out: ${String(err)}` };

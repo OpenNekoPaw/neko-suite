@@ -4,6 +4,7 @@ import {
   createResourceRef,
   type ResourceRef,
   type Task,
+  type TaskRunScope,
 } from '@neko/shared';
 import {
   AgentTaskResultObservationError,
@@ -225,9 +226,21 @@ describe('task result observation', () => {
   });
 });
 
-function createTask(overrides: Partial<Task> = {}): Task {
+function taskScope(childRunId: string): TaskRunScope {
   return {
-    id: 'task-1',
+    conversationId: 'conv-1',
+    runId: 'run-1',
+    parentRunId: 'run-1',
+    childRunId,
+    childKind: 'task',
+  };
+}
+
+function createTask(overrides: Partial<Task> = {}): Task {
+  const id = overrides.id ?? 'task-1';
+  return {
+    scope: overrides.scope ?? taskScope(id),
+    id,
     type: 'image_generation',
     status: 'completed',
     input: {

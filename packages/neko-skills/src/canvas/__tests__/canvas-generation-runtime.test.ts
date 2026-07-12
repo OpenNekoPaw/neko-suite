@@ -20,6 +20,14 @@ import {
   selectCanvasReferenceImageSource,
 } from '../canvas-generation-runtime';
 
+const OWNER_SCOPE = { conversationId: 'canvas-document-1', runId: 'generation-run-1' } as const;
+const TASK_SCOPE = {
+  ...OWNER_SCOPE,
+  parentRunId: OWNER_SCOPE.runId,
+  childRunId: 'task-1',
+  childKind: 'task',
+} as const;
+
 describe('canvas generation runtime', () => {
   it('builds AutoPrompt messages from shot metadata without static defaults', () => {
     const userContent = buildCanvasShotPromptUserContent({
@@ -179,6 +187,7 @@ describe('canvas generation runtime', () => {
     expect(
       buildCanvasImageGenerationRequest(
         {
+          ownerScope: OWNER_SCOPE,
           nodeId: 'shot-1',
           cellId: 'cell-1',
           prompt: 'cat detective',
@@ -202,6 +211,7 @@ describe('canvas generation runtime', () => {
       aspectRatio: '1:1',
       count: 2,
       metadata: {
+        ...OWNER_SCOPE,
         nodeId: 'shot-1',
         sourceNodeId: 'source-1',
         cellId: 'cell-1',
@@ -231,6 +241,7 @@ describe('canvas generation runtime', () => {
 
   it('collects Canvas generation referenceRefs as stable descriptors only', () => {
     const descriptors = collectCanvasGenerationReferenceDescriptors({
+      ownerScope: OWNER_SCOPE,
       nodeId: 'shot-1',
       prompt: 'cat detective',
       referenceRefs: ['gallery-1:front'],
@@ -284,6 +295,7 @@ describe('canvas generation runtime', () => {
   it('resolves referenceRefs through injected canvas and image bridges', async () => {
     const refs = await resolveCanvasIpAdapterReferences(
       {
+        ownerScope: OWNER_SCOPE,
         nodeId: 'shot-1',
         prompt: 'prompt',
         referenceRefs: ['gallery-1:cell-2'],
@@ -312,8 +324,11 @@ describe('canvas generation runtime', () => {
 
   it('runs image generation and emits progress events', async () => {
     const progress = vi.fn();
-    const generateImage = vi.fn().mockResolvedValue({ id: 'task-1', status: 'pending' });
+    const generateImage = vi
+      .fn()
+      .mockResolvedValue({ scope: TASK_SCOPE, id: 'task-1', status: 'pending' });
     const waitForTask = vi.fn().mockResolvedValue({
+      scope: TASK_SCOPE,
       id: 'task-1',
       status: 'completed',
       outputs: [{ url: 'https://cdn.test/out.png', mimeType: 'image/png' }],
@@ -325,7 +340,12 @@ describe('canvas generation runtime', () => {
     });
 
     await expect(
-      runtime.generateForNode({ nodeId: 'shot-1', cellId: 'cell-1', prompt: 'cat' }),
+      runtime.generateForNode({
+        ownerScope: OWNER_SCOPE,
+        nodeId: 'shot-1',
+        cellId: 'cell-1',
+        prompt: 'cat',
+      }),
     ).resolves.toEqual({ dataUrl: 'data:image/png;base64,abc' });
 
     expect(generateImage).toHaveBeenCalledWith(
@@ -333,10 +353,15 @@ describe('canvas generation runtime', () => {
         prompt: 'cat',
         aspectRatio: '16:9',
         count: 1,
-        metadata: { nodeId: 'shot-1', sourceNodeId: 'shot-1', cellId: 'cell-1' },
+        metadata: {
+          ...OWNER_SCOPE,
+          nodeId: 'shot-1',
+          sourceNodeId: 'shot-1',
+          cellId: 'cell-1',
+        },
       }),
     );
-    expect(waitForTask).toHaveBeenCalledWith('task-1', 180000);
+    expect(waitForTask).toHaveBeenCalledWith(TASK_SCOPE, 180000);
     expect(progress).toHaveBeenCalledWith({
       nodeId: 'shot-1',
       taskId: 'task-1',
@@ -355,16 +380,16 @@ describe('canvas generation runtime', () => {
     const progress = vi.fn();
     const runtime = new CanvasGenerationRuntime({
       media: {
-        generateImage: async () => ({ id: 'task-1', status: 'pending' }),
-        waitForTask: async () => ({ id: 'task-1', status: 'failed' }),
+        generateImage: async () => ({ scope: TASK_SCOPE, id: 'task-1', status: 'pending' }),
+        waitForTask: async () => ({ scope: TASK_SCOPE, id: 'task-1', status: 'failed' }),
       },
       fetchOutputAsDataUrl: async () => 'data:image/png;base64,abc',
       onProgress: progress,
     });
 
-    await expect(runtime.generateForNode({ nodeId: 'shot-1', prompt: 'cat' })).resolves.toBe(
-      undefined,
-    );
+    await expect(
+      runtime.generateForNode({ ownerScope: OWNER_SCOPE, nodeId: 'shot-1', prompt: 'cat' }),
+    ).resolves.toBe(undefined);
     expect(progress).toHaveBeenLastCalledWith({
       nodeId: 'shot-1',
       taskId: 'task-1',

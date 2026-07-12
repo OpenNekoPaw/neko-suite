@@ -23,6 +23,7 @@ import type {
   NpcTranscriptArtifact,
   SkillSummary,
   StoryboardTable,
+  TaskRunScope,
 } from '@neko/shared';
 import type {
   ConversationLifecycleAction,
@@ -31,6 +32,7 @@ import type {
 } from '@neko/shared/types/creative-ai-invocation';
 import type { StoryboardTextCue, StoryboardVoiceCue } from '@neko/shared';
 import {
+  validateChildRunScope,
   STORYBOARD_TEXT_CUE_KINDS,
   isAgentCapabilityInvocationInput,
   isCanvasMarkdownCapabilityTarget,
@@ -283,8 +285,7 @@ export interface UpdateTabStateWebviewMessage {
 
 export interface TaskActionWebviewMessage {
   type: 'cancelTask' | 'retryTask' | 'viewTaskResult';
-  taskId: string;
-  conversationId: string;
+  taskScope: TaskRunScope;
   resultRef?: string;
 }
 
@@ -949,6 +950,7 @@ export interface TaskUpdatedMessage {
 export interface TaskRemovedMessage {
   type: 'taskRemoved';
   conversationId: string;
+  taskScope: TaskRunScope;
   taskId: string;
 }
 
@@ -1715,12 +1717,18 @@ export function buildTaskUpdatedMessage(input: {
 }
 
 export function buildTaskRemovedMessage(input: {
-  readonly conversationId: string;
+  readonly taskScope: TaskRunScope;
   readonly taskId: string;
 }): TaskRemovedMessage {
+  if (input.taskScope.childKind !== 'task' || input.taskScope.childRunId !== input.taskId) {
+    throw new Error(
+      `taskRemoved scope mismatch: ${input.taskScope.childKind}:${input.taskScope.childRunId} cannot remove task ${input.taskId}.`,
+    );
+  }
   return {
     type: 'taskRemoved',
-    conversationId: requireBuilderConversationId(input.conversationId, 'taskRemoved'),
+    conversationId: requireBuilderConversationId(input.taskScope.conversationId, 'taskRemoved'),
+    taskScope: input.taskScope,
     taskId: input.taskId,
   };
 }
@@ -2323,12 +2331,16 @@ function parseTaskActionMessage(
   type: TaskActionWebviewMessage['type'],
   raw: Record<string, unknown>,
 ): TaskActionWebviewMessage | null {
-  const taskId = requiredString(raw.taskId);
-  const conversationId = requiredString(raw.conversationId);
+  const scopeResult = validateChildRunScope(raw.taskScope);
+  if (!scopeResult.ok || scopeResult.scope.childKind !== 'task') {
+    return null;
+  }
   const resultRef = typeof raw.resultRef === 'string' && raw.resultRef ? raw.resultRef : undefined;
-  return taskId && conversationId
-    ? { type, taskId, conversationId, ...(resultRef ? { resultRef } : {}) }
-    : null;
+  return {
+    type,
+    taskScope: scopeResult.scope as TaskRunScope,
+    ...(resultRef ? { resultRef } : {}),
+  };
 }
 
 function parseQueuedMessageActionMessage(

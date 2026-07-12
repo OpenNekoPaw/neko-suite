@@ -67,7 +67,14 @@ export function toMediaTaskResultObservationTask(
   const outputData = buildMediaTaskResultObservationData(input);
   const error = input.error ?? formatMediaTaskError(task);
 
+  if (input.taskId !== task.scope.childRunId) {
+    throw new Error(
+      `Media task observation id ${input.taskId} does not match scope ${task.scope.childRunId}`,
+    );
+  }
+
   return {
+    scope: task.scope,
     id: input.taskId,
     type: toAgentTaskType(task.type),
     status: toAgentTaskStatus(task.status),

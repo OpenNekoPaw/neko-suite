@@ -20,7 +20,7 @@
 - [x] 3.1 Add a conversation-owned run registry and scoped cancellation tree for Agent, SubAgent, and Task runs.
 - [x] 3.2 Migrate SubAgent manager/runtime APIs, mutable indexes, events, result lookup, cancellation, and cleanup to complete child-run scope keys.
 - [x] 3.3 Migrate coordinator TaskPool and parent/child bookkeeping so equal local IDs can coexist in different conversations and parent runs.
-- [ ] 3.4 Migrate TaskManager control, terminal observation, persistence, recovery, retry, and cancellation paths to complete run scope keys.
+- [x] 3.4 Migrate TaskManager control, terminal observation, persistence, recovery, retry, and cancellation paths to complete run scope keys.
 - [ ] 3.5 Add fail-closed migration diagnostics for valuable persisted Task/SubAgent records with ambiguous ownership.
 - [ ] 3.6 Delete or make inaccessible bare-ID session control paths and add path assertions proving they are not used.
 - [ ] 3.7 Verify cancelling or disposing conversation A leaves B's Agent/SubAgents/Tasks unchanged.

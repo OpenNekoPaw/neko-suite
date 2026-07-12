@@ -103,11 +103,13 @@ export {
   getAgentTaskResultDeliveryPolicy,
   isAgentTaskResultTerminalStatus,
   normalizeAgentTaskResultDeliveryPolicy,
+  normalizeAgentChildRunResultObservation,
   normalizeAgentTaskResultObservation,
   normalizeAgentTaskResultRefs,
   type AgentTaskResultDeliveryDecision,
   type AgentTaskResultObservationDiagnosticCode,
   type AgentTaskResultObservationRecords,
+  type NormalizeAgentChildRunResultObservationInput,
   type NormalizeAgentTaskResultObservationInput,
 } from './task-result-observation';
 export {
@@ -118,6 +120,7 @@ export {
   type AgentTaskResultObservationCoordinatorDiagnosticCode,
   type AgentTaskResultObservationCoordinatorOptions,
   type AgentTaskResultObservationRecordPort,
+  type HandleAgentChildRunResultTerminalInput,
   type HandleAgentTaskResultTerminalInput,
   type HandleAgentTaskResultTerminalResult,
 } from './task-result-observation-coordinator';

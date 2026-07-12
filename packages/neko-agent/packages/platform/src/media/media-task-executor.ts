@@ -14,6 +14,7 @@ import type {
   TaskExecutionContext,
   SerializableTask,
   ITaskRecoveryStorage,
+  TaskRunScope,
 } from '@neko/shared';
 import { sleepWithAbort } from '@neko/shared';
 import type { Provider, Model } from '../types/provider';
@@ -155,7 +156,7 @@ export class MediaTaskExecutor {
 
     for (const info of recoveryInfos) {
       try {
-        const task = await taskManager.get(info.taskId);
+        const task = await taskManager.get(info.scope);
         if (task?.lifecycle?.recoverPolicy && task.lifecycle.recoverPolicy !== 'resume-polling') {
           logger.debug('Skipping recovery polling for task recover policy', {
             taskId: info.taskId,
@@ -169,7 +170,7 @@ export class MediaTaskExecutor {
         if (!provider) {
           logger.warn('Provider not found for recovery', { providerId: info.providerId });
           if (taskManager.deleteRecoveryInfo) {
-            await taskManager.deleteRecoveryInfo(info.taskId);
+            await taskManager.deleteRecoveryInfo(info.scope);
           }
           continue;
         }
@@ -179,7 +180,7 @@ export class MediaTaskExecutor {
         if (!adapter) {
           logger.warn('Adapter not found for recovery', { providerType: provider.type });
           if (taskManager.deleteRecoveryInfo) {
-            await taskManager.deleteRecoveryInfo(info.taskId);
+            await taskManager.deleteRecoveryInfo(info.scope);
           }
           continue;
         }
@@ -196,7 +197,7 @@ export class MediaTaskExecutor {
           });
           logger.debug('Recovered task already completed', { taskId: info.taskId });
           if (taskManager.deleteRecoveryInfo) {
-            await taskManager.deleteRecoveryInfo(info.taskId);
+            await taskManager.deleteRecoveryInfo(info.scope);
           }
         } else if (result.status === 'failed' || result.status === 'cancelled') {
           await this.completeRecoveredTask(taskManager, info, {
@@ -207,7 +208,7 @@ export class MediaTaskExecutor {
           });
           logger.debug('Recovered task failed/cancelled', { taskId: info.taskId });
           if (taskManager.deleteRecoveryInfo) {
-            await taskManager.deleteRecoveryInfo(info.taskId);
+            await taskManager.deleteRecoveryInfo(info.scope);
           }
         } else {
           // Task still pending/processing, resume polling
@@ -219,7 +220,7 @@ export class MediaTaskExecutor {
         logger.error('Recovery failed for task', { taskId: info.taskId, error });
         // Clean up invalid recovery info
         if (taskManager.deleteRecoveryInfo) {
-          await taskManager.deleteRecoveryInfo(info.taskId);
+          await taskManager.deleteRecoveryInfo(info.scope);
         }
       }
     }
@@ -241,7 +242,7 @@ export class MediaTaskExecutor {
       adapter,
       info.externalTaskId,
       provider,
-      info.taskId,
+      info.scope,
       taskManager,
       () => {}, // No progress callback for resumed tasks
     )
@@ -249,7 +250,7 @@ export class MediaTaskExecutor {
         void this.completeRecoveredTask(taskManager, info, output);
         // Clean up recovery info on completion
         if (taskManager.deleteRecoveryInfo) {
-          taskManager.deleteRecoveryInfo(info.taskId).catch((err) => {
+          taskManager.deleteRecoveryInfo(info.scope).catch((err) => {
             logger.error('Failed to delete recovery info', { error: err });
           });
         }
@@ -257,7 +258,7 @@ export class MediaTaskExecutor {
       .catch((err) => {
         logger.error('Resumed polling failed', { taskId: info.taskId, error: err });
         if (taskManager.deleteRecoveryInfo) {
-          taskManager.deleteRecoveryInfo(info.taskId).catch(() => {});
+          taskManager.deleteRecoveryInfo(info.scope).catch(() => {});
         }
       });
   }
@@ -271,8 +272,8 @@ export class MediaTaskExecutor {
       onProgress: (progress: number) => void,
       context?: TaskExecutionContext,
     ): Promise<TaskOutput> => {
-      const payload = input.payload as unknown as MediaTaskPayload & { __taskId?: string };
-      const { generationType, providerId, modelId, request, __taskId } = payload;
+      const payload = input.payload as unknown as MediaTaskPayload;
+      const { generationType, providerId, modelId, request } = payload;
 
       // Get provider and model (uses configManager for config data)
       const provider = this.configManager.getProvider(providerId);
@@ -296,7 +297,7 @@ export class MediaTaskExecutor {
         onProgress,
         legacyAdapter ?? undefined,
         context,
-        __taskId,
+        context?.scope,
       );
       if (aiSdkResult) return aiSdkResult;
 
@@ -318,7 +319,7 @@ export class MediaTaskExecutor {
     onProgress: (progress: number) => void,
     legacyAdapter?: MediaAdapter,
     context?: TaskExecutionContext,
-    taskId?: string,
+    taskScope?: TaskRunScope,
   ): Promise<TaskOutput | null> {
     // Infer image generation mode from model capabilities:
     // Models with both 'chat' and 'image_generation' use chat completions (Gemini, GPT-image)
@@ -336,8 +337,8 @@ export class MediaTaskExecutor {
         apiUrl: provider.apiUrl,
         apiKey: provider.apiKey ?? '',
         onExternalTaskId: async (externalTaskId) => {
-          if (taskId && this.taskManager?.saveRecoveryInfo) {
-            await this.taskManager.saveRecoveryInfo(taskId, externalTaskId, provider.id);
+          if (taskScope && this.taskManager?.saveRecoveryInfo) {
+            await this.taskManager.saveRecoveryInfo(taskScope, externalTaskId, provider.id);
           }
           context?.reportLifecycle({
             lifecycle: {
@@ -722,14 +723,14 @@ export class MediaTaskExecutor {
     adapter: MediaAdapter,
     externalTaskId: string,
     provider: Provider,
-    taskId: string,
+    taskScope: TaskRunScope,
     taskManager: MediaTaskManagerDeps,
     onProgress: (progress: number) => void,
     signal?: AbortSignal,
   ): Promise<TaskOutput> {
     try {
       if (taskManager.updateLifecycle) {
-        await taskManager.updateLifecycle(taskId, {
+        await taskManager.updateLifecycle(taskScope, {
           costPhase: 'external-wait',
           recoverPolicy: 'resume-polling',
           interruptPolicy: 'detach-and-continue',
@@ -743,12 +744,12 @@ export class MediaTaskExecutor {
         signal,
       );
       if (taskManager.updateLifecycle) {
-        await taskManager.updateLifecycle(taskId, { costPhase: 'local-finalize' });
+        await taskManager.updateLifecycle(taskScope, { costPhase: 'local-finalize' });
       }
 
       // Clean up recovery info on completion
       if (taskManager.deleteRecoveryInfo) {
-        await taskManager.deleteRecoveryInfo(taskId).catch((err) => {
+        await taskManager.deleteRecoveryInfo(taskScope).catch((err) => {
           logger.error('Failed to delete recovery info', { error: err });
         });
       }
@@ -757,7 +758,7 @@ export class MediaTaskExecutor {
     } catch (error) {
       // Clean up on error too
       if (taskManager.deleteRecoveryInfo) {
-        await taskManager.deleteRecoveryInfo(taskId).catch(() => {});
+        await taskManager.deleteRecoveryInfo(taskScope).catch(() => {});
       }
       throw error;
     }
@@ -768,7 +769,7 @@ export class MediaTaskExecutor {
     info: TaskRecoveryInfo,
     output: TaskOutput,
   ): Promise<void> {
-    const existing = await taskManager.get(info.taskId);
+    const existing = await taskManager.get(info.scope);
     if (!existing || !taskManager.upsertExternalTask) {
       return;
     }

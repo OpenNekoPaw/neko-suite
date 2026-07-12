@@ -17,23 +17,17 @@ export function tryHandleTaskRoute(
     }
 
     case 'cancelTask': {
-      const conversationId = resolveRequiredConversationId(webview, message, 'cancelTask');
-      if (!conversationId) return true;
-      deps.taskHandler.handleCancelTask(webview, message.taskId, conversationId);
+      deps.taskHandler.handleCancelTask(webview, message.taskScope);
       return true;
     }
 
     case 'retryTask': {
-      const conversationId = resolveRequiredConversationId(webview, message, 'retryTask');
-      if (!conversationId) return true;
-      deps.taskHandler.handleRetryTask(webview, message.taskId, conversationId);
+      deps.taskHandler.handleRetryTask(webview, message.taskScope);
       return true;
     }
 
     case 'viewTaskResult': {
-      const conversationId = resolveRequiredConversationId(webview, message, 'viewTaskResult');
-      if (!conversationId) return true;
-      deps.taskHandler.handleViewTaskResult(message.taskId, conversationId, message.resultRef);
+      deps.taskHandler.handleViewTaskResult(message.taskScope, message.resultRef);
       return true;
     }
 

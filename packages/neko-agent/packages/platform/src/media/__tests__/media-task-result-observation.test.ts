@@ -125,6 +125,13 @@ describe('media task result observation projection', () => {
 function createMediaTask(): MediaTask {
   const now = new Date('2026-01-01T00:00:00.000Z');
   return {
+    scope: {
+      conversationId: 'conv-1',
+      runId: 'run-1',
+      parentRunId: 'run-1',
+      childRunId: 'task-1',
+      childKind: 'task',
+    },
     id: 'task-1',
     type: 'text-to-image',
     status: 'completed',

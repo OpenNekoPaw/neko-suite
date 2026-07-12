@@ -8,7 +8,11 @@
 
 import * as vscode from 'vscode';
 import type { Platform } from '@neko/platform';
-import { resolveWorkspaceGeneratedAssetRelativeDirectory, type GeneratedAsset } from '@neko/shared';
+import {
+  resolveWorkspaceGeneratedAssetRelativeDirectory,
+  type GeneratedAsset,
+  type TaskRunScope,
+} from '@neko/shared';
 import {
   DEFAULT_MEDIA_TASK_CONFIGURED_OUTPUT_DIR,
   DEFAULT_MEDIA_TASK_SHOW_SAVE_NOTIFICATION,
@@ -163,8 +167,8 @@ export class MediaTaskDeliveryHost {
       task,
       taskType,
       outputDir: settingsPlan.outputDir,
-      saveOutputs: (id: string, dir: string, options?: DownloadMediaOptions) =>
-        this.deps.platform?.media?.saveOutputs(id, dir, options) ?? Promise.resolve([]),
+      saveOutputs: (scope: TaskRunScope, dir: string, options?: DownloadMediaOptions) =>
+        this.deps.platform?.media?.saveOutputs(scope, dir, options) ?? Promise.resolve([]),
       transcodeFile: this.deps.transcodeFile,
       assetIndex: this.assetIndex,
       generateAssetId,

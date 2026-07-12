@@ -9,12 +9,7 @@
 import * as vscode from 'vscode';
 import * as path from 'node:path';
 import type { AssistantRuntimeSettingsSnapshot, Platform } from '@neko/platform';
-import type {
-  AgentTaskResultFollowUpRequest,
-  Task,
-  TaskLifecycleMetadata,
-  TaskStatus,
-} from '@neko/shared';
+import type { AgentTaskResultFollowUpRequest } from '@neko/shared';
 import {
   buildAgentCapabilityActivationProgressMessage,
   buildGlobalErrorMessage,
@@ -515,11 +510,29 @@ export class AgentMessageTurnHandler {
       return;
     }
 
+    const result = event.data?.result;
+    const error = event.data?.error ?? result?.error;
     void coordinator
-      .handleTerminalTask(toSubAgentTaskResultObservationTask(event), {
+      .handleTerminalChildRun({
+        scope: event.scope,
+        childId: event.subAgentId,
+        childType: event.data?.subagentType ?? 'subagent',
+        status: event.type,
         source: 'subagent',
         ...(event.data?.parentMessageId ? { parentMessageId: event.data.parentMessageId } : {}),
         ...(event.data?.parentToolCallId ? { parentToolCallId: event.data.parentToolCallId } : {}),
+        outputData: {
+          subAgentId: event.subAgentId,
+          ...(result?.response ? { response: result.response } : {}),
+          ...(result?.iterations !== undefined ? { iterations: result.iterations } : {}),
+          ...(result?.usage ? { usage: result.usage } : {}),
+        },
+        ...(error ? { error } : {}),
+        createdAt: event.timestamp,
+        completedAt: event.timestamp,
+        ...(event.data?.runStartedAt !== undefined
+          ? { runStartedAt: event.data.runStartedAt }
+          : {}),
       })
       .catch((error) => {
         logger.warn('Failed to record SubAgent task-result observation', {
@@ -690,72 +703,10 @@ export class AgentMessageTurnHandler {
   }
 }
 
-function isTerminalSubAgentEvent(event: SubAgentEvent): boolean {
+function isTerminalSubAgentEvent(
+  event: SubAgentEvent,
+): event is SubAgentEvent & { type: 'completed' | 'failed' | 'cancelled' } {
   return event.type === 'completed' || event.type === 'failed' || event.type === 'cancelled';
-}
-
-function toSubAgentTaskResultObservationTask(event: SubAgentEvent): Task {
-  const status = toTaskStatusFromSubAgentEvent(event);
-  const lifecycle: TaskLifecycleMetadata = {
-    ownerConversationId: event.conversationId,
-    ...(event.data?.runId ? { ownerRunId: event.data.runId } : {}),
-    ...(event.data?.runStartedAt !== undefined
-      ? { ownerRunStartedAt: event.data.runStartedAt }
-      : {}),
-    runMode: event.data?.runMode ?? 'background',
-    costPhase: 'idle',
-    interruptPolicy: 'detach-and-continue',
-    recoverPolicy: 'snapshot-only',
-  };
-  const result = event.data?.result;
-  const error = event.data?.error ?? result?.error;
-
-  return {
-    id: event.subAgentId,
-    type: 'custom',
-    status,
-    input: {
-      type: 'custom',
-      payload: {
-        subAgentId: event.subAgentId,
-        parentAgentId: event.parentAgentId,
-        ...(event.data?.description ? { description: event.data.description } : {}),
-        ...(event.data?.subagentType ? { subagentType: event.data.subagentType } : {}),
-        ...(event.data?.modelTier ? { modelTier: event.data.modelTier } : {}),
-      },
-      lifecycle,
-    },
-    output: {
-      data: {
-        subAgentId: event.subAgentId,
-        ...(result?.response ? { response: result.response } : {}),
-        ...(result?.iterations !== undefined ? { iterations: result.iterations } : {}),
-        ...(result?.usage ? { usage: result.usage } : {}),
-      },
-      ...(error ? { error } : {}),
-    },
-    progress: status === 'completed' ? 100 : 0,
-    createdAt: event.timestamp,
-    updatedAt: event.timestamp,
-    ...(error ? { error } : {}),
-    lifecycle,
-  };
-}
-
-function toTaskStatusFromSubAgentEvent(event: SubAgentEvent): TaskStatus {
-  switch (event.type) {
-    case 'completed':
-      return 'completed';
-    case 'failed':
-      return 'failed';
-    case 'cancelled':
-      return 'cancelled';
-    case 'spawned':
-      return 'pending';
-    case 'started':
-    case 'progress':
-      return 'running';
-  }
 }
 
 function createVSCodeEntityMemoryContributionAutomation(): EntityMemoryContributionAutomationPort {

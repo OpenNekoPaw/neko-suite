@@ -12,7 +12,7 @@ import {
   type TasksUpdatedMessage,
   type TaskUpdatedMessage,
 } from '@neko-agent/types';
-import type { Task, TaskInput, TaskStatus } from '@neko/shared';
+import type { Task, TaskInput, TaskRunScope, TaskStatus } from '@neko/shared';
 import {
   buildCancelTaskActionPlan,
   buildClearCompletedTaskPlan,
@@ -39,21 +39,24 @@ export type TaskRuntimeAction = 'cancel' | 'retry' | 'remove' | 'view-result';
 
 export interface TaskRuntimeTaskManager {
   list(status?: TaskStatus): Promise<Task[]>;
-  get(id: string): Promise<Task | null | undefined>;
-  cancel(id: string): Promise<unknown>;
-  submit(input: TaskInput): Promise<string>;
-  delete(id: string): Promise<unknown>;
+  get(scope: TaskRunScope): Promise<Task | null | undefined>;
+  cancel(scope: TaskRunScope): Promise<unknown>;
+  submit(
+    input: TaskInput,
+    owner: Pick<TaskRunScope, 'conversationId' | 'runId' | 'parentRunId'>,
+  ): Promise<TaskRunScope>;
+  delete(scope: TaskRunScope): Promise<unknown>;
 }
 
 export interface TaskRuntimeMediaGateway {
-  getCandidate(taskId: string): Promise<TaskMediaCandidate | null | undefined>;
-  cancelTask(taskId: string): Promise<AgentMediaTaskView | null | undefined>;
-  deleteTask(taskId: string): Promise<unknown>;
+  getCandidate(scope: TaskRunScope): Promise<TaskMediaCandidate | null | undefined>;
+  cancelTask(scope: TaskRunScope): Promise<AgentMediaTaskView | null | undefined>;
+  deleteTask(scope: TaskRunScope): Promise<unknown>;
 }
 
 export interface TaskRuntimeHostPrivateLeaseGuard {
   getDiagnostic(input: {
-    readonly taskId: string;
+    readonly scope: TaskRunScope;
     readonly control: AgentTaskLeaseControl;
   }): AgentTaskLeaseDiagnostic | undefined | Promise<AgentTaskLeaseDiagnostic | undefined>;
 }
@@ -77,6 +80,7 @@ export interface TaskRuntimeEffects {
 }
 
 export interface TaskRuntimeInput {
+  scope: TaskRunScope;
   taskId: string;
   conversationId: string;
   resultRef?: string;
@@ -131,6 +135,7 @@ export async function runCancelTaskRuntime(
   deps: TaskRuntimeDeps,
   effects: TaskRuntimeEffects,
 ): Promise<TaskRuntimeResult> {
+  assertTaskRuntimeInputScope(input);
   if (!deps.taskManager && !deps.media) {
     return { kind: 'noop', conversationId: input.conversationId, taskId: input.taskId };
   }
@@ -142,8 +147,8 @@ export async function runCancelTaskRuntime(
     };
   }
 
-  const task = await deps.taskManager?.get(input.taskId);
-  const media = await deps.media?.getCandidate(input.taskId);
+  const task = await deps.taskManager?.get(input.scope);
+  const media = await deps.media?.getCandidate(input.scope);
   const plan = buildCancelTaskActionPlan({ ...input, task, media });
 
   if (plan.kind === 'reject') {
@@ -152,7 +157,7 @@ export async function runCancelTaskRuntime(
   }
 
   if (plan.kind === 'cancel-task-manager') {
-    await deps.taskManager?.cancel(input.taskId);
+    await deps.taskManager?.cancel(input.scope);
     await runSendTasksRuntime({ conversationId: input.conversationId }, deps, effects);
     return {
       kind: 'cancelled-task-manager',
@@ -161,7 +166,7 @@ export async function runCancelTaskRuntime(
     };
   }
 
-  const updated = await deps.media?.cancelTask(input.taskId);
+  const updated = await deps.media?.cancelTask(input.scope);
   if (updated) {
     await effects.postMessage(
       buildMediaTaskProgressMessage({
@@ -182,6 +187,7 @@ export async function runRetryTaskRuntime(
   deps: TaskRuntimeDeps,
   effects: TaskRuntimeEffects,
 ): Promise<TaskRuntimeResult> {
+  assertTaskRuntimeInputScope(input);
   if (!deps.taskManager) {
     return { kind: 'noop', conversationId: input.conversationId, taskId: input.taskId };
   }
@@ -193,7 +199,7 @@ export async function runRetryTaskRuntime(
     };
   }
 
-  const task = await deps.taskManager.get(input.taskId);
+  const task = await deps.taskManager.get(input.scope);
   const plan = buildRetryTaskActionPlan({ ...input, task });
   if (plan.kind === 'reject') {
     effects.onRejectedAction?.({ action: 'retry', plan });
@@ -201,7 +207,12 @@ export async function runRetryTaskRuntime(
   }
 
   try {
-    const newTaskId = await deps.taskManager.submit(plan.input);
+    const newScope = await deps.taskManager.submit(plan.input, {
+      conversationId: input.scope.conversationId,
+      runId: input.scope.runId,
+      parentRunId: input.scope.parentRunId,
+    });
+    const newTaskId = newScope.childRunId;
     effects.onTaskRetried?.({
       taskId: input.taskId,
       newTaskId,
@@ -231,8 +242,9 @@ export async function runRemoveTaskRuntime(
   deps: TaskRuntimeDeps,
   effects: TaskRuntimeEffects,
 ): Promise<TaskRuntimeResult> {
-  const task = await deps.taskManager?.get(input.taskId);
-  const media = await deps.media?.getCandidate(input.taskId);
+  assertTaskRuntimeInputScope(input);
+  const task = await deps.taskManager?.get(input.scope);
+  const media = await deps.media?.getCandidate(input.scope);
   const plan = buildRemoveTaskActionPlan({ ...input, task, media });
 
   if (plan.kind === 'reject') {
@@ -241,14 +253,14 @@ export async function runRemoveTaskRuntime(
   }
 
   if (plan.deleteMedia) {
-    await deps.media?.deleteTask(input.taskId);
+    await deps.media?.deleteTask(input.scope);
   }
   if (plan.deleteTaskManager) {
-    await deps.taskManager?.delete(input.taskId);
+    await deps.taskManager?.delete(input.scope);
   }
 
   await effects.postMessage(
-    buildTaskRemovedMessage({ conversationId: input.conversationId, taskId: input.taskId }),
+    buildTaskRemovedMessage({ taskScope: input.scope, taskId: input.taskId }),
   );
   return { kind: 'removed', conversationId: input.conversationId, taskId: input.taskId };
 }
@@ -258,6 +270,7 @@ export async function runViewTaskResultRuntime(
   deps: TaskRuntimeDeps,
   effects: TaskRuntimeEffects,
 ): Promise<TaskRuntimeResult> {
+  assertTaskRuntimeInputScope(input);
   if (await rejectHostPrivateLease(input, 'attach', deps, effects)) {
     return {
       kind: 'host-private-lease',
@@ -266,8 +279,8 @@ export async function runViewTaskResultRuntime(
     };
   }
 
-  const task = await deps.taskManager?.get(input.taskId);
-  const media = await deps.media?.getCandidate(input.taskId);
+  const task = await deps.taskManager?.get(input.scope);
+  const media = await deps.media?.getCandidate(input.scope);
   const plan = buildViewTaskResultActionPlan({ ...input, task, media });
 
   if (plan.kind === 'reject') {
@@ -284,6 +297,18 @@ export async function runViewTaskResultRuntime(
   return { kind: 'opened-result', conversationId: input.conversationId, taskId: input.taskId };
 }
 
+function assertTaskRuntimeInputScope(input: TaskRuntimeInput): void {
+  if (
+    input.scope.childKind !== 'task' ||
+    input.scope.childRunId !== input.taskId ||
+    input.scope.conversationId !== input.conversationId
+  ) {
+    throw new Error(
+      `Task runtime scope mismatch: ${input.scope.conversationId}/${input.scope.childRunId} cannot authorize ${input.conversationId}/${input.taskId}`,
+    );
+  }
+}
+
 async function rejectHostPrivateLease(
   input: TaskRuntimeInput,
   control: AgentTaskLeaseControl,
@@ -291,7 +316,7 @@ async function rejectHostPrivateLease(
   effects: TaskRuntimeEffects,
 ): Promise<boolean> {
   const diagnostic = await deps.hostPrivateLeaseGuard?.getDiagnostic({
-    taskId: input.taskId,
+    scope: input.scope,
     control,
   });
   if (!diagnostic) {
@@ -317,15 +342,17 @@ export async function runClearCompletedTasksRuntime(
   const plan = buildClearCompletedTaskPlan({ conversationId: input.conversationId, tasks });
 
   for (const taskId of plan.taskIds) {
-    await taskManager.delete(taskId);
+    const task = tasks.find((candidate) => candidate.id === taskId);
+    if (!task) {
+      throw new Error(`Clear-completed plan referenced unknown task: ${taskId}`);
+    }
+    await taskManager.delete(task.scope);
     try {
-      await deps.media?.deleteTask(taskId);
+      await deps.media?.deleteTask(task.scope);
     } catch (error) {
       effects.onMediaDeleteFailed?.({ taskId, conversationId: input.conversationId, error });
     }
-    await effects.postMessage(
-      buildTaskRemovedMessage({ conversationId: input.conversationId, taskId }),
-    );
+    await effects.postMessage(buildTaskRemovedMessage({ taskScope: task.scope, taskId }));
   }
 
   await runSendTasksRuntime(input, deps, effects);

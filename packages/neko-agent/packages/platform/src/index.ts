@@ -384,8 +384,7 @@ import { type IUserConfigManager } from './config/user-config';
 import { ConfigManager, type ConfigManagerOptions } from './config/config-manager';
 import { ProviderRegistry } from './provider/provider-registry';
 import { Service } from './service/service';
-import type { IToolRegistry } from '@neko/shared';
-import type { ITaskManager } from '@neko/shared';
+import type { ITaskManager, IToolRegistry, TaskRunScope } from '@neko/shared';
 import { PromptManager } from './service/prompt-manager';
 // Media Generation imports
 import { MediaGenerationService } from './media/media-generation-service';
@@ -413,15 +412,19 @@ export interface PlatformOptions {
    */
   taskManager?: ITaskManager & {
     initialize?(): Promise<void>;
-    resumePendingTasks?(): Promise<string[]>;
+    resumePendingTasks?(): Promise<TaskRunScope[]>;
     dispose?(): void | Promise<void>;
     registerExecutor?(type: string, executor: unknown): void;
-    saveRecoveryInfo?(taskId: string, externalTaskId: string, providerId: string): Promise<void>;
-    deleteRecoveryInfo?(taskId: string): Promise<void>;
+    saveRecoveryInfo?(
+      scope: TaskRunScope,
+      externalTaskId: string,
+      providerId: string,
+    ): Promise<void>;
+    deleteRecoveryInfo?(scope: TaskRunScope): Promise<void>;
     getRecoveryStorage?(): import('@neko/shared').ITaskRecoveryStorage | undefined;
-    updateOutputData?(id: string, outputData: Record<string, unknown>): Promise<boolean>;
+    updateOutputData?(scope: TaskRunScope, outputData: Record<string, unknown>): Promise<boolean>;
     upsertExternalTask?(task: import('@neko/shared').SerializableTask): Promise<void>;
-    delete?(id: string): Promise<boolean>;
+    delete?(scope: TaskRunScope): Promise<boolean>;
   };
   /**
    * Tool registry instance (from @neko/agent).

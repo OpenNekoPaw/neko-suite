@@ -77,12 +77,18 @@ export function createAgentWorkspaceRuntimeFixture(
     files: {
       [paths.userConfigPath]: serializeUnifiedConfigToToml(userConfig),
       [paths.workspaceConfigPath]: serializeUnifiedConfigToToml(workspaceConfig),
-      [path.join(paths.userSkillsDir, 'personal-review', 'SKILL.md')]:
-        createSkillMarkdown('personal-review', 'Personal review Skill.'),
-      [path.join(paths.workspaceSkillsDir, 'project-review', 'SKILL.md')]:
-        createSkillMarkdown('project-review', 'Project review Skill.'),
-      [path.join(paths.userCommandsDir, 'personal-check.md')]: '# Personal check\n\nCheck globally.',
-      [path.join(paths.workspaceCommandsDir, 'project-check.md')]: '# Project check\n\nCheck project.',
+      [path.join(paths.userSkillsDir, 'personal-review', 'SKILL.md')]: createSkillMarkdown(
+        'personal-review',
+        'Personal review Skill.',
+      ),
+      [path.join(paths.workspaceSkillsDir, 'project-review', 'SKILL.md')]: createSkillMarkdown(
+        'project-review',
+        'Project review Skill.',
+      ),
+      [path.join(paths.userCommandsDir, 'personal-check.md')]:
+        '# Personal check\n\nCheck globally.',
+      [path.join(paths.workspaceCommandsDir, 'project-check.md')]:
+        '# Project check\n\nCheck project.',
       [paths.taskRecordsPath]: JSON.stringify({ tasks: taskRecords }, null, 2),
       [paths.hostPrivateLeasePath]: JSON.stringify({ leases: [] }, null, 2),
       [paths.resourceCacheManifestPath]: JSON.stringify({ version: 1, entries: [] }, null, 2),
@@ -187,8 +193,9 @@ export function createAgentWorkspaceRuntimeTaskRecord(
   overrides: Partial<SerializableTask> = {},
 ): SerializableTask {
   const now = 1_800_000_000_000;
+  const id = overrides.id ?? 'workspace-task-1';
   return {
-    id: 'workspace-task-1',
+    id,
     type: 'workflow',
     status: 'running',
     progress: 25,
@@ -207,6 +214,13 @@ export function createAgentWorkspaceRuntimeTaskRecord(
       },
     },
     ...overrides,
+    scope: overrides.scope ?? {
+      conversationId: 'workspace-conversation-1',
+      runId: 'workspace-run-1',
+      parentRunId: 'workspace-run-1',
+      childRunId: id,
+      childKind: 'task',
+    },
   } satisfies SerializableTask;
 }
 

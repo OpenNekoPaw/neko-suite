@@ -3,7 +3,8 @@
  */
 
 import type { ToolDefinition } from './platform';
-import type { AgentTraceContext } from './agent-trace';
+import { UNKNOWN_AGENT_TRACE_ID, type AgentTraceContext } from './agent-trace';
+import type { ConversationRunScope } from './agent-runtime-scope';
 import type { CreativeDomainMetadata } from './domain-routing';
 import type {
   ToolQueryBeforeMutateGuidance,
@@ -235,6 +236,77 @@ export interface ToolExecuteOptions {
   metadata?: Record<string, unknown>;
   /** Runtime trace context for structured debug logging */
   trace?: AgentTraceContext;
+}
+
+/**
+ * Require the immutable conversation/run owner attached by the Agent executor.
+ * Runtime-owned work must never infer ownership from active UI state or local child ids.
+ */
+export function requireToolExecutionRunScope(
+  options: ToolExecuteOptions | undefined,
+): ConversationRunScope {
+  const metadataConversationId = readToolExecutionOwnerId(
+    options?.metadata?.conversationId,
+    'metadata.conversationId',
+  );
+  const traceConversationId = ignoreUnknownTraceOwner(
+    readToolExecutionOwnerId(options?.trace?.conversationId, 'trace.conversationId'),
+  );
+  const conversationId = requireMatchingToolExecutionOwnerId(
+    'conversationId',
+    metadataConversationId,
+    traceConversationId,
+  );
+  if (conversationId === UNKNOWN_AGENT_TRACE_ID) {
+    throw new Error('Tool execution requires a concrete conversationId owner.');
+  }
+
+  const runId = requireMatchingToolExecutionOwnerId(
+    'runId',
+    readToolExecutionOwnerId(options?.metadata?.runId, 'metadata.runId'),
+    readToolExecutionOwnerId(options?.trace?.runId, 'trace.runId'),
+  );
+  return { conversationId, runId };
+}
+
+/** Attach canonical Agent execution ownership to an internal async-work request. */
+export function withToolExecutionRunMetadata(
+  options: ToolExecuteOptions | undefined,
+  metadata: Record<string, unknown> | undefined = undefined,
+): Record<string, unknown> {
+  return {
+    ...(metadata ?? {}),
+    ...requireToolExecutionRunScope(options),
+  };
+}
+
+function ignoreUnknownTraceOwner(value: string | undefined): string | undefined {
+  return value === UNKNOWN_AGENT_TRACE_ID ? undefined : value;
+}
+
+function readToolExecutionOwnerId(value: unknown, source: string): string | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== 'string' || value.trim().length === 0) {
+    throw new Error(`Tool execution requires non-empty ${source}.`);
+  }
+  return value.trim();
+}
+
+function requireMatchingToolExecutionOwnerId(
+  field: 'conversationId' | 'runId',
+  metadataValue: string | undefined,
+  traceValue: string | undefined,
+): string {
+  if (metadataValue && traceValue && metadataValue !== traceValue) {
+    throw new Error(
+      `Tool execution ${field} owner mismatch: metadata=${metadataValue}, trace=${traceValue}.`,
+    );
+  }
+  const value = metadataValue ?? traceValue;
+  if (!value) {
+    throw new Error(`Tool execution requires ${field} ownership.`);
+  }
+  return value;
 }
 
 /**

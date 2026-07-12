@@ -1,12 +1,22 @@
 import { describe, expect, it, vi } from 'vitest';
 import { MemoryTaskRecoveryStorage, MemoryTaskStorage, TaskManager } from '@neko/agent';
-import type { TaskLifecycleMetadata } from '@neko/shared';
+import type { TaskLifecycleMetadata, TaskRunScope } from '@neko/shared';
 import type { ConfigManager } from '../../config/config-manager';
 import type { ProviderRegistry } from '../../provider/provider-registry';
 import type { Provider, Model } from '../../types/provider';
 import type { MediaAdapter, MediaAdapterResult } from '../types';
 import { getMediaAdapterRegistry } from '../adapters/media-adapter-registry';
 import { createMediaTaskInput, MediaTaskExecutor } from '../media-task-executor';
+
+const OWNER = {
+  conversationId: 'conv-1',
+  runId: 'run-1',
+  parentRunId: 'run-1',
+} as const;
+
+function taskScope(childRunId: string): TaskRunScope {
+  return { ...OWNER, childRunId, childKind: 'task' };
+}
 
 describe('MediaTaskExecutor lifecycle reporting', () => {
   it('projects Agent task ownership and result delivery policy from media request metadata', () => {
@@ -62,19 +72,20 @@ describe('MediaTaskExecutor lifecycle reporting', () => {
       const lifecycleReports: string[] = [];
       const originalUpdateLifecycle = harness.manager.updateLifecycle.bind(harness.manager);
       vi.spyOn(harness.manager, 'updateLifecycle').mockImplementation(
-        async (taskId: string, lifecycle: Partial<TaskLifecycleMetadata>) => {
+        async (scope: TaskRunScope, lifecycle: Partial<TaskLifecycleMetadata>) => {
           if (lifecycle.costPhase === 'external-wait') {
-            expect(saveRecoveryInfo).toHaveBeenCalledWith(taskId, 'external-1', 'provider-1');
+            expect(saveRecoveryInfo).toHaveBeenCalledWith(scope, 'external-1', 'provider-1');
           }
           if (lifecycle.costPhase) {
             lifecycleReports.push(lifecycle.costPhase);
           }
-          return originalUpdateLifecycle(taskId, lifecycle);
+          return originalUpdateLifecycle(scope, lifecycle);
         },
       );
 
       const taskId = await harness.manager.submit(
         createMediaTaskInput('text-to-image', 'provider-1', 'model-1', { prompt: 'cat' }),
+        OWNER,
       );
       const waiter = harness.manager.waitForCompletion(taskId, 30000);
       await vi.advanceTimersByTimeAsync(2000);
@@ -102,6 +113,7 @@ describe('MediaTaskExecutor lifecycle reporting', () => {
 
     const taskId = await harness.manager.submit(
       createMediaTaskInput('text-to-image', 'provider-1', 'model-1', { prompt: 'cat' }),
+      OWNER,
     );
     const task = await harness.manager.waitForCompletion(taskId, 30000);
 
@@ -126,6 +138,7 @@ describe('MediaTaskExecutor lifecycle reporting', () => {
 
     const taskId = await harness.manager.submit(
       createMediaTaskInput('text-to-image', 'provider-1', 'model-1', { prompt: 'cat' }),
+      OWNER,
     );
     const task = await harness.manager.waitForCompletion(taskId, 30000);
 
@@ -147,6 +160,7 @@ describe('MediaTaskExecutor lifecycle reporting', () => {
 
       const taskId = await harness.manager.submit(
         createMediaTaskInput('text-to-image', 'provider-1', 'model-1', { prompt: 'cat' }),
+        OWNER,
       );
       await waitForTaskRunning(harness.manager, taskId);
 
@@ -176,6 +190,7 @@ describe('MediaTaskExecutor lifecycle reporting', () => {
 
       const taskId = await harness.manager.submit(
         createMediaTaskInput('text-to-image', 'provider-1', 'model-1', { prompt: 'cat' }),
+        OWNER,
       );
       await waitForTaskRunning(harness.manager, taskId);
       await harness.manager.cancel(taskId);
@@ -208,6 +223,7 @@ describe('MediaTaskExecutor lifecycle reporting', () => {
       const harness = createHarness({ adapter, storage, recoveryStorage });
 
       await storage.save({
+        scope: taskScope('task-resume'),
         id: 'task-resume',
         type: 'video_generation',
         status: 'running',
@@ -223,6 +239,7 @@ describe('MediaTaskExecutor lifecycle reporting', () => {
         },
       });
       await recoveryStorage.save({
+        scope: taskScope('task-resume'),
         taskId: 'task-resume',
         externalTaskId: 'external-resume',
         providerId: 'provider-1',
@@ -237,9 +254,9 @@ describe('MediaTaskExecutor lifecycle reporting', () => {
       await expect(harness.manager.resumePendingTasks()).resolves.toEqual([]);
 
       expect(adapter.generateVideo).not.toHaveBeenCalled();
-      const task = await harness.manager.get('task-resume');
+      const task = await harness.manager.get(taskScope('task-resume'));
       expect(task?.status).toBe('completed');
-      await expect(recoveryStorage.load('task-resume')).resolves.toBeUndefined();
+      await expect(recoveryStorage.load(taskScope('task-resume'))).resolves.toBeUndefined();
     } finally {
       vi.useRealTimers();
     }
@@ -329,9 +346,9 @@ function createAdapter(options: {
   };
 }
 
-async function waitForTaskRunning(manager: TaskManager, taskId: string): Promise<void> {
+async function waitForTaskRunning(manager: TaskManager, scope: TaskRunScope): Promise<void> {
   for (let attempt = 0; attempt < 20; attempt++) {
-    const task = await manager.get(taskId);
+    const task = await manager.get(scope);
     if (task?.status === 'running') {
       return;
     }

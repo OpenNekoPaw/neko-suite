@@ -3,7 +3,7 @@ import type {
   AgentTaskResultFollowUpRequest,
   AgentTaskResultSource,
   Task,
-  TaskRunLease,
+  TaskRunScope,
 } from '@neko/shared';
 import {
   createAgentTaskResultObservationRuntime,
@@ -12,6 +12,7 @@ import {
   type AgentTaskResultObservationJournalPort,
   type AgentTaskResultObservationRuntime,
   type AgentTaskResultObservationRuntimeTaskManagerTerminalInput,
+  type HandleAgentChildRunResultTerminalInput,
   type IRuntimeTaskManager,
 } from '@neko/agent';
 import type { IAgentManager } from '../ai/agentManager';
@@ -36,7 +37,7 @@ export interface TaskResultObservationCoordinatorOptions {
 }
 
 export interface TaskResultObservationTerminalOptions {
-  readonly lease?: TaskRunLease;
+  readonly scope?: TaskRunScope;
   readonly source?: AgentTaskResultSource;
   readonly parentMessageId?: string;
   readonly parentToolCallId?: string;
@@ -73,6 +74,10 @@ export class TaskResultObservationCoordinator {
     return this.runtime.reconcileTerminalTasks();
   }
 
+  handleTerminalChildRun(input: HandleAgentChildRunResultTerminalInput): Promise<void> {
+    return this.runtime.handleTerminalChildRun(input);
+  }
+
   handleTerminalTask(
     task: Task,
     options: TaskResultObservationTerminalOptions = {},
@@ -89,7 +94,6 @@ function shouldObserveTaskManagerTerminalTask(
 
 function isTaskManagerMediaGenerationTask(task: Task): boolean {
   return (
-    MEDIA_GENERATION_TASK_TYPES.has(task.type) &&
-    task.lifecycle?.recoverPolicy === 'resume-polling'
+    MEDIA_GENERATION_TASK_TYPES.has(task.type) && task.lifecycle?.recoverPolicy === 'resume-polling'
   );
 }

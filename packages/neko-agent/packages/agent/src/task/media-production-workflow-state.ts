@@ -4,14 +4,15 @@ import {
   type MediaProductionWorkflowRunState,
   type Task,
   type TaskInput,
+  type TaskRunScope,
 } from '@neko/shared';
 
 export const MEDIA_PRODUCTION_WORKFLOW_PAYLOAD_KIND = 'media-production-workflow' as const;
 export const MEDIA_PRODUCTION_WORKFLOW_STATE_OUTPUT_KEY = 'mediaProductionWorkflowState' as const;
 
 export interface MediaProductionWorkflowTaskStatePort {
-  get(id: string): Promise<Task | undefined>;
-  updateOutputData(id: string, outputData: Record<string, unknown>): Promise<boolean>;
+  get(scope: TaskRunScope): Promise<Task | undefined>;
+  updateOutputData(scope: TaskRunScope, outputData: Record<string, unknown>): Promise<boolean>;
 }
 
 export function createMediaProductionWorkflowTaskInput(input: {
@@ -68,28 +69,44 @@ export function readMediaProductionWorkflowTaskState(
 export class TaskBackedMediaProductionWorkflowStateStore {
   constructor(private readonly tasks: MediaProductionWorkflowTaskStatePort) {}
 
-  async load(taskId: string): Promise<MediaProductionWorkflowRunState> {
-    const task = await this.tasks.get(taskId);
-    if (!task) throw new Error(`Media production workflow task ${taskId} was not found.`);
+  async load(scope: TaskRunScope): Promise<MediaProductionWorkflowRunState> {
+    const task = await this.tasks.get(scope);
+    if (!task) {
+      throw new Error(
+        `Media production workflow task ${scope.childRunId} was not found in ${scope.conversationId}/${scope.runId}.`,
+      );
+    }
     const state = readMediaProductionWorkflowTaskState(task);
-    if (!state) throw new Error(`Task ${taskId} is not a media production workflow task.`);
+    if (!state) {
+      throw new Error(`Task ${scope.childRunId} is not a media production workflow task.`);
+    }
     return state;
   }
 
-  async save(taskId: string, state: MediaProductionWorkflowRunState): Promise<void> {
+  async save(scope: TaskRunScope, state: MediaProductionWorkflowRunState): Promise<void> {
     assertValidWorkflowState(state);
-    const task = await this.tasks.get(taskId);
-    if (!task) throw new Error(`Media production workflow task ${taskId} was not found.`);
-    const current = readMediaProductionWorkflowTaskState(task);
-    if (!current) throw new Error(`Task ${taskId} is not a media production workflow task.`);
-    if (current.workflowRunId !== state.workflowRunId) {
-      throw new Error(`Workflow task ${taskId} cannot be rebound to another workflow run.`);
+    const task = await this.tasks.get(scope);
+    if (!task) {
+      throw new Error(
+        `Media production workflow task ${scope.childRunId} was not found in ${scope.conversationId}/${scope.runId}.`,
+      );
     }
-    const updated = await this.tasks.updateOutputData(taskId, {
+    const current = readMediaProductionWorkflowTaskState(task);
+    if (!current) {
+      throw new Error(`Task ${scope.childRunId} is not a media production workflow task.`);
+    }
+    if (current.workflowRunId !== state.workflowRunId) {
+      throw new Error(
+        `Workflow task ${scope.childRunId} cannot be rebound to another workflow run.`,
+      );
+    }
+    const updated = await this.tasks.updateOutputData(scope, {
       [MEDIA_PRODUCTION_WORKFLOW_STATE_OUTPUT_KEY]: state,
     });
     if (!updated) {
-      throw new Error(`Media production workflow task ${taskId} state was not persisted.`);
+      throw new Error(
+        `Media production workflow task ${scope.childRunId} state was not persisted.`,
+      );
     }
   }
 }

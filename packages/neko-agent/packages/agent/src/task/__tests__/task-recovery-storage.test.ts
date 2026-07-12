@@ -9,21 +9,35 @@ import {
   createFileRecoveryStorage,
   createStateTaskRecoveryStorage,
 } from '../task-recovery-storage';
-import type { TaskRecoveryInfo } from '@neko/shared';
+import type { TaskRecoveryInfo, TaskRunScope } from '@neko/shared';
+
+function taskScope(childRunId: string): TaskRunScope {
+  return {
+    conversationId: 'conv-recovery',
+    runId: 'run-recovery',
+    parentRunId: 'run-recovery',
+    childRunId,
+    childKind: 'task',
+  };
+}
 
 describe('MemoryTaskRecoveryStorage', () => {
   let storage: MemoryTaskRecoveryStorage;
 
-  const createInfo = (overrides: Partial<TaskRecoveryInfo> = {}): TaskRecoveryInfo => ({
-    taskId: `task_${Date.now()}_1`,
-    externalTaskId: 'ext_123',
-    providerId: 'runway',
-    taskType: 'video_generation',
-    payload: { prompt: 'test' },
-    createdAt: Date.now(),
-    updatedAt: Date.now(),
-    ...overrides,
-  });
+  const createInfo = (overrides: Partial<TaskRecoveryInfo> = {}): TaskRecoveryInfo => {
+    const taskId = overrides.taskId ?? `task_${Date.now()}_1`;
+    return {
+      taskId,
+      externalTaskId: 'ext_123',
+      providerId: 'runway',
+      taskType: 'video_generation',
+      payload: { prompt: 'test' },
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      ...overrides,
+      scope: overrides.scope ?? taskScope(taskId),
+    };
+  };
 
   beforeEach(() => {
     storage = new MemoryTaskRecoveryStorage();
@@ -34,12 +48,12 @@ describe('MemoryTaskRecoveryStorage', () => {
       const info = createInfo({ taskId: 'task_1' });
       await storage.save(info);
 
-      const loaded = await storage.load('task_1');
+      const loaded = await storage.load(taskScope('task_1'));
       expect(loaded).toEqual(info);
     });
 
     it('should return undefined for non-existent info', async () => {
-      const loaded = await storage.load('non-existent');
+      const loaded = await storage.load(taskScope('non-existent'));
       expect(loaded).toBeUndefined();
     });
 
@@ -50,7 +64,7 @@ describe('MemoryTaskRecoveryStorage', () => {
       const updated = { ...info, updatedAt: Date.now() + 1000 };
       await storage.save(updated);
 
-      const loaded = await storage.load('task_1');
+      const loaded = await storage.load(taskScope('task_1'));
       expect(loaded?.updatedAt).toBe(updated.updatedAt);
     });
 
@@ -58,10 +72,10 @@ describe('MemoryTaskRecoveryStorage', () => {
       const info = createInfo({ taskId: 'task_1' });
       await storage.save(info);
 
-      const loaded = await storage.load('task_1');
+      const loaded = await storage.load(taskScope('task_1'));
       loaded!.externalTaskId = 'modified';
 
-      const reloaded = await storage.load('task_1');
+      const reloaded = await storage.load(taskScope('task_1'));
       expect(reloaded?.externalTaskId).toBe('ext_123');
     });
   });
@@ -95,14 +109,14 @@ describe('MemoryTaskRecoveryStorage', () => {
   describe('delete', () => {
     it('should delete recovery info', async () => {
       await storage.save(createInfo({ taskId: 'task_1' }));
-      await storage.delete('task_1');
+      await storage.delete(taskScope('task_1'));
 
-      const loaded = await storage.load('task_1');
+      const loaded = await storage.load(taskScope('task_1'));
       expect(loaded).toBeUndefined();
     });
 
     it('should not throw when deleting non-existent info', async () => {
-      await expect(storage.delete('non-existent')).resolves.toBeUndefined();
+      await expect(storage.delete(taskScope('non-existent'))).resolves.toBeUndefined();
     });
   });
 
@@ -136,16 +150,20 @@ describe('FileTaskRecoveryStorage', () => {
     }),
   };
 
-  const createInfo = (overrides: Partial<TaskRecoveryInfo> = {}): TaskRecoveryInfo => ({
-    taskId: `task_${Date.now()}_1`,
-    externalTaskId: 'ext_123',
-    providerId: 'runway',
-    taskType: 'video_generation',
-    payload: { prompt: 'test' },
-    createdAt: Date.now(),
-    updatedAt: Date.now(),
-    ...overrides,
-  });
+  const createInfo = (overrides: Partial<TaskRecoveryInfo> = {}): TaskRecoveryInfo => {
+    const taskId = overrides.taskId ?? `task_${Date.now()}_1`;
+    return {
+      taskId,
+      externalTaskId: 'ext_123',
+      providerId: 'runway',
+      taskType: 'video_generation',
+      payload: { prompt: 'test' },
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      ...overrides,
+      scope: overrides.scope ?? taskScope(taskId),
+    };
+  };
 
   beforeEach(() => {
     vi.useFakeTimers();
@@ -165,7 +183,7 @@ describe('FileTaskRecoveryStorage', () => {
       fileExists = true;
       fileContent = JSON.stringify([createInfo({ taskId: 'existing' })]);
 
-      const loaded = await storage.load('existing');
+      const loaded = await storage.load(taskScope('existing'));
       expect(loaded?.taskId).toBe('existing');
       expect(mockFs.readFile).toHaveBeenCalledWith('/test/recovery.json');
     });
@@ -210,7 +228,7 @@ describe('FileTaskRecoveryStorage', () => {
       const info = createInfo({ taskId: 'task_1' });
       await storage.save(info);
 
-      const loaded = await storage.load('task_1');
+      const loaded = await storage.load(taskScope('task_1'));
       expect(loaded).toEqual(info);
     });
 
@@ -321,10 +339,10 @@ describe('FileTaskRecoveryStorage', () => {
       await vi.advanceTimersByTimeAsync(1000);
       mockFs.writeFile.mockClear();
 
-      await storage.delete('task_1');
+      await storage.delete(taskScope('task_1'));
       await vi.advanceTimersByTimeAsync(1000);
 
-      const loaded = await storage.load('task_1');
+      const loaded = await storage.load(taskScope('task_1'));
       expect(loaded).toBeUndefined();
       expect(mockFs.writeFile).toHaveBeenCalled();
     });
@@ -359,16 +377,20 @@ describe('FileTaskRecoveryStorage', () => {
 });
 
 describe('StateTaskRecoveryStorage', () => {
-  const createInfo = (overrides: Partial<TaskRecoveryInfo> = {}): TaskRecoveryInfo => ({
-    taskId: 'task_1',
-    externalTaskId: 'ext_123',
-    providerId: 'runway',
-    taskType: 'video_generation',
-    payload: { prompt: 'test' },
-    createdAt: 1,
-    updatedAt: 2,
-    ...overrides,
-  });
+  const createInfo = (overrides: Partial<TaskRecoveryInfo> = {}): TaskRecoveryInfo => {
+    const taskId = overrides.taskId ?? 'task_1';
+    return {
+      taskId,
+      externalTaskId: 'ext_123',
+      providerId: 'runway',
+      taskType: 'video_generation',
+      payload: { prompt: 'test' },
+      createdAt: 1,
+      updatedAt: 2,
+      ...overrides,
+      scope: overrides.scope ?? taskScope(taskId),
+    };
+  };
 
   it('persists recovery info through a state adapter', async () => {
     const state = new Map<string, TaskRecoveryInfo[]>();
@@ -383,7 +405,7 @@ describe('StateTaskRecoveryStorage', () => {
     await storage.save(createInfo({ taskId: 'task_1' }));
     await storage.save(createInfo({ taskId: 'task_2', externalTaskId: 'ext_456' }));
 
-    expect(await storage.load('task_1')).toEqual(
+    expect(await storage.load(taskScope('task_1'))).toEqual(
       expect.objectContaining({ taskId: 'task_1', externalTaskId: 'ext_123' }),
     );
     expect(await storage.loadAll()).toHaveLength(2);
@@ -396,7 +418,7 @@ describe('StateTaskRecoveryStorage', () => {
       },
     });
 
-    expect(await restored.load('task_2')).toEqual(
+    expect(await restored.load(taskScope('task_2'))).toEqual(
       expect.objectContaining({ taskId: 'task_2', externalTaskId: 'ext_456' }),
     );
   });
