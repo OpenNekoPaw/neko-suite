@@ -125,7 +125,7 @@ describe('AgentDashboardWorkItemSource', () => {
     source.dispose();
   });
 
-  it('mirrors task work items from active turn timeline events', async () => {
+  it('mirrors task work items from authoritative conversation projection updates', async () => {
     const source = new AgentDashboardWorkItemSource();
     const workItem = createTaskWorkItem({
       id: 'tool-timeline-1',
@@ -136,14 +136,10 @@ describe('AgentDashboardWorkItemSource', () => {
     });
 
     source.acceptWebviewMessage({
-      type: 'agentTurnTimeline',
-      schemaVersion: 2,
-      connectionEpoch: 'epoch-1',
+      type: 'agentTurnTimelineUpdate',
       conversationId: 'conv-1',
       turnId: 'turn-1',
       messageId: 'msg-1',
-      batchKind: 'delta',
-      deliveryRevision: 1,
       operations: [
         {
           operation: 'upsert',

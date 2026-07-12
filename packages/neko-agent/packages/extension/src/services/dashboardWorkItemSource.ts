@@ -8,7 +8,7 @@ import {
 } from '@neko/shared/types/dashboard-task';
 import { formatTaskRunScope, type TaskRunScope } from '@neko/shared';
 import {
-  type AgentTurnTimelineMessage,
+  type ConversationProjectionUpdate,
   getAgentWorkItemRuntimeKey,
   isTaskWorkItem,
   type AgentWorkItem,
@@ -29,7 +29,7 @@ const SOURCE_ID = 'neko-agent';
 const SOURCE_NAME = 'Neko Agent';
 
 type MirroredWorkItemMessage =
-  | AgentTurnTimelineMessage
+  | ConversationProjectionUpdate
   | TasksUpdatedMessage
   | TaskCreatedMessage
   | TaskUpdatedMessage
@@ -81,7 +81,7 @@ export class AgentDashboardWorkItemSource implements DashboardTaskSource, vscode
     }
 
     switch (message.type) {
-      case 'agentTurnTimeline':
+      case 'agentTurnTimelineUpdate':
         this.upsertTimelineWorkItems(message);
         return;
       case 'tasksUpdated':
@@ -193,7 +193,7 @@ export class AgentDashboardWorkItemSource implements DashboardTaskSource, vscode
     this.emitUpsert(merged, existing);
   }
 
-  private upsertTimelineWorkItems(message: AgentTurnTimelineMessage): void {
+  private upsertTimelineWorkItems(message: ConversationProjectionUpdate): void {
     for (const operation of message.operations) {
       if (!('item' in operation)) {
         continue;
@@ -265,7 +265,7 @@ function isMirroredWorkItemMessage(message: unknown): message is MirroredWorkIte
 
   return (
     message.type === 'tasksUpdated' ||
-    message.type === 'agentTurnTimeline' ||
+    message.type === 'agentTurnTimelineUpdate' ||
     message.type === 'taskCreated' ||
     message.type === 'taskUpdated' ||
     message.type === 'taskRemoved' ||
