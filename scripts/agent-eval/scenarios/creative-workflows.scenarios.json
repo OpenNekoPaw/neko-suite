@@ -76,6 +76,25 @@
       }
     },
     {
+      "id": "comic-description-canonical-storyboard-skill",
+      "kind": "single-prompt",
+      "surface": "agent",
+      "prompt": "根据以下漫画页描述生成一场两镜头、可直接进入图片与视频制作的分镜表，不要先询问：第1格，夜雨中的黑发青年推开废弃车站铁门并环顾空站台；第2格，他发现远处蓝色信号灯正在闪烁。",
+      "expectations": [
+        "Agent discovers and activates only the canonical storyboard Skill.",
+        "Agent never attempts to activate the retired comic-to-storyboard identity.",
+        "The generated review table preserves scene/shot structure and separate imagePrompt/videoPrompt intent."
+      ],
+      "assertions": [
+        { "kind": "runtime-errors-empty" },
+        { "kind": "final-answer-non-empty" },
+        { "kind": "skill-active", "name": "storyboard" },
+        { "kind": "skill-activation-attempts-only", "names": ["storyboard"] },
+        { "kind": "final-answer-contains", "text": ["imagePrompt", "videoPrompt"] },
+        { "kind": "final-answer-not-contains", "text": ["comic-to-storyboard"] }
+      ]
+    },
+    {
       "id": "blame-epub-storyboard-to-canvas",
       "kind": "single-prompt",
       "surface": "agent",
@@ -113,6 +132,28 @@
           "输出是否基于漫画画面而不是泛泛创作"
         ]
       }
+    },
+    {
+      "id": "blame-epub-canonical-storyboard-skill",
+      "kind": "single-prompt",
+      "surface": "agent",
+      "prompt": "@${A}/epub/animation/Blame/[Kmoe][BLAME！(新裝版)]卷01.epub 分析前10页，生成分镜表",
+      "expectations": [
+        "Agent reads and visually analyzes the referenced EPUB pages before authoring.",
+        "Agent discovers and activates only the canonical storyboard Skill after source analysis.",
+        "Agent never attempts to activate the retired comic-to-storyboard identity.",
+        "The generated review table preserves scene/shot structure and separate imagePrompt/videoPrompt intent."
+      ],
+      "assertions": [
+        { "kind": "runtime-errors-empty" },
+        { "kind": "final-answer-non-empty" },
+        { "kind": "content-access-used", "pathContains": "BLAME" },
+        { "kind": "image-analysis-evidence", "minPages": 10 },
+        { "kind": "skill-active", "name": "storyboard" },
+        { "kind": "skill-activation-attempts-only", "names": ["storyboard"] },
+        { "kind": "final-answer-contains", "text": ["scene", "shot", "imagePrompt", "videoPrompt"] },
+        { "kind": "final-answer-not-contains", "text": ["comic-to-storyboard", "制作提示词"] }
+      ]
     },
     {
       "id": "lamp-god-epub-animation-plan",

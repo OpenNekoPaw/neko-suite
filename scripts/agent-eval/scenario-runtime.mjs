@@ -17,6 +17,7 @@ export const SUPPORTED_ASSERTION_KINDS = new Set([
   'canvas-handoff-attempted',
   'skill-triggered',
   'skill-active',
+  'skill-activation-attempts-only',
   'tool-call-succeeded',
   'tool-call-failed',
   'timeline-order',
@@ -161,6 +162,8 @@ function evaluateAssertion(assertion, facts) {
     case 'skill-triggered':
     case 'skill-active':
       return assertSkillActivation(assertion, facts);
+    case 'skill-activation-attempts-only':
+      return assertSkillActivationAttemptsOnly(assertion, facts);
     case 'tool-call-succeeded':
       return assertToolCall(assertion, facts, 'success');
     case 'tool-call-failed':
@@ -438,6 +441,26 @@ function assertSkillActivation(assertion, facts) {
   return { kind: assertion.kind, ok: true, name: assertion.name, activation };
 }
 
+function assertSkillActivationAttemptsOnly(assertion, facts) {
+  const attempts = readToolCalls(facts).filter((toolCall) => toolCall?.name === 'ActivateSkill');
+  const observedNames = attempts.map((toolCall) => toolCall?.arguments?.skillName);
+  const invalidNames = observedNames.filter(
+    (name) => typeof name !== 'string' || !assertion.names.includes(name),
+  );
+  assertCase(attempts.length > 0, 'expected at least one ActivateSkill tool call');
+  assertCase(
+    invalidNames.length === 0,
+    `observed forbidden Skill activation attempt(s): ${invalidNames.map(String).join(', ')}`,
+  );
+  return {
+    kind: assertion.kind,
+    ok: true,
+    allowedNames: assertion.names,
+    observedNames,
+    toolCallIds: attempts.map((toolCall) => toolCall.id),
+  };
+}
+
 function assertToolCall(assertion, facts, expectedStatus) {
   const match = readToolCalls(facts).find((toolCall) => {
     if (toolCall?.name !== assertion.name || toolCall.status !== expectedStatus) return false;
@@ -615,6 +638,9 @@ function validateAssertion(assertion, scenarioId, index) {
     case 'skill-triggered':
     case 'skill-active':
       assertNonEmptyString(assertion.name, `${assertion.kind}.name`);
+      break;
+    case 'skill-activation-attempts-only':
+      assertStringArray(assertion.names, `${assertion.kind}.names`);
       break;
     case 'tool-call-succeeded':
     case 'tool-call-failed':

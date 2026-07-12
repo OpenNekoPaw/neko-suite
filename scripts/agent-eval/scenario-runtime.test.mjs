@@ -285,6 +285,57 @@ describe('scenario assertion evaluation', () => {
     ]);
   });
 
+  it('rejects retired Skill activation attempts even when a canonical activation follows', () => {
+    const skillFacts = {
+      turns: [
+        {
+          role: 'assistant',
+          toolCalls: [
+            {
+              id: 'call-retired',
+              name: 'ActivateSkill',
+              status: 'error',
+              arguments: { skillName: 'comic-to-storyboard' },
+            },
+            {
+              id: 'call-canonical',
+              name: 'ActivateSkill',
+              status: 'success',
+              arguments: { skillName: 'storyboard' },
+            },
+          ],
+        },
+      ],
+    };
+
+    expect(() =>
+      evaluateScenarioAssertions(
+        [{ kind: 'skill-activation-attempts-only', names: ['storyboard'] }],
+        skillFacts,
+      ),
+    ).toThrow('observed forbidden Skill activation attempt(s): comic-to-storyboard');
+
+    expect(
+      evaluateScenarioAssertions(
+        [{ kind: 'skill-activation-attempts-only', names: ['storyboard'] }],
+        {
+          turns: [
+            {
+              role: 'assistant',
+              toolCalls: [skillFacts.turns[0].toolCalls[1]],
+            },
+          ],
+        },
+      ),
+    ).toEqual([
+      expect.objectContaining({
+        kind: 'skill-activation-attempts-only',
+        ok: true,
+        observedNames: ['storyboard'],
+      }),
+    ]);
+  });
+
   it('fails when tool status or structured evidence does not match', () => {
     expect(() =>
       evaluateScenarioAssertions(
