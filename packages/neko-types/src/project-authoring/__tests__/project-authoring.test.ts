@@ -28,11 +28,56 @@ describe('project authoring contracts', () => {
         reveal: false,
       },
       diagnostics: [],
+      projectRef: {
+        domain: 'cut',
+        documentUri: 'file:///workspace/story.nkv',
+        projectRevision: 'nkv:digest-1',
+        contentDigest: 'digest-1',
+      },
       data: { clipIds: ['clip-1'] },
     });
 
     expect(result.version).toBe(NEKO_PROJECT_AUTHORING_CONTRACT_VERSION);
     expect(validateNekoProjectAuthoringResult(result)).toEqual({ ok: true, diagnostics: [] });
+  });
+
+  it('rejects malformed or mismatched returned project revisions', () => {
+    const malformed = createNekoProjectAuthoringResult({
+      ok: true,
+      documentUri: 'file:///workspace/story.nkv',
+      diagnostics: [],
+      projectRef: {
+        domain: 'cut',
+        documentUri: 'file:///workspace/story.nkv',
+        projectRevision: '   ',
+      },
+    });
+    expect(validateNekoProjectAuthoringResult(malformed)).toEqual({
+      ok: false,
+      diagnostics: [
+        expect.objectContaining({ code: 'invalid-authoring-result', path: ['projectRef'] }),
+      ],
+    });
+
+    const mismatched = createNekoProjectAuthoringResult({
+      ok: true,
+      documentUri: 'file:///workspace/story.nkv',
+      diagnostics: [],
+      projectRef: {
+        domain: 'cut',
+        documentUri: 'file:///workspace/other.nkv',
+        projectRevision: 'nkv:digest-2',
+      },
+    });
+    expect(validateNekoProjectAuthoringResult(mismatched)).toEqual({
+      ok: false,
+      diagnostics: [
+        expect.objectContaining({
+          code: 'invalid-authoring-result',
+          path: ['projectRef', 'documentUri'],
+        }),
+      ],
+    });
   });
 
   it('rejects successful results that do not name the written document', () => {
@@ -50,7 +95,10 @@ describe('project authoring contracts', () => {
 
   it('validates explicit target semantics and runtime handle rejection', () => {
     expect(validateNekoProjectAuthoringTarget({ kind: 'file' }).diagnostics).toEqual([
-      expect.objectContaining({ code: 'invalid-authoring-target', path: ['target', 'documentUri'] }),
+      expect.objectContaining({
+        code: 'invalid-authoring-target',
+        path: ['target', 'documentUri'],
+      }),
     ]);
     expect(
       validateNekoProjectAuthoringTarget({

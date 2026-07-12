@@ -1,4 +1,5 @@
 import type { CanvasData, CanvasConnection, CanvasNode } from './canvas';
+import type { QualityProjectRef } from './media-quality';
 import type {
   CanvasAgentApplyContentResult,
   CanvasAgentContentPayload,
@@ -14,10 +15,7 @@ import type {
   CanvasAuthoringDiagnostic,
   CanvasAuthoringResultStatus,
 } from './canvas-authoring-contracts';
-import type {
-  CanvasStoryboardPayload,
-  CreatedCanvasStoryboard,
-} from './storyboard-planner';
+import type { CanvasStoryboardPayload, CreatedCanvasStoryboard } from './storyboard-planner';
 
 export const CANVAS_HEADLESS_AUTHORING_CONTRACT_VERSION = 1 as const;
 
@@ -80,6 +78,7 @@ export interface CanvasHeadlessAuthoringResultBase {
   readonly documentUri: string;
   readonly target: ResolvedCanvasHeadlessAuthoringTarget;
   readonly diagnostics: readonly CanvasAuthoringDiagnostic[];
+  readonly projectRef?: QualityProjectRef;
   readonly batch?: CanvasHeadlessAuthoringOperationBatch;
   readonly createdNodes?: readonly CanvasHeadlessAuthoringCreatedNodeRef[];
   readonly createdConnections?: readonly CanvasHeadlessAuthoringCreatedConnectionRef[];
@@ -119,18 +118,15 @@ export interface CanvasHeadlessUpdateBlockAuthoringRequest extends CanvasUpdateB
   readonly target?: CanvasHeadlessAuthoringTarget;
 }
 
-export interface CanvasHeadlessUpdateBlockAuthoringResult
-  extends CanvasHeadlessAuthoringResultBase {
+export interface CanvasHeadlessUpdateBlockAuthoringResult extends CanvasHeadlessAuthoringResultBase {
   readonly updateBlockResult?: CanvasUpdateBlockResult;
 }
 
-export interface CanvasHeadlessCreateCompositeAuthoringRequest
-  extends CanvasCreateCompositeRequest {
+export interface CanvasHeadlessCreateCompositeAuthoringRequest extends CanvasCreateCompositeRequest {
   readonly target?: CanvasHeadlessAuthoringTarget;
 }
 
-export interface CanvasHeadlessCreateCompositeAuthoringResult
-  extends CanvasHeadlessAuthoringResultBase {
+export interface CanvasHeadlessCreateCompositeAuthoringResult extends CanvasHeadlessAuthoringResultBase {
   readonly createCompositeResult?: CanvasCreateCompositeResult;
 }
 
@@ -139,8 +135,7 @@ export interface CanvasHeadlessApplyAgentContentAuthoringRequest {
   readonly payload: CanvasAgentContentPayload;
 }
 
-export interface CanvasHeadlessApplyAgentContentAuthoringResult
-  extends CanvasHeadlessAuthoringResultBase {
+export interface CanvasHeadlessApplyAgentContentAuthoringResult extends CanvasHeadlessAuthoringResultBase {
   readonly applyAgentContentResult?: CanvasAgentApplyContentResult;
 }
 
@@ -152,8 +147,7 @@ export interface CanvasHeadlessCreateStoryboardAuthoringRequest {
   readonly workflowPlanId?: string;
 }
 
-export interface CanvasHeadlessCreateStoryboardAuthoringResult
-  extends CanvasHeadlessAuthoringResultBase {
+export interface CanvasHeadlessCreateStoryboardAuthoringResult extends CanvasHeadlessAuthoringResultBase {
   readonly storyboard?: CreatedCanvasStoryboard;
 }
 

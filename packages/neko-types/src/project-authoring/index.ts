@@ -1,3 +1,4 @@
+import type { QualityProjectRef } from '../types/media-quality';
 import type {
   ProjectFileDiagnostic,
   ProjectFileDiagnosticValue,
@@ -73,6 +74,7 @@ export interface NekoProjectAuthoringResult<TData = unknown> {
   readonly target?: ResolvedNekoProjectAuthoringTarget;
   readonly created?: boolean;
   readonly revealed?: boolean;
+  readonly projectRef?: QualityProjectRef;
   readonly diagnostics: readonly NekoProjectAuthoringDiagnostic[];
   readonly data?: TData;
 }
@@ -247,6 +249,7 @@ export function createNekoProjectAuthoringResult<TData = unknown>(
     ...(input.target ? { target: input.target } : {}),
     ...(input.created !== undefined ? { created: input.created } : {}),
     ...(input.revealed !== undefined ? { revealed: input.revealed } : {}),
+    ...(input.projectRef ? { projectRef: { ...input.projectRef } } : {}),
     ...(input.data !== undefined ? { data: input.data } : {}),
   };
 }
@@ -350,6 +353,37 @@ export function validateNekoProjectAuthoringResult(
         path: ['documentUri'],
       }),
     );
+  }
+  if (result.projectRef) {
+    if (!result.projectRef.documentUri.trim() || !result.projectRef.projectRevision.trim()) {
+      diagnostics.push(
+        createNekoProjectAuthoringDiagnostic({
+          code: 'invalid-authoring-result',
+          message: 'Returned project references require documentUri and projectRevision.',
+          path: ['projectRef'],
+        }),
+      );
+    } else if (isNekoProjectAuthoringRuntimeHandleValue(result.projectRef.documentUri)) {
+      diagnostics.push(
+        createNekoProjectAuthoringDiagnostic({
+          code: 'invalid-authoring-result',
+          message: 'Returned project references cannot use runtime or cache identity.',
+          path: ['projectRef', 'documentUri'],
+        }),
+      );
+    } else if (result.documentUri && result.projectRef.documentUri !== result.documentUri) {
+      diagnostics.push(
+        createNekoProjectAuthoringDiagnostic({
+          code: 'invalid-authoring-result',
+          message: 'Returned project reference must identify the written document.',
+          path: ['projectRef', 'documentUri'],
+          context: {
+            documentUri: result.documentUri,
+            projectDocumentUri: result.projectRef.documentUri,
+          },
+        }),
+      );
+    }
   }
   if (result.ok && result.diagnostics.some((diagnostic) => diagnostic.severity === 'error')) {
     diagnostics.push(
