@@ -537,7 +537,7 @@ function projectStreamMessageResourcesForWebview(
     }));
   }
 
-  if (message.type === 'agentTurnTimelineUpdate' || message.type === 'agentTurnTimeline') {
+  if (message.type === 'agentTurnTimelineUpdate') {
     const projectedOperations = Promise.all(
       message.operations.map(async (operation) => {
         if (!('item' in operation)) {
