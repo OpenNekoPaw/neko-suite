@@ -99,6 +99,17 @@ import type {
   PluginTransferTargetRef,
 } from './plugin-transfer-contract';
 import type { AgentConfigDiagnostic } from './config-diagnostic';
+import type {
+  ProjectionAttachRequest,
+  ProjectionAttachmentHostFrame,
+  ProjectionAttachmentKey,
+  ProjectionDetachMessage,
+  ProjectionSnapshotAcknowledgement,
+} from './projection-attachment';
+import type {
+  ConversationProjectionPatch,
+  ConversationProjectionSnapshot,
+} from './conversation-projection';
 export { NEKO_AGENT_HOST_MESSAGE_EVENT } from './host-message-event';
 
 export type ProtocolModelCategory = ModelType;
@@ -493,6 +504,16 @@ export interface WebviewKeyboardEditableWebviewMessage {
 
 export type { AgentTurnTimelineSnapshotRequest };
 
+export type ConversationProjectionAttachmentHostFrame = ProjectionAttachmentHostFrame<
+  ConversationProjectionSnapshot,
+  ConversationProjectionPatch
+>;
+
+export interface ProjectionEndpointReadyMessage {
+  readonly type: 'projectionEndpointReady';
+  readonly endpointEpoch: string;
+}
+
 export type WebviewToExtensionMessage =
   | SendMessageWebviewMessage
   | SearchProjectFilesWebviewMessage
@@ -534,6 +555,9 @@ export type WebviewToExtensionMessage =
   | RevealContextSourceWebviewMessage
   | WebviewKeyboardFocusWebviewMessage
   | WebviewKeyboardEditableWebviewMessage
+  | ProjectionAttachRequest
+  | ProjectionSnapshotAcknowledgement
+  | ProjectionDetachMessage
   | AgentTurnTimelineSnapshotRequest;
 
 export interface ProjectFileMentionInfo {
@@ -1185,6 +1209,8 @@ export type ExtensionToWebviewMessage =
   | PrefillInputMessage
   | InjectContextMessage
   | AmbientCanvasUpdateMessage
+  | ProjectionEndpointReadyMessage
+  | ConversationProjectionAttachmentHostFrame
   | AgentTurnTimelineMessage
   | AgentTurnTimelineDiagnostic;
 
@@ -1300,6 +1326,9 @@ export const WEBVIEW_TO_EXTENSION_MESSAGE_TYPES = [
   'revealContextSource',
   'webviewKeyboardFocus',
   'webviewKeyboardEditable',
+  'projectionAttach',
+  'projectionSnapshotAck',
+  'projectionDetach',
   'requestAgentTurnTimelineSnapshot',
 ] as const satisfies readonly WebviewToExtensionMessage['type'][];
 
@@ -1853,6 +1882,21 @@ export function parseWebviewToExtensionMessage(raw: unknown): WebviewToExtension
   if (!isRecord(raw) || typeof raw.type !== 'string') return null;
 
   const type = raw.type;
+  if (type === 'projectionAttach') {
+    const key = parseProjectionAttachmentKey(raw.key);
+    return key ? { type, key } : null;
+  }
+  if (type === 'projectionSnapshotAck') {
+    const key = parseProjectionAttachmentKey(raw.key);
+    const projectionVersion = nonNegativeInteger(raw.projectionVersion);
+    if (!key || raw.sequence !== 0 || projectionVersion === null) return null;
+    return { type, key, sequence: 0, projectionVersion };
+  }
+  if (type === 'projectionDetach') {
+    const key = parseProjectionAttachmentKey(raw.key);
+    if (!key || !isProjectionDetachReason(raw.reason)) return null;
+    return { type, key, reason: raw.reason };
+  }
   if (type === 'requestAgentTurnTimelineSnapshot') {
     const result = validateAgentTurnTimelineSnapshotRequest(raw);
     if (!result.ok) return null;
@@ -3699,6 +3743,25 @@ function isNonEmptyString(value: unknown): value is string {
 
 function nonNegativeInteger(value: unknown): number | null {
   return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : null;
+}
+
+function parseProjectionAttachmentKey(value: unknown): ProjectionAttachmentKey | null {
+  if (!isRecord(value)) return null;
+  const endpointEpoch = requiredString(value.endpointEpoch);
+  const attachmentId = requiredString(value.attachmentId);
+  const tabId = requiredString(value.tabId);
+  const conversationId = requiredString(value.conversationId);
+  if (!endpointEpoch || !attachmentId || !tabId || !conversationId) return null;
+  return { endpointEpoch, attachmentId, tabId, conversationId };
+}
+
+function isProjectionDetachReason(value: unknown): value is ProjectionDetachMessage['reason'] {
+  return (
+    value === 'tab-closed' ||
+    value === 'endpoint-replaced' ||
+    value === 'conversation-disposed' ||
+    value === 'protocol-fatal'
+  );
 }
 
 function requiredString(value: unknown): string | null {

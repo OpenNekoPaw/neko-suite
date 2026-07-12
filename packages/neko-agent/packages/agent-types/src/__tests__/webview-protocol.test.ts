@@ -53,6 +53,88 @@ const cacheResourceRef = createResourceRef({
 });
 
 describe('webview protocol parser', () => {
+  it('accepts projection attachment lifecycle messages with complete identity', () => {
+    const key = {
+      endpointEpoch: 'endpoint-1',
+      attachmentId: 'attachment-1',
+      tabId: 'tab-1',
+      conversationId: 'conv-1',
+    };
+
+    expect(parseWebviewToExtensionMessage({ type: 'projectionAttach', key })).toEqual({
+      type: 'projectionAttach',
+      key,
+    });
+    expect(
+      parseWebviewToExtensionMessage({
+        type: 'projectionSnapshotAck',
+        key,
+        sequence: 0,
+        projectionVersion: 3,
+      }),
+    ).toEqual({
+      type: 'projectionSnapshotAck',
+      key,
+      sequence: 0,
+      projectionVersion: 3,
+    });
+    expect(
+      parseWebviewToExtensionMessage({
+        type: 'projectionDetach',
+        key,
+        reason: 'endpoint-replaced',
+      }),
+    ).toEqual({ type: 'projectionDetach', key, reason: 'endpoint-replaced' });
+  });
+
+  it('rejects malformed projection attachment lifecycle messages', () => {
+    const key = {
+      endpointEpoch: 'endpoint-1',
+      attachmentId: 'attachment-1',
+      tabId: 'tab-1',
+      conversationId: 'conv-1',
+    };
+
+    for (const field of ['endpointEpoch', 'attachmentId', 'tabId', 'conversationId'] as const) {
+      expect(
+        parseWebviewToExtensionMessage({
+          type: 'projectionAttach',
+          key: { ...key, [field]: '' },
+        }),
+      ).toBeNull();
+    }
+    expect(
+      parseWebviewToExtensionMessage({
+        type: 'projectionSnapshotAck',
+        key,
+        sequence: 1,
+        projectionVersion: 3,
+      }),
+    ).toBeNull();
+    expect(
+      parseWebviewToExtensionMessage({
+        type: 'projectionSnapshotAck',
+        key,
+        sequence: 0,
+        projectionVersion: -1,
+      }),
+    ).toBeNull();
+    expect(
+      parseWebviewToExtensionMessage({
+        type: 'projectionSnapshotAck',
+        key,
+        sequence: 0,
+        projectionVersion: 1.5,
+      }),
+    ).toBeNull();
+    expect(
+      parseWebviewToExtensionMessage({
+        type: 'projectionDetach',
+        key,
+        reason: 'visibility-changed',
+      }),
+    ).toBeNull();
+  });
   it('builds valid agent turn timeline V2 batches', () => {
     const textItem = makeTimelineTextItem({ itemId: 'text-1', sequence: 1, content: 'Hello' });
     const message = buildAgentTurnTimelineMessage({
