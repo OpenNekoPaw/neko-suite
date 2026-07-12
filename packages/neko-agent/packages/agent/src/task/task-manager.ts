@@ -55,7 +55,10 @@ export interface IRuntimeTaskManager extends ITaskManager, ICreationProjectedTas
   resumePendingTasks(): Promise<string[]>;
   dispose(): Promise<void>;
   registerExecutor(type: TaskType, executor: TaskExecutor): void;
-  onTerminalTask(callback: TaskTerminalCallback, options?: TaskTerminalSubscriptionOptions): () => void;
+  onTerminalTask(
+    callback: TaskTerminalCallback,
+    options?: TaskTerminalSubscriptionOptions,
+  ): () => void;
   saveRecoveryInfo(taskId: string, externalTaskId: string, providerId: string): Promise<void>;
   deleteRecoveryInfo(taskId: string): Promise<void>;
   getRecoveryStorage(): ITaskRecoveryStorage;
@@ -207,12 +210,16 @@ export class TaskManager implements IRuntimeTaskManager {
 
       const recoveryInfo = await this.recoveryStorage.load(task.id).catch(() => undefined);
       const lifecycle = createTaskLifecycleMetadata(task.lifecycle);
-      if (recoveryInfo && lifecycle.recoverPolicy === 'resume-polling') {
+      if (
+        lifecycle.recoverPolicy === 'snapshot-only' ||
+        (recoveryInfo && lifecycle.recoverPolicy === 'resume-polling')
+      ) {
         resumedIds.push(task.id);
         continue;
       }
 
-      // Re-execute the task
+      // Re-execute only retryable executor work. Snapshot-only workflows are
+      // resumed explicitly from their persisted stage artifacts by their owner.
       this.executeTask(task).catch((error) => {
         this.updateTask(task.id, {
           status: 'failed',

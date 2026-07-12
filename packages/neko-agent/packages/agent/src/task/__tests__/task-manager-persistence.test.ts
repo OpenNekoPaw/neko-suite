@@ -371,6 +371,44 @@ describe('TaskManager Persistence', () => {
       expect(executor).not.toHaveBeenCalled();
     });
 
+    it('should preserve snapshot-only workflow tasks without replaying their executor', async () => {
+      const executor: TaskExecutor = vi.fn().mockResolvedValue({ data: 'duplicated mutation' });
+      manager.registerExecutor('workflow', executor);
+
+      await storage.save({
+        id: 'media_production_workflow',
+        type: 'workflow',
+        status: 'running',
+        input: {
+          type: 'workflow',
+          payload: {
+            kind: 'media-production-workflow',
+            workflowRunId: 'workflow-1',
+          },
+          lifecycle: { recoverPolicy: 'snapshot-only' },
+        },
+        progress: 50,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        lifecycle: {
+          runMode: 'background',
+          costPhase: 'idle',
+          interruptPolicy: 'detach-and-continue',
+          recoverPolicy: 'snapshot-only',
+        },
+      });
+
+      await manager.initialize();
+      const resumed = await manager.resumePendingTasks();
+      await vi.runAllTimersAsync();
+
+      expect(resumed).toEqual(['media_production_workflow']);
+      expect(executor).not.toHaveBeenCalled();
+      expect(await storage.load('media_production_workflow')).toEqual(
+        expect.objectContaining({ status: 'pending', retryCount: 1 }),
+      );
+    });
+
     it('should not re-execute tasks that have external recovery info and resume-polling policy', async () => {
       const executor: TaskExecutor = vi.fn().mockResolvedValue({ data: 'duplicated' });
       manager.registerExecutor('custom', executor);
