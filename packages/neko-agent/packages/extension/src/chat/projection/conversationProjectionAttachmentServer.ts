@@ -115,11 +115,8 @@ class DefaultConversationProjectionAttachmentServer implements ConversationProje
   async detach(message: ProjectionDetachMessage): Promise<void> {
     this.assertActive();
     const attachment = this.requireAttachment(message.key);
-    try {
-      await attachment.detach(message);
-    } finally {
-      this.removeAttachment(attachment);
-    }
+    this.removeAttachment(attachment);
+    await attachment.close();
   }
 
   async dispose(): Promise<void> {
@@ -129,7 +126,7 @@ class DefaultConversationProjectionAttachmentServer implements ConversationProje
     await Promise.all(
       attachments.map(async (attachment) => {
         try {
-          await attachment.detach({
+          await attachment.notifyDetach({
             type: 'projectionDetach',
             key: attachment.key,
             reason: 'endpoint-replaced',
@@ -274,7 +271,15 @@ class ProjectionAttachment {
     });
   }
 
-  detach(message: ProjectionDetachMessage): Promise<void> {
+  close(): Promise<void> {
+    if (this.phase === 'closing') return this.tail;
+    this.phase = 'closing';
+    this.unsubscribeProjection();
+    this.pendingPatches = [];
+    return this.tail;
+  }
+
+  notifyDetach(message: ProjectionDetachMessage): Promise<void> {
     if (!isSameProjectionAttachment(this.key, message.key)) {
       throw protocolError(
         'attachment-identity-mismatch',
@@ -312,6 +317,7 @@ class ProjectionAttachment {
 
   private async deliverPatch(patch: ConversationProjectionPatch): Promise<void> {
     this.assertHealthy();
+    if (this.phase !== 'live') return;
     if (patch.baseProjectionVersion !== this.deliveredProjectionVersion) {
       throw protocolError(
         'attachment-patch-base-mismatch',

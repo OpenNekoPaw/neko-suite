@@ -160,6 +160,53 @@ describe('ConversationProjectionAttachmentServer', () => {
   it('serializes live patch posting within one attachment', async () => {
     const projection = createConversationProjectionStore('conversation-a');
     const firstPatchDelivery = deferred<boolean>();
+    const secondPatchPosted = deferred<void>();
+    const frames: HostFrame[] = [];
+    const server = createConversationProjectionAttachmentServer({
+      endpointEpoch: 'endpoint-1',
+      resolveProjection: () => projection,
+      postMessage: async (frame) => {
+        frames.push(frame);
+        if (frame.type === 'projectionPatch' && frame.sequence === 1) {
+          return firstPatchDelivery.promise;
+        }
+        if (frame.type === 'projectionPatch' && frame.sequence === 2) {
+          secondPatchPosted.resolve();
+        }
+        return true;
+      },
+      reportError: vi.fn(),
+    });
+
+    await server.attach({ type: 'projectionAttach', key: keyA });
+    await server.acknowledge({
+      type: 'projectionSnapshotAck',
+      key: keyA,
+      sequence: 0,
+      projectionVersion: 0,
+    });
+    projection.apply(appendUpdate('a', 1));
+    await nextMicrotask();
+    projection.apply(appendUpdate('b', 2));
+    await nextMicrotask();
+
+    expect(frames.map((frame) => frame.type)).toEqual(['projectionSnapshot', 'projectionPatch']);
+    firstPatchDelivery.resolve(true);
+    await secondPatchPosted.promise;
+    expect(frames.map((frame) => frame.type)).toEqual([
+      'projectionSnapshot',
+      'projectionPatch',
+      'projectionPatch',
+    ]);
+    await server.detach({ type: 'projectionDetach', key: keyA, reason: 'tab-closed' });
+    projection.apply(appendUpdate('c', 3));
+    await nextMicrotask();
+    expect(frames).toHaveLength(3);
+  });
+
+  it('drops queued patch frames when the client closes an attachment', async () => {
+    const projection = createConversationProjectionStore('conversation-a');
+    const firstPatchDelivery = deferred<boolean>();
     const frames: HostFrame[] = [];
     const server = createConversationProjectionAttachmentServer({
       endpointEpoch: 'endpoint-1',
@@ -186,18 +233,44 @@ describe('ConversationProjectionAttachmentServer', () => {
     projection.apply(appendUpdate('b', 2));
     await nextMicrotask();
 
-    expect(frames.map((frame) => frame.type)).toEqual(['projectionSnapshot', 'projectionPatch']);
+    const closing = server.detach({
+      type: 'projectionDetach',
+      key: keyA,
+      reason: 'protocol-fatal',
+    });
     firstPatchDelivery.resolve(true);
-    await server.detach({ type: 'projectionDetach', key: keyA, reason: 'tab-closed' });
-    expect(frames.map((frame) => frame.type)).toEqual([
-      'projectionSnapshot',
-      'projectionPatch',
-      'projectionPatch',
-      'projectionDetach',
+    await closing;
+
+    expect(frames.map((frame) => frame.type)).toEqual(['projectionSnapshot', 'projectionPatch']);
+  });
+
+  it('removes a client-detached Tab before accepting its replacement attachment', async () => {
+    const projection = createConversationProjectionStore('conversation-a');
+    const frames: HostFrame[] = [];
+    const server = createConversationProjectionAttachmentServer({
+      endpointEpoch: 'endpoint-1',
+      resolveProjection: () => projection,
+      postMessage: async (frame) => {
+        frames.push(frame);
+        return true;
+      },
+      reportError: vi.fn(),
+    });
+    const replacementKey = { ...keyA, attachmentId: 'attachment-replacement' };
+
+    await server.attach({ type: 'projectionAttach', key: keyA });
+    const closing = server.detach({
+      type: 'projectionDetach',
+      key: keyA,
+      reason: 'protocol-fatal',
+    });
+    const replacing = server.attach({ type: 'projectionAttach', key: replacementKey });
+
+    await expect(Promise.all([closing, replacing])).resolves.toEqual([undefined, undefined]);
+    expect(frames).toEqual([
+      expect.objectContaining({ type: 'projectionSnapshot', key: keyA }),
+      expect.objectContaining({ type: 'projectionSnapshot', key: replacementKey }),
     ]);
-    projection.apply(appendUpdate('c', 3));
-    await nextMicrotask();
-    expect(frames).toHaveLength(4);
   });
 
   it('disposes every attachment at endpoint replacement and rejects later ACKs', async () => {
