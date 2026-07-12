@@ -2,9 +2,10 @@ import { act, fireEvent, render, screen } from '@testing-library/react';
 import { createRef, type ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AgentContextPayload } from '@neko/shared';
-import type { AgentState, Message, SettingsState } from '@neko-agent/types';
+import type { Message, SettingsState } from '@neko-agent/types';
 import type { ChatWorkspaceProps } from './ChatWorkspace';
 import { ChatWorkspace } from './ChatWorkspace';
+import { createTabRenderRuntime } from '@/render-runtime/tab-render-runtime';
 
 const vscodeMocks = vi.hoisted(() => ({
   sendMessage: vi.fn(),
@@ -71,6 +72,9 @@ vi.mock('@/components/ChatView', () => ({
   ChatView: (props: {
     activeConversationId: string | null;
     inputValue: string;
+    onInputChange: (value: string) => void;
+    attachedFiles?: readonly unknown[];
+    selectedFileReferences?: readonly unknown[];
     onSend: (input?: { messageText?: string; displayMessageText?: string }) => void;
     onClearActiveSkill?: (recordId?: string) => void;
     onCancelTask?: (taskId: string) => void;
@@ -88,6 +92,11 @@ vi.mock('@/components/ChatView', () => ({
     onEntryPromptMenuChange?: (menu: 'generate-assets' | 'roleplay' | null) => void;
   }) => (
     <div>
+      <button
+        type="button"
+        data-testid="set-draft"
+        onClick={() => props.onInputChange('draft-a')}
+      />
       <button
         type="button"
         data-testid="send"
@@ -147,6 +156,8 @@ vi.mock('@/components/ChatView', () => ({
       />
       <span data-testid="entry-menu">{props.entryPromptMenu ?? 'none'}</span>
       <span data-testid="input-value">{props.inputValue}</span>
+      <span data-testid="attachment-count">{props.attachedFiles?.length ?? 0}</span>
+      <span data-testid="reference-count">{props.selectedFileReferences?.length ?? 0}</span>
     </div>
   ),
 }));
@@ -414,10 +425,53 @@ describe('ChatWorkspace pending send', () => {
     expect(vscodeMocks.editQueuedMessage).toHaveBeenCalledWith('conv-1', 'queued-1');
   });
 
-  it('keeps session mode isolated per visible conversation', () => {
+  it('keeps composer state in its owning Tab store while switching', () => {
+    const runtimeA = createTabRenderRuntime({ tabId: 'tab-a', conversationId: 'conv-a' });
+    const runtimeB = createTabRenderRuntime({ tabId: 'tab-b', conversationId: 'conv-b' });
+    runtimeA.store.updateState({
+      attachedFiles: [{ id: 'asset-a', name: 'a.png', type: 'image', data: 'data-a' }],
+      selectedFileReferences: [{ path: 'a.md' }],
+    });
     const { getByTestId, rerender } = render(
       <ChatWorkspace
         {...createProps({
+          tabRenderStore: runtimeA.store,
+          activeConversationId: 'conv-a',
+          activeConversationIdRef: createRefWithCurrent<string | null>('conv-a'),
+          activeTabConversationId: 'conv-a',
+        })}
+      />,
+    );
+
+    fireEvent.click(getByTestId('set-draft'));
+    expect(getByTestId('input-value').textContent).toBe('draft-a');
+    expect(getByTestId('attachment-count').textContent).toBe('1');
+    expect(getByTestId('reference-count').textContent).toBe('1');
+
+    rerender(
+      <ChatWorkspace
+        {...createProps({
+          tabRenderStore: runtimeB.store,
+          activeConversationId: 'conv-b',
+          activeConversationIdRef: createRefWithCurrent<string | null>('conv-b'),
+          activeTabConversationId: 'conv-b',
+        })}
+      />,
+    );
+
+    expect(getByTestId('input-value').textContent).toBe('');
+    expect(getByTestId('attachment-count').textContent).toBe('0');
+    expect(getByTestId('reference-count').textContent).toBe('0');
+    expect(runtimeA.store.getSnapshot().state.inputValue).toBe('draft-a');
+  });
+
+  it('keeps session mode isolated per visible conversation', () => {
+    const storeA = createTabRenderRuntime({ tabId: 'tab-a', conversationId: 'conv-a' }).store;
+    const storeB = createTabRenderRuntime({ tabId: 'tab-b', conversationId: 'conv-b' }).store;
+    const { getByTestId, rerender } = render(
+      <ChatWorkspace
+        {...createProps({
+          tabRenderStore: storeA,
           activeConversationId: 'conv-a',
           activeConversationIdRef: createRefWithCurrent<string | null>('conv-a'),
           activeTabConversationId: 'conv-a',
@@ -433,6 +487,7 @@ describe('ChatWorkspace pending send', () => {
     rerender(
       <ChatWorkspace
         {...createProps({
+          tabRenderStore: storeB,
           activeConversationId: 'conv-b',
           activeConversationIdRef: createRefWithCurrent<string | null>('conv-b'),
           activeTabConversationId: 'conv-b',
@@ -446,6 +501,7 @@ describe('ChatWorkspace pending send', () => {
     rerender(
       <ChatWorkspace
         {...createProps({
+          tabRenderStore: storeA,
           activeConversationId: 'conv-a',
           activeConversationIdRef: createRefWithCurrent<string | null>('conv-a'),
           activeTabConversationId: 'conv-a',
@@ -595,6 +651,7 @@ function runRegisteredShortcut(id: string): void {
 function createProps(overrides: Partial<ChatWorkspaceProps> = {}): ChatWorkspaceProps {
   const noop = vi.fn();
   return {
+    tabRenderStore: createTabRenderRuntime({ tabId: 'tab-1', conversationId: 'conv-1' }).store,
     messages: [],
     setMessages: noop as React.Dispatch<React.SetStateAction<Message[]>>,
     isThinking: false,
@@ -623,9 +680,7 @@ function createProps(overrides: Partial<ChatWorkspaceProps> = {}): ChatWorkspace
     workItems: [],
     pluginsAvailable: {},
     setActiveTab: noop as React.Dispatch<React.SetStateAction<'chat'>>,
-    conversationTokenCountRef: createRefWithCurrent(new Map()),
     conversationCompressingRef: createRefWithCurrent(new Map()),
-    conversationAgentStateRef: createRefWithCurrent(new Map<string, AgentState>()),
     contextTokenCount: 0,
     isCompressing: false,
     mediaModelCallCount: 0,
@@ -645,7 +700,6 @@ function createProps(overrides: Partial<ChatWorkspaceProps> = {}): ChatWorkspace
       React.SetStateAction<Array<{ nodeId: string; type: string; summary: string }>>
     >,
     onNewChat: noop,
-    sessionCleanupRef: createRefWithCurrent(null),
     ...overrides,
   };
 }

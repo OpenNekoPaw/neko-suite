@@ -30,12 +30,6 @@ export {
   type UseResourceStateReturn,
 } from './useResourceState';
 
-export {
-  useConversationSession,
-  type UseConversationSessionProps,
-  type UseConversationSessionReturn,
-} from './useConversationSession';
-
 export { useTabManager, type UseTabManagerProps, type UseTabManagerReturn } from './useTabManager';
 
 export {

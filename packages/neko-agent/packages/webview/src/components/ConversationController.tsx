@@ -202,7 +202,10 @@ export function ConversationController({
     setActiveTabId,
     clearMessages,
   } = conversation;
-  useTabRenderRuntimeRegistry(openTabs, activeTabId);
+  const tabRenderRuntimeRegistry = useTabRenderRuntimeRegistry(openTabs, activeTabId);
+  const activeTabRenderStore = activeTabId
+    ? (tabRenderRuntimeRegistry.get(activeTabId)?.store ?? null)
+    : null;
 
   // ---- UI state for active tab ----
   const [activeTab, setActiveTab] = useState<TabType>('chat');
@@ -432,18 +435,8 @@ export function ConversationController({
     [visibleConversationId],
   );
 
-  // Session-bound cleanup ref — ChatWorkspace registers its useConversationSession cleanup
-  // callbacks here so ConversationController can invoke them when deleting conversations.
-  const sessionCleanupRef = useRef<{
-    cleanupConversation: (id: string) => void;
-    cleanupAllConversations: () => void;
-  } | null>(null);
-
   const cleanupConversation = useCallback(
     (conversationId: string) => {
-      // Delegate to ChatWorkspace's useConversationSession (cleans input/attachment caches)
-      sessionCleanupRef.current?.cleanupConversation(conversationId);
-      // Also clean shared refs not covered by useConversationSession
       conversationTokenCountRef.current.delete(conversationId);
       conversationCompressingRef.current.delete(conversationId);
       conversationMediaCallCountRef.current.delete(conversationId);
@@ -1589,8 +1582,9 @@ export function ConversationController({
               />
             </InputAreaProvider>
           </div>
-        ) : (
+        ) : activeTabRenderStore ? (
           <ChatWorkspace
+            tabRenderStore={activeTabRenderStore}
             // Conversation state
             messages={[...visibleSessionState.messages]}
             setMessages={setMessages}
@@ -1627,9 +1621,7 @@ export function ConversationController({
             pluginsAvailable={pluginsAvailable}
             // Session
             setActiveTab={setActiveTab}
-            conversationTokenCountRef={conversationTokenCountRef}
             conversationCompressingRef={conversationCompressingRef}
-            conversationAgentStateRef={conversationAgentStateRef}
             // Context management
             contextTokenCount={contextTokenCount}
             isCompressing={isCompressing}
@@ -1669,10 +1661,8 @@ export function ConversationController({
               setGlobalError(t('chat.input.queueEditDraftConflict'));
             }}
             onSessionDiagnostic={reportConversationDiagnostic}
-            // Session cleanup registration
-            sessionCleanupRef={sessionCleanupRef}
           />
-        )
+        ) : null
       ) : null}
 
       {visibleConversationDiagnostic &&

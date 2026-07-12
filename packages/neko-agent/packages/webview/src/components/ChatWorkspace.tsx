@@ -2,7 +2,7 @@
  * ChatWorkspace — View composition layer.
  *
  * Responsibilities:
- *   - UI state: useUIState (model selection, input, gen params)
+ *   - Tab-owned render state (input, attachments, generation, menus)
  *   - Behavior hooks: useChatActions, usePlanActions, useSkillActions, useSlashCommands
  *   - Model derivation (allModels, availableModels, mediaModels)
  *   - Keyboard shortcuts
@@ -48,8 +48,6 @@ import type { BoundActiveSkillIndicator } from '@/handlers';
 import type { ActivationProgressTimeline } from '@/presenters/activation-progress-presenter';
 import { projectTrailingMention } from '@/components/ChatView/InputArea/mention-input';
 import {
-  useUIState,
-  useConversationSession,
   useChatActions,
   type PendingSendInput,
   usePlanActions,
@@ -66,12 +64,15 @@ import type {
   ConversationViewportSnapshot,
   ForegroundConversationAvailability,
 } from '@/render-lifecycle/conversation-render-contract';
+import type { TabRenderStore } from '@/render-runtime/tab-render-runtime';
+import { useTabRenderStore } from '@/render-runtime/useTabRenderStore';
 
 // =============================================================================
 // Props
 // =============================================================================
 
 export interface ChatWorkspaceProps {
+  tabRenderStore: TabRenderStore;
   // Conversation state
   messages: Message[];
   setMessages: React.Dispatch<React.SetStateAction<Message[]>>;
@@ -110,10 +111,8 @@ export interface ChatWorkspaceProps {
   pluginsAvailable: PluginsAvailable;
   // Session
   setActiveTab: React.Dispatch<React.SetStateAction<TabType>>;
-  // Conversation session refs (for useConversationSession)
-  conversationTokenCountRef: MutableRefObject<Map<string, number>>;
+  // Conversation runtime resource refs
   conversationCompressingRef: MutableRefObject<Map<string, boolean>>;
-  conversationAgentStateRef: MutableRefObject<Map<string, AgentState>>;
   // Context management
   contextTokenCount: number;
   isCompressing: boolean;
@@ -155,11 +154,6 @@ export interface ChatWorkspaceProps {
   onQueuedEditRequestConsumed?: (id: number) => void;
   onQueuedEditConflict?: (event: { conversationId: string; item: AgentQueuedMessageItem }) => void;
   onSessionDiagnostic?: (diagnostic: AgentSessionDiagnosticMessage) => void;
-  // Session cleanup: ConversationController registers a ref so it can call our cleanup
-  sessionCleanupRef: MutableRefObject<{
-    cleanupConversation: (id: string) => void;
-    cleanupAllConversations: () => void;
-  } | null>;
 }
 
 // =============================================================================
@@ -167,6 +161,7 @@ export interface ChatWorkspaceProps {
 // =============================================================================
 
 export function ChatWorkspace({
+  tabRenderStore,
   messages,
   setMessages,
   isThinking,
@@ -197,9 +192,7 @@ export function ChatWorkspace({
   workItems,
   pluginsAvailable,
   setActiveTab,
-  conversationTokenCountRef,
   conversationCompressingRef,
-  conversationAgentStateRef,
   contextTokenCount,
   isCompressing,
   mediaModelCallCount,
@@ -230,21 +223,97 @@ export function ChatWorkspace({
   onQueuedEditRequestConsumed,
   onQueuedEditConflict,
   onSessionDiagnostic,
-  sessionCleanupRef,
 }: ChatWorkspaceProps) {
-  // ---- UI state (model selection comes from props, not useUIState) ----
-  const ui = useUIState();
-  const {
-    inputValue,
-    setInputValue,
-    clearInput,
-    genCategory,
-    setGenCategory,
-    genParams,
-    updateGenParams,
-    mediaUnderstandingSelection,
-    setMediaUnderstandingSelection,
-  } = ui;
+  const { snapshot: tabRenderSnapshot, updateState: updateTabRenderState } =
+    useTabRenderStore(tabRenderStore);
+  const tabState = tabRenderSnapshot.state;
+  const inputValue = tabState.inputValue;
+  const attachedFiles = [...tabState.attachedFiles];
+  const selectedFileReferences = [...tabState.selectedFileReferences];
+  const genCategory = tabState.generationCategory;
+  const genParams = tabState.generationParams;
+  const mediaUnderstandingSelection = tabState.mediaUnderstandingSelection;
+  const sessionMode = tabState.sessionMode;
+  const entryPromptMenu = tabState.menus.entryPrompt;
+
+  const setInputValue = useCallback<React.Dispatch<React.SetStateAction<string>>>(
+    (value) => {
+      updateTabRenderState((state) => ({
+        inputValue: resolveSetStateAction(value, state.inputValue),
+      }));
+    },
+    [updateTabRenderState],
+  );
+  const clearInput = useCallback(
+    () => updateTabRenderState({ inputValue: '' }),
+    [updateTabRenderState],
+  );
+  const setAttachedFiles = useCallback<
+    React.Dispatch<
+      React.SetStateAction<import('@/components/ChatView/InputArea/types').MessageAttachment[]>
+    >
+  >(
+    (value) => {
+      updateTabRenderState((state) => ({
+        attachedFiles: resolveSetStateAction(value, [...state.attachedFiles]),
+      }));
+    },
+    [updateTabRenderState],
+  );
+  const setSelectedFileReferences = useCallback<
+    React.Dispatch<
+      React.SetStateAction<import('@/components/ChatView/InputArea/types').SelectedFileReference[]>
+    >
+  >(
+    (value) => {
+      updateTabRenderState((state) => ({
+        selectedFileReferences: resolveSetStateAction(value, [...state.selectedFileReferences]),
+      }));
+    },
+    [updateTabRenderState],
+  );
+  const setGenCategory = useCallback<React.Dispatch<React.SetStateAction<typeof genCategory>>>(
+    (value) => {
+      updateTabRenderState((state) => ({
+        generationCategory: resolveSetStateAction(value, state.generationCategory),
+      }));
+    },
+    [updateTabRenderState],
+  );
+  const updateGenParams = useCallback(
+    (partial: Partial<typeof genParams>) => {
+      updateTabRenderState((state) => ({
+        generationParams: { ...state.generationParams, ...partial },
+      }));
+    },
+    [updateTabRenderState],
+  );
+  const setMediaUnderstandingSelection = useCallback<
+    React.Dispatch<React.SetStateAction<import('@/hooks/useUIState').MediaUnderstandingSelection>>
+  >(
+    (value) => {
+      updateTabRenderState((state) => ({
+        mediaUnderstandingSelection: resolveSetStateAction(
+          value,
+          state.mediaUnderstandingSelection,
+        ),
+      }));
+    },
+    [updateTabRenderState],
+  );
+  const setEntryPromptMenu = useCallback<
+    React.Dispatch<React.SetStateAction<EntryPromptMenu | null>>
+  >(
+    (value) => {
+      updateTabRenderState((state) => ({
+        menus: {
+          ...state.menus,
+          entryPrompt: resolveSetStateAction(value, state.menus.entryPrompt),
+        },
+      }));
+    },
+    [updateTabRenderState],
+  );
 
   const visibleSessionConversationId = activeTabConversationId ?? activeConversationId;
   const isCharacterRoleSession = isCharacterRoleConversationKind(conversationKind);
@@ -292,49 +361,12 @@ export function ChatWorkspace({
     onSessionDiagnostic,
   ]);
 
-  // ---- Session-bound state: input/attachment isolation per conversation ----
-  const {
-    attachedFiles,
-    setAttachedFiles,
-    selectedFileReferences,
-    setSelectedFileReferences,
-    cleanupConversation,
-    cleanupAllConversations,
-  } = useConversationSession({
-    activeConversationId: visibleSessionConversationId,
-    inputValue,
-    setInputValue,
-    conversationTokenCountRef,
-    conversationCompressingRef,
-    conversationAgentStateRef,
-  });
-
-  // Register cleanup callbacks so ConversationController can invoke them
-  sessionCleanupRef.current = { cleanupConversation, cleanupAllConversations };
-
-  // ---- Session mode ----
-  const [sessionModeByConversation, setSessionModeByConversation] = useState<
-    Map<string, SessionMode>
-  >(() => new Map());
-  const sessionMode = visibleSessionConversationId
-    ? (sessionModeByConversation.get(visibleSessionConversationId) ?? 'agent')
-    : 'agent';
   const setVisibleSessionMode = useCallback(
     (mode: SessionMode) => {
-      if (!visibleSessionConversationId) return;
-      setSessionModeByConversation((prev) => {
-        const next = new Map(prev);
-        if (mode === 'agent') {
-          next.delete(visibleSessionConversationId);
-        } else {
-          next.set(visibleSessionConversationId, mode);
-        }
-        return next;
-      });
+      updateTabRenderState({ sessionMode: mode });
     },
-    [visibleSessionConversationId],
+    [updateTabRenderState],
   );
-  const [entryPromptMenu, setEntryPromptMenu] = useState<EntryPromptMenu | null>(null);
   const consumedEntryPromptRequestIdRef = useRef<number | null>(null);
   const consumedInitialInputRequestIdRef = useRef<number | null>(null);
   const inputValueRef = useRef(inputValue);
@@ -770,17 +802,17 @@ export function ChatWorkspace({
         contextChips={contextChips}
         ambientNodes={ambientNodes}
         onCancelTask={(taskScope) => {
-          if (!isCharacterRoleSession) {
+          if (!isCharacterRoleSession && sessionMutationConversationId) {
             AgentHostMessages.cancelTask(taskScope);
           }
         }}
         onRetryTask={(taskScope) => {
-          if (!isCharacterRoleSession) {
+          if (!isCharacterRoleSession && sessionMutationConversationId) {
             AgentHostMessages.retryTask(taskScope);
           }
         }}
         onViewTaskResult={(taskScope, resultRef) => {
-          if (!isCharacterRoleSession) {
+          if (!isCharacterRoleSession && sessionMutationConversationId) {
             AgentHostMessages.viewTaskResult(taskScope, resultRef);
           }
         }}
@@ -805,6 +837,10 @@ export function ChatWorkspace({
       />
     </InputAreaProvider>
   );
+}
+
+function resolveSetStateAction<T>(value: React.SetStateAction<T>, current: T): T {
+  return typeof value === 'function' ? (value as (previous: T) => T)(current) : value;
 }
 
 function isActiveWorkItem(item: AgentWorkItem): boolean {
