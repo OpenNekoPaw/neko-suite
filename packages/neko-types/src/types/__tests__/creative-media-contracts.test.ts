@@ -17,6 +17,7 @@ import {
   type QualityTarget,
 } from '../index';
 import {
+  validateProjectQualityPreview,
   validateProjectQualityResult,
   type ProjectQualityResult,
 } from '../../project-authoring/project-quality';
@@ -197,6 +198,29 @@ describe('creative media shared contracts', () => {
     Reflect.set(unknownVersionTarget, 'version', 99);
     expect(validateQualityTarget(unknownVersionTarget).diagnostics).toEqual([
       expect.objectContaining({ code: 'invalid-quality-target' }),
+    ]);
+  });
+
+  it('rejects runtime-only ProjectQuality preview identity and durable session URLs', () => {
+    const invalidPreviewRef = resourceRef({
+      id: 'preview:runtime',
+      kind: 'preview',
+      source: { kind: 'remote-url', uri: 'blob:runtime-preview' },
+    });
+    expect(
+      validateProjectQualityPreview({
+        project: {
+          domain: 'model',
+          documentUri: 'file:///workspace/scene.nkm',
+          projectRevision: 'nkm:scene-v1',
+        },
+        previewRef: invalidPreviewRef,
+        sessionRenderUri: 'file:///workspace/render.png',
+        createdAt: '2026-07-12T00:00:00.000Z',
+      }).diagnostics,
+    ).toEqual([
+      expect.objectContaining({ path: ['previewRef'] }),
+      expect.objectContaining({ path: ['sessionRenderUri'] }),
     ]);
   });
 

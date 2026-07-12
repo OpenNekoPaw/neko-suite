@@ -10,6 +10,7 @@ import {
 } from '@neko/shared';
 import {
   createNewFile,
+  createVSCodeProjectFileIoAdapter,
   createVSCodeLogger,
   resolveLogLevelSetting,
   VSCodeErrorHandler,
@@ -19,14 +20,12 @@ import { setRootLogger, getRootLogger } from './logger';
 import { ModelEditorProvider } from './editor/ModelEditorProvider';
 import { ModelStatusBar } from './editor/ModelStatusBar';
 import { createNekoModelCapabilityProvider } from './agentCapabilityProvider';
-import {
-  formatSupportedModelAssetExtensions,
-  parseModelImportAssetArgs,
-} from './importModelAsset';
+import { formatSupportedModelAssetExtensions, parseModelImportAssetArgs } from './importModelAsset';
 import { ModelLiveModeService } from './live';
 import { registerMarketInstallTargets } from './market/registerMarketInstallTargets';
 import { ModelAssetExportService } from './export/ModelAssetExportService';
 import { ModelProjectAuthoringService } from './services/ModelProjectAuthoringService';
+import { ModelProjectQualityFacade } from './services/ModelProjectQualityFacade';
 
 /** Default .nkm document template */
 function getModelTemplate(title: string, profile: NkmSceneProfile = '3d'): string {
@@ -84,7 +83,32 @@ export function activate(context: vscode.ExtensionContext): NekoModelAPI {
   const modelStatusBar = new ModelStatusBar();
   context.subscriptions.push(modelStatusBar);
   modelEditorProvider = new ModelEditorProvider(context, modelStatusBar);
-  const api = modelEditorProvider.getModelApi();
+  const projectFileAdapter = createVSCodeProjectFileIoAdapter({ vscodeApi: vscode });
+  const projectQuality = new ModelProjectQualityFacade({
+    fileOps: projectFileAdapter.fileOps,
+    runtimeProbe: {
+      async probe({ document }) {
+        const engine = vscode.extensions.getExtension('neko.neko-engine');
+        return {
+          available: Boolean(engine),
+          profileId: document.profile ?? '3d',
+          diagnostics: engine
+            ? []
+            : [
+                {
+                  code: 'quality-evaluator-failed',
+                  severity: 'warning',
+                  message: 'The Neko Engine runtime adapter is not installed.',
+                },
+              ],
+        };
+      },
+    },
+  });
+  const api: NekoModelAPI = {
+    ...modelEditorProvider.getModelApi(),
+    projectQuality,
+  };
   const liveModeService = new ModelLiveModeService({
     editorProvider: modelEditorProvider,
     logger: logger.child('LiveMode'),

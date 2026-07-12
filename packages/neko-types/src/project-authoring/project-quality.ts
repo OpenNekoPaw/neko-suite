@@ -1,4 +1,4 @@
-import type { ResourceRef } from '../types/resource-cache';
+import { isResourceRef, type ResourceRef } from '../types/resource-cache';
 import type { QualityDiagnostic, QualityProjectRef, QualityTarget } from '../types/media-quality';
 import { isRuntimeOnlyResourceIdentityValue } from '../types/durable-resource-ref';
 
@@ -119,6 +119,24 @@ export function validateProjectQualityPreview(
   preview: ProjectQualityPreview,
 ): ProjectQualityContractValidationResult {
   const diagnostics: QualityDiagnostic[] = [];
+  if (!isResourceRef(preview.previewRef)) {
+    diagnostics.push({
+      code: 'invalid-quality-gate-result',
+      severity: 'error',
+      message: 'ProjectQuality preview requires a structurally valid preview ResourceRef.',
+      path: ['previewRef'],
+    });
+  } else if (
+    projectQualityPreviewIdentityValues(preview.previewRef).some(isRuntimeOnlyResourceIdentityValue)
+  ) {
+    diagnostics.push({
+      code: 'invalid-quality-gate-result',
+      severity: 'error',
+      message:
+        'ProjectQuality previewRef cannot use cache, render, Webview, or session-only identity.',
+      path: ['previewRef'],
+    });
+  }
   if (preview.sessionRenderUri && !isRuntimeOnlyResourceIdentityValue(preview.sessionRenderUri)) {
     diagnostics.push({
       code: 'invalid-quality-gate-result',
@@ -128,6 +146,18 @@ export function validateProjectQualityPreview(
     });
   }
   return { ok: diagnostics.length === 0, diagnostics };
+}
+
+function projectQualityPreviewIdentityValues(ref: ResourceRef): readonly unknown[] {
+  const values: unknown[] = [
+    ref.id,
+    ref.source.filePath,
+    ref.source.uri,
+    ref.source.projectRelativePath,
+  ];
+  if (ref.locator?.kind === 'file') values.push(ref.locator.path, ref.locator.uri);
+  if (ref.locator?.kind === 'preview-asset') values.push(ref.locator.route);
+  return values;
 }
 
 function isProjectQualityOperation(value: unknown): value is ProjectQualityOperation {

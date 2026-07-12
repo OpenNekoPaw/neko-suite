@@ -73,6 +73,9 @@ export interface ModelOperationResult {
 }
 
 export interface NekoModelAPI {
+  /** Package-owned structural, render-preview, runtime, and export-readiness facade for .nkm projects. */
+  readonly projectQuality: import('../project-authoring/project-quality').ProjectQualityFacade;
+
   getSceneGraph(): Promise<ModelSceneGraphSnapshot | undefined>;
   getNodeProperties(nodeId: string): Promise<ModelSceneNodeInfo | undefined>;
   setNodeTransform(

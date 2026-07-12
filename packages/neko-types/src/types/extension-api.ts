@@ -852,6 +852,9 @@ export interface NekoSketchAPI {
  * Values are keyed by the stable `PuppetFaceParameter.id` field.
  */
 export interface NekoPuppetAPI {
+  /** Package-owned structural, preview, runtime, and export-readiness facade for .nkp projects. */
+  readonly projectQuality: import('../project-authoring/project-quality').ProjectQualityFacade;
+
   /**
    * Get the current face parameter values for the active puppet character.
    * Returns a Record keyed by parameter id (e.g. "faceWidth", "eyeOpenL") with numeric values.

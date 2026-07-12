@@ -10,6 +10,7 @@ import {
   VSCodeErrorHandler,
   resolveLogLevelSetting,
   watchLogLevel,
+  createVSCodeProjectFileIoAdapter,
 } from '@neko/shared/vscode/extension';
 import type { NekoPuppetAPI } from '@neko/shared';
 import { PuppetEditorProvider } from './editor';
@@ -19,6 +20,7 @@ import { registerCommands } from './commands';
 import { createNekoPuppetCapabilityProvider } from './agentCapabilityProvider';
 import { registerMarketInstallTargets } from './market/registerMarketInstallTargets';
 import { PuppetLiveModeService } from './live';
+import { PuppetProjectQualityFacade } from './PuppetProjectQualityFacade';
 
 /**
  * Activate the extension
@@ -38,6 +40,28 @@ export async function activate(context: vscode.ExtensionContext): Promise<NekoPu
   logger.info('Activating extension...');
 
   const puppetEditorProvider = new PuppetEditorProvider(context);
+  const projectFileAdapter = createVSCodeProjectFileIoAdapter({ vscodeApi: vscode });
+  const projectQuality = new PuppetProjectQualityFacade({
+    fileOps: projectFileAdapter.fileOps,
+    runtimeProbe: {
+      async probe({ document }) {
+        const adapter = document.puppet.runtimeAdapter;
+        return {
+          available: Boolean(adapter),
+          profileId: document.puppet.animationModel ?? 'moc3-parameter',
+          diagnostics: adapter
+            ? []
+            : [
+                {
+                  code: 'quality-evaluator-failed',
+                  severity: 'warning',
+                  message: 'The .nkp project does not persist an explicit runtime adapter.',
+                },
+              ],
+        };
+      },
+    },
+  });
   const liveModeService = new PuppetLiveModeService({
     editorProvider: puppetEditorProvider,
     logger: logger.child('LiveMode'),
@@ -64,6 +88,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<NekoPu
 
   // Expose NekoPuppetAPI for cross-extension communication (neko-agent tools)
   const api: NekoPuppetAPI = {
+    projectQuality,
     getCurrentFaceParams: () => puppetEditorProvider.getCurrentFaceParams(),
     isActive: () => puppetEditorProvider.isActive(),
     setFaceParams: (params: Record<string, number>) => puppetEditorProvider.setFaceParams(params),
