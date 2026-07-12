@@ -87,6 +87,12 @@ export interface TabRenderState {
 export type TabRenderStateUpdate =
   Partial<TabRenderState> | ((state: TabRenderState) => Partial<TabRenderState>);
 
+export interface TabRenderRetentionSnapshot {
+  readonly isComposing: boolean;
+  readonly hasDirtyInput: boolean;
+  readonly revision: number;
+}
+
 export interface TabRenderStoreSnapshot extends TabRenderBinding {
   readonly visibility: TabRenderVisibility;
   readonly state: TabRenderState;
@@ -95,15 +101,27 @@ export interface TabRenderStoreSnapshot extends TabRenderBinding {
 
 export interface TabRenderStore {
   getSnapshot(): TabRenderStoreSnapshot;
+  getRetentionSnapshot(): TabRenderRetentionSnapshot;
   subscribe(listener: () => void): () => void;
+  subscribeRetention(listener: () => void): () => void;
   updateState(update: TabRenderStateUpdate): void;
   setVisibility(visibility: TabRenderVisibility): void;
   dispose(): void;
 }
 
+export interface TabRenderRuntimeRetentionSnapshot extends Omit<
+  TabRenderRetentionSnapshot,
+  'revision'
+> {
+  readonly lifecycle: TabRenderRuntimeLifecycle;
+  readonly revision: number;
+}
+
 export interface TabRenderRuntime extends TabRenderBinding {
   readonly store: TabRenderStore;
   readonly lifecycle: TabRenderRuntimeLifecycle;
+  getRetentionSnapshot(): TabRenderRuntimeRetentionSnapshot;
+  subscribeRetention(listener: () => void): () => void;
   markReady(): void;
   beginAttach(): void;
   detach(): void;
@@ -131,19 +149,27 @@ export function createTabRenderRuntimeRegistry(): TabRenderRuntimeRegistry {
 class DefaultTabRenderStore implements TabRenderStore {
   private snapshot: TabRenderStoreSnapshot;
   private readonly listeners = new Set<() => void>();
+  private readonly retentionListeners = new Set<() => void>();
+  private retentionSnapshot: TabRenderRetentionSnapshot;
   private disposed = false;
 
   constructor(binding: TabRenderBinding) {
+    const state = createInitialTabRenderState();
     this.snapshot = Object.freeze({
       ...binding,
       visibility: 'hidden',
-      state: createInitialTabRenderState(),
+      state,
       revision: 0,
     });
+    this.retentionSnapshot = createTabRenderRetentionSnapshot(state, 0);
   }
 
   getSnapshot(): TabRenderStoreSnapshot {
     return this.snapshot;
+  }
+
+  getRetentionSnapshot(): TabRenderRetentionSnapshot {
+    return this.retentionSnapshot;
   }
 
   subscribe(listener: () => void): () => void {
@@ -152,13 +178,27 @@ class DefaultTabRenderStore implements TabRenderStore {
     return () => this.listeners.delete(listener);
   }
 
+  subscribeRetention(listener: () => void): () => void {
+    this.assertActive();
+    this.retentionListeners.add(listener);
+    return () => this.retentionListeners.delete(listener);
+  }
+
   updateState(update: TabRenderStateUpdate): void {
     this.assertActive();
     const patch = typeof update === 'function' ? update(this.snapshot.state) : update;
     if (Object.keys(patch).length === 0) return;
     const nextState = Object.freeze({ ...this.snapshot.state, ...patch });
     if (hasSameStateFields(this.snapshot.state, nextState)) return;
+    const previousRetention = this.retentionSnapshot;
     this.commit({ state: nextState });
+    const nextRetention = createTabRenderRetentionSnapshot(
+      nextState,
+      previousRetention.revision + 1,
+    );
+    if (hasSameRetentionFields(previousRetention, nextRetention)) return;
+    this.retentionSnapshot = nextRetention;
+    for (const listener of this.retentionListeners) listener();
   }
 
   setVisibility(visibility: TabRenderVisibility): void {
@@ -171,6 +211,7 @@ class DefaultTabRenderStore implements TabRenderStore {
     if (this.disposed) return;
     this.disposed = true;
     this.listeners.clear();
+    this.retentionListeners.clear();
   }
 
   private commit(patch: Partial<Pick<TabRenderStoreSnapshot, 'state' | 'visibility'>>): void {
@@ -194,6 +235,9 @@ class DefaultTabRenderRuntime implements TabRenderRuntime {
   readonly conversationId: string;
   readonly store: TabRenderStore;
   private currentLifecycle: TabRenderRuntimeLifecycle = 'attaching';
+  private readonly retentionListeners = new Set<() => void>();
+  private readonly unsubscribeStoreRetention: () => void;
+  private retentionSnapshot: TabRenderRuntimeRetentionSnapshot;
 
   constructor(binding: TabRenderBinding) {
     assertBinding(binding);
@@ -203,20 +247,40 @@ class DefaultTabRenderRuntime implements TabRenderRuntime {
       tabId: binding.tabId,
       conversationId: binding.conversationId,
     });
+    this.retentionSnapshot = createTabRenderRuntimeRetentionSnapshot(
+      this.currentLifecycle,
+      this.store.getRetentionSnapshot(),
+      0,
+    );
+    this.unsubscribeStoreRetention = this.store.subscribeRetention(() => this.publishRetention());
   }
 
   get lifecycle(): TabRenderRuntimeLifecycle {
     return this.currentLifecycle;
   }
 
+  getRetentionSnapshot(): TabRenderRuntimeRetentionSnapshot {
+    return this.retentionSnapshot;
+  }
+
+  subscribeRetention(listener: () => void): () => void {
+    if (this.currentLifecycle === 'disposed') {
+      throw new Error(`Tab render runtime ${this.tabId} is disposed.`);
+    }
+    this.retentionListeners.add(listener);
+    return () => this.retentionListeners.delete(listener);
+  }
+
   markReady(): void {
     this.assertLifecycle('attaching', 'become ready');
     this.currentLifecycle = 'ready';
+    this.publishRetention();
   }
 
   beginAttach(): void {
     this.assertLifecycle('detached', 'begin attaching');
     this.currentLifecycle = 'attaching';
+    this.publishRetention();
   }
 
   detach(): void {
@@ -226,6 +290,7 @@ class DefaultTabRenderRuntime implements TabRenderRuntime {
       );
     }
     this.currentLifecycle = 'detached';
+    this.publishRetention();
   }
 
   setVisible(visible: boolean): void {
@@ -238,7 +303,26 @@ class DefaultTabRenderRuntime implements TabRenderRuntime {
   dispose(): void {
     if (this.currentLifecycle === 'disposed') return;
     this.currentLifecycle = 'disposed';
+    this.unsubscribeStoreRetention();
+    this.retentionListeners.clear();
     this.store.dispose();
+  }
+
+  private publishRetention(): void {
+    const next = createTabRenderRuntimeRetentionSnapshot(
+      this.currentLifecycle,
+      this.store.getRetentionSnapshot(),
+      this.retentionSnapshot.revision + 1,
+    );
+    if (
+      next.lifecycle === this.retentionSnapshot.lifecycle &&
+      next.isComposing === this.retentionSnapshot.isComposing &&
+      next.hasDirtyInput === this.retentionSnapshot.hasDirtyInput
+    ) {
+      return;
+    }
+    this.retentionSnapshot = next;
+    for (const listener of this.retentionListeners) listener();
   }
 
   private assertLifecycle(expected: TabRenderRuntimeLifecycle, operation: string): void {
@@ -333,6 +417,43 @@ class DefaultTabRenderRuntimeRegistry implements TabRenderRuntimeRegistry {
       throw new Error('Tab render runtime registry is disposed.');
     }
   }
+}
+
+function createTabRenderRuntimeRetentionSnapshot(
+  lifecycle: TabRenderRuntimeLifecycle,
+  store: TabRenderRetentionSnapshot,
+  revision: number,
+): TabRenderRuntimeRetentionSnapshot {
+  return Object.freeze({
+    lifecycle,
+    isComposing: store.isComposing,
+    hasDirtyInput: store.hasDirtyInput,
+    revision,
+  });
+}
+
+function createTabRenderRetentionSnapshot(
+  state: TabRenderState,
+  revision: number,
+): TabRenderRetentionSnapshot {
+  return Object.freeze({
+    isComposing: state.composition.isComposing,
+    hasDirtyInput: Boolean(
+      state.inputValue.length > 0 ||
+      state.attachedFiles.length > 0 ||
+      state.selectedFileReferences.length > 0 ||
+      state.contextReferences.length > 0 ||
+      state.queuedEdit !== null,
+    ),
+    revision,
+  });
+}
+
+function hasSameRetentionFields(
+  previous: TabRenderRetentionSnapshot,
+  next: TabRenderRetentionSnapshot,
+): boolean {
+  return previous.isComposing === next.isComposing && previous.hasDirtyInput === next.hasDirtyInput;
 }
 
 function createInitialTabRenderState(): TabRenderState {

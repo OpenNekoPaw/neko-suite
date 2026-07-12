@@ -62,6 +62,7 @@ import {
 import type { ActivationProgressTimeline } from '@/presenters/activation-progress-presenter';
 import { shouldActivateForegroundConversation } from '@/handlers/foreground-activation';
 import { ConversationTabRuntimeView } from './ConversationTabRuntimeView';
+import { useRetainedTabComponents } from '@/render-runtime/useRetainedTabComponents';
 import { isCharacterRoleConversationKind } from '@/presenters/character-role-session-presenter';
 import {
   commitConversationRenderActivation,
@@ -455,6 +456,12 @@ export function ConversationController({
     visibleConversationId,
     workItemsByConversation,
   ]);
+  const retainedTabComponentIds = useRetainedTabComponents({
+    openTabs,
+    activeTabId,
+    runtimeRegistry: tabRenderRuntimeRegistry,
+    sessionStateByConversation,
+  });
   const visibleSessionState = useMemo(
     () =>
       sessionStateByConversation.get(visibleConversationId ?? '') ??
@@ -1517,6 +1524,7 @@ export function ConversationController({
       ) : null}
 
       {openTabs.map((tab) => {
+        if (!retainedTabComponentIds.has(tab.id)) return null;
         const runtime = tabRenderRuntimeRegistry.get(tab.id);
         const sessionState = sessionStateByConversation.get(tab.conversationId);
         if (!runtime || !sessionState) return null;

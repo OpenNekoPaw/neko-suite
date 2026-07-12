@@ -800,6 +800,114 @@ describe('ConversationController entry state', () => {
     expect(screen.getByTestId('workspace-local-state').textContent).toBe('1');
   });
 
+  it('bounds clean inactive workspace trees and remounts from the retained Tab store', () => {
+    vi.clearAllMocks();
+    render(<ConversationController {...createProps()} />);
+    const openTabs = Array.from({ length: 6 }, (_, index) => ({
+      id: `tab-${index + 1}`,
+      title: `Chat ${index + 1}`,
+      conversationId: `conv-${index + 1}`,
+    }));
+
+    act(() => {
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          data: { type: 'tabState', tabState: { openTabs, activeTabId: 'tab-6' } },
+        }),
+      );
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          data: {
+            type: 'promptModeChanged',
+            conversationId: 'conv-1',
+            mode: 'plan',
+          },
+        }),
+      );
+    });
+
+    expect(screen.queryByTestId('workspace-runtime-tab-1')).toBeNull();
+    expect(screen.getByTestId('workspace-runtime-tab-6').getAttribute('data-visible')).toBe('true');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Switch Chat 1' }));
+
+    const remountedTabOne = screen.getByTestId('workspace-runtime-tab-1');
+    expect(remountedTabOne.getAttribute('data-visible')).toBe('true');
+    expect(screen.getByTestId('workspace-prompt-mode').textContent).toBe('plan');
+    expect(screen.queryByTestId('workspace-runtime-tab-2')).toBeNull();
+    expect(screen.getByTestId('workspace-runtime-tab-6')).toBeTruthy();
+  });
+
+  it('keeps an inactive dirty-input Tab tree outside the clean retention budget', () => {
+    vi.clearAllMocks();
+    render(<ConversationController {...createProps()} />);
+    const openTabs = Array.from({ length: 6 }, (_, index) => ({
+      id: `tab-${index + 1}`,
+      title: `Chat ${index + 1}`,
+      conversationId: `conv-${index + 1}`,
+    }));
+
+    act(() => {
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          data: { type: 'tabState', tabState: { openTabs, activeTabId: 'tab-6' } },
+        }),
+      );
+    });
+    expect(screen.queryByTestId('workspace-runtime-tab-1')).toBeNull();
+
+    act(() => {
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          data: {
+            type: 'injectContext',
+            tabId: 'tab-1',
+            conversationId: 'conv-1',
+            payload: contextPayload('ctx-tab-1', 'Retained Tab context'),
+          },
+        }),
+      );
+    });
+
+    expect(screen.getByTestId('workspace-runtime-tab-1').getAttribute('data-visible')).toBe(
+      'false',
+    );
+  });
+
+  it('keeps a background running Tab tree outside the clean retention budget', () => {
+    vi.clearAllMocks();
+    render(<ConversationController {...createProps()} />);
+    const openTabs = Array.from({ length: 6 }, (_, index) => ({
+      id: `tab-${index + 1}`,
+      title: `Chat ${index + 1}`,
+      conversationId: `conv-${index + 1}`,
+    }));
+
+    act(() => {
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          data: { type: 'tabState', tabState: { openTabs, activeTabId: 'tab-6' } },
+        }),
+      );
+    });
+    expect(screen.queryByTestId('workspace-runtime-tab-1')).toBeNull();
+
+    act(() => {
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          data: {
+            type: 'agentStateSnapshot',
+            agentStates: [{ conversationId: 'conv-1', phase: 'streaming', startedAt: 10 }],
+          },
+        }),
+      );
+    });
+
+    expect(screen.getByTestId('workspace-runtime-tab-1').getAttribute('data-visible')).toBe(
+      'false',
+    );
+  });
+
   it('retains independent keyed workspace instances for two tabs bound to one conversation', () => {
     vi.clearAllMocks();
     render(<ConversationController {...createProps()} />);

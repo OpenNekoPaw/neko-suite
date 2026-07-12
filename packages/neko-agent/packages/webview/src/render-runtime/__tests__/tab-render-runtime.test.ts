@@ -66,6 +66,38 @@ describe('TabRenderRuntime', () => {
     });
   });
 
+  it('publishes retention changes only when composition or dirty input protection changes', () => {
+    const runtime = createTabRenderRuntime({ tabId: 'tab-a', conversationId: 'conv-a' });
+    const listener = vi.fn();
+    runtime.store.subscribeRetention(listener);
+
+    expect(runtime.store.getRetentionSnapshot()).toEqual({
+      isComposing: false,
+      hasDirtyInput: false,
+      revision: 0,
+    });
+
+    runtime.store.updateState({ selectedModel: 'model-a' });
+    runtime.store.updateState({ inputValue: 'draft-a' });
+    runtime.store.updateState({ inputValue: 'draft-a-updated' });
+    runtime.store.updateState({ composition: { isComposing: true } });
+
+    expect(listener).toHaveBeenCalledTimes(2);
+    expect(runtime.store.getRetentionSnapshot()).toEqual({
+      isComposing: true,
+      hasDirtyInput: true,
+      revision: 2,
+    });
+
+    runtime.store.updateState({ inputValue: '', composition: { isComposing: false } });
+    expect(listener).toHaveBeenCalledTimes(3);
+    expect(runtime.store.getRetentionSnapshot()).toEqual({
+      isComposing: false,
+      hasDirtyInput: false,
+      revision: 3,
+    });
+  });
+
   it('owns an independent store and explicit lifecycle per Tab binding', () => {
     const runtimeA = createTabRenderRuntime({ tabId: 'tab-a', conversationId: 'conv-a' });
     const runtimeB = createTabRenderRuntime({ tabId: 'tab-b', conversationId: 'conv-b' });
@@ -88,6 +120,20 @@ describe('TabRenderRuntime', () => {
       visibility: 'hidden',
       revision: 0,
     });
+  });
+
+  it('publishes attaching lifecycle protection independently from store changes', () => {
+    const runtime = createTabRenderRuntime({ tabId: 'tab-a', conversationId: 'conv-a' });
+    const listener = vi.fn();
+    runtime.subscribeRetention(listener);
+
+    expect(runtime.getRetentionSnapshot()).toMatchObject({ lifecycle: 'attaching', revision: 0 });
+    runtime.markReady();
+    runtime.detach();
+    runtime.beginAttach();
+
+    expect(listener).toHaveBeenCalledTimes(3);
+    expect(runtime.getRetentionSnapshot()).toMatchObject({ lifecycle: 'attaching', revision: 3 });
   });
 
   it('fails visibly for invalid lifecycle transitions and disposed store mutation', () => {
