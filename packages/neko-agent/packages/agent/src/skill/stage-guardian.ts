@@ -23,36 +23,45 @@
  */
 
 import type { IdcStage } from '@neko-agent/types';
-import { getLogger } from '../utils/logger';
 import type { StageTracker } from './stage-tracker';
 
 // =============================================================================
 // Types
 // =============================================================================
 
-export type StageGuardianIssueCode =
-  | 'stage-out-of-order'
-  | 'stage-timeout'
-  /**
-   * An Apply was committed for a subject that the guardian never saw an
-   * approval decision for. Indicates the approval gate was bypassed —
-   * either the ApprovalEngine wasn't consulted, or the caller skipped
-   * `noteApproval()` on purpose. Guardian cannot distinguish; it only
-   * raises the observation.
-   */
-  | 'approval-skipped';
-
-export interface StageGuardianIssue {
-  code: StageGuardianIssueCode;
+interface StageGuardianIssueBase {
   /** Stage the issue was observed on. */
-  stage: IdcStage;
-  /** Human-readable description (for logs / UI). */
-  message: string;
+  readonly stage: IdcStage;
   /** ms epoch when the issue was raised. */
-  at: number;
-  /** Extra context — issue-specific. */
-  detail?: Record<string, unknown>;
+  readonly at: number;
 }
+
+export type StageGuardianIssue = StageGuardianIssueBase &
+  (
+    | {
+        readonly code: 'stage-out-of-order';
+        readonly detail?: never;
+      }
+    | {
+        readonly code: 'stage-timeout';
+        readonly detail: Readonly<{
+          readonly elapsedMs: number;
+          readonly budgetMs: number;
+        }>;
+      }
+    | {
+        /**
+         * Apply was committed without a preceding approval decision for the subject.
+         * The guardian reports the observation without inferring why the gate was bypassed.
+         */
+        readonly code: 'approval-skipped';
+        readonly detail: Readonly<{
+          readonly subject: string;
+        }>;
+      }
+  );
+
+export type StageGuardianIssueCode = StageGuardianIssue['code'];
 
 export type StageGuardianListener = (issue: StageGuardianIssue) => void;
 
@@ -122,7 +131,6 @@ export interface IStageGuardian {
   dispose(): void;
 }
 
-const logger = getLogger('StageGuardian');
 const HISTORY_CAP = 64;
 
 class StageGuardian implements IStageGuardian {
@@ -182,7 +190,6 @@ class StageGuardian implements IStageGuardian {
     this._raise({
       code: 'stage-timeout',
       stage: this._watchStage,
-      message: `Stage "${this._watchStage}" has been active for ${elapsed}ms (> ${this._stageTimeoutMs}ms budget)`,
       at: this._now(),
       detail: { elapsedMs: elapsed, budgetMs: this._stageTimeoutMs },
     });
@@ -206,7 +213,6 @@ class StageGuardian implements IStageGuardian {
     this._raise({
       code: 'approval-skipped',
       stage: this._watchStage ?? 'apply',
-      message: `Apply committed for subject "${subject}" without a prior approval decision`,
       at: this._now(),
       detail: { subject },
     });
@@ -256,8 +262,6 @@ class StageGuardian implements IStageGuardian {
       this._raise({
         code: 'stage-out-of-order',
         stage,
-        message:
-          'Entered Apply without visiting Draft / Plan first — high-risk tool calls should traverse the earlier stages per ADR §3.2',
         at,
       });
     }
@@ -274,8 +278,6 @@ class StageGuardian implements IStageGuardian {
       // Drop the oldest to stay bounded.
       this._history.splice(0, this._history.length - HISTORY_CAP);
     }
-
-    logger.warn(`[${issue.code}] ${issue.message}`);
 
     for (const listener of this._listeners) {
       try {

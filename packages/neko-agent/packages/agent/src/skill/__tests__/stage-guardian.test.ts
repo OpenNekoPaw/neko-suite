@@ -29,6 +29,7 @@ describe('StageGuardian', () => {
       expect(issues).toHaveLength(1);
       expect(issues[0]!.code).toBe('stage-out-of-order');
       expect(issues[0]!.stage).toBe('apply');
+      expect(issues[0]).not.toHaveProperty('message');
     });
 
     it('does not flag apply when draft was already visited', () => {
@@ -92,10 +93,13 @@ describe('StageGuardian', () => {
       t = 2000;
       guardian.tick();
       expect(issues.filter((i) => i.code === 'stage-timeout')).toHaveLength(1);
-      const issue = issues.find((i) => i.code === 'stage-timeout')!;
-      expect(issue.stage).toBe('draft');
-      expect(issue.detail?.elapsedMs).toBe(2000);
-      expect(issue.detail?.budgetMs).toBe(1000);
+      const issue = issues.find(
+        (candidate): candidate is Extract<StageGuardianIssue, { code: 'stage-timeout' }> =>
+          candidate.code === 'stage-timeout',
+      );
+      expect(issue?.stage).toBe('draft');
+      expect(issue?.detail.elapsedMs).toBe(2000);
+      expect(issue?.detail.budgetMs).toBe(1000);
     });
 
     it('stage-timeout only fires once per stage entry', () => {
@@ -209,9 +213,13 @@ describe('StageGuardian', () => {
       guardian.noteApply('tool:generate_image');
 
       expect(issues).toHaveLength(1);
-      expect(issues[0]!.code).toBe('approval-skipped');
-      expect(issues[0]!.detail?.subject).toBe('tool:generate_image');
-      expect(issues[0]!.stage).toBe('apply');
+      const issue = issues[0];
+      expect(issue?.code).toBe('approval-skipped');
+      if (issue?.code !== 'approval-skipped') {
+        throw new Error('Expected approval-skipped issue');
+      }
+      expect(issue.detail.subject).toBe('tool:generate_image');
+      expect(issue.stage).toBe('apply');
     });
 
     it('does not flag when approval precedes apply for the same subject', () => {
@@ -252,7 +260,11 @@ describe('StageGuardian', () => {
       guardian.noteApply('tool:write_file');
 
       expect(issues.filter((i) => i.code === 'approval-skipped')).toHaveLength(1);
-      expect(issues[0]!.detail?.subject).toBe('tool:write_file');
+      const issue = issues[0];
+      if (issue?.code !== 'approval-skipped') {
+        throw new Error('Expected approval-skipped issue');
+      }
+      expect(issue.detail.subject).toBe('tool:write_file');
     });
 
     it('opt-out via enforceApprovalGate=false silences the check', () => {

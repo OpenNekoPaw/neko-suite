@@ -25,7 +25,12 @@ import {
 } from './skill-registry-populator';
 import { createConversationSkillProvider } from './skill-meta-provider';
 import type { ISubpackageResolver } from './subpackage-guard';
-import type { SkillActivationRequest, SkillProviderFactory } from '../tools/core/meta-tools';
+import type {
+  SkillActivationProviderResult,
+  SkillActivationRequest,
+  SkillDeactivationProviderResult,
+  SkillProviderFactory,
+} from '../tools/core/meta-tools';
 
 export interface RuntimeSkillAwareSystemPromptResult {
   readonly prompt: string;
@@ -89,13 +94,7 @@ export interface RuntimeSkillProviderState {
   activateLifecycleSkill?(
     conversationId: string,
     input: SkillActivationRequest,
-  ): Promise<{
-    success: boolean;
-    message: string;
-    allowedTools?: string[];
-    lifecycleRecordId?: string;
-    diagnostics?: ActiveSkillLifecycleProjection['diagnostics'];
-  }>;
+  ): Promise<SkillActivationProviderResult>;
   deactivateLifecycleSkill?(
     conversationId: string,
     input?: {
@@ -103,12 +102,7 @@ export interface RuntimeSkillProviderState {
       readonly slot?: SkillLifecycleDeactivationRequest['slot'];
       readonly skillName?: string;
     },
-  ): Promise<{
-    success: boolean;
-    message: string;
-    removedRecordIds?: readonly string[];
-    diagnostics?: ActiveSkillLifecycleProjection['diagnostics'];
-  }>;
+  ): Promise<SkillDeactivationProviderResult>;
   applySkillInjection(
     conversationId: string,
     injection: SkillInjection,

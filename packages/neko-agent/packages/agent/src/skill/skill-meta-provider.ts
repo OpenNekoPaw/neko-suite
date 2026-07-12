@@ -10,31 +10,20 @@ import type {
   ISkillProvider,
   SkillActivationRequest,
   SkillContextSummary,
+  SkillActivationProviderResult,
+  SkillDeactivationProviderResult,
 } from '../tools/core/meta-tools';
 import type { SkillService } from './skill-service';
 
 export interface ConversationSkillProviderEffects {
   getActiveSkill(): Skill | undefined;
   getActiveSkillLifecycle?(): ActiveSkillLifecycleProjection;
-  activateLifecycleSkill?(input: SkillActivationRequest): Promise<{
-    success: boolean;
-    message: string;
-    skillName?: string;
-    requestedSkillName?: string;
-    allowedTools?: string[];
-    lifecycleRecordId?: string;
-    diagnostics?: ActiveSkillLifecycleProjection['diagnostics'];
-  }>;
+  activateLifecycleSkill?(input: SkillActivationRequest): Promise<SkillActivationProviderResult>;
   deactivateLifecycleSkill?(input?: {
     readonly recordId?: string;
     readonly slot?: SkillLifecycleDeactivationRequest['slot'];
     readonly skillName?: string;
-  }): Promise<{
-    success: boolean;
-    message: string;
-    removedRecordIds?: readonly string[];
-    diagnostics?: ActiveSkillLifecycleProjection['diagnostics'];
-  }>;
+  }): Promise<SkillDeactivationProviderResult>;
   applySkillInjection(injection: SkillInjection, skill: Skill): void | Promise<void>;
   clearActiveSkill(): void | Promise<void>;
   createSkill?(input: CreateSkillInput): Promise<CreateSkillResult>;
@@ -86,21 +75,22 @@ export function createConversationSkillProvider(
         const skill = await skillService.registry.ensureLoaded(input.name);
         if (!skill) {
           logger?.warn?.(`Skill "${input.name}" not found during activation`);
-          return { success: false, message: `Skill "${input.name}" not found` };
+          return { success: false, code: 'skill-not-found' };
         }
 
         const injection = await skillService.apply(skill);
         await effects.applySkillInjection(injection, skill);
         return {
           success: true,
-          message: `Activated skill "${input.name}"`,
+          skillName: input.name,
           allowedTools: injection.allowedTools ?? skill.allowedTools,
         };
       } catch (error) {
         logger?.error?.('Failed to activate skill', { name: input.name, error });
         return {
           success: false,
-          message: error instanceof Error ? error.message : String(error),
+          code: 'provider-error',
+          detail: error instanceof Error ? error.message : String(error),
         };
       }
     },
@@ -122,7 +112,7 @@ export function createConversationSkillProvider(
       }
 
       await effects.clearActiveSkill();
-      return { success: true, message: 'Skill deactivated' };
+      return { success: true };
     },
   };
 }

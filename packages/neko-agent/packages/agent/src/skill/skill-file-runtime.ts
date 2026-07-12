@@ -145,12 +145,20 @@ export function createSkillFileRuntime(options: SkillFileRuntimeOptions): SkillF
 export class CreateSkillError extends Error {
   readonly code: CreateSkillFailureCode;
   readonly diagnostics: readonly SkillDiagnostic[];
+  readonly detail?: string;
 
-  constructor(code: CreateSkillFailureCode, diagnostics: readonly SkillDiagnostic[]) {
+  constructor(
+    code: CreateSkillFailureCode,
+    diagnostics: readonly SkillDiagnostic[],
+    detail?: string,
+  ) {
     super(diagnostics.map((diagnostic) => diagnostic.message).join('\n'));
     this.name = 'CreateSkillError';
     this.code = code;
     this.diagnostics = diagnostics;
+    if (detail !== undefined) {
+      this.detail = detail;
+    }
   }
 }
 
@@ -346,11 +354,20 @@ class DefaultSkillFileRuntime implements SkillFileRuntime {
           ),
         );
       }
+      const details = [
+        ...(error instanceof CreateSkillError
+          ? error.detail === undefined
+            ? []
+            : [error.detail]
+          : [formatError(error)]),
+        ...(cleanupError === undefined ? [] : [formatError(cleanupError)]),
+      ];
       throw new CreateSkillError(
         error instanceof CreateSkillError ? error.code : 'filesystem-error',
         error instanceof CreateSkillError
           ? [...error.diagnostics, ...diagnostics.slice(1)]
           : diagnostics,
+        details.length > 0 ? details.join('; ') : undefined,
       );
     }
 

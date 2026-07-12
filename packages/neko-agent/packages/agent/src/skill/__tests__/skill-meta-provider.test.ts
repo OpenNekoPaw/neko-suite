@@ -211,7 +211,7 @@ describe('createConversationSkillProvider', () => {
       provider.activateSkill({ name: 'commit', reason: 'Agent selected commit workflow' }),
     ).resolves.toEqual({
       success: true,
-      message: 'Activated skill "commit"',
+      skillName: 'commit',
       allowedTools: ['bash'],
     });
     expect(skillService.registry.ensureLoaded).toHaveBeenCalledWith('commit');
@@ -246,7 +246,7 @@ describe('createConversationSkillProvider', () => {
       }),
     ).resolves.toEqual({
       success: true,
-      message: 'Activated skill "comic-to-storyboard"',
+      skillName: 'comic-to-storyboard',
       allowedTools: ['ReadDocument', 'ReadImage'],
     });
 
@@ -267,7 +267,7 @@ describe('createConversationSkillProvider', () => {
       provider.activateSkill({ name: 'missing', reason: 'Agent selected missing workflow' }),
     ).resolves.toEqual({
       success: false,
-      message: 'Skill "missing" not found',
+      code: 'skill-not-found',
     });
     expect(warn).toHaveBeenCalledWith('Skill "missing" not found during activation');
   });
@@ -289,7 +289,8 @@ describe('createConversationSkillProvider', () => {
       provider.activateSkill({ name: 'video', reason: 'Agent selected video workflow' }),
     ).resolves.toEqual({
       success: false,
-      message: 'subpackage missing',
+      code: 'provider-error',
+      detail: 'subpackage missing',
     });
     expect(effects.applySkillInjection).not.toHaveBeenCalled();
     expect(logger.error).toHaveBeenCalledWith('Failed to activate skill', {
@@ -307,7 +308,6 @@ describe('createConversationSkillProvider', () => {
 
     await expect(provider.deactivateSkill()).resolves.toEqual({
       success: true,
-      message: 'Skill deactivated',
     });
     expect(effects.clearActiveSkill).toHaveBeenCalled();
   });

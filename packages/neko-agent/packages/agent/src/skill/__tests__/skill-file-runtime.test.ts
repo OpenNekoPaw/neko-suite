@@ -300,7 +300,12 @@ describe('SkillFileRuntime', () => {
         skill: validSkill('write-failure'),
         resources: [{ path: 'references/fail.md', encoding: 'utf8', content: 'fail' }],
       }),
-    ).rejects.toMatchObject({ code: 'filesystem-error' });
+    ).rejects.toMatchObject({
+      code: 'filesystem-error',
+      detail: expect.stringMatching(
+        /^Injected write failure: \/home\/neko\/\.agents\/skills\/\.write-failure\.tmp-[^/]+\/references\/fail\.md$/,
+      ),
+    });
 
     expect(fs.has('/home/neko/.agents/skills/write-failure')).toBe(false);
     expect(fs.listPaths().some((filePath) => filePath.includes('.write-failure.tmp-'))).toBe(false);

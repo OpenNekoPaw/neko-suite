@@ -264,12 +264,11 @@ describe('skill runtime bootstrap', () => {
       },
       activateLifecycleSkill: async () => ({
         success: true,
-        message: 'Activated skill "storyboard"',
+        skillName: 'storyboard',
         lifecycleRecordId: 'record-storyboard',
       }),
       deactivateLifecycleSkill: async () => ({
         success: true,
-        message: 'Skill deactivated',
         removedRecordIds: ['record-storyboard'],
       }),
       applySkillInjection: vi.fn(),

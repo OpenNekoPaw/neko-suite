@@ -40,7 +40,10 @@ describe('current single-Skill lifecycle characterization', () => {
     );
 
     expect(runtime.getActiveSkill('conv-1')).toEqual({
-      skill: review,
+      skill: expect.objectContaining({
+        name: 'review',
+        content: 'review instructions: changed files',
+      }),
       injection: expect.objectContaining({ name: 'review' }),
       appliedAt: 100,
     });
@@ -92,7 +95,7 @@ describe('current single-Skill lifecycle characterization', () => {
       provider.activateSkill({ name: 'review', reason: 'Agent selected review workflow' }),
     ).resolves.toEqual({
       success: true,
-      message: 'Activated skill "review"',
+      skillName: 'review',
       allowedTools: ['ReadDocument'],
     });
     expect(skillService.registry.ensureLoaded).toHaveBeenCalledWith('review');
@@ -113,7 +116,6 @@ describe('current single-Skill lifecycle characterization', () => {
 
     await expect(provider.deactivateSkill()).resolves.toEqual({
       success: true,
-      message: 'Skill deactivated',
     });
     expect(effects.clearActiveSkill).toHaveBeenCalledOnce();
   });

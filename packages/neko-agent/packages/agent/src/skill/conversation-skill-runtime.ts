@@ -18,6 +18,10 @@ import {
   createAgentCapabilityActivationProgressEvent,
 } from '@neko/shared';
 import { normalizeAgentInputTriggerName } from '@neko-agent/types';
+import type {
+  SkillActivationProviderResult,
+  SkillDeactivationProviderResult,
+} from '../tools/core/meta-tools';
 import type { SkillService } from './skill-service';
 import { defaultSkillLifecycleRequest, SkillLifecycleRuntime } from './skill-lifecycle-runtime';
 import {
@@ -274,27 +278,15 @@ export class ConversationSkillRuntime {
     );
   }
 
-  async activateDomainSkill(input: ApplySkillInvocationInput): Promise<{
-    success: boolean;
-    message: string;
-    skillName?: string;
-    requestedSkillName?: string;
-    allowedTools?: string[];
-    lifecycleRecordId?: string;
-    diagnostics?: readonly import('@neko/shared').SkillLifecycleDiagnostic[];
-  }> {
+  async activateDomainSkill(
+    input: ApplySkillInvocationInput,
+  ): Promise<SkillActivationProviderResult> {
     return this.activateLifecycleSkill({ ...input, slot: 'domainSkill' });
   }
 
-  async activateLifecycleSkill(input: ApplySkillInvocationInput): Promise<{
-    success: boolean;
-    message: string;
-    skillName?: string;
-    requestedSkillName?: string;
-    allowedTools?: string[];
-    lifecycleRecordId?: string;
-    diagnostics?: readonly import('@neko/shared').SkillLifecycleDiagnostic[];
-  }> {
+  async activateLifecycleSkill(
+    input: ApplySkillInvocationInput,
+  ): Promise<SkillActivationProviderResult> {
     const slot = input.slot ?? 'domainSkill';
     const requestedSkillName = normalizeAgentInputTriggerName(input.skillName);
     const canonicalSkillName = resolveCanonicalSkillName(requestedSkillName);
@@ -315,7 +307,8 @@ export class ConversationSkillRuntime {
     if (!result?.applied) {
       return {
         success: false,
-        message: result?.error ?? `Skill "${input.skillName}" was not activated`,
+        code: 'activation-rejected',
+        ...(result?.error ? { detail: result.error } : {}),
       };
     }
 
@@ -325,7 +318,6 @@ export class ConversationSkillRuntime {
     const activatedSkillName = result.skill?.name ?? canonicalSkillName;
     return {
       success: true,
-      message: `Activated skill "${activatedSkillName}"`,
       skillName: activatedSkillName,
       ...(requestedSkillName !== activatedSkillName ? { requestedSkillName } : {}),
       allowedTools: result.injection?.allowedTools ?? result.skill?.allowedTools,
@@ -340,15 +332,10 @@ export class ConversationSkillRuntime {
     readonly slot?: import('@neko/shared').SkillLifecycleSlot;
     readonly skillName?: string;
     readonly actor?: import('@neko/shared').SkillLifecycleDeactivationActor;
-  }): Promise<{
-    success: boolean;
-    message: string;
-    removedRecordIds?: readonly string[];
-    diagnostics?: readonly import('@neko/shared').SkillLifecycleDiagnostic[];
-  }> {
+  }): Promise<SkillDeactivationProviderResult> {
     const lifecycle = this._getLifecycleRuntime();
     if (!lifecycle) {
-      return { success: false, message: 'SkillService not initialized' };
+      return { success: false, code: 'skill-system-unavailable' };
     }
 
     const result = lifecycle.deactivate({
@@ -362,7 +349,7 @@ export class ConversationSkillRuntime {
     if (!result.ok) {
       return {
         success: false,
-        message: result.diagnostics[0]?.message ?? 'Skill lifecycle deactivation rejected',
+        code: 'deactivation-rejected',
         diagnostics: result.diagnostics,
       };
     }
@@ -370,7 +357,6 @@ export class ConversationSkillRuntime {
     this._deps.agentBridge?.clearActiveSkill(input.conversationId);
     return {
       success: true,
-      message: 'Skill deactivated',
       removedRecordIds: result.removedRecordIds,
       diagnostics: result.diagnostics,
     };
