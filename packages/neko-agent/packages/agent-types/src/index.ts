@@ -424,7 +424,6 @@ export type {
   AgentTurnTimelineParentAnchorKind,
   AgentTurnTimelineReplaceOperation,
   AgentTurnTimelineSnapshotOperation,
-  AgentTurnTimelineSnapshotRequest,
   AgentTurnTimelineStructuralItem,
   AgentTurnTimelineTaskItem,
   AgentTurnTimelineTaskPayload,
@@ -446,7 +445,6 @@ export {
   AGENT_TURN_TIMELINE_SCHEMA_VERSION,
   assertValidAgentTurnTimelineMessage,
   validateAgentTurnTimelineMessage,
-  validateAgentTurnTimelineSnapshotRequest,
 } from './agent-turn-timeline';
 export type {
   AgentMediaModelCategory,
@@ -593,7 +591,6 @@ export {
   buildAssistantTextReplacementMessage,
   buildAgentStateSnapshotMessage,
   buildAgentTurnTimelineMessage,
-  buildAgentTurnTimelineSnapshotRequest,
   buildAgentCapabilityActivationProgressMessage,
   buildAgentCapabilityLifecycleResultMessage,
   buildAgentSessionDiagnosticMessage,

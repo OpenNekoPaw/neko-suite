@@ -79,14 +79,11 @@ describe('active turn timeline presenter', () => {
     });
 
     expect(second.diagnostics).toEqual([]);
-    expect(second.snapshotRequest).toBeUndefined();
     expect(third.diagnostics).toEqual([]);
-    expect(third.snapshotRequest).toBeUndefined();
     expect(third.state?.items[0]?.payload).toMatchObject({
       content: `a${'b'.repeat(1_999)}${'c'.repeat(2_000)}`,
     });
     expect(completed.diagnostics).toEqual([]);
-    expect(completed.snapshotRequest).toBeUndefined();
     expect(completed.state?.items[0]).toMatchObject({
       itemRevision: 4_001,
       status: 'complete',
@@ -106,7 +103,6 @@ describe('active turn timeline presenter', () => {
     });
 
     expect(stale.state).toBe(active);
-    expect(stale.snapshotRequest).toBeUndefined();
     expect(stale.diagnostics).toEqual(
       expect.arrayContaining([expect.objectContaining({ code: 'stale-item-revision' })]),
     );
@@ -134,23 +130,13 @@ describe('active turn timeline presenter', () => {
     expect(duplicate.diagnostics).toEqual(
       expect.arrayContaining([expect.objectContaining({ code: 'duplicate-delivery-revision' })]),
     );
-    expect(gap.state).toEqual({ ...active, synchronization: 'suspended' });
+    expect(gap.state).toEqual({ ...active, synchronization: 'unavailable' });
     expect(gap.diagnostics).toEqual(
       expect.arrayContaining([expect.objectContaining({ code: 'delivery-revision-gap' })]),
     );
-    expect(gap.snapshotRequest).toEqual({
-      type: 'requestAgentTurnTimelineSnapshot',
-      schemaVersion: 2,
-      connectionEpoch: 'epoch-1',
-      conversationId: 'conv-1',
-      turnId: 'turn-1',
-      messageId: 'msg-1',
-      reason: 'revision-gap',
-      lastAppliedDeliveryRevision: 1,
-    });
   });
 
-  it('suspends dependent deltas until one authoritative snapshot resumes the timeline', () => {
+  it('keeps a revision-gapped legacy timeline failed until its attachment is replaced', () => {
     const active = applyAgentTurnTimelineMessage({
       state: null,
       message: timelineMessage([textItem('text-1', 1, 'a')]),
@@ -161,33 +147,30 @@ describe('active turn timeline presenter', () => {
         deliveryRevision: 3,
       }),
     });
-    const blocked = applyAgentTurnTimelineMessage({
+    const blockedDelta = applyAgentTurnTimelineMessage({
       state: gap.state,
       message: timelineMessage([{ ...textItem('text-1', 1, 'blocked'), itemRevision: 4 }], {
         deliveryRevision: 4,
       }),
     });
-    const snapshot = applyAgentTurnTimelineMessage({
-      state: blocked.state,
+    const blockedSnapshot = applyAgentTurnTimelineMessage({
+      state: gap.state,
       message: timelineMessage([{ ...textItem('text-1', 1, 'authoritative'), itemRevision: 4 }], {
         deliveryRevision: 4,
         operation: 'snapshot',
         batchKind: 'snapshot',
       }),
     });
-    const resumed = applyAgentTurnTimelineMessage({
-      state: snapshot.state,
-      message: timelineMessage([{ ...textItem('text-1', 1, '!'), itemRevision: 5 }], {
-        deliveryRevision: 5,
-      }),
-    });
 
-    expect(blocked.state).toBe(gap.state);
-    expect(blocked.snapshotRequest).toBeUndefined();
-    expect(blocked.state?.items[0]?.payload).toMatchObject({ content: 'a' });
-    expect(snapshot.diagnostics).toEqual([]);
-    expect(snapshot.state?.synchronization).toBe('synchronized');
-    expect(resumed.state?.items[0]?.payload).toMatchObject({ content: 'authoritative!' });
+    expect(blockedDelta.state).toBe(gap.state);
+    expect(blockedSnapshot.state).toBe(gap.state);
+    expect(blockedDelta.state?.items[0]?.payload).toMatchObject({ content: 'a' });
+    expect(blockedDelta.diagnostics).toContainEqual(
+      expect.objectContaining({ code: 'turn-snapshot-unavailable' }),
+    );
+    expect(blockedSnapshot.diagnostics).toContainEqual(
+      expect.objectContaining({ code: 'turn-snapshot-unavailable' }),
+    );
   });
 
   it('marks a suspended timeline unavailable when snapshot recovery fails', () => {

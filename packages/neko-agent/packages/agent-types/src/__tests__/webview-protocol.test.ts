@@ -93,6 +93,21 @@ describe('webview protocol parser', () => {
     ).toEqual({ type: 'projectionDetach', key, reason: 'endpoint-replaced' });
   });
 
+  it('rejects the removed Timeline snapshot recovery message', () => {
+    expect(
+      parseWebviewToExtensionMessage({
+        type: 'requestAgentTurnTimelineSnapshot',
+        schemaVersion: 2,
+        connectionEpoch: 'epoch-1',
+        conversationId: 'conv-1',
+        turnId: 'turn-1',
+        messageId: 'msg-1',
+        reason: 'revision-gap',
+        lastAppliedDeliveryRevision: 1,
+      }),
+    ).toBeNull();
+  });
+
   it('rejects malformed projection attachment lifecycle messages', () => {
     const key = {
       endpointEpoch: 'endpoint-1',

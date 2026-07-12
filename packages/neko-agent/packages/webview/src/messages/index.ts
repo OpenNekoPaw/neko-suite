@@ -15,11 +15,9 @@ import {
   setState as setVSCodeState,
   type VSCodeAPI,
 } from '@neko/shared/vscode';
-import { buildAgentTurnTimelineSnapshotRequest } from '@neko-agent/types';
 import type {
   AgentHostRuntimeAdapter,
   AgentHostRuntimeSubscription,
-  AgentTurnTimelineSnapshotRequest,
   ConversationLifecycleWebviewMessage,
   ExtensionToWebviewMessage,
   InvokeAgentCapabilityLifecycleWebviewMessage,
@@ -122,12 +120,6 @@ export const AgentHostMessages = {
    */
   sendMessage: (payload: Omit<SendMessageWebviewMessage, 'type'>) => {
     postConversationMessage({ type: 'sendMessage', ...payload });
-  },
-
-  requestAgentTurnTimelineSnapshot: (
-    request: Omit<AgentTurnTimelineSnapshotRequest, 'type' | 'schemaVersion'>,
-  ) => {
-    postConversationMessage(buildAgentTurnTimelineSnapshotRequest(request));
   },
 
   /** Create a new conversation */

@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import {
   AGENT_TURN_TIMELINE_SCHEMA_VERSION,
   validateAgentTurnTimelineMessage,
-  validateAgentTurnTimelineSnapshotRequest,
   type AgentTurnTimelineAssistantTextItem,
   type AgentTurnTimelineMessage,
   type AgentTurnTimelineThinkingItem,
@@ -373,25 +372,5 @@ describe('Agent Timeline V2 contract', () => {
         expect.objectContaining({ code: 'unsupported-schema-version' }),
       );
     }
-  });
-
-  it('validates explicit snapshot requests', () => {
-    expect(
-      validateAgentTurnTimelineSnapshotRequest({
-        type: 'requestAgentTurnTimelineSnapshot',
-        schemaVersion: 2,
-        ...identity,
-        reason: 'revision-gap',
-        lastAppliedDeliveryRevision: 10,
-      }).ok,
-    ).toBe(true);
-    expect(
-      validateAgentTurnTimelineSnapshotRequest({
-        type: 'requestAgentTurnTimelineSnapshot',
-        schemaVersion: 1,
-        ...identity,
-        reason: 'reload',
-      }).diagnostics,
-    ).toContainEqual(expect.objectContaining({ code: 'unsupported-schema-version' }));
   });
 });

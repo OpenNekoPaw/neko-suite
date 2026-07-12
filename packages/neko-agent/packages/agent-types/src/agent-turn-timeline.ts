@@ -222,13 +222,6 @@ export interface AgentTurnTimelineBatch extends AgentTurnTimelineConnectionIdent
 
 export type AgentTurnTimelineMessage = AgentTurnTimelineBatch;
 
-export interface AgentTurnTimelineSnapshotRequest extends AgentTurnTimelineConnectionIdentity {
-  readonly type: 'requestAgentTurnTimelineSnapshot';
-  readonly schemaVersion: typeof AGENT_TURN_TIMELINE_SCHEMA_VERSION;
-  readonly reason: 'webview-initialization' | 'revision-gap';
-  readonly lastAppliedDeliveryRevision?: number;
-}
-
 export type AgentTurnTimelineDiagnosticCode =
   | 'invalid-message'
   | 'unsupported-schema-version'
@@ -410,35 +403,6 @@ export function assertValidAgentTurnTimelineMessage(
         .join('; ')}`,
     );
   }
-}
-
-export function validateAgentTurnTimelineSnapshotRequest(
-  raw: unknown,
-): AgentTurnTimelineValidationResult {
-  if (!isRecord(raw) || raw.type !== 'requestAgentTurnTimelineSnapshot') {
-    return failure('invalid-message', 'Timeline snapshot request has an invalid type.');
-  }
-  if (raw.schemaVersion !== AGENT_TURN_TIMELINE_SCHEMA_VERSION) {
-    return failure(
-      'unsupported-schema-version',
-      'Timeline snapshot request must use schemaVersion 2.',
-    );
-  }
-  const diagnostics: AgentTurnTimelineValidationDiagnostic[] = [];
-  readConnectionIdentity(raw, diagnostics);
-  if (raw.reason !== 'webview-initialization' && raw.reason !== 'revision-gap') {
-    diagnostics.push({ code: 'invalid-message', message: 'Snapshot request reason is invalid.' });
-  }
-  if (
-    raw.lastAppliedDeliveryRevision !== undefined &&
-    readNonNegativeInteger(raw.lastAppliedDeliveryRevision) === null
-  ) {
-    diagnostics.push({
-      code: 'invalid-delivery-revision',
-      message: 'lastAppliedDeliveryRevision must be a non-negative integer.',
-    });
-  }
-  return { ok: diagnostics.length === 0, diagnostics };
 }
 
 interface ValidateOperationContext {

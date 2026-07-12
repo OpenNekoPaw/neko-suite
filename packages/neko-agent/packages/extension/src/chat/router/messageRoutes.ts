@@ -12,14 +12,6 @@ export function tryHandleMessageRoute(
   const { webview } = deps;
 
   switch (message.type) {
-    case 'requestAgentTurnTimelineSnapshot':
-      void webview.postMessage({
-        type: 'globalError',
-        message:
-          'Legacy Timeline snapshot recovery is unsupported. Reattach the Tab projection endpoint.',
-      });
-      return true;
-
     case 'sendMessage':
       if (deps.characterDialogue?.hasSession(message.conversationId)) {
         void deps.characterDialogue.routeUserMessage(message.conversationId, message.message);

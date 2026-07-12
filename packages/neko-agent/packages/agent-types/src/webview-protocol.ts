@@ -78,17 +78,12 @@ import type {
   AgentTurnTimelineDiagnostic,
   AgentTurnTimelineMessage,
   AgentTurnTimelineOperation,
-  AgentTurnTimelineSnapshotRequest,
 } from './agent-turn-timeline';
 import {
   AGENT_TURN_TIMELINE_SCHEMA_VERSION,
   assertValidAgentTurnTimelineMessage,
-  validateAgentTurnTimelineSnapshotRequest,
 } from './agent-turn-timeline';
-export {
-  validateAgentTurnTimelineMessage,
-  validateAgentTurnTimelineSnapshotRequest,
-} from './agent-turn-timeline';
+export { validateAgentTurnTimelineMessage } from './agent-turn-timeline';
 import type {
   PluginTransferAssetRef,
   PluginTransferCutStoryboardPayload,
@@ -502,8 +497,6 @@ export interface WebviewKeyboardEditableWebviewMessage {
   editable: boolean;
 }
 
-export type { AgentTurnTimelineSnapshotRequest };
-
 export type ConversationProjectionAttachmentHostFrame = ProjectionAttachmentHostFrame<
   ConversationProjectionSnapshot,
   ConversationProjectionPatch
@@ -562,8 +555,7 @@ export type WebviewToExtensionMessage =
   | ProjectionEndpointDiscoverRequest
   | ProjectionAttachRequest
   | ProjectionSnapshotAcknowledgement
-  | ProjectionDetachMessage
-  | AgentTurnTimelineSnapshotRequest;
+  | ProjectionDetachMessage;
 
 export interface ProjectFileMentionInfo {
   path: string;
@@ -1336,7 +1328,6 @@ export const WEBVIEW_TO_EXTENSION_MESSAGE_TYPES = [
   'projectionAttach',
   'projectionSnapshotAck',
   'projectionDetach',
-  'requestAgentTurnTimelineSnapshot',
 ] as const satisfies readonly WebviewToExtensionMessage['type'][];
 
 const PROMPT_MODES: readonly SetPromptModeWebviewMessage['mode'][] = ['default', 'plan'];
@@ -1464,25 +1455,6 @@ export function buildAgentTurnTimelineMessage(input: {
   };
   assertValidAgentTurnTimelineMessage(message);
   return message;
-}
-
-export function buildAgentTurnTimelineSnapshotRequest(
-  input: Omit<AgentTurnTimelineSnapshotRequest, 'type' | 'schemaVersion'>,
-): AgentTurnTimelineSnapshotRequest {
-  const request: AgentTurnTimelineSnapshotRequest = {
-    type: 'requestAgentTurnTimelineSnapshot',
-    schemaVersion: AGENT_TURN_TIMELINE_SCHEMA_VERSION,
-    ...input,
-  };
-  const result = validateAgentTurnTimelineSnapshotRequest(request);
-  if (!result.ok) {
-    throw new Error(
-      `Invalid Agent turn timeline snapshot request: ${result.diagnostics
-        .map((diagnostic) => `${diagnostic.code}: ${diagnostic.message}`)
-        .join('; ')}`,
-    );
-  }
-  return request;
 }
 
 export function buildErrorMessage(input: {
@@ -1906,27 +1878,6 @@ export function parseWebviewToExtensionMessage(raw: unknown): WebviewToExtension
     const key = parseProjectionAttachmentKey(raw.key);
     if (!key || !isProjectionDetachReason(raw.reason)) return null;
     return { type, key, reason: raw.reason };
-  }
-  if (type === 'requestAgentTurnTimelineSnapshot') {
-    const result = validateAgentTurnTimelineSnapshotRequest(raw);
-    if (!result.ok) return null;
-    const connectionEpoch = requiredString(raw.connectionEpoch);
-    const conversationId = requiredString(raw.conversationId);
-    const turnId = requiredString(raw.turnId);
-    const messageId = requiredString(raw.messageId);
-    if (!connectionEpoch || !conversationId || !turnId || !messageId) return null;
-    return {
-      type: 'requestAgentTurnTimelineSnapshot',
-      schemaVersion: AGENT_TURN_TIMELINE_SCHEMA_VERSION,
-      connectionEpoch,
-      conversationId,
-      turnId,
-      messageId,
-      reason: raw.reason === 'webview-initialization' ? 'webview-initialization' : 'revision-gap',
-      ...(typeof raw.lastAppliedDeliveryRevision === 'number'
-        ? { lastAppliedDeliveryRevision: raw.lastAppliedDeliveryRevision }
-        : {}),
-    };
   }
   if (type === 'sendMessage') {
     return parseSendMessageWebviewMessage(raw);

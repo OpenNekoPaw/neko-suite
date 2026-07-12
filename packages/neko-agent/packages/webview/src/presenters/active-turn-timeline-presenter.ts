@@ -2,7 +2,6 @@ import type {
   AgentTurnTimelineDiagnostic,
   AgentTurnTimelineItem,
   AgentTurnTimelineMessage,
-  AgentTurnTimelineSnapshotRequest,
   AgentTurnTimelineValidationDiagnostic,
   AgentTurnTimelineValidationState,
   AgentWorkItem,
@@ -10,10 +9,7 @@ import type {
   Message,
   ToolCall,
 } from '@neko-agent/types';
-import {
-  buildAgentTurnTimelineSnapshotRequest,
-  validateAgentTurnTimelineMessage,
-} from '@neko-agent/types';
+import { validateAgentTurnTimelineMessage } from '@neko-agent/types';
 
 export type ActiveTurnTimelineSynchronization = 'synchronized' | 'suspended' | 'unavailable';
 
@@ -38,7 +34,6 @@ export interface ActiveTurnTimelineApplyInput {
 export interface ActiveTurnTimelineApplyResult {
   readonly state: ActiveTurnTimelineState | null;
   readonly diagnostics: readonly AgentTurnTimelineValidationDiagnostic[];
-  readonly snapshotRequest?: AgentTurnTimelineSnapshotRequest;
 }
 
 export interface ActiveTurnTimelineDiagnosticApplyResult {
@@ -69,7 +64,7 @@ export function applyAgentTurnTimelineMessage(
     };
   }
 
-  if (currentState?.synchronization === 'unavailable' && input.message.batchKind !== 'snapshot') {
+  if (currentState?.synchronization === 'unavailable') {
     return {
       state: currentState,
       diagnostics: [
@@ -123,22 +118,9 @@ export function applyAgentTurnTimelineMessage(
     if (!currentState || !requiresSnapshot) {
       return { state: currentState, diagnostics: validation.diagnostics };
     }
-    const alreadySuspended = currentState.synchronization === 'suspended';
     return {
-      state: { ...currentState, synchronization: 'suspended' },
+      state: { ...currentState, synchronization: 'unavailable' },
       diagnostics: validation.diagnostics,
-      ...(!alreadySuspended
-        ? {
-            snapshotRequest: buildAgentTurnTimelineSnapshotRequest({
-              connectionEpoch: currentState.connectionEpoch,
-              conversationId: currentState.conversationId,
-              turnId: currentState.turnId,
-              messageId: currentState.messageId,
-              reason: 'revision-gap',
-              lastAppliedDeliveryRevision: currentState.deliveryRevision,
-            }),
-          }
-        : {}),
     };
   }
 

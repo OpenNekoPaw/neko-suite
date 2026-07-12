@@ -65,7 +65,6 @@ function applyTimelineMessagesToConversation(
   let markdownPublication: AgentMarkdownSessionPublication | undefined;
   let projectedWorkItems: ReturnType<typeof projectActiveTurnTimelineWorkItems> = [];
   const diagnostics: Array<{ readonly code: string; readonly message: string }> = [];
-  let timelineState: ReturnType<typeof applyAgentTurnTimelineMessage>['state'] = null;
   const acceptedTimelineDeliveries: AgentTurnTimelineMessage[] = [];
   let acceptedDeliveries = 0;
 
@@ -82,7 +81,6 @@ function applyTimelineMessagesToConversation(
             message: delivery,
           });
           activeState = projection.state;
-          timelineState = projection.state;
           diagnostics.push(...projection.diagnostics);
           if (projection.diagnostics.length === 0) {
             acceptedDeliveries += 1;
@@ -109,13 +107,7 @@ function applyTimelineMessagesToConversation(
 
   // External-store publication must follow the synchronous React props commit.
   markdownPublication?.publish();
-  const foregroundDiagnostics = diagnostics.filter(
-    (diagnostic) =>
-      !(
-        diagnostic.code === 'delivery-revision-gap' &&
-        timelineState?.synchronization === 'suspended'
-      ),
-  );
+  const foregroundDiagnostics = diagnostics;
   if (
     foregroundDiagnostics.length > 0 &&
     context.activeConversationIdRef.current === firstDelivery.conversationId

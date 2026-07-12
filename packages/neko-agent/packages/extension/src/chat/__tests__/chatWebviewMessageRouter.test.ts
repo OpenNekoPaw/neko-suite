@@ -1650,28 +1650,6 @@ describe('handleChatWebviewMessage', () => {
     expect(deps.skillHandler.sendSkillsList).toHaveBeenCalledWith(deps.webview);
   });
 
-  it('rejects the removed Timeline snapshot recovery route visibly', () => {
-    const deps = createDeps();
-    const request = {
-      type: 'requestAgentTurnTimelineSnapshot',
-      schemaVersion: 2,
-      connectionEpoch: 'epoch-1',
-      conversationId: 'conv-1',
-      turnId: 'turn-msg-1',
-      messageId: 'msg-1',
-      reason: 'revision-gap',
-      lastAppliedDeliveryRevision: 2,
-    } as const;
-
-    handleChatWebviewMessage(request, deps);
-
-    expect(deps.webview.postMessage).toHaveBeenCalledWith({
-      type: 'globalError',
-      message:
-        'Legacy Timeline snapshot recovery is unsupported. Reattach the Tab projection endpoint.',
-    });
-  });
-
   it('routes lifecycle config snapshot refresh without calling settings directly', () => {
     const deps = createDeps();
 
