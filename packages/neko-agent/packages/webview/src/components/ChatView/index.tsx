@@ -47,6 +47,7 @@ interface ChatViewProps {
   characterDialogueSession?: CharacterDialogueSessionProjection;
   embodyCharacterSession?: EmbodyCharacterSessionProjection;
   isConversationSwitching?: boolean;
+  composerDisabled?: boolean;
   foregroundConversationAvailability?: ForegroundConversationAvailability;
   /** Active skill indicator */
   activeSkill?: ActiveSkillIndicator | null;
@@ -122,6 +123,7 @@ export function ChatView({
   characterDialogueSession,
   embodyCharacterSession,
   isConversationSwitching = false,
+  composerDisabled = false,
   foregroundConversationAvailability = { kind: 'ready' },
   activeSkill,
   activationProgress = [],
@@ -288,7 +290,11 @@ export function ChatView({
           onLlmConfigChange={onLlmConfigChange}
           composerMenuState={composerMenuState}
           onComposerMenuStateChange={onComposerMenuStateChange}
-          disabled={isConversationSwitching || foregroundConversationAvailability.kind !== 'ready'}
+          disabled={
+            composerDisabled ||
+            isConversationSwitching ||
+            foregroundConversationAvailability.kind !== 'ready'
+          }
           attachedFiles={attachedFiles}
           onAttachedFilesChange={onAttachedFilesChange}
           selectedFileReferences={selectedFileReferences}

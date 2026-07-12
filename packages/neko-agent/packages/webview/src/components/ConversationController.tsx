@@ -568,6 +568,7 @@ export function ConversationController({
     AgentHostMessages.refreshConfigSnapshot();
   }, []);
   const requestConversationResourceSnapshot = useCallback((conversationId: string) => {
+    AgentHostMessages.getSettings(conversationId);
     AgentHostMessages.getContextTokenCount(conversationId);
     AgentHostMessages.getTasks(conversationId);
     AgentHostMessages.getPromptMode(conversationId);

@@ -56,7 +56,6 @@ import type {
   AgentModelSlots,
   AgentQueuedMessageItem,
   ConversationKind,
-  ModelRef,
   SessionMode,
 } from '@neko-agent/types';
 
@@ -1262,11 +1261,22 @@ function buildAgentLlmSendConfig(
   selectedModel: string,
   availableModels: readonly ChatModelOption[],
   llmConfig: AgentLlmConfig,
-): { agentModels?: AgentModelSlots; llmConfig: AgentLlmConfig } {
-  const primaryModel = parseSelectedLlmModelRef(selectedModel);
+): { agentModels?: AgentModelSlots; llmConfig?: AgentLlmConfig } {
+  const selectedOption = availableModels.find((option) => option.id === selectedModel);
+  const primaryModel =
+    selectedOption?.providerId &&
+    selectedOption.modelId &&
+    (selectedOption.category === undefined || selectedOption.category === 'llm')
+      ? {
+          providerId: selectedOption.providerId,
+          modelId: selectedOption.modelId,
+          category: 'llm' as const,
+        }
+      : null;
+  const filteredConfig = filterLlmConfigForModel(selectedModel, availableModels, llmConfig);
   return {
     ...(primaryModel ? { agentModels: { primary: primaryModel } } : {}),
-    llmConfig: filterLlmConfigForModel(selectedModel, availableModels, llmConfig),
+    ...(Object.keys(filteredConfig).length > 0 ? { llmConfig: filteredConfig } : {}),
   };
 }
 
@@ -1495,17 +1505,6 @@ function removeUndefinedAgentLlmAdvancedParams(
   return Object.fromEntries(
     Object.entries(advanced).filter(([, value]) => value !== undefined),
   ) as NonNullable<AgentLlmConfig['advanced']>;
-}
-
-function parseSelectedLlmModelRef(selectedModel: string): ModelRef<'llm'> | null {
-  if (!selectedModel) return null;
-  const separatorIndex = selectedModel.indexOf(':');
-  if (separatorIndex <= 0 || separatorIndex === selectedModel.length - 1) return null;
-  return {
-    providerId: selectedModel.slice(0, separatorIndex),
-    modelId: selectedModel.slice(separatorIndex + 1),
-    category: 'llm',
-  };
 }
 
 function appendSelectedFileReferencesToMessage(

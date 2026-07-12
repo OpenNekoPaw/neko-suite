@@ -370,6 +370,8 @@ export function ChatWorkspace({
 
   const tabConversationId = tabRenderSnapshot.conversationId;
   const isCharacterRoleSession = isCharacterRoleConversationKind(conversationKind);
+  const isModelConfigurationReady =
+    isCharacterRoleSession || tabState.modelConfigurationInitialized;
   const sessionMutationConversationId = isVisible ? tabConversationId : null;
   const sessionMutationConversationIdRef = useRef<string | null>(sessionMutationConversationId);
 
@@ -458,13 +460,19 @@ export function ChatWorkspace({
   });
 
   useEffect(() => {
-    if (!pendingSendRequest || !sessionMutationConversationId) return;
+    if (!pendingSendRequest || !sessionMutationConversationId || !isModelConfigurationReady) return;
     if (consumedPendingSendRequestIdRef.current === pendingSendRequest.id) return;
 
     consumedPendingSendRequestIdRef.current = pendingSendRequest.id;
     handleSend(pendingSendRequest.input);
     onPendingSendRequestConsumed?.(pendingSendRequest.id);
-  }, [handleSend, onPendingSendRequestConsumed, pendingSendRequest, sessionMutationConversationId]);
+  }, [
+    handleSend,
+    isModelConfigurationReady,
+    onPendingSendRequestConsumed,
+    pendingSendRequest,
+    sessionMutationConversationId,
+  ]);
 
   useEffect(() => {
     if (!initialInputRequest || !sessionMutationConversationId) return;
@@ -814,6 +822,7 @@ export function ChatWorkspace({
         </div>
       ) : null}
       <ChatView
+        composerDisabled={!isModelConfigurationReady}
         messages={messages}
         inputValue={inputValue}
         isThinking={isThinking}

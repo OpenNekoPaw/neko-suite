@@ -97,6 +97,7 @@ vi.mock('@/components/ChatView/InputAreaContext', () => ({
 
 vi.mock('@/components/ChatView', () => ({
   ChatView: (props: {
+    composerDisabled?: boolean;
     activeConversationId: string | null;
     inputValue: string;
     onInputChange: (value: string) => void;
@@ -146,6 +147,7 @@ vi.mock('@/components/ChatView', () => ({
       <button
         type="button"
         data-testid="send"
+        disabled={props.composerDisabled}
         onClick={() =>
           props.onSend({
             messageText: 'hello from tabless state',
@@ -335,6 +337,16 @@ describe('ChatWorkspace pending send', () => {
         })}
       />,
     );
+
+    expect(vscodeMocks.sendMessage).not.toHaveBeenCalled();
+    expect(onPendingSendRequestConsumed).not.toHaveBeenCalled();
+
+    act(() => {
+      runtime.store.updateState({
+        modelConfigurationInitialized: true,
+        selectedModel: 'test-model',
+      });
+    });
 
     expect(vscodeMocks.sendMessage).toHaveBeenCalledTimes(1);
     expect(vscodeMocks.sendMessage).toHaveBeenCalledWith(
@@ -747,6 +759,10 @@ describe('ChatWorkspace pending send', () => {
     const handleMessage = vi.fn();
     const setAmbientNodes = vi.fn();
     const runtime = createTabRenderRuntime({ tabId: 'tab-b', conversationId: 'conv-b' });
+    runtime.store.updateState({
+      modelConfigurationInitialized: true,
+      selectedModel: 'test-model',
+    });
     const target = render(
       <ChatWorkspace
         {...createProps({
@@ -889,6 +905,10 @@ describe('ChatWorkspace pending send', () => {
 
   it('does not require a host active-conversation owner to mutate the visible Tab', () => {
     const runtime = createTabRenderRuntime({ tabId: 'tab-b', conversationId: 'conv-b' });
+    runtime.store.updateState({
+      modelConfigurationInitialized: true,
+      selectedModel: 'test-model',
+    });
     const { getByTestId } = render(
       <ChatWorkspace {...createProps({ tabRenderStore: runtime.store })} />,
     );
@@ -915,8 +935,13 @@ function runRegisteredShortcut(id: string): void {
 
 function createProps(overrides: Partial<ChatWorkspaceProps> = {}): ChatWorkspaceProps {
   const noop = vi.fn();
+  const runtime = createTabRenderRuntime({ tabId: 'tab-1', conversationId: 'conv-1' });
+  runtime.store.updateState({
+    modelConfigurationInitialized: true,
+    selectedModel: 'test-model',
+  });
   return {
-    tabRenderStore: createTabRenderRuntime({ tabId: 'tab-1', conversationId: 'conv-1' }).store,
+    tabRenderStore: runtime.store,
     messages: [],
     setMessages: noop as React.Dispatch<React.SetStateAction<Message[]>>,
     isThinking: false,

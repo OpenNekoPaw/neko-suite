@@ -33,6 +33,7 @@
 - [x] 4.4 Add bounded retention for inactive clean historical component trees while retaining independent stores and projection replicas.
 - [x] 4.5 Remove conversation save/restore effects, foreground shared component rebinding, and active-conversation UI fallbacks.
 - [x] 4.6 Add concurrent/rapid-switch regression tests for input, attachment, configuration, Markdown, Timeline/projection, focus, and scroll isolation.
+- [x] 4.7 Require every ordinary Tab activation to hydrate its conversation settings snapshot before send, and project model refs from the validated model catalog.
 
 ## 5. Independent TUI Application and Session Runtimes
 

@@ -32,6 +32,7 @@ const vscodeMocks = vi.hoisted(() => ({
   activateConversation: vi.fn(),
   deleteConversation: vi.fn(),
   searchProjectFiles: vi.fn(),
+  getSettings: vi.fn(),
   getContextTokenCount: vi.fn(),
   getTasks: vi.fn(),
   getPromptMode: vi.fn(),
@@ -183,6 +184,9 @@ vi.mock('@/components/ChatWorkspace', () => ({
         </span>
         <span data-testid={testId('workspace-execution-mode')}>
           {tabRenderSnapshot.snapshot.state.executionMode}
+        </span>
+        <span data-testid={testId('workspace-media-models')}>
+          {Object.values(tabRenderSnapshot.snapshot.state.mediaModelSelection).join('|')}
         </span>
         <span data-testid={testId('workspace-model-options')}>
           {props.settings?.chatModelOptions.map((option) => option.id).join('|') ?? ''}
@@ -386,6 +390,7 @@ describe('ConversationController entry state', () => {
     expect(screen.getByTestId('entry-menu').textContent).toBe('none');
     expect(screen.getByTestId('pending-send').textContent).toBe('none');
     expect(screen.getByTestId('initial-input').textContent).toBe('none');
+    expect(vscodeMocks.getSettings).toHaveBeenCalledWith('conv-new');
   });
 
   it('opens roleplay prompts from the entry button', () => {
@@ -1249,7 +1254,15 @@ describe('ConversationController entry state', () => {
                 modelId: 'model-b',
                 category: 'llm',
               },
+              {
+                id: 'provider-b:image-b',
+                label: 'Image B',
+                providerId: 'provider-b',
+                modelId: 'image-b',
+                category: 'image',
+              },
             ],
+            defaultMediaModels: { image: 'provider-b:image-b' },
           },
         }),
       );
@@ -1257,7 +1270,12 @@ describe('ConversationController entry state', () => {
 
     expect(screen.getByTestId('workspace-selected-model').textContent).toBe('provider-b:model-b');
     expect(screen.getByTestId('workspace-execution-mode').textContent).toBe('plan');
-    expect(screen.getByTestId('workspace-model-options').textContent).toBe('provider-b:model-b');
+    expect(screen.getByTestId('workspace-model-options').textContent).toBe(
+      'provider-b:model-b|provider-b:image-b',
+    );
+    expect(screen.getByTestId('workspace-media-models').textContent).toBe(
+      'provider-b:image-b|none|none',
+    );
     expect(screen.getByTestId('workspace-selected-model-tab-a').textContent).toBe(
       'provider-a:model-a',
     );
@@ -1276,7 +1294,7 @@ describe('ConversationController entry state', () => {
     );
     expect(screen.getByTestId('workspace-execution-mode-tab-b').textContent).toBe('plan');
     expect(screen.getByTestId('workspace-model-options-tab-b').textContent).toBe(
-      'provider-b:model-b',
+      'provider-b:model-b|provider-b:image-b',
     );
   });
 

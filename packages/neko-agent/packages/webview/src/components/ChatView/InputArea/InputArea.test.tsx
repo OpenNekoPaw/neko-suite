@@ -725,6 +725,75 @@ describe('InputArea composer controls', () => {
     );
   });
 
+  it('omits Agent LLM config when the selected model has no parameter contract', () => {
+    const onSend = vi.fn();
+
+    render(
+      <Harness selectedModel="missing:model" availableModels={[]}>
+        <InputArea
+          inputValue="继续完善企划"
+          isThinking={false}
+          onInputChange={vi.fn()}
+          onSend={onSend}
+        />
+      </Harness>,
+    );
+
+    fireEvent.click(screen.getByTitle('发送'));
+
+    expect(onSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        messageText: '继续完善企划',
+        sessionMode: 'agent',
+      }),
+    );
+    expect(onSend.mock.calls[0]?.[0]).not.toHaveProperty('llmConfig');
+  });
+
+  it('builds the primary Agent model from the selected catalog entry', () => {
+    const onSend = vi.fn();
+    const catalogModels: ChatModelOption[] = [
+      {
+        id: 'catalog-model-key',
+        label: 'GPT 5.5',
+        providerId: 'nekoapi-chat',
+        modelId: 'gpt-5.5',
+        category: 'llm',
+        llmParameterControls: {
+          reasoning: true,
+          verbosity: true,
+          creativity: true,
+          maxOutputTokens: true,
+        },
+      },
+    ];
+
+    render(
+      <Harness selectedModel="catalog-model-key" availableModels={catalogModels}>
+        <InputArea
+          inputValue="继续完善企划"
+          isThinking={false}
+          onInputChange={vi.fn()}
+          onSend={onSend}
+        />
+      </Harness>,
+    );
+
+    fireEvent.click(screen.getByTitle('发送'));
+
+    expect(onSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        agentModels: {
+          primary: {
+            providerId: 'nekoapi-chat',
+            modelId: 'gpt-5.5',
+            category: 'llm',
+          },
+        },
+      }),
+    );
+  });
+
   it('shows Agent parameter field names as menu headers with compact options', () => {
     render(
       <Harness>
