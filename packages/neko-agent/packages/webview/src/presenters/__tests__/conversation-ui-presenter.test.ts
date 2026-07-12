@@ -451,10 +451,6 @@ describe('conversation UI presenter', () => {
         ['conv-a', new Map([['work-a', workItem('work-a', 'conv-a')]])],
         ['conv-b', new Map([['work-b', workItemB]])],
       ]),
-      inputByConversation: new Map([
-        ['conv-a', { inputValue: 'draft a', attachedFiles: [], selectedFileReferences: [] }],
-        ['conv-b', { inputValue: 'draft b', attachedFiles: [], selectedFileReferences: [] }],
-      ]),
     });
 
     expect(projected).toEqual({
@@ -478,11 +474,6 @@ describe('conversation UI presenter', () => {
       },
       agentState: agentStateB,
       workItems: [workItemB],
-      input: {
-        inputValue: 'draft b',
-        attachedFiles: [],
-        selectedFileReferences: [],
-      },
     });
   });
 

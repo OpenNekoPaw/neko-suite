@@ -6,10 +6,6 @@ import type {
   Message,
   PromptMode,
 } from '@neko-agent/types';
-import type {
-  MessageAttachment,
-  SelectedFileReference,
-} from '@/components/ChatView/InputArea/types';
 import type { ActiveSkillIndicator } from '@/components/ChatView/SkillIndicator';
 import type { ActivationProgressTimeline } from './activation-progress-presenter';
 
@@ -36,12 +32,6 @@ export interface ConversationSessionContextProjection {
   readonly isCompressing: boolean;
 }
 
-export interface ConversationSessionInputState {
-  readonly inputValue: string;
-  readonly attachedFiles: readonly MessageAttachment[];
-  readonly selectedFileReferences: readonly SelectedFileReference[];
-}
-
 export interface ConversationSessionState {
   readonly conversationId: string;
   readonly messages: readonly Message[];
@@ -51,7 +41,6 @@ export interface ConversationSessionState {
   readonly context: ConversationSessionContextProjection;
   readonly agentState: AgentState | null;
   readonly workItems: readonly AgentWorkItem[];
-  readonly input: ConversationSessionInputState;
 }
 
 export type ConversationSessionStateMap = ReadonlyMap<string, ConversationSessionState>;
@@ -71,7 +60,6 @@ export interface ProjectConversationSessionStateInput {
   readonly compressingByConversation?: ReadonlyMap<string, boolean>;
   readonly agentStateByConversation?: ReadonlyMap<string, AgentState>;
   readonly workItemsByConversation?: AgentWorkItemStore;
-  readonly inputByConversation?: ReadonlyMap<string, ConversationSessionInputState>;
   readonly defaultPromptMode?: PromptMode;
 }
 
@@ -96,10 +84,6 @@ export function projectConversationSessionState(
     },
     agentState: input.agentStateByConversation?.get(conversationId) ?? null,
     workItems: [...(input.workItemsByConversation?.get(conversationId)?.values() ?? [])],
-    input: {
-      ...emptyConversationInputState(),
-      ...(input.inputByConversation?.get(conversationId) ?? {}),
-    },
   };
 }
 
@@ -153,13 +137,5 @@ export function idleSessionStreamingState(): ConversationSessionStreamingState {
     isThinking: false,
     queuedMessageCount: 0,
     queuedMessages: [],
-  };
-}
-
-function emptyConversationInputState(): ConversationSessionInputState {
-  return {
-    inputValue: '',
-    attachedFiles: [],
-    selectedFileReferences: [],
   };
 }
