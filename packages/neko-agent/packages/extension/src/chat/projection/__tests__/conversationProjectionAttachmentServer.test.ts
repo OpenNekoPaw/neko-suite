@@ -200,6 +200,39 @@ describe('ConversationProjectionAttachmentServer', () => {
     expect(frames).toHaveLength(4);
   });
 
+  it('disposes every attachment at endpoint replacement and rejects later ACKs', async () => {
+    const projection = createConversationProjectionStore('conversation-a');
+    const frames: HostFrame[] = [];
+    const resolveProjection = vi.fn(() => projection);
+    const server = createConversationProjectionAttachmentServer({
+      endpointEpoch: 'endpoint-1',
+      resolveProjection,
+      postMessage: async (frame) => {
+        frames.push(frame);
+        return true;
+      },
+      reportError: vi.fn(),
+    });
+
+    await server.attach({ type: 'projectionAttach', key: keyA });
+    expect(resolveProjection).toHaveBeenCalledWith('conversation-a');
+    await server.dispose();
+
+    expect(frames.at(-1)).toEqual({
+      type: 'projectionDetach',
+      key: keyA,
+      reason: 'endpoint-replaced',
+    });
+    await expect(
+      server.acknowledge({
+        type: 'projectionSnapshotAck',
+        key: keyA,
+        sequence: 0,
+        projectionVersion: 0,
+      }),
+    ).rejects.toThrow('disposed');
+  });
+
   it('rejects an ACK from a different attachment without releasing queued patches', async () => {
     const projection = createConversationProjectionStore('conversation-a');
     const frames: HostFrame[] = [];

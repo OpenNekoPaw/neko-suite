@@ -1,6 +1,7 @@
 import type * as vscode from 'vscode';
 import type {
   ActivateConversationWebviewMessage,
+  ProjectionAttachmentKey,
   UpdateTabStateWebviewMessage,
 } from '@neko-agent/types';
 import type { AgentCapabilityLifecycleDescriptor } from '@neko/shared';
@@ -8,6 +9,7 @@ import type { DragDropBroker } from '../../services/DragDropBroker';
 import type { AgentMessageTurnHandler } from '../agentMessageTurnHandler';
 import type { CharacterDialogueController } from '../characterDialogueController';
 import type { EmbodyCharacterController } from '../embodyCharacterController';
+import type { ConversationProjectionAttachmentServer } from '../projection/conversationProjectionAttachmentServer';
 import type {
   ContextHandler,
   ConversationMessageHandler,
@@ -21,6 +23,8 @@ import type {
 
 export interface ChatWebviewMessageRouterDeps {
   readonly webview: vscode.Webview;
+  readonly projectionAttachments: ConversationProjectionAttachmentServer;
+  readonly reportProjectionProtocolError: (error: Error, key: ProjectionAttachmentKey) => void;
   readonly messages?: AgentMessageTurnHandler;
   readonly characterDialogue?: CharacterDialogueController;
   readonly embodyCharacter?: EmbodyCharacterController;

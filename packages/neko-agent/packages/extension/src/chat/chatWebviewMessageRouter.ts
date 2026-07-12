@@ -3,6 +3,7 @@ import { tryHandleConversationRoute } from './router/conversationRoutes';
 import { tryHandleFileAndPluginRoute } from './router/fileAndPluginRoutes';
 import { tryHandleMessageRoute } from './router/messageRoutes';
 import { tryHandlePlanRoute } from './router/planRoutes';
+import { tryHandleProjectionRoute } from './router/projectionRoutes';
 import { tryHandleSettingsRoute } from './router/settingsRoutes';
 import { tryHandleSkillContextRoute } from './router/skillContextRoutes';
 import { tryHandleTaskRoute } from './router/taskRoutes';
@@ -14,6 +15,9 @@ export type { ChatWebviewMessageRouterDeps } from './router/types';
 export const CHAT_WEBVIEW_MESSAGE_ROUTER_TYPES = [
   'sendMessage',
   'requestAgentTurnTimelineSnapshot',
+  'projectionAttach',
+  'projectionSnapshotAck',
+  'projectionDetach',
   'searchProjectFiles',
   'startCharacterDialogueFromSlash',
   'mermaidError',
@@ -88,6 +92,7 @@ type _AllWebviewMessagesRouted = AssertNever<UnroutedWebviewMessageType>;
 type _NoBridgeMessageOverlap = AssertNever<DuplicateBridgeMessageType>;
 
 const routeHandlers = [
+  tryHandleProjectionRoute,
   tryHandleMessageRoute,
   tryHandleConversationRoute,
   tryHandlePlanRoute,

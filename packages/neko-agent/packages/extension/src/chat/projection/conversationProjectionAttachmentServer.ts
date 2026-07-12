@@ -3,6 +3,7 @@ import type {
   ConversationProjectionSnapshot,
   ProjectionAttachmentHostFrame,
   ProjectionAttachmentKey,
+  ProjectionAttachmentProtocolDiagnosticCode,
   ProjectionAttachRequest,
   ProjectionDetachMessage,
   ProjectionPatchFrame,
@@ -22,6 +23,17 @@ export interface ConversationProjectionAttachmentServerOptions {
   readonly resolveProjection: (conversationId: string) => ConversationProjectionStore;
   readonly postMessage: (frame: ConversationProjectionAttachmentHostFrame) => Promise<boolean>;
   readonly reportError: (error: Error, key: ProjectionAttachmentKey) => void;
+}
+
+export class ProjectionAttachmentProtocolError extends Error {
+  constructor(
+    readonly code: ProjectionAttachmentProtocolDiagnosticCode,
+    readonly key: ProjectionAttachmentKey,
+    message: string,
+  ) {
+    super(message);
+    this.name = 'ProjectionAttachmentProtocolError';
+  }
 }
 
 export interface ConversationProjectionAttachmentServer {
@@ -55,20 +67,26 @@ class DefaultConversationProjectionAttachmentServer implements ConversationProje
     assertRequiredIdentity('tabId', request.key.tabId);
     assertRequiredIdentity('conversationId', request.key.conversationId);
     if (this.attachmentsById.has(request.key.attachmentId)) {
-      throw new Error(
+      throw protocolError(
+        'attachment-snapshot-required',
+        request.key,
         `Projection attachment ${request.key.attachmentId} is already registered for this endpoint.`,
       );
     }
     const existingAttachmentId = this.attachmentIdByTabId.get(request.key.tabId);
     if (existingAttachmentId) {
-      throw new Error(
+      throw protocolError(
+        'attachment-snapshot-required',
+        request.key,
         `Projection Tab ${request.key.tabId} is already attached as ${existingAttachmentId}.`,
       );
     }
 
     const projection = this.options.resolveProjection(request.key.conversationId);
     if (projection.conversationId !== request.key.conversationId) {
-      throw new Error(
+      throw protocolError(
+        'attachment-identity-mismatch',
+        request.key,
         `Projection resolver returned conversation ${projection.conversationId} for ${request.key.conversationId}.`,
       );
     }
@@ -127,10 +145,18 @@ class DefaultConversationProjectionAttachmentServer implements ConversationProje
     this.assertEndpoint(key);
     const attachment = this.attachmentsById.get(key.attachmentId);
     if (!attachment) {
-      throw new Error(`Projection attachment ${key.attachmentId} is not registered.`);
+      throw protocolError(
+        'attachment-identity-mismatch',
+        key,
+        `Projection attachment ${key.attachmentId} is not registered.`,
+      );
     }
     if (!isSameProjectionAttachment(attachment.key, key)) {
-      throw new Error(`Projection attachment identity mismatch for ${key.attachmentId}.`);
+      throw protocolError(
+        'attachment-identity-mismatch',
+        key,
+        `Projection attachment identity mismatch for ${key.attachmentId}.`,
+      );
     }
     return attachment;
   }
@@ -146,7 +172,9 @@ class DefaultConversationProjectionAttachmentServer implements ConversationProje
 
   private assertEndpoint(key: ProjectionAttachmentKey): void {
     if (key.endpointEpoch !== this.options.endpointEpoch) {
-      throw new Error(
+      throw protocolError(
+        'attachment-identity-mismatch',
+        key,
         `Projection attachment endpoint mismatch: expected ${this.options.endpointEpoch}, received ${key.endpointEpoch}.`,
       );
     }
@@ -207,12 +235,18 @@ class ProjectionAttachment {
 
   acknowledge(acknowledgement: ProjectionSnapshotAcknowledgement): Promise<void> {
     if (!isSameProjectionAttachment(this.key, acknowledgement.key)) {
-      throw new Error(`Projection attachment identity mismatch for ${this.key.attachmentId}.`);
+      throw protocolError(
+        'attachment-identity-mismatch',
+        acknowledgement.key,
+        `Projection attachment identity mismatch for ${this.key.attachmentId}.`,
+      );
     }
     return this.enqueue(async () => {
       this.assertHealthy();
       if (this.phase !== 'awaiting-snapshot-ack') {
-        throw new Error(
+        throw protocolError(
+          'attachment-stale-ack',
+          acknowledgement.key,
           `Projection attachment ${this.key.attachmentId} cannot acknowledge a snapshot while ${this.phase}.`,
         );
       }
@@ -220,7 +254,9 @@ class ProjectionAttachment {
         acknowledgement.sequence !== 0 ||
         acknowledgement.projectionVersion !== this.snapshotVersion
       ) {
-        throw new Error(
+        throw protocolError(
+          'attachment-stale-ack',
+          acknowledgement.key,
           `Projection attachment ${this.key.attachmentId} received a stale snapshot acknowledgement.`,
         );
       }
@@ -240,7 +276,11 @@ class ProjectionAttachment {
 
   detach(message: ProjectionDetachMessage): Promise<void> {
     if (!isSameProjectionAttachment(this.key, message.key)) {
-      throw new Error(`Projection attachment identity mismatch for ${this.key.attachmentId}.`);
+      throw protocolError(
+        'attachment-identity-mismatch',
+        message.key,
+        `Projection attachment identity mismatch for ${this.key.attachmentId}.`,
+      );
     }
     if (this.phase === 'closing') return this.tail;
     this.phase = 'closing';
@@ -252,7 +292,9 @@ class ProjectionAttachment {
   private acceptPatch(patch: ConversationProjectionPatch): void {
     if (patch.conversationId !== this.key.conversationId) {
       this.fail(
-        new Error(
+        protocolError(
+          'attachment-identity-mismatch',
+          this.key,
           `Projection attachment ${this.key.attachmentId} received patch for conversation ${patch.conversationId}.`,
         ),
       );
@@ -271,7 +313,9 @@ class ProjectionAttachment {
   private async deliverPatch(patch: ConversationProjectionPatch): Promise<void> {
     this.assertHealthy();
     if (patch.baseProjectionVersion !== this.deliveredProjectionVersion) {
-      throw new Error(
+      throw protocolError(
+        'attachment-patch-base-mismatch',
+        this.key,
         `Projection attachment ${this.key.attachmentId} patch base mismatch: expected ${this.deliveredProjectionVersion}, received ${patch.baseProjectionVersion}.`,
       );
     }
@@ -291,7 +335,9 @@ class ProjectionAttachment {
   private async deliver(frame: ConversationProjectionAttachmentHostFrame): Promise<void> {
     const delivered = await this.options.postMessage(frame);
     if (!delivered) {
-      throw new Error(
+      throw protocolError(
+        'attachment-snapshot-required',
+        this.key,
         `Projection attachment ${this.key.attachmentId} endpoint rejected ${frame.type}.`,
       );
     }
@@ -323,6 +369,14 @@ class ProjectionAttachment {
     this.unsubscribe?.();
     this.unsubscribe = undefined;
   }
+}
+
+function protocolError(
+  code: ProjectionAttachmentProtocolDiagnosticCode,
+  key: ProjectionAttachmentKey,
+  message: string,
+): ProjectionAttachmentProtocolError {
+  return new ProjectionAttachmentProtocolError(code, key, message);
 }
 
 function assertRequiredIdentity(name: string, value: string): void {

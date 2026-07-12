@@ -64,6 +64,13 @@ function createCanvasLifecycleDescriptor(capabilityId: string): AgentCapabilityL
 function createDeps(): ChatWebviewMessageRouterDeps {
   return {
     webview: { postMessage: vi.fn().mockResolvedValue(true) } as any,
+    projectionAttachments: {
+      attach: vi.fn().mockResolvedValue(undefined),
+      acknowledge: vi.fn().mockResolvedValue(undefined),
+      detach: vi.fn().mockResolvedValue(undefined),
+      dispose: vi.fn().mockResolvedValue(undefined),
+    },
+    reportProjectionProtocolError: vi.fn(),
     messages: {
       handleUserMessage: vi.fn(),
       searchProjectFiles: vi.fn(),

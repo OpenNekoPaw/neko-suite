@@ -9,6 +9,7 @@
 
 import * as vscode from 'vscode';
 import * as path from 'node:path';
+import { randomUUID } from 'node:crypto';
 import { getService, getLogger } from '../base';
 import type { Platform } from '@neko/platform';
 import type { IAgentManager } from '../ai/agentManager';
@@ -74,6 +75,11 @@ import { StateTaskDeliveryCursorStorage, TaskDeliveryBridge } from '../services/
 import type { TaskResultObservationCoordinator } from '../services/taskResultObservationCoordinator';
 import { handleChatWebviewMessage } from './chatWebviewMessageRouter';
 import {
+  createConversationProjectionAttachmentServer,
+  ProjectionAttachmentProtocolError,
+  type ConversationProjectionAttachmentServer,
+} from './projection/conversationProjectionAttachmentServer';
+import {
   getCapabilityDiscoveryService,
   getCapabilityRuntimeBindings,
   setCapabilityRuntimeSkillService,
@@ -88,6 +94,7 @@ import {
   type CreativeAiConversationProjection,
   type Message,
   type OpenTab,
+  type ProjectionAttachmentKey,
   type TabState,
 } from '@neko-agent/types';
 import type { AgentTaskResultFollowUpRequest, NpcAgentWorkflowRequest, Skill } from '@neko/shared';
@@ -257,6 +264,14 @@ interface TabStateWriteMetadata {
   readonly updatedAt: number;
 }
 
+function classifyProjectionProtocolError(
+  error: Error,
+): import('@neko-agent/types').ProjectionAttachmentProtocolDiagnosticCode {
+  return error instanceof ProjectionAttachmentProtocolError
+    ? error.code
+    : 'attachment-snapshot-required';
+}
+
 function createTabStateWriterId(): string {
   tabStateWriterOrdinal += 1;
   return `chat-tab-state-${Date.now().toString(36)}-${tabStateWriterOrdinal}`;
@@ -345,6 +360,10 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
   // Lifecycle
   private readonly _disposables: vscode.Disposable[] = [];
   private readonly _webviewDisposables: vscode.Disposable[] = [];
+  private _webviewBindingGeneration = 0;
+  private _projectionAttachmentServer?: ConversationProjectionAttachmentServer;
+  private _projectionEndpointEpoch?: string;
+  private readonly _reportedProjectionErrors = new WeakSet<Error>();
 
   // Lazy getter for plugin slash commands (set by the command host after registry is ready)
   private _pluginCommandsGetter?: () => Array<{
@@ -704,12 +723,19 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
   ) {
     this._disposeWebviewBindings();
     this._view = webviewView;
+    const bindingGeneration = this._webviewBindingGeneration;
 
-    void this._initializeResolvedWebview(webviewView);
+    void this._initializeResolvedWebview(webviewView, bindingGeneration);
   }
 
-  private async _initializeResolvedWebview(webviewView: vscode.WebviewView): Promise<void> {
+  private async _initializeResolvedWebview(
+    webviewView: vscode.WebviewView,
+    bindingGeneration: number,
+  ): Promise<void> {
     await this._localResourceAccess.configureChatWebview(webviewView.webview);
+    if (bindingGeneration !== this._webviewBindingGeneration || this._view !== webviewView) {
+      return;
+    }
     webviewView.webview.html = this._getHtmlForWebview(webviewView.webview);
     this._setupMessageHandlers(webviewView.webview);
 
@@ -914,6 +940,25 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
    * Set up message handlers for webview communication
    */
   private _setupMessageHandlers(webview: vscode.Webview) {
+    if (this._projectionAttachmentServer) {
+      throw new Error(
+        'Projection attachment server already exists for the active Webview endpoint.',
+      );
+    }
+    const endpointEpoch = randomUUID();
+    this._projectionEndpointEpoch = endpointEpoch;
+    this._projectionAttachmentServer = createConversationProjectionAttachmentServer({
+      endpointEpoch,
+      resolveProjection: (conversationId) => {
+        if (!this._agentManager) {
+          throw new Error('AgentManager is required to resolve conversation projection authority.');
+        }
+        return this._agentManager.getOrCreateProjection(conversationId);
+      },
+      postMessage: async (frame) => Boolean(await webview.postMessage(frame)),
+      reportError: (error, key) => this._reportProjectionProtocolError(webview, error, key),
+    });
+
     // Register webview for broadcasts (skills, commands, etc.)
     const postMessageFn = (msg: unknown) => webview.postMessage(msg);
     if (this._configBridge) {
@@ -957,6 +1002,14 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
 
         if (!this._webviewReady) {
           this._webviewReady = true;
+          const currentEndpointEpoch = this._projectionEndpointEpoch;
+          if (!currentEndpointEpoch) {
+            throw new Error('Projection endpoint epoch is unavailable for the active Webview.');
+          }
+          await webview.postMessage({
+            type: 'projectionEndpointReady',
+            endpointEpoch: currentEndpointEpoch,
+          });
           this._flushPendingMessages();
           this._replayUndeliveredTasks();
         }
@@ -967,8 +1020,15 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
           if (handled) return;
         }
 
+        const projectionAttachments = this._projectionAttachmentServer;
+        if (!projectionAttachments) {
+          throw new Error('Projection attachment server is unavailable for the active Webview.');
+        }
         handleChatWebviewMessage(message, {
           webview,
+          projectionAttachments,
+          reportProjectionProtocolError: (error, key) =>
+            this._reportProjectionProtocolError(webview, error, key),
           messages: this._messages,
           characterDialogue: this._characterDialogue,
           embodyCharacter: this._embodyCharacter,
@@ -1475,7 +1535,16 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
   }
 
   private _disposeWebviewBindings(): void {
+    this._webviewBindingGeneration += 1;
     this._webviewReady = false;
+    this._projectionEndpointEpoch = undefined;
+    const projectionAttachmentServer = this._projectionAttachmentServer;
+    this._projectionAttachmentServer = undefined;
+    if (projectionAttachmentServer) {
+      void projectionAttachmentServer.dispose().catch((error: unknown) => {
+        logger.error('Failed to dispose projection attachment endpoint', error);
+      });
+    }
     void this._setKeyboardFocused(false);
     for (const disposable of this._webviewDisposables.splice(0)) {
       try {
@@ -1484,6 +1553,24 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
         logger.warn('Failed to dispose webview binding', error);
       }
     }
+  }
+
+  private _reportProjectionProtocolError(
+    webview: vscode.Webview,
+    error: Error,
+    key: ProjectionAttachmentKey,
+  ): void {
+    if (this._reportedProjectionErrors.has(error)) return;
+    this._reportedProjectionErrors.add(error);
+    logger.error('Projection attachment protocol failed', { error, key });
+    void webview.postMessage({
+      type: 'projectionProtocolDiagnostic',
+      key,
+      code: classifyProjectionProtocolError(error),
+      severity: 'error',
+      fatal: true,
+      message: error.message,
+    });
   }
 
   private async _setKeyboardFocused(focused: boolean): Promise<void> {

@@ -1239,6 +1239,68 @@ describe('chatProvider', () => {
     provider.dispose();
   });
 
+  it('announces a new projection endpoint epoch after each Webview replacement', async () => {
+    const firstWebview = vscode.createMockWebview();
+    const secondWebview = vscode.createMockWebview();
+    const provider = new ChatViewProvider(vscode.Uri.file('/ext/neko-agent'), createMockContext(), {
+      localResourceAccess: createImmediateLocalResourceAccess(),
+    });
+
+    provider.resolveWebviewView(
+      {
+        webview: firstWebview,
+        visible: true,
+        onDidChangeVisibility: vi.fn(() => ({ dispose: vi.fn() })),
+      } as never,
+      {} as never,
+      {} as never,
+    );
+    await Promise.resolve();
+    const receiveFirstMessage = vi.mocked(firstWebview.onDidReceiveMessage).mock.calls[0]?.[0] as
+      ((message: unknown) => void | Promise<void>) | undefined;
+    await receiveFirstMessage?.({ type: 'getTabState' });
+    const firstEndpointMessage = vi
+      .mocked(firstWebview.postMessage)
+      .mock.calls.map(([message]) => message)
+      .find(
+        (message): message is { type: 'projectionEndpointReady'; endpointEpoch: string } =>
+          typeof message === 'object' &&
+          message !== null &&
+          'type' in message &&
+          message.type === 'projectionEndpointReady',
+      );
+
+    provider.resolveWebviewView(
+      {
+        webview: secondWebview,
+        visible: true,
+        onDidChangeVisibility: vi.fn(() => ({ dispose: vi.fn() })),
+      } as never,
+      {} as never,
+      {} as never,
+    );
+    await Promise.resolve();
+    const receiveSecondMessage = vi.mocked(secondWebview.onDidReceiveMessage).mock.calls[0]?.[0] as
+      ((message: unknown) => void | Promise<void>) | undefined;
+    await receiveSecondMessage?.({ type: 'getTabState' });
+    const secondEndpointMessage = vi
+      .mocked(secondWebview.postMessage)
+      .mock.calls.map(([message]) => message)
+      .find(
+        (message): message is { type: 'projectionEndpointReady'; endpointEpoch: string } =>
+          typeof message === 'object' &&
+          message !== null &&
+          'type' in message &&
+          message.type === 'projectionEndpointReady',
+      );
+
+    expect(firstEndpointMessage?.endpointEpoch).toEqual(expect.any(String));
+    expect(secondEndpointMessage?.endpointEpoch).toEqual(expect.any(String));
+    expect(secondEndpointMessage?.endpointEpoch).not.toBe(firstEndpointMessage?.endpointEpoch);
+
+    provider.dispose();
+  });
+
   it('clears the agent editable keyboard context when the assistant view is hidden', async () => {
     const webview = vscode.createMockWebview();
     let visibilityListener: (() => void) | undefined;
