@@ -32,6 +32,8 @@ import type { AuthConfigJson, CredentialsConfig, MarketConfig, UnifiedConfig } f
 export const SUPPORTED_TOML_CONFIG_VERSION = 1;
 
 export interface NekoTomlConfig {
+  readonly ui_locale?: unknown;
+  readonly prompt_locale?: unknown;
   readonly version?: number;
   readonly default_provider?: string;
   readonly default_model?: string;

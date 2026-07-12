@@ -4,7 +4,10 @@ import * as os from 'os';
 import * as path from 'path';
 import {
   getConfigReadDiagnostic,
+  getUserConfigDir,
   getUserConfigPath,
+  getWorkspaceConfigDir,
+  getWorkspaceConfigPath,
   isConfigReadError,
   readConfigFileResult,
   writeConfigFile,
@@ -753,7 +756,17 @@ describe('config-reader typed results', () => {
 });
 
 describe('config-reader canonical paths', () => {
-  it('uses TOML as canonical user config', () => {
-    expect(getUserConfigPath()).toMatch(/\.neko[/\\]config\.toml$/);
+  it('keeps the user configuration under ~/.neko', () => {
+    expect(getUserConfigDir()).toBe(path.join(os.homedir(), '.neko'));
+    expect(getUserConfigPath()).toBe(path.join(os.homedir(), '.neko', 'config.toml'));
+  });
+
+  it('keeps the workspace configuration under <workspace>/.neko', () => {
+    const workspaceRoot = path.join(path.parse(process.cwd()).root, 'workspace');
+
+    expect(getWorkspaceConfigDir(workspaceRoot)).toBe(path.join(workspaceRoot, '.neko'));
+    expect(getWorkspaceConfigPath(workspaceRoot)).toBe(
+      path.join(workspaceRoot, '.neko', 'config.toml'),
+    );
   });
 });

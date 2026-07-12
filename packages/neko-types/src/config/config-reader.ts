@@ -46,6 +46,22 @@ export interface ConfigReadDiagnostic {
   readonly detail?: string;
 }
 
+export type ConfigDocumentReadResult =
+  | {
+      readonly status: 'ok';
+      readonly filePath: string;
+      readonly document: NekoTomlConfig;
+    }
+  | {
+      readonly status: 'missing';
+      readonly filePath: string;
+    }
+  | {
+      readonly status: ConfigReadErrorCode;
+      readonly filePath: string;
+      readonly diagnostic: ConfigReadDiagnostic;
+    };
+
 export type ConfigReadResult =
   | {
       readonly status: 'ok';
@@ -116,7 +132,7 @@ export function getWorkspaceConfigPath(workDir: string): string {
  * @param filePath - Path to the TOML configuration file
  * @returns Typed read result that distinguishes missing, empty, invalid TOML, validation, and IO failures
  */
-export function readConfigFileResult(filePath: string): ConfigReadResult {
+export function readConfigDocumentFileResult(filePath: string): ConfigDocumentReadResult {
   try {
     if (!fs.existsSync(filePath)) {
       return { status: 'missing', filePath };
@@ -133,7 +149,24 @@ export function readConfigFileResult(filePath: string): ConfigReadResult {
     return {
       status: 'ok',
       filePath,
-      config: tomlToUnifiedConfig(parse(content) as NekoTomlConfig),
+      document: parse(content) as NekoTomlConfig,
+    };
+  } catch (error) {
+    const code = getConfigReadErrorCode(error);
+    const diagnostic = buildConfigReadDiagnostic(code, filePath, error);
+    logger.error(diagnostic.message, error);
+    return { status: code, filePath, diagnostic };
+  }
+}
+
+export function readConfigFileResult(filePath: string): ConfigReadResult {
+  const result = readConfigDocumentFileResult(filePath);
+  if (result.status !== 'ok') return result;
+  try {
+    return {
+      status: 'ok',
+      filePath,
+      config: tomlToUnifiedConfig(result.document),
     };
   } catch (error) {
     const code = getConfigReadErrorCode(error);
@@ -146,6 +179,14 @@ export function readConfigFileResult(filePath: string): ConfigReadResult {
 /**
  * Read user configuration with a typed result (~/.neko/config.toml)
  */
+export function readUserConfigDocumentResult(): ConfigDocumentReadResult {
+  return readConfigDocumentFileResult(getUserConfigPath());
+}
+
+export function readWorkspaceConfigDocumentResult(workDir: string): ConfigDocumentReadResult {
+  return readConfigDocumentFileResult(getWorkspaceConfigPath(workDir));
+}
+
 export function readUserConfigResult(): ConfigReadResult {
   return readConfigFileResult(getUserConfigPath());
 }

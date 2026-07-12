@@ -16,3 +16,10 @@
  */
 export type { II18nService, MessageBundle, SupportedLocale } from './types';
 export { I18nService, interpolate, normalizeLocale } from './core';
+export { createStrictTranslator } from './strict';
+export type {
+  StrictMessageBundleSource,
+  StrictMessageKey,
+  StrictMessageParameters,
+  StrictTranslator,
+} from './strict';
