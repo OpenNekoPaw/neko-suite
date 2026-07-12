@@ -189,6 +189,6 @@ function makeQuery(): ProjectSemanticCoverageQuery {
     },
     analysisKind: 'ocr',
     projectRoot: '/mock/workspace',
-    skillId: 'comic-to-storyboard',
+    skillId: 'storyboard',
   };
 }

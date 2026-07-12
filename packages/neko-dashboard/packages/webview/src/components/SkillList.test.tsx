@@ -11,24 +11,24 @@ Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
 const skills: readonly DashboardSkill[] = [
   makeSkill({
-    id: 'media-to-video',
-    name: '媒体转视频',
+    id: 'media-production',
+    name: '媒体制作',
     tags: ['AI', '视频', '编排'],
     role: 'orchestrator',
-    groupId: 'media-to-video',
+    groupId: 'media-production',
   }),
   makeSkill({
-    id: 'comic-to-storyboard',
-    name: '漫画转分镜表',
+    id: 'storyboard',
+    name: '分镜设计',
     tags: ['AI', '漫画', '分镜'],
     role: 'focused-skill',
     visibility: 'advanced',
-    groupId: 'media-to-video',
-    parentSkillIds: ['media-to-video'],
+    groupId: 'media-production',
+    parentSkillIds: ['media-production'],
   }),
   makeSkill({
-    id: 'export-video-package',
-    name: '视频导出打包',
+    id: 'video-editing',
+    name: '视频编辑',
     tags: ['导出', '视频', '交付'],
     role: 'quick-action',
   }),
@@ -53,19 +53,19 @@ describe('SkillList', () => {
     );
 
     expect(host.textContent).toContain('编排技能');
-    expect(host.textContent).toContain('媒体转视频');
-    expect(host.textContent).not.toContain('漫画转分镜表');
+    expect(host.textContent).toContain('媒体制作');
+    expect(host.textContent).not.toContain('分镜设计');
     expect(host.textContent).toContain('内置');
     expect(host.textContent).toContain('编排');
     expect(host.textContent).toContain('快捷动作');
-    expect(host.textContent).toContain('视频导出打包');
+    expect(host.textContent).toContain('视频编辑');
     expect(host.querySelectorAll('.skill-row').length).toBe(2);
 
     act(() => {
       findButtonByText(host, '子技能（1）')?.click();
     });
 
-    expect(host.textContent).toContain('漫画转分镜表');
+    expect(host.textContent).toContain('分镜设计');
     expect(host.querySelectorAll('.skill-row').length).toBe(3);
   });
 
@@ -75,7 +75,7 @@ describe('SkillList', () => {
     );
 
     expect(host.textContent).toContain('3 个技能');
-    expect(host.textContent).toContain('视频导出打包');
+    expect(host.textContent).toContain('视频编辑');
 
     const storyboardFilter = host.querySelector<HTMLSelectElement>('.skill-filter-select');
     expect(storyboardFilter).not.toBeNull();
@@ -88,8 +88,8 @@ describe('SkillList', () => {
     });
 
     expect(host.textContent).toContain('1/3 个技能');
-    expect(host.textContent).toContain('漫画转分镜表');
-    expect(host.textContent).not.toContain('视频导出打包');
+    expect(host.textContent).toContain('分镜设计');
+    expect(host.textContent).not.toContain('视频编辑');
   });
 
   it('renders stable skill icons without leaking raw emoji or codicon text', () => {
@@ -126,14 +126,14 @@ describe('SkillList', () => {
     const advancedToggle = findButtonByText(host, '高级项1');
     expect(advancedToggle).not.toBeNull();
     expect(advancedToggle?.getAttribute('aria-expanded')).toBe('false');
-    expect(host.textContent).not.toContain('漫画转分镜表');
+    expect(host.textContent).not.toContain('分镜设计');
 
     act(() => {
       advancedToggle?.click();
     });
 
     expect(advancedToggle?.getAttribute('aria-expanded')).toBe('true');
-    expect(host.textContent).toContain('漫画转分镜表');
+    expect(host.textContent).toContain('分镜设计');
     expect(host.querySelectorAll('.skill-row').length).toBe(3);
   });
 
@@ -157,7 +157,7 @@ describe('SkillList', () => {
     });
 
     expect(onSkillAction).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 'comic-to-storyboard' }),
+      expect.objectContaining({ id: 'storyboard' }),
       'fork',
     );
     expect(JSON.stringify(onSkillAction.mock.calls)).not.toContain('/Users/');

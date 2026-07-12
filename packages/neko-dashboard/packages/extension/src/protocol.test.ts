@@ -65,7 +65,7 @@ describe('dashboard webview protocol guards', () => {
         command: 'neko.agent.invokeSkill',
         intent: 'Generate a clip',
         skill: {
-          id: 'ai-generate',
+          id: 'image',
           extensionId: 'neko.neko-agent',
           name: 'AI Generate',
           description: 'Generate media',

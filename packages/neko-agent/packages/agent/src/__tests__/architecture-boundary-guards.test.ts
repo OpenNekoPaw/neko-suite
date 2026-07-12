@@ -1,4 +1,5 @@
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { basename, join, relative } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
@@ -7,6 +8,11 @@ const agentSrc = join(repoRoot, 'packages/agent/src');
 const packageRoot = join(repoRoot, 'packages');
 const webviewSrc = join(packageRoot, 'webview/src');
 const extensionSrc = join(packageRoot, 'extension/src');
+
+function hasQuotedIdentity(source: string, identity: string): boolean {
+  const escaped = identity.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`['"\`]${escaped}['"\`]`).test(source);
+}
 
 describe('agent architecture boundary guards', () => {
   it('keeps Webview from importing runtime, platform, ai-sdk, or vscode modules', () => {
@@ -763,8 +769,8 @@ describe('agent architecture boundary guards', () => {
     expect(violations).toEqual([]);
   });
 
-  it('keeps removed creative Skill identities out of runtime fixtures and locale metadata', () => {
-    const removedSkillNames = [
+  it('keeps removed creative and Quality identities out of workspace runtime fixtures', () => {
+    const removedCreativeSkillNames = [
       'ai-generate',
       'comic-to-animation',
       'comic-to-storyboard',
@@ -775,22 +781,42 @@ describe('agent architecture boundary guards', () => {
       'generated-shot-assembly',
       'export-video-package',
     ] as const;
+    const removedQualityToolNames = ['QualityRepairCheck', 'QualityCheckConsistency'] as const;
+    const removedRuntimeIdentities = [
+      ...removedCreativeSkillNames,
+      ...removedQualityToolNames,
+    ] as const;
     const allowedNegativeOrInternalReferences = new Map<string, ReadonlySet<string>>([
       [
         'packages/neko-agent/packages/extension/src/services/__tests__/skillCatalogProvider.test.ts',
-        new Set(removedSkillNames),
+        new Set(removedCreativeSkillNames),
       ],
-      ['packages/neko-skills/src/builtins/builtin-skills.test.ts', new Set(removedSkillNames)],
+      [
+        'packages/neko-skills/src/builtins/builtin-skills.test.ts',
+        new Set(removedRuntimeIdentities),
+      ],
       ['packages/neko-skills/src/builtins/creative-media.ts', new Set(['generated-shot-assembly'])],
+      [
+        'packages/neko-skills/src/quality/__tests__/quality-review-validation.test.ts',
+        new Set(removedQualityToolNames),
+      ],
+      [
+        'packages/neko-skills/src/subagent/__tests__/creative-presets.test.ts',
+        new Set(['QualityCheckConsistency']),
+      ],
+      [
+        'packages/neko-cut/packages/extension/src/services/cutAgentSkillInvocation.test.ts',
+        new Set(['ai-generate']),
+      ],
     ]);
     const workspaceRoot = join(repoRoot, '../..');
-    const sourceRoots = [
-      join(workspaceRoot, 'packages/neko-agent'),
-      join(workspaceRoot, 'packages/neko-skills'),
-      join(workspaceRoot, 'scripts/agent-eval/scenarios'),
-    ];
-    const violations = sourceRoots
-      .flatMap((root) => listFiles(root))
+    const trackedSourceFiles = execFileSync(
+      'git',
+      ['ls-files', 'packages', 'scripts/agent-eval/scenarios'],
+      { cwd: workspaceRoot, encoding: 'utf-8' },
+    )
+      .split('\n')
+      .filter(Boolean)
       .filter(
         (file) =>
           file.endsWith('.ts') ||
@@ -798,16 +824,15 @@ describe('agent architecture boundary guards', () => {
           file.endsWith('.json') ||
           file.endsWith('.mjs'),
       )
-      .filter((file) => !file.includes('/node_modules/') && !file.includes('/dist/'))
-      .filter((file) => !file.endsWith('architecture-boundary-guards.test.ts'))
-      .flatMap((file) => {
-        const relativePath = relative(workspaceRoot, file).replace(/\\/g, '/');
-        const allowedNames = allowedNegativeOrInternalReferences.get(relativePath);
-        const source = readFileSync(file, 'utf-8');
-        return removedSkillNames
-          .filter((name) => source.includes(name) && !allowedNames?.has(name))
-          .map((name) => `${relativePath} contains removed creative Skill identity ${name}`);
-      });
+      .filter((file) => !file.endsWith('architecture-boundary-guards.test.ts'));
+    const violations = trackedSourceFiles.flatMap((relativePath) => {
+      const file = join(workspaceRoot, relativePath);
+      const allowedNames = allowedNegativeOrInternalReferences.get(relativePath);
+      const source = readFileSync(file, 'utf-8');
+      return removedRuntimeIdentities
+        .filter((name) => hasQuotedIdentity(source, name) && !allowedNames?.has(name))
+        .map((name) => `${relativePath} contains removed runtime identity ${name}`);
+    });
 
     expect(violations).toEqual([]);
   });

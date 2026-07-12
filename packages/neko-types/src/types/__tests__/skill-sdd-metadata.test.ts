@@ -395,7 +395,7 @@ describe('validateSkillManifest — explicit legacy compatibility pass', () => {
         inputArtifacts: ['generated-media-ref'],
         referencedCapabilities: ['cut.importStoryboard'],
         suggestedProjectors: ['projector:storyboard-to-cut'],
-        tags: ['media-to-video'],
+        tags: ['media-production'],
         costLevel: 'medium',
         riskLevel: 'medium',
         validationRequirements: ['StoryboardTable'],
@@ -634,7 +634,7 @@ describe('skill catalog projection metadata', () => {
         catalog: {
           role: 'pipeline',
           visibility: 'everyone',
-          parentSkillIds: ['media-to-video', ''],
+          parentSkillIds: ['media-production', ''],
           actions: ['run', { id: 'edit', targetSource: 'builtin' }],
         } as unknown as SkillManifest['catalog'],
       }),

@@ -385,7 +385,7 @@ describe('project cache/search contracts', () => {
           provider: {
             providerId: 'semantic-index.local',
             schemaVersion: '1',
-            skillId: 'comic-to-storyboard',
+            skillId: 'storyboard',
             skillVersion: '2026-06-11',
           },
         },
@@ -512,7 +512,7 @@ function makeCoverageQuery(): ProjectSemanticCoverageQuery {
       endLine: 20,
     },
     analysisKind: 'ocr',
-    skillId: 'comic-to-storyboard',
+    skillId: 'storyboard',
     skillVersion: '2026-06-11',
     schemaVersion: '1',
     projectRoot: '/workspace',

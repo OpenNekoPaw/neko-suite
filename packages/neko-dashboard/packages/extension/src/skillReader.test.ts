@@ -55,9 +55,9 @@ describe('SkillReader', () => {
       exports: {
         getSkills: () => [
           {
-            id: 'ai-generate',
-            name: 'AI Generate',
-            description: 'Generate media.',
+            id: 'image',
+            name: 'Image',
+            description: 'Create or edit images.',
             command: 'neko.agent.invokeSkill',
             tags: ['ai'],
           },
@@ -68,9 +68,9 @@ describe('SkillReader', () => {
     const [skill] = await new SkillReader().read();
 
     expect(skill).toMatchObject({
-      id: 'ai-generate',
-      name: 'AI Generate',
-      description: 'Generate media.',
+      id: 'image',
+      name: 'Image',
+      description: 'Create or edit images.',
       locale: 'fr',
       tags: ['ai'],
       catalog: {
@@ -86,16 +86,16 @@ describe('SkillReader', () => {
       exports: {
         getSkills: () => [
           {
-            id: 'media-to-video',
-            name: 'Media to Video',
-            description: 'Coordinate media adaptation.',
+            id: 'media-production',
+            name: 'Media Production',
+            description: 'Coordinate media production.',
             command: 'neko.agent.invokeSkill',
             catalog: {
               role: 'orchestrator',
               source: 'builtin',
               visibility: 'primary',
               editable: false,
-              groupId: 'media-to-video',
+              groupId: 'media-production',
               actions: [{ id: 'run' }, { id: 'fork', targetSource: 'project' }],
             },
           },
@@ -110,7 +110,7 @@ describe('SkillReader', () => {
       source: 'builtin',
       visibility: 'primary',
       editable: false,
-      groupId: 'media-to-video',
+      groupId: 'media-production',
       actions: [{ id: 'run' }, { id: 'fork', targetSource: 'project' }],
     });
   });

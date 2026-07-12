@@ -116,7 +116,7 @@ function makeQuery(): ProjectSemanticCoverageQuery {
     range: { startLine: 1, endLine: 20 },
     analysisKind: 'ocr',
     projectRoot: '/workspace',
-    skillId: 'comic-to-storyboard',
+    skillId: 'storyboard',
     skillVersion: '2026-06-12',
     schemaVersion: '1',
   };
