@@ -122,7 +122,9 @@ function useOptionalControlledState<T>(
   valueRef.current = value;
   onControlledChangeRef.current = onControlledChange;
   const setValue = useCallback<StateUpdater<T>>((action) => {
-    const nextValue = resolveStateAction(action, valueRef.current);
+    const currentValue = valueRef.current;
+    const nextValue = resolveStateAction(action, currentValue);
+    if (Object.is(nextValue, currentValue)) return;
     valueRef.current = nextValue;
     if (onControlledChangeRef.current) {
       onControlledChangeRef.current(nextValue);
@@ -142,13 +144,18 @@ function createComposerMenuFieldSetter<
   field: TField,
 ): StateUpdater<ComposerMenuState[TSection][TField]> {
   return (action) => {
-    setComposerMenuState((state) => ({
-      ...state,
-      [section]: {
-        ...state[section],
-        [field]: resolveStateAction(action, state[section][field]),
-      },
-    }));
+    setComposerMenuState((state) => {
+      const currentValue = state[section][field];
+      const nextValue = resolveStateAction(action, currentValue);
+      if (Object.is(nextValue, currentValue)) return state;
+      return {
+        ...state,
+        [section]: {
+          ...state[section],
+          [field]: nextValue,
+        },
+      };
+    });
   };
 }
 
@@ -157,10 +164,11 @@ function createComposerMenuRootFieldSetter<TField extends 'queueExpanded'>(
   field: TField,
 ): StateUpdater<ComposerMenuState[TField]> {
   return (action) => {
-    setComposerMenuState((state) => ({
-      ...state,
-      [field]: resolveStateAction(action, state[field]),
-    }));
+    setComposerMenuState((state) => {
+      const currentValue = state[field];
+      const nextValue = resolveStateAction(action, currentValue);
+      return Object.is(nextValue, currentValue) ? state : { ...state, [field]: nextValue };
+    });
   };
 }
 

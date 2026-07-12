@@ -348,6 +348,33 @@ describe('InputArea composer controls', () => {
     vi.clearAllMocks();
   });
 
+  it('does not feed unchanged mention menu state back into a controlled render store', () => {
+    const onComposerStateCommit = vi.fn();
+
+    function ControlledComposerHarness() {
+      const [composerMenuState, setComposerMenuState] = useState(DEFAULT_COMPOSER_MENU_STATE);
+
+      return (
+        <Harness onRequestFiles={() => undefined}>
+          <InputArea
+            inputValue=""
+            isThinking={false}
+            composerMenuState={composerMenuState}
+            onComposerMenuStateChange={(nextState) => {
+              onComposerStateCommit(nextState);
+              setComposerMenuState(nextState);
+            }}
+            onInputChange={vi.fn()}
+            onSend={vi.fn()}
+          />
+        </Harness>
+      );
+    }
+
+    expect(() => render(<ControlledComposerHarness />)).not.toThrow();
+    expect(onComposerStateCommit).not.toHaveBeenCalled();
+  });
+
   it('merges controlled slash menu updates against the latest Tab-owned state', () => {
     const onComposerMenuStateChange = vi.fn();
     render(
