@@ -15,6 +15,10 @@ import {
 } from '@neko/shared';
 import { getLogger } from '../utils/logger';
 import {
+  PersistedChildRunOwnershipError,
+  requirePersistedTaskRunScope,
+} from '../runtime/persisted-child-run-ownership';
+import {
   assertJsonFileRevisionCurrent,
   createJsonFileWriteMetadata,
   createJsonFileWriterId,
@@ -53,7 +57,7 @@ export class MemoryTaskRecoveryStorage implements ITaskRecoveryStorage {
 }
 
 export interface StateTaskRecoveryStorageAdapter {
-  load(key: string): readonly TaskRecoveryInfo[] | PromiseLike<readonly TaskRecoveryInfo[]>;
+  load(key: string): unknown | PromiseLike<unknown>;
   save(key: string, infos: readonly TaskRecoveryInfo[]): void | PromiseLike<void>;
 }
 
@@ -87,9 +91,12 @@ export class StateTaskRecoveryStorage implements ITaskRecoveryStorage {
   async loadAll(): Promise<TaskRecoveryInfo[]> {
     try {
       const infos = await this.options.adapter.load(this.options.storageKey);
-      const parsed = parseTaskRecoveryInfoArray(infos);
+      const parsed = parseTaskRecoveryInfoArray(infos, `state:${this.options.storageKey}`);
       return parsed ? parsed.map((info) => ({ ...info })) : [];
     } catch (error) {
+      if (error instanceof PersistedChildRunOwnershipError) {
+        throw error;
+      }
       logger.warn('Failed to load state recovery storage', { error });
       return [];
     }
@@ -241,7 +248,7 @@ export class FileTaskRecoveryStorage implements ITaskRecoveryStorage {
         const content = await this.options.readFile(this.options.filePath);
         const parsed = parseTaskRecoveryStorageContent(content);
         this.loadedRevision = parsed.revision;
-        const data = parseTaskRecoveryInfoArray(parsed.recovery);
+        const data = parseTaskRecoveryInfoArray(parsed.recovery, `file:${this.options.filePath}`);
         if (!data) {
           throw new Error('Recovery file does not contain valid task recovery records');
         }
@@ -250,7 +257,10 @@ export class FileTaskRecoveryStorage implements ITaskRecoveryStorage {
         }
       }
     } catch (error) {
-      // If file doesn't exist or is corrupted, start fresh
+      if (error instanceof PersistedChildRunOwnershipError) {
+        throw error;
+      }
+      // Provider cache corruption is recoverable, but ownership ambiguity is not.
       logger.warn('Failed to load recovery file', { error });
     }
 
@@ -292,13 +302,13 @@ export function createFileRecoveryStorage(
   });
 }
 
-function parseTaskRecoveryInfoArray(value: unknown): TaskRecoveryInfo[] | null {
+function parseTaskRecoveryInfoArray(value: unknown, source: string): TaskRecoveryInfo[] | null {
   if (!Array.isArray(value)) {
     return null;
   }
   const infos: TaskRecoveryInfo[] = [];
-  for (const item of value) {
-    const info = parseTaskRecoveryInfo(item);
+  for (const [recordIndex, item] of value.entries()) {
+    const info = parseTaskRecoveryInfo(item, source, recordIndex);
     if (!info) {
       return null;
     }
@@ -324,16 +334,24 @@ function parseTaskRecoveryStorageContent(content: string): {
   throw new Error('Recovery file does not contain a recovery array');
 }
 
-function parseTaskRecoveryInfo(value: unknown): TaskRecoveryInfo | null {
+function parseTaskRecoveryInfo(
+  value: unknown,
+  source: string,
+  recordIndex: number,
+): TaskRecoveryInfo | null {
   if (!isRecord(value)) {
     return null;
   }
-  const scopeResult = validateChildRunScope(value.scope);
+  const localId = typeof value.taskId === 'string' ? value.taskId : undefined;
+  const scope = requirePersistedTaskRunScope({
+    value: value.scope,
+    recordKind: 'task-recovery',
+    source,
+    recordIndex,
+    ...(localId ? { localId } : {}),
+  });
   if (
-    !scopeResult.ok ||
-    scopeResult.scope.childKind !== 'task' ||
-    typeof value.taskId !== 'string' ||
-    value.taskId !== scopeResult.scope.childRunId ||
+    !localId ||
     typeof value.externalTaskId !== 'string' ||
     typeof value.providerId !== 'string' ||
     !isTaskType(value.taskType) ||
@@ -346,8 +364,8 @@ function parseTaskRecoveryInfo(value: unknown): TaskRecoveryInfo | null {
     return null;
   }
   return {
-    scope: scopeResult.scope as TaskRunScope,
-    taskId: value.taskId,
+    scope,
+    taskId: localId,
     externalTaskId: value.externalTaskId,
     providerId: value.providerId,
     taskType: value.taskType,

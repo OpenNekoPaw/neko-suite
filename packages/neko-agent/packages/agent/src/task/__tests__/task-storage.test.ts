@@ -2,7 +2,7 @@
  * Task Storage Unit Tests
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
   FileTaskStorage,
   FileTaskStorageLoadError,
@@ -12,6 +12,7 @@ import {
   getWorkspaceVisibleAgentTaskRecordsFilePath,
 } from '../task-storage';
 import type { SerializableTask, TaskRunScope } from '@neko/shared';
+import { PersistedChildRunOwnershipError } from '../../runtime/persisted-child-run-ownership';
 
 function taskScope(childRunId: string): TaskRunScope {
   return {
@@ -299,6 +300,43 @@ describe('FileTaskStorage', () => {
       code: 'agent-task-storage-load-failed',
       filePath,
     });
+  });
+
+  it('fails closed and preserves a legacy task whose runtime owner is missing', async () => {
+    const filePath = '/tmp/tasks.json';
+    const legacyTask = createTask({ id: 'legacy-task' });
+    const { scope: _scope, ...withoutScope } = legacyTask;
+    const files = new Map<string, string>([
+      [filePath, JSON.stringify({ version: 1, tasks: [withoutScope] })],
+    ]);
+    const fsOps = createMemoryFileTaskStorageFs(files);
+    const storage = new FileTaskStorage({ filePath, ...fsOps, writerId: 'task-writer-a' });
+
+    await expect(storage.loadAll()).rejects.toMatchObject({
+      code: 'agent-task-storage-load-failed',
+      cause: expect.objectContaining({
+        code: 'agent-persisted-child-run-ownership-ambiguous',
+        diagnostic: expect.objectContaining({
+          recordKind: 'task',
+          failure: 'missing-scope',
+          localId: 'legacy-task',
+        }),
+      }),
+    });
+    expect(files.get(filePath)).toContain('legacy-task');
+  });
+
+  it('rejects ambiguous state-backed tasks instead of attaching them by local id', async () => {
+    const legacyTask = createTask({ id: 'legacy-state-task' });
+    const { scope: _scope, ...withoutScope } = legacyTask;
+    const save = vi.fn();
+    const storage = new StateTaskStorage({
+      storageKey: 'neko.agent.tasks',
+      adapter: { load: () => [withoutScope], save },
+    });
+
+    await expect(storage.loadAll()).rejects.toBeInstanceOf(PersistedChildRunOwnershipError);
+    expect(save).not.toHaveBeenCalled();
   });
 
   it('rejects stale whole-file writers before overwriting another task partition', async () => {

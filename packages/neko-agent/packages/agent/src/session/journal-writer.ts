@@ -5,6 +5,7 @@
  * Designed for crash recovery: every write is immediately flushed to disk.
  */
 
+import type { ChildRunScope } from '@neko/shared';
 import type { AgentEvent, ExecutionMode, IJournalWriter } from './types';
 import { randomUUID } from 'node:crypto';
 
@@ -27,6 +28,7 @@ export interface StateSnapshot {
 
 /** SubAgent sidechain reference */
 export interface SubAgentRef {
+  scope: ChildRunScope;
   subAgentId: string;
   journalPath: string;
 }

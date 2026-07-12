@@ -11,6 +11,7 @@ import {
 import * as nodeFs from 'node:fs';
 import * as nodePath from 'node:path';
 import { getLogger } from '../utils/logger';
+import { requirePersistedTaskRunScope } from '../runtime/persisted-child-run-ownership';
 import {
   buildTaskStorageCleanupPlan,
   createWorkspaceVisibleAgentTaskRecord,
@@ -69,7 +70,7 @@ export class MemoryTaskStorage implements ITaskStorage {
 }
 
 export interface StateTaskStorageAdapter {
-  load(key: string): readonly SerializableTask[] | PromiseLike<readonly SerializableTask[]>;
+  load(key: string): unknown | PromiseLike<unknown>;
   save(key: string, tasks: readonly SerializableTask[]): void | PromiseLike<void>;
 }
 
@@ -105,8 +106,10 @@ export class StateTaskStorage implements ITaskStorage {
   }
 
   async loadAll(): Promise<SerializableTask[]> {
-    const tasks = await this.options.adapter.load(this.options.storageKey);
-    return tasks.map((task) => ({ ...task }));
+    const value = await this.options.adapter.load(this.options.storageKey);
+    return parsePersistedTaskArray(value, `state:${this.options.storageKey}`).map((task) => ({
+      ...task,
+    }));
   }
 
   async delete(scope: TaskRunScope): Promise<void> {
@@ -346,7 +349,10 @@ export class FileTaskStorage implements ITaskStorage {
       const fileExists = await this.options.exists(this.options.filePath);
       if (fileExists) {
         const content = await this.options.readFile(this.options.filePath);
-        const { tasks, revision } = parseFileTaskStorageContent(content);
+        const { tasks, revision } = parseFileTaskStorageContent(
+          content,
+          `file:${this.options.filePath}`,
+        );
         this.loadedRevision = revision;
         for (const task of tasks) {
           this.cache.set(formatTaskRunScope(task.scope), task);
@@ -372,21 +378,62 @@ export class FileTaskStorage implements ITaskStorage {
   }
 }
 
-function parseFileTaskStorageContent(content: string): {
+function parseFileTaskStorageContent(
+  content: string,
+  source: string,
+): {
   readonly tasks: readonly SerializableTask[];
   readonly revision: number;
 } {
   const parsed = JSON.parse(content) as unknown;
   if (Array.isArray(parsed)) {
-    return { tasks: parsed as SerializableTask[], revision: 0 };
+    return { tasks: parsePersistedTaskArray(parsed, source), revision: 0 };
   }
   if (isRecord(parsed) && Array.isArray(parsed['tasks'])) {
     return {
-      tasks: parsed['tasks'] as SerializableTask[],
+      tasks: parsePersistedTaskArray(parsed['tasks'], source),
       revision: parseJsonFileWriteMetadata(parsed)?.revision ?? 0,
     };
   }
   throw new Error('Task storage file does not contain a task array');
+}
+
+function parsePersistedTaskArray(value: unknown, source: string): SerializableTask[] {
+  if (!Array.isArray(value)) {
+    throw new Error(`${source} does not contain a task array`);
+  }
+  return value.map((item, recordIndex) => parsePersistedTask(item, source, recordIndex));
+}
+
+function parsePersistedTask(value: unknown, source: string, recordIndex: number): SerializableTask {
+  const localId = isRecord(value) && typeof value['id'] === 'string' ? value['id'] : undefined;
+  const scope = requirePersistedTaskRunScope({
+    value: isRecord(value) ? value['scope'] : undefined,
+    recordKind: 'task',
+    source,
+    recordIndex,
+    ...(localId ? { localId } : {}),
+  });
+  if (!isSerializableTask(value)) {
+    throw new Error(`${source}[${recordIndex}] does not contain a valid serializable task`);
+  }
+  return { ...value, scope };
+}
+
+function isSerializableTask(value: unknown): value is SerializableTask {
+  return (
+    isRecord(value) &&
+    typeof value['id'] === 'string' &&
+    typeof value['type'] === 'string' &&
+    typeof value['status'] === 'string' &&
+    isRecord(value['input']) &&
+    typeof value['progress'] === 'number' &&
+    Number.isFinite(value['progress']) &&
+    typeof value['createdAt'] === 'number' &&
+    Number.isFinite(value['createdAt']) &&
+    typeof value['updatedAt'] === 'number' &&
+    Number.isFinite(value['updatedAt'])
+  );
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

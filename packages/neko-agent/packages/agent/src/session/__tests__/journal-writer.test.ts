@@ -134,6 +134,13 @@ describe('JournalWriter', () => {
   describe('appendSubAgentRef', () => {
     it('should write subagent ref entry', async () => {
       await writer.appendSubAgentRef(3, {
+        scope: {
+          conversationId: 'conv-1',
+          runId: 'run-1',
+          parentRunId: 'run-1',
+          childRunId: 'sub-1',
+          childKind: 'subagent',
+        },
         subAgentId: 'sub-1',
         journalPath: '/tmp/journals/conv_sub_sub-1.jsonl',
       });

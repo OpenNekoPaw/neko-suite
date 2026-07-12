@@ -10,6 +10,7 @@ import {
   createStateTaskRecoveryStorage,
 } from '../task-recovery-storage';
 import type { TaskRecoveryInfo, TaskRunScope } from '@neko/shared';
+import { PersistedChildRunOwnershipError } from '../../runtime/persisted-child-run-ownership';
 
 function taskScope(childRunId: string): TaskRunScope {
   return {
@@ -203,11 +204,31 @@ describe('FileTaskRecoveryStorage', () => {
       expect(all).toEqual([]);
     });
 
+    it('fails closed and preserves external recovery data when ownership is missing', async () => {
+      fileExists = true;
+      const info = createInfo({ taskId: 'legacy-task', externalTaskId: 'external-valuable' });
+      const { scope: _scope, ...withoutScope } = info;
+      fileContent = JSON.stringify([withoutScope]);
+
+      await expect(storage.loadAll()).rejects.toMatchObject({
+        code: 'agent-persisted-child-run-ownership-ambiguous',
+        diagnostic: expect.objectContaining({
+          recordKind: 'task-recovery',
+          failure: 'missing-scope',
+          localId: 'legacy-task',
+        }),
+      });
+      expect(fileContent).toContain('external-valuable');
+      expect(mockFs.writeFile).not.toHaveBeenCalled();
+      expect(mockFs.deleteFile).not.toHaveBeenCalled();
+    });
+
     it('should reject recovery files with invalid record shapes', async () => {
       fileExists = true;
       fileContent = JSON.stringify([
         createInfo({ taskId: 'valid' }),
         {
+          scope: taskScope('invalid'),
           taskId: 'invalid',
           externalTaskId: 123,
           providerId: 'runway',
@@ -421,6 +442,19 @@ describe('StateTaskRecoveryStorage', () => {
     expect(await restored.load(taskScope('task_2'))).toEqual(
       expect.objectContaining({ taskId: 'task_2', externalTaskId: 'ext_456' }),
     );
+  });
+
+  it('fails closed for state recovery records with ambiguous ownership', async () => {
+    const info = createInfo({ taskId: 'legacy-state-task', externalTaskId: 'external-state' });
+    const { scope: _scope, ...withoutScope } = info;
+    const save = vi.fn();
+    const storage = createStateTaskRecoveryStorage({
+      storageKey: 'neko.agent.taskRecovery',
+      adapter: { load: () => [withoutScope], save },
+    });
+
+    await expect(storage.loadAll()).rejects.toBeInstanceOf(PersistedChildRunOwnershipError);
+    expect(save).not.toHaveBeenCalled();
   });
 
   it('degrades corrupt state adapter loads to empty recovery info', async () => {

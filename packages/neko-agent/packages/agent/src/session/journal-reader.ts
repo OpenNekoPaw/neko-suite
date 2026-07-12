@@ -10,6 +10,7 @@ import type { ExecutionMode } from './types';
 import type { JournalEntry, SubAgentRef, StateSnapshot } from './journal-writer';
 import { projectJournalEntriesToHistory } from './working-memory';
 import { createHash } from 'node:crypto';
+import { requirePersistedSubAgentRunScope } from '../runtime/persisted-child-run-ownership';
 
 // =============================================================================
 // Types
@@ -108,7 +109,7 @@ export class JournalReader {
       }
 
       if (entry.type === 'subagent_ref' && entry.subAgentRef) {
-        subAgentRefs.push(entry.subAgentRef);
+        subAgentRefs.push(parsePersistedSubAgentRef(entry.subAgentRef, this._filePath, entry.seq));
         continue;
       }
 
@@ -154,6 +155,25 @@ export class JournalReader {
 
     return { history, executionMode, versionLogEntries, subAgentRefs, lastSeq, lastSnapshot };
   }
+}
+
+function parsePersistedSubAgentRef(
+  value: SubAgentRef,
+  source: string,
+  recordIndex: number,
+): SubAgentRef {
+  const localId = typeof value.subAgentId === 'string' ? value.subAgentId : undefined;
+  const scope = requirePersistedSubAgentRunScope({
+    value: value.scope,
+    recordKind: 'subagent-ref',
+    source,
+    recordIndex,
+    ...(localId ? { localId } : {}),
+  });
+  if (!localId || typeof value.journalPath !== 'string' || !value.journalPath.trim()) {
+    throw new Error(`Persisted SubAgent reference at ${source}[${recordIndex}] is malformed.`);
+  }
+  return { scope, subAgentId: localId, journalPath: value.journalPath };
 }
 
 function createFallbackJournalEntryId(

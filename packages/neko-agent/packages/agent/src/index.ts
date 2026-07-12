@@ -1298,3 +1298,12 @@ export {
   type NekoContentSource,
   type NekoContentSubdir,
 } from './workspace';
+
+export {
+  PersistedChildRunOwnershipError,
+  requirePersistedSubAgentRunScope,
+  requirePersistedTaskRunScope,
+  type PersistedChildRunOwnershipDiagnostic,
+  type PersistedChildRunOwnershipFailure,
+  type PersistedChildRunRecordKind,
+} from './runtime/persisted-child-run-ownership';

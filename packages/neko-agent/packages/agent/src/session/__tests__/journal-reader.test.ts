@@ -430,7 +430,17 @@ CORRUPTED LINE
           seq: 1,
           ts: 1000,
           type: 'subagent_ref',
-          subAgentRef: { subAgentId: 'sub-1', journalPath: '/tmp/journals/conv_sub_sub-1.jsonl' },
+          subAgentRef: {
+            scope: {
+              conversationId: 'conv-1',
+              runId: 'run-1',
+              parentRunId: 'run-1',
+              childRunId: 'sub-1',
+              childKind: 'subagent',
+            },
+            subAgentId: 'sub-1',
+            journalPath: '/tmp/journals/conv_sub_sub-1.jsonl',
+          },
         },
       ];
       const reader = new JournalReader({
@@ -441,6 +451,32 @@ CORRUPTED LINE
       const state = await reader.readSessionState();
       expect(state!.subAgentRefs).toHaveLength(1);
       expect(state!.subAgentRefs[0]!.subAgentId).toBe('sub-1');
+    });
+
+    it('fails closed for a persisted SubAgent reference without complete ownership', async () => {
+      const content = `${JSON.stringify({
+        seq: 1,
+        ts: 1000,
+        type: 'subagent_ref',
+        subAgentRef: {
+          subAgentId: 'legacy-subagent',
+          journalPath: '/tmp/journals/legacy-subagent.jsonl',
+        },
+      })}
+`;
+      const reader = new JournalReader({
+        filePath: '/tmp/conversation.jsonl',
+        fsOps: createMockFsOps(content),
+      });
+
+      await expect(reader.readSessionState()).rejects.toMatchObject({
+        code: 'agent-persisted-child-run-ownership-ambiguous',
+        diagnostic: expect.objectContaining({
+          recordKind: 'subagent-ref',
+          failure: 'missing-scope',
+          localId: 'legacy-subagent',
+        }),
+      });
     });
 
     it('should track lastSeq correctly', async () => {
