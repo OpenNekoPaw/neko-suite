@@ -95,13 +95,7 @@ export interface ChatWorkspaceProps {
   // Config
   settings: SettingsState;
   updateSettings: (partial: Partial<SettingsState>) => void;
-  // Model selection (owned by ConversationController for settingsData hydration)
-  selectedModel: string;
-  setSelectedModel: (modelId: string) => void;
-  mediaModelSelection: import('@/hooks/useUIState').MediaModelSelection;
-  setMediaModelSelection: React.Dispatch<
-    React.SetStateAction<import('@/hooks/useUIState').MediaModelSelection>
-  >;
+  onModelSelect: (modelId: string) => void;
   mediaUnderstandingModels?: MediaUnderstandingModels;
   mentionItems: MentionItem[];
   onMentionSearchFilterChange: (filter: string) => void;
@@ -181,10 +175,7 @@ export function ChatWorkspace({
   clearMessages,
   settings,
   updateSettings,
-  selectedModel,
-  setSelectedModel,
-  mediaModelSelection,
-  setMediaModelSelection,
+  onModelSelect,
   mediaUnderstandingModels,
   mentionItems,
   onMentionSearchFilterChange,
@@ -228,6 +219,8 @@ export function ChatWorkspace({
     useTabRenderStore(tabRenderStore);
   const tabState = tabRenderSnapshot.state;
   const inputValue = tabState.inputValue;
+  const selectedModel = tabState.selectedModel;
+  const mediaModelSelection = tabState.mediaModelSelection;
   const attachedFiles = [...tabState.attachedFiles];
   const selectedFileReferences = [...tabState.selectedFileReferences];
   const genCategory = tabState.generationCategory;
@@ -240,6 +233,23 @@ export function ChatWorkspace({
     (value) => {
       updateTabRenderState((state) => ({
         inputValue: resolveSetStateAction(value, state.inputValue),
+      }));
+    },
+    [updateTabRenderState],
+  );
+  const setSelectedModel = useCallback(
+    (modelId: string) => {
+      updateTabRenderState({ selectedModel: modelId });
+      onModelSelect(modelId);
+    },
+    [onModelSelect, updateTabRenderState],
+  );
+  const setMediaModelSelection = useCallback<
+    React.Dispatch<React.SetStateAction<import('@/hooks/useUIState').MediaModelSelection>>
+  >(
+    (value) => {
+      updateTabRenderState((state) => ({
+        mediaModelSelection: resolveSetStateAction(value, state.mediaModelSelection),
       }));
     },
     [updateTabRenderState],

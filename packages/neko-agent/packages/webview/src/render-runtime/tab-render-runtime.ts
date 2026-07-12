@@ -48,6 +48,7 @@ export interface TabQueuedEditState {
 }
 
 export interface TabRenderState {
+  readonly configurationInitialized: boolean;
   readonly activeSurface: TabType;
   readonly inputValue: string;
   readonly attachedFiles: readonly MessageAttachment[];
@@ -310,6 +311,7 @@ class DefaultTabRenderRuntimeRegistry implements TabRenderRuntimeRegistry {
 
 function createInitialTabRenderState(): TabRenderState {
   return Object.freeze({
+    configurationInitialized: false,
     activeSurface: 'chat',
     inputValue: '',
     attachedFiles: Object.freeze([]),

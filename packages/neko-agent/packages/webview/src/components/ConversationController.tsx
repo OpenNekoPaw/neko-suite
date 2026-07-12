@@ -544,6 +544,24 @@ export function ConversationController({
     () => ({ ...settings, promptMode: activePromptMode }),
     [settings, activePromptMode],
   );
+
+  useEffect(() => {
+    if (!activeTabRenderStore || activeSettings.chatModelOptions.length === 0) return;
+    const state = activeTabRenderStore.getSnapshot().state;
+    if (state.configurationInitialized) return;
+    activeTabRenderStore.updateState({
+      configurationInitialized: true,
+      selectedModel,
+      mediaModelSelection,
+      promptMode: visibleSessionState.promptMode,
+    });
+  }, [
+    activeSettings.chatModelOptions.length,
+    activeTabRenderStore,
+    mediaModelSelection,
+    selectedModel,
+    visibleSessionState.promptMode,
+  ]);
   const entryModelState = useMemo(
     () =>
       projectChatWorkspaceModelState({
@@ -580,8 +598,6 @@ export function ConversationController({
       );
       if (!selectedOption?.providerId || !selectedOption.modelId) return;
 
-      selectedModelRef.current = modelId;
-      setSelectedModel(modelId);
       const selectedProviderId = selectedOption.providerId;
       const selectedModelId = selectedOption.modelId;
 
@@ -1607,11 +1623,7 @@ export function ConversationController({
             // Config
             settings={activeSettings}
             updateSettings={updateActiveSettings}
-            // Model selection (owned here for settingsData hydration)
-            selectedModel={selectedModel}
-            setSelectedModel={handleModelSelect}
-            mediaModelSelection={mediaModelSelection}
-            setMediaModelSelection={setMediaModelSelection}
+            onModelSelect={handleModelSelect}
             mediaUnderstandingModels={activeSettings.mediaUnderstandingModels}
             mentionItems={mentionItems}
             onMentionSearchFilterChange={updateMentionSearchFilter}

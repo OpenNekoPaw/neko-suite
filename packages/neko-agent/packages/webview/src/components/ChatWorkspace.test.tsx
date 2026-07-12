@@ -45,9 +45,17 @@ vi.mock('@/components/ChatView/InputAreaContext', () => ({
     onSessionModeChange?: (mode: 'agent' | 'image' | 'video' | 'audio') => void;
     onCompressContext?: () => Promise<void>;
     onPromptModeChange?: (mode: 'default' | 'plan') => void;
+    selectedModel?: string;
+    onModelSelect?: (modelId: string) => void;
   }) => (
     <div>
       <span data-testid="session-mode">{props.sessionMode ?? 'agent'}</span>
+      <span data-testid="selected-model">{props.selectedModel ?? 'none'}</span>
+      <button
+        type="button"
+        data-testid="set-model-b"
+        onClick={() => props.onModelSelect?.('model-b')}
+      />
       <button
         type="button"
         data-testid="set-image-session"
@@ -425,12 +433,51 @@ describe('ChatWorkspace pending send', () => {
     expect(vscodeMocks.editQueuedMessage).toHaveBeenCalledWith('conv-1', 'queued-1');
   });
 
+  it('keeps model selection in its owning Tab store while switching', () => {
+    const runtimeA = createTabRenderRuntime({ tabId: 'tab-a', conversationId: 'conv-a' });
+    const runtimeB = createTabRenderRuntime({ tabId: 'tab-b', conversationId: 'conv-b' });
+    runtimeA.store.updateState({ selectedModel: 'model-a' });
+    runtimeB.store.updateState({ selectedModel: 'test-model' });
+    const onModelSelect = vi.fn();
+    const { getByTestId, rerender } = render(
+      <ChatWorkspace
+        {...createProps({
+          tabRenderStore: runtimeA.store,
+          activeConversationId: 'conv-a',
+          activeConversationIdRef: createRefWithCurrent<string | null>('conv-a'),
+          activeTabConversationId: 'conv-a',
+          onModelSelect,
+        })}
+      />,
+    );
+
+    expect(getByTestId('selected-model').textContent).toBe('model-a');
+    fireEvent.click(getByTestId('set-model-b'));
+    expect(runtimeA.store.getSnapshot().state.selectedModel).toBe('model-b');
+    expect(onModelSelect).toHaveBeenCalledWith('model-b');
+
+    rerender(
+      <ChatWorkspace
+        {...createProps({
+          tabRenderStore: runtimeB.store,
+          activeConversationId: 'conv-b',
+          activeConversationIdRef: createRefWithCurrent<string | null>('conv-b'),
+          activeTabConversationId: 'conv-b',
+          onModelSelect,
+        })}
+      />,
+    );
+
+    expect(getByTestId('selected-model').textContent).toBe('test-model');
+    expect(runtimeB.store.getSnapshot().state.selectedModel).toBe('test-model');
+  });
+
   it('keeps composer state in its owning Tab store while switching', () => {
     const runtimeA = createTabRenderRuntime({ tabId: 'tab-a', conversationId: 'conv-a' });
     const runtimeB = createTabRenderRuntime({ tabId: 'tab-b', conversationId: 'conv-b' });
     runtimeA.store.updateState({
-      attachedFiles: [{ id: 'asset-a', name: 'a.png', type: 'image', data: 'data-a' }],
-      selectedFileReferences: [{ path: 'a.md' }],
+      attachedFiles: [{ id: 'asset-a', name: 'a.png', type: 'image', preview: 'data-a' }],
+      selectedFileReferences: [{ id: 'file-a', path: 'a.md', label: 'a.md' }],
     });
     const { getByTestId, rerender } = render(
       <ChatWorkspace
@@ -668,12 +715,7 @@ function createProps(overrides: Partial<ChatWorkspaceProps> = {}): ChatWorkspace
     clearMessages: noop,
     settings: createSettings(),
     updateSettings: noop,
-    selectedModel: 'auto',
-    setSelectedModel: noop as React.Dispatch<React.SetStateAction<string>>,
-    mediaModelSelection: { image: 'none', video: 'none', audio: 'none' },
-    setMediaModelSelection: noop as React.Dispatch<
-      React.SetStateAction<{ image: string; video: string; audio: string }>
-    >,
+    onModelSelect: noop,
     mentionItems: [],
     onMentionSearchFilterChange: noop,
     pluginCommands: [],
