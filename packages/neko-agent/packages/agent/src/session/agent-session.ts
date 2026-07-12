@@ -819,6 +819,7 @@ export class AgentSession implements IAgentSession {
     return {
       ...provider,
       setExecutionMode: (input) => {
+        const previousMode = this.getExecutionMode();
         const intent = createAgentCapabilityActivationIntent({
           conversationId: this._config.conversationId ?? 'unknown',
           source: 'agent-tool',
@@ -826,14 +827,16 @@ export class AgentSession implements IAgentSession {
           action: 'set',
           name: input.mode,
           requestedBy: 'agent',
-          reason: input.reason ?? `SetExecutionMode requested ${input.mode}`,
+          ...(input.reason !== undefined ? { reason: input.reason } : {}),
           createdAt: Date.now(),
         });
         this.setExecutionModeWithIntent(input.mode, intent);
+        const effectiveMode = this.getExecutionMode();
         return {
           success: true,
-          message: `Execution mode set to ${input.mode}`,
-          mode: input.mode,
+          changed: previousMode !== effectiveMode,
+          requestedMode: input.mode,
+          effectiveMode,
         };
       },
     };
@@ -2595,13 +2598,13 @@ function createEmptySkillProvider(): ISkillProvider {
   return {
     listSkills: () => [],
     getActiveSkill: () => null,
-    activateSkill: (input) => ({
+    activateSkill: () => ({
       success: false,
-      message: `Skill system is not initialized: ${input.name}`,
+      code: 'skill-system-unavailable',
     }),
     deactivateSkill: () => ({
       success: false,
-      message: 'Skill system is not initialized',
+      code: 'skill-system-unavailable',
     }),
   };
 }

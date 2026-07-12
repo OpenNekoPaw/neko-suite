@@ -44,7 +44,6 @@ export interface AgentWorkspaceRuntimeConversationState {
   readonly messageQueue?: AgentMessageQueueSnapshot;
   readonly chatModel?: AgentWorkspaceRuntimeModelSelection;
   readonly mediaModels?: Partial<Record<AgentWorkspaceRuntimeMediaCategory, string>>;
-  readonly llmParameterSummary?: string;
   readonly activeSkills?: readonly ActiveSkillLifecycleRecordProjection[];
   readonly capabilityProviders?: readonly AgentCapabilityProviderAvailabilitySummary[];
   readonly capabilityDiagnostics?: readonly AgentCapabilityAvailabilityDiagnostic[];
@@ -425,9 +424,6 @@ function parseConversationState(
     ...(messageQueue ? { messageQueue } : {}),
     ...(chatModel ? { chatModel } : {}),
     ...(mediaModels ? { mediaModels } : {}),
-    ...(typeof value.llmParameterSummary === 'string'
-      ? { llmParameterSummary: value.llmParameterSummary }
-      : {}),
     ...(activeSkills ? { activeSkills } : {}),
     ...(capabilityProviders ? { capabilityProviders } : {}),
     ...(capabilityDiagnostics ? { capabilityDiagnostics } : {}),

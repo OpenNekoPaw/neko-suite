@@ -710,6 +710,12 @@ export interface IAgentSession {
    */
   setExecutionModeWithIntent(mode: ExecutionMode, intent: AgentCapabilityActivationIntent): void;
 
+  /** Snapshot of semantic StageGuardian diagnostics raised during this session. */
+  getStageGuardianIssues(): readonly import('../skill').StageGuardianIssue[];
+
+  /** Subscribe to semantic StageGuardian diagnostics. */
+  onStageGuardianIssue(listener: import('../skill').StageGuardianListener): () => void;
+
   /**
    * Wire an ISkillProvider into the meta tools.
    * Called by the extension layer after the skill system is initialized.

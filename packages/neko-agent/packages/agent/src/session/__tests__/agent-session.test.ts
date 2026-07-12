@@ -1873,7 +1873,7 @@ describe('AgentSession', () => {
         });
         return {
           success: true,
-          message: 'Activated skill "comic-to-storyboard"',
+          skillName: 'comic-to-storyboard',
           lifecycleRecordId: 'record-comic',
         };
       });
@@ -2060,7 +2060,7 @@ describe('AgentSession', () => {
         });
         return {
           success: true,
-          message: 'Activated skill "canvas-authoring"',
+          skillName: 'canvas-authoring',
           allowedTools: ['canvas.createStoryboardFromMarkdown'],
           lifecycleRecordId: 'record-canvas',
         };
