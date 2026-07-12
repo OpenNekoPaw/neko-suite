@@ -6,6 +6,7 @@ import { Text } from 'ink';
 import { cleanup, render } from 'ink-testing-library';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AgentEvent } from '@neko/agent';
+import type { StageGuardianIssue } from '@neko/agent/skill';
 import { createAgentRuntimeSessionMessageQueuePort } from '@neko/agent/runtime';
 import type { AgentConversationMessageQueue } from '@neko/agent/runtime';
 import type { AgentCapabilityProvider, IService } from '@neko/shared';
@@ -14,6 +15,7 @@ import { DEFAULT_CLI_CONFIG, type CLIConfig } from '../../core/types';
 import { useAgentStore } from '../../stores/agent-store';
 import { useConversationStore } from '../../stores/conversation-store';
 import { useAgentSession, type AgentSessionHandle } from '../useAgentSession';
+import { createTestAgentTerminalPresentation } from '../../presentation/testing';
 
 const runtimeMocks = vi.hoisted(() => ({
   latestFactoryConfig: undefined as Record<string, unknown> | undefined,
@@ -34,6 +36,7 @@ const runtimeMocks = vi.hoisted(() => ({
   createAgentRuntimeSession: vi.fn(),
   latestTaskResultObservationRuntimeOptions: undefined as
     Parameters<typeof import('@neko/agent').createAgentTaskResultObservationRuntime>[0] | undefined,
+  stageGuardianListener: undefined as ((issue: StageGuardianIssue) => void) | undefined,
 }));
 
 const platformMocks = vi.hoisted(() => ({
@@ -81,6 +84,7 @@ beforeEach(async () => {
   runtimeMocks.latestSession = undefined;
   runtimeMocks.latestMessageQueue = undefined;
   runtimeMocks.latestTaskResultObservationRuntimeOptions = undefined;
+  runtimeMocks.stageGuardianListener = undefined;
   runtimeMocks.queueEnqueue.mockReset();
   runtimeMocks.queuePromote.mockReset();
   runtimeMocks.queueRemove.mockReset();
@@ -206,6 +210,53 @@ describe('useAgentSession runtime assembly', () => {
           expect.objectContaining({ id: 'external-research:usage-boundary' }),
         ]),
       }),
+    );
+  });
+
+  it('keeps UI locale independent while propagating prompt locale into runtime assembly', async () => {
+    const snapshots: Array<{ readonly ready: boolean; readonly modeDescription?: string }> = [];
+
+    render(
+      React.createElement(LocaleSeparationProbe, {
+        config: {
+          ...DEFAULT_CLI_CONFIG,
+          workDir: tempRoot,
+          providerRequiresApiKey: false,
+        },
+        onSnapshot: (snapshot) => {
+          snapshots.push(snapshot);
+        },
+      }),
+    );
+
+    await waitFor(() => snapshots.some((snapshot) => snapshot.ready));
+
+    expect(snapshots.at(-1)?.modeDescription).toBe('Show or switch session mode');
+    expect(runtimeMocks.latestFactoryConfig).toEqual(
+      expect.objectContaining({ promptLocale: 'zh-cn' }),
+    );
+  });
+
+  it('projects StageGuardian diagnostics through the invocation-local translator', async () => {
+    render(
+      React.createElement(StageGuardianPresentationProbe, {
+        config: {
+          ...DEFAULT_CLI_CONFIG,
+          workDir: tempRoot,
+          providerRequiresApiKey: false,
+        },
+      }),
+    );
+
+    await waitFor(() => runtimeMocks.stageGuardianListener !== undefined);
+    runtimeMocks.stageGuardianListener?.({
+      code: 'stage-out-of-order',
+      stage: 'apply',
+      at: 1,
+    });
+
+    expect(useConversationStore.getState().messages.at(-1)?.content).toBe(
+      '[stage-out-of-order] 未先进入 Draft / Plan 就进入了 Apply；高风险工具调用应按 ADR §3.2 先经过前置阶段。',
     );
   });
 
@@ -510,6 +561,8 @@ function RuntimeAssemblyProbe(props: {
 }): React.JSX.Element {
   const session = useAgentSession({
     config: props.config,
+    presentation: createTestAgentTerminalPresentation('en'),
+    promptLocale: 'en',
     service: createNoopService(),
     capabilityProviders: props.capabilityProviders,
   });
@@ -521,12 +574,52 @@ function RuntimeAssemblyProbe(props: {
   return React.createElement(Text, null, 'runtime-assembly-probe');
 }
 
+function LocaleSeparationProbe(props: {
+  readonly config: CLIConfig;
+  readonly onSnapshot: (snapshot: {
+    readonly ready: boolean;
+    readonly modeDescription?: string;
+  }) => void;
+}): React.JSX.Element {
+  const session = useAgentSession({
+    config: props.config,
+    presentation: createTestAgentTerminalPresentation('en'),
+    promptLocale: 'zh-cn',
+    service: createNoopService(),
+    capabilityProviders: [],
+  });
+
+  useEffect(() => {
+    props.onSnapshot({
+      ready: session.isReady,
+      modeDescription: session.slashCommands.find((command) => command.name === 'mode')
+        ?.description,
+    });
+  }, [props, session.isReady, session.slashCommands]);
+
+  return React.createElement(Text, null, 'locale-separation-probe');
+}
+
+function StageGuardianPresentationProbe(props: { readonly config: CLIConfig }): React.JSX.Element {
+  useAgentSession({
+    config: props.config,
+    presentation: createTestAgentTerminalPresentation('zh-cn'),
+    promptLocale: 'zh-cn',
+    service: createNoopService(),
+    capabilityProviders: [],
+  });
+
+  return React.createElement(Text, null, 'stage-guardian-presentation-probe');
+}
+
 function RuntimeTokenProbe(props: {
   readonly config: CLIConfig;
   readonly onContextTokens: (count: number | null) => void;
 }): React.JSX.Element {
   const session = useAgentSession({
     config: props.config,
+    presentation: createTestAgentTerminalPresentation('en'),
+    promptLocale: 'en',
     service: createNoopService(),
     capabilityProviders: [],
   });
@@ -549,6 +642,8 @@ function RuntimeSubmitProbe(props: {
 }): React.JSX.Element {
   const session = useAgentSession({
     config: props.config,
+    presentation: createTestAgentTerminalPresentation('en'),
+    promptLocale: 'en',
     capabilityProviders: [],
   });
 
@@ -576,6 +671,8 @@ function RuntimeSessionProbe(props: {
 }): React.JSX.Element {
   const session = useAgentSession({
     config: props.config,
+    presentation: createTestAgentTerminalPresentation('en'),
+    promptLocale: 'en',
     capabilityProviders: [],
   });
 
@@ -641,6 +738,11 @@ function createMockAgentSession(tokenCount: number): Record<string, unknown> {
     }),
     getExecutionMode: vi.fn(() => 'auto'),
     setExecutionMode: vi.fn(),
+    getStageGuardianIssues: vi.fn(() => []),
+    onStageGuardianIssue: vi.fn((listener: (issue: StageGuardianIssue) => void) => {
+      runtimeMocks.stageGuardianListener = listener;
+      return vi.fn();
+    }),
     compressContext: vi.fn(),
     setSkillProvider: vi.fn(),
     clearActiveSkill: vi.fn(),
