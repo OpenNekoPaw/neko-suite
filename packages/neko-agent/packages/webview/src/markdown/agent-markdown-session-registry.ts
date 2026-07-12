@@ -37,7 +37,6 @@ export interface AgentMarkdownSessionRegistry {
   ): AgentMarkdownSessionPublication;
   getSnapshot(sessionKey: string): MarkdownStreamingSnapshot | undefined;
   subscribe(sessionKey: string, listener: () => void): () => void;
-  releaseTurn(conversationId: string, messageId: string): void;
   disposeConversation(conversationId: string): void;
   /** Release the exiting Webview realm without publishing to subscribers being torn down. */
   disposeAll(): void;
@@ -254,9 +253,6 @@ export function createAgentMarkdownSessionRegistry(): AgentMarkdownSessionRegist
         if (subscribers.size === 0) listeners.delete(sessionKey);
       };
     },
-    releaseTurn(conversationId, messageId): void {
-      disposeMatching((sessionKey) => belongsToTurn(sessionKey, conversationId, messageId));
-    },
     disposeConversation(conversationId): void {
       disposeMatching((sessionKey) => belongsToConversation(sessionKey, conversationId));
     },
@@ -283,10 +279,6 @@ export function createAgentMarkdownSessionRegistry(): AgentMarkdownSessionRegist
 
 function belongsToConversation(sessionKey: string, conversationId: string): boolean {
   return sessionKey.startsWith(`${conversationId}\u0000`);
-}
-
-function belongsToTurn(sessionKey: string, conversationId: string, messageId: string): boolean {
-  return sessionKey.startsWith(`${conversationId}\u0000${messageId}\u0000`);
 }
 
 export function createAgentMarkdownSessionKey(input: {

@@ -41,11 +41,6 @@ import {
   projectQueuedMessagesForPendingCount,
 } from '../presenters/message-queue-presenter';
 import {
-  completeActiveTurnTimeline,
-  projectMessagesWithActiveTurnTimeline,
-} from '@/presenters/active-turn-timeline-presenter';
-import { hasTimelineOwnershipForMessage } from './timeline-handlers';
-import {
   projectAgentPhaseToStateStore,
   projectAgentStateSnapshot,
 } from '../presenters/agent-state-presenter';
@@ -64,10 +59,6 @@ const handleThinking: MessageHandler<'thinking'> = (message: ThinkingMessage, co
  * Handle 'streamText' message - Streaming text chunk
  */
 const handleStreamText: MessageHandler<'streamText'> = (message: StreamTextMessage, context) => {
-  if (shouldIgnoreCompatibilityStream(context, message.conversationId, message.messageId)) {
-    return;
-  }
-
   updateConversation(context, message.conversationId, (msgs, streamingId) => {
     const projection = projectStreamingTextIntoMessages({
       messages: msgs,
@@ -88,10 +79,6 @@ const handleAssistantTextReplacement: MessageHandler<'assistantTextReplacement'>
   message: AssistantTextReplacementMessage,
   context,
 ) => {
-  if (shouldIgnoreCompatibilityStream(context, message.conversationId, message.messageId)) {
-    return;
-  }
-
   updateConversation(context, message.conversationId, (msgs, streamingId) => {
     const projection = projectAssistantTextReplacementIntoMessages({
       messages: msgs,
@@ -114,35 +101,11 @@ const handleStreamComplete: MessageHandler<'streamComplete'> = (
   message: StreamCompleteMessage,
   context,
 ) => {
-  updateConversation(context, message.conversationId, (msgs, streamingId, streaming) => {
+  updateConversation(context, message.conversationId, (msgs, streamingId) => {
     const previousQueuedMessageCount = getPreviousQueuedMessageCount(
       context,
       message.conversationId,
     );
-    const activeTimeline =
-      streaming.activeTurnTimeline?.messageId === (message.messageId ?? streamingId)
-        ? completeActiveTurnTimeline(streaming.activeTurnTimeline, {
-            finalContentBlocks: message.contentBlocks,
-          })
-        : (streaming.activeTurnTimeline ?? null);
-    if (activeTimeline && activeTimeline.messageId === (message.messageId ?? streamingId)) {
-      const projectedMessages = projectMessagesWithActiveTurnTimeline(msgs, activeTimeline);
-      const hasOptimisticQueuedMessages = hasQueuedUserMessages(projectedMessages);
-      const nextQueuedMessageCount = hasOptimisticQueuedMessages
-        ? Math.max(previousQueuedMessageCount, 1)
-        : 0;
-
-      return {
-        messages: hasOptimisticQueuedMessages
-          ? projectedMessages
-          : projectQueuedMessagesCleared(projectedMessages),
-        streamingMessageId: streamingId === activeTimeline.messageId ? null : streamingId,
-        isThinking: hasOptimisticQueuedMessages,
-        queuedMessageCount: nextQueuedMessageCount,
-        activeTurnTimeline: activeTimeline,
-      };
-    }
-
     const projection = projectStreamingCompleteIntoMessages({
       messages: msgs,
       streamingMessageId: streamingId,
@@ -161,7 +124,6 @@ const handleStreamComplete: MessageHandler<'streamComplete'> = (
       streamingMessageId: projection.streamingMessageId,
       isThinking: hasOptimisticQueuedMessages ? true : projection.isThinking,
       queuedMessageCount: nextQueuedMessageCount,
-      activeTurnTimeline: activeTimeline,
     };
   });
 };
@@ -173,10 +135,6 @@ const handleStreamThinking: MessageHandler<'streamThinking'> = (
   message: StreamThinkingMessage,
   context,
 ) => {
-  if (shouldIgnoreCompatibilityStream(context, message.conversationId, message.messageId)) {
-    return;
-  }
-
   updateConversation(context, message.conversationId, (msgs, streamingId) => {
     const projection = projectStreamingThinkingIntoMessages({
       messages: msgs,
@@ -192,15 +150,6 @@ const handleStreamThinking: MessageHandler<'streamThinking'> = (
     };
   });
 };
-
-/** Commit the canonical Timeline before deciding whether a legacy stream event is redundant. */
-function shouldIgnoreCompatibilityStream(
-  context: MessageHandlerContext,
-  conversationId: string | undefined,
-  messageId: string | undefined,
-): boolean {
-  return hasTimelineOwnershipForMessage({ context, conversationId, messageId });
-}
 
 /**
  * Handle 'messageQueued' message - Message was queued while agent is running

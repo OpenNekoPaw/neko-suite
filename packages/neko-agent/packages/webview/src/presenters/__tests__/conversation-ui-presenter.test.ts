@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import type { AgentQueuedMessageItem, AgentState, AgentWorkItem, Message } from '@neko-agent/types';
-import type { ActiveTurnTimelineState } from '../active-turn-timeline-presenter';
 import type { ActivationProgressTimeline } from '../activation-progress-presenter';
 import {
   projectActiveConversation,
@@ -392,13 +391,6 @@ describe('conversation UI presenter', () => {
     const messageB: Message = { id: 'message-b', role: 'assistant', content: 'B', timestamp: 2 };
     const queuedA = queuedMessage('queue-a', 'conv-a');
     const queuedB = queuedMessage('queue-b', 'conv-b');
-    const timelineB: ActiveTurnTimelineState = {
-      conversationId: 'conv-b',
-      turnId: 'turn-b',
-      messageId: 'message-b',
-      items: [],
-      completed: false,
-    };
     const activeSkillA = { conversationId: 'conv-a', skillName: 'skill-a' };
     const activeSkillB = { conversationId: 'conv-b', skillName: 'skill-b' };
     const activationA = activationProgress('conv-a', 'activation-a');
@@ -424,7 +416,6 @@ describe('conversation UI presenter', () => {
             isThinking: true,
             queuedMessageCount: 1,
             queuedMessages: [queuedB],
-            activeTurnTimeline: timelineB,
           },
         ],
       ]),
@@ -474,7 +465,6 @@ describe('conversation UI presenter', () => {
         isThinking: true,
         queuedMessageCount: 1,
         queuedMessages: [queuedB],
-        activeTurnTimeline: timelineB,
       },
       promptMode: 'default',
       skill: {

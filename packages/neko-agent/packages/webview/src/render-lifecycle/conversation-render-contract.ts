@@ -1,5 +1,4 @@
 import type { AgentQueuedMessageItem, Message } from '@neko-agent/types';
-import type { ActiveTurnTimelineState } from '@/presenters/active-turn-timeline-presenter';
 
 export type ConversationVisibility = 'foreground' | 'background';
 export type ConversationRetention = 'retained' | 'disposed';
@@ -15,7 +14,6 @@ export interface ConversationStreamingSnapshot {
   readonly queuedMessageCount: number;
   readonly queuedMessages: readonly AgentQueuedMessageItem[];
   readonly messageQueueVersion?: number;
-  readonly activeTurnTimeline: ActiveTurnTimelineState | null;
 }
 
 export interface ConversationRenderSnapshot {
@@ -35,11 +33,6 @@ interface RevisionedConversationMutation {
 export type ConversationRenderMutation =
   | (RevisionedConversationMutation & {
       readonly kind: 'host-snapshot';
-      readonly messages: readonly Message[];
-      readonly streaming: ConversationStreamingSnapshot;
-    })
-  | (RevisionedConversationMutation & {
-      readonly kind: 'timeline-commit';
       readonly messages: readonly Message[];
       readonly streaming: ConversationStreamingSnapshot;
     })
@@ -79,7 +72,6 @@ export interface ConversationRenderPublication {
 
 export type ConversationRenderDiagnosticCode =
   | 'stale-revision'
-  | 'conversation-identity-mismatch'
   | 'conversation-snapshot-unavailable'
   | 'conversation-disposed'
   | 'activation-already-committed'
@@ -117,6 +109,5 @@ export function createIdleConversationStreamingSnapshot(): ConversationStreaming
     isThinking: false,
     queuedMessageCount: 0,
     queuedMessages: [],
-    activeTurnTimeline: null,
   };
 }

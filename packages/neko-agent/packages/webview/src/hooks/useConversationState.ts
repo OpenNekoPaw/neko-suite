@@ -11,7 +11,6 @@ import type {
   ConversationSummary,
   OpenTab,
 } from '@neko-agent/types';
-import type { ActiveTurnTimelineState } from '@/presenters/active-turn-timeline-presenter';
 import { ConversationRenderCoordinator } from '@/render-lifecycle/conversation-render-coordinator';
 import {
   commitConversationSnapshotProjection,
@@ -27,7 +26,6 @@ export interface StreamingState {
   queuedMessageCount?: number;
   queuedMessages?: readonly AgentQueuedMessageItem[];
   messageQueueVersion?: number;
-  activeTurnTimeline?: ActiveTurnTimelineState | null;
 }
 
 /**

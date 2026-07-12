@@ -67,30 +67,8 @@ describe('ConversationRenderCoordinator', () => {
     expect(coordinator.read('conv-b')?.visibility).toBe('foreground');
   });
 
-  it('rejects identity mismatches and mutations after disposal', () => {
+  it('rejects mutations after disposal', () => {
     const coordinator = new ConversationRenderCoordinator();
-    const timeline = {
-      conversationId: 'conv-other',
-      turnId: 'turn-a',
-      messageId: 'message-a',
-      items: [],
-      completed: false,
-    };
-
-    expect(() =>
-      coordinator.ingest({
-        ...hostSnapshot('conv-a', 0, []),
-        streaming: {
-          ...createIdleConversationStreamingSnapshot(),
-          activeTurnTimeline: timeline,
-        },
-      }),
-    ).toThrowError(
-      expect.objectContaining({
-        diagnostic: expect.objectContaining({ code: 'conversation-identity-mismatch' }),
-      }),
-    );
-
     coordinator.ingest(hostSnapshot('conv-a', 0, []));
     coordinator.dispose({
       kind: 'disposal',

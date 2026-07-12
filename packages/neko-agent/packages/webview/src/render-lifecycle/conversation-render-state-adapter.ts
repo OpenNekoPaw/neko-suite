@@ -1,6 +1,5 @@
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react';
 import type { AgentQueuedMessageItem, Message } from '@neko-agent/types';
-import type { ActiveTurnTimelineState } from '@/presenters/active-turn-timeline-presenter';
 import type {
   ConversationActivationSource,
   ConversationRenderSnapshot,
@@ -16,7 +15,6 @@ export interface ConversationRenderStreamingState {
   readonly queuedMessageCount?: number;
   readonly queuedMessages?: readonly AgentQueuedMessageItem[];
   readonly messageQueueVersion?: number;
-  readonly activeTurnTimeline?: ActiveTurnTimelineState | null;
 }
 
 export interface ConversationRenderActivationInput {
@@ -45,11 +43,10 @@ export function ingestConversationRenderSnapshot(input: {
   readonly conversationId: string;
   readonly messages: readonly Message[];
   readonly streaming: ConversationRenderStreamingState;
-  readonly kind?: 'host-snapshot' | 'timeline-commit';
 }): ConversationRenderSnapshot {
   const baseRevision = input.coordinator.read(input.conversationId)?.revision ?? 0;
   return input.coordinator.ingest({
-    kind: input.kind ?? 'host-snapshot',
+    kind: 'host-snapshot',
     conversationId: input.conversationId,
     baseRevision,
     messages: input.messages,
@@ -130,24 +127,17 @@ export function commitConversationRenderActivation(input: {
 }
 
 function projectActivationMessages(input: ConversationRenderActivationInput): Message[] {
-  const timeline = input.streaming.activeTurnTimeline;
-  const timelineMessageId = timeline?.messageId;
-  return input.messages.map((message) => {
-    if (message.id === timelineMessageId) return message;
-    return finalizeOrphanedStreamingMessage(message);
-  });
+  return input.messages.map(finalizeOrphanedStreamingMessage);
 }
 
 function projectActivationStreaming(
   streaming: ConversationRenderStreamingState,
 ): ConversationRenderStreamingState {
-  return streaming.activeTurnTimeline
-    ? streaming
-    : {
-        ...streaming,
-        streamingMessageId: null,
-        isThinking: false,
-      };
+  return {
+    ...streaming,
+    streamingMessageId: null,
+    isThinking: false,
+  };
 }
 
 function finalizeOrphanedStreamingMessage(message: Message): Message {
@@ -209,7 +199,6 @@ export function createConversationVisibleStatePort(
 function toConversationStreamingSnapshot(
   streaming: ConversationRenderStreamingState,
 ): ConversationStreamingSnapshot {
-  const activeTurnTimeline = streaming.activeTurnTimeline ?? null;
   return {
     streamingMessageId: streaming.streamingMessageId,
     isThinking: streaming.isThinking,
@@ -218,7 +207,6 @@ function toConversationStreamingSnapshot(
     ...(streaming.messageQueueVersion !== undefined
       ? { messageQueueVersion: streaming.messageQueueVersion }
       : {}),
-    activeTurnTimeline,
   };
 }
 
@@ -232,9 +220,6 @@ function toConversationRenderStreamingState(
     queuedMessages: streaming.queuedMessages,
     ...(streaming.messageQueueVersion !== undefined
       ? { messageQueueVersion: streaming.messageQueueVersion }
-      : {}),
-    ...(streaming.activeTurnTimeline !== null
-      ? { activeTurnTimeline: streaming.activeTurnTimeline }
       : {}),
   };
 }

@@ -11,7 +11,6 @@ import type {
   SelectedFileReference,
 } from '@/components/ChatView/InputArea/types';
 import type { ActiveSkillIndicator } from '@/components/ChatView/SkillIndicator';
-import type { ActiveTurnTimelineState } from './active-turn-timeline-presenter';
 import type { ActivationProgressTimeline } from './activation-progress-presenter';
 
 export interface ConversationAmbientNode {
@@ -20,9 +19,7 @@ export interface ConversationAmbientNode {
   readonly summary: string;
 }
 
-export interface ConversationSessionStreamingState extends ConversationStreamingState {
-  readonly activeTurnTimeline?: ActiveTurnTimelineState | null;
-}
+export type ConversationSessionStreamingState = ConversationStreamingState;
 
 export type ConversationSessionActiveSkill = ActiveSkillIndicator & {
   readonly conversationId: string;
@@ -146,9 +143,6 @@ export function normalizeSessionStreamingState(
     queuedMessages: streaming.queuedMessages ? [...streaming.queuedMessages] : [],
     ...(streaming.messageQueueVersion !== undefined
       ? { messageQueueVersion: streaming.messageQueueVersion }
-      : {}),
-    ...(streaming.activeTurnTimeline !== undefined
-      ? { activeTurnTimeline: streaming.activeTurnTimeline }
       : {}),
   };
 }

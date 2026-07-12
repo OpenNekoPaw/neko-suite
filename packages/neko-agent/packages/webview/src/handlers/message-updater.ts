@@ -8,7 +8,6 @@
 
 import type { MessageHandlerContext, StreamingState } from './types';
 import type { AgentQueuedMessageItem, Message } from '@neko-agent/types';
-import type { ActiveTurnTimelineState } from '@/presenters/active-turn-timeline-presenter';
 import {
   commitConversationSnapshotProjection,
   ingestConversationRenderSnapshot,
@@ -30,8 +29,6 @@ export interface ConversationUpdateResult {
   queuedMessages?: readonly AgentQueuedMessageItem[];
   /** If provided, update queue snapshot version */
   messageQueueVersion?: number;
-  /** If provided, update active Agent turn timeline state */
-  activeTurnTimeline?: ActiveTurnTimelineState | null;
 }
 
 /**
@@ -69,7 +66,6 @@ export function updateConversation(
       queuedMessageCount: context.queuedMessageCount ?? 0,
       queuedMessages: context.queuedMessages ?? [],
       messageQueueVersion: undefined,
-      activeTurnTimeline: null,
     };
     const result = updater(currentMessages, currentStreaming.streamingMessageId, currentStreaming);
     const nextStreaming = {
@@ -90,10 +86,6 @@ export function updateConversation(
         result.messageQueueVersion !== undefined
           ? result.messageQueueVersion
           : currentStreaming.messageQueueVersion,
-      activeTurnTimeline:
-        result.activeTurnTimeline !== undefined
-          ? result.activeTurnTimeline
-          : (currentStreaming.activeTurnTimeline ?? null),
     };
 
     const coordinator = context.conversationRenderCoordinator;
@@ -105,7 +97,6 @@ export function updateConversation(
       conversationId,
       messages: result.messages,
       streaming: nextStreaming,
-      kind: 'timeline-commit',
     });
     commitConversationSnapshotProjection({
       snapshot,
@@ -141,10 +132,6 @@ export function updateConversation(
             result.messageQueueVersion !== undefined
               ? result.messageQueueVersion
               : streaming.messageQueueVersion,
-          activeTurnTimeline:
-            result.activeTurnTimeline !== undefined
-              ? result.activeTurnTimeline
-              : (streaming.activeTurnTimeline ?? null),
         },
       };
     });

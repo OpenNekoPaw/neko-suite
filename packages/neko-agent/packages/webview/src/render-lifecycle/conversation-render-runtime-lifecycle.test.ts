@@ -31,7 +31,7 @@ describe('conversation render runtime lifecycle', () => {
     expect(coordinator.read('conv-a')).toBeDefined();
   });
 
-  it('disposes only one conversation and releases only one active Markdown turn', () => {
+  it('disposes only one conversation and preserves other Markdown sessions', () => {
     const markdown = createAgentMarkdownSessionRegistry();
     const coordinator = new ConversationRenderCoordinator();
     const runtime = createConversationRenderRuntimeLifecycle({ coordinator, markdown });
@@ -39,10 +39,6 @@ describe('conversation render runtime lifecycle', () => {
     coordinator.ingest(hostSnapshot('conv-b'));
     markdown.commitProjectionSnapshot(projectionSnapshot('conv-a', 'message-a')).publish();
     markdown.commitProjectionSnapshot(projectionSnapshot('conv-b', 'message-b')).publish();
-
-    runtime.releaseTurn('conv-a', 'message-a');
-    expect(markdown.metrics().activeSessions).toBe(1);
-    expect(coordinator.read('conv-a')).toBeDefined();
 
     runtime.disposeConversation('conv-a', 'conversation-delete');
     expect(coordinator.read('conv-a')).toBeUndefined();

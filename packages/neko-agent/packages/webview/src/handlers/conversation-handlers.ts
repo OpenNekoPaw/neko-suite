@@ -30,7 +30,6 @@ import { upsertWorkItemsForConversation } from '@/presenters/work-item-state-pre
 import { findActiveTab, isCharacterRoleTab } from '@/presenters/character-role-session-presenter';
 import { shouldActivateForegroundConversation } from './foreground-activation';
 import { projectQueuedMessagesCleared } from '@/presenters/message-queue-presenter';
-import { getActiveTimelineForMessage } from './timeline-handlers';
 import { updateConversation } from './message-updater';
 import {
   commitConversationSnapshotProjection,
@@ -42,19 +41,6 @@ import {
  * Handle 'error' message - Error occurred
  */
 const handleError: MessageHandler<'error'> = (message: ErrorMessage, context) => {
-  const activeTimeline = getActiveTimelineForMessage(context, message.conversationId, undefined);
-  if (activeTimeline) {
-    const hasMatchingError = activeTimeline.items.some(
-      (item) =>
-        item.kind === 'error' && (!message.message || item.payload.message === message.message),
-    );
-    if (hasMatchingError) {
-      return;
-    }
-    context.setGlobalError(message.message || 'An error occurred');
-    return;
-  }
-
   if (context.isCurrentConversation(message.conversationId)) {
     context.setMessages((prev) => [
       ...projectConversationError({
@@ -112,7 +98,6 @@ const handleHistoryCleared: MessageHandler<'historyCleared'> = (
     isThinking: projection.streaming.isThinking,
     queuedMessageCount: projection.streaming.queuedMessageCount,
     queuedMessages: projection.streaming.queuedMessages,
-    activeTurnTimeline: null,
   }));
 };
 
@@ -206,11 +191,6 @@ const handleActiveConversation: MessageHandler<'activeConversation'> = (
     !shouldActivateForeground;
 
   if (conversationId) {
-    releaseReplacedActiveTurn(
-      context,
-      conversationId,
-      getProjectedActiveTurnTimeline(projection.streaming)?.messageId,
-    );
     cacheConversationProjection(context, conversationId, projection.messages, projection.streaming);
     context.forceUpdate();
 
@@ -278,44 +258,6 @@ function cacheConversationProjection(
     conversationMessagesRef: context.conversationMessagesRef,
     conversationStreamingRef: context.conversationStreamingRef,
   });
-}
-
-function getProjectedActiveTurnTimeline(streaming: object): StreamingState['activeTurnTimeline'] {
-  const value: unknown = Reflect.get(streaming, 'activeTurnTimeline');
-  if (value === undefined || value === null) {
-    return value;
-  }
-  return isActiveTurnTimelineState(value) ? value : undefined;
-}
-
-function isActiveTurnTimelineState(
-  value: unknown,
-): value is NonNullable<StreamingState['activeTurnTimeline']> {
-  if (!value || typeof value !== 'object') {
-    return false;
-  }
-  return (
-    typeof Reflect.get(value, 'conversationId') === 'string' &&
-    typeof Reflect.get(value, 'turnId') === 'string' &&
-    typeof Reflect.get(value, 'messageId') === 'string' &&
-    Array.isArray(Reflect.get(value, 'items')) &&
-    typeof Reflect.get(value, 'completed') === 'boolean'
-  );
-}
-
-function releaseReplacedActiveTurn(
-  context: MessageHandlerContext,
-  conversationId: string,
-  nextMessageId: string | undefined,
-): void {
-  const previousMessageId =
-    context.conversationStreamingRef.current.get(conversationId)?.activeTurnTimeline?.messageId;
-  if (!previousMessageId || previousMessageId === nextMessageId) return;
-  if (context.releaseTurnRendering) {
-    context.releaseTurnRendering(conversationId, previousMessageId);
-    return;
-  }
-  context.markdownSessionRegistry?.releaseTurn(conversationId, previousMessageId);
 }
 
 export const conversationHandlers: HandlerRegistration[] = [

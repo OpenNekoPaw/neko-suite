@@ -1420,7 +1420,6 @@ function createContextHarness(options: ContextHarnessOptions): ContextHarness {
         conversationId,
         messages: result.messages,
         streaming: result.streaming,
-        kind: 'timeline-commit',
       });
       commitConversationSnapshotProjection({
         snapshot,

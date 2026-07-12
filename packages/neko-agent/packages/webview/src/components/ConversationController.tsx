@@ -652,7 +652,6 @@ export function ConversationController({
           isThinking: false,
           queuedMessageCount: 0,
           queuedMessages: [],
-          activeTurnTimeline: null,
         },
       });
       commitConversationSnapshotProjection({

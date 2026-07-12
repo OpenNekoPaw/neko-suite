@@ -18,7 +18,6 @@ import type {
   AgentQueuedMessageItem,
   AgentSessionDiagnosticMessage,
 } from '@neko-agent/types';
-import type { ActiveTurnTimelineState } from '@/presenters/active-turn-timeline-presenter';
 import type { AgentMarkdownSessionRegistry } from '@/markdown/agent-markdown-session-registry';
 import type { ActivationProgressTimeline } from '@/presenters/activation-progress-presenter';
 import type { MediaModelSelection } from '@/hooks/useUIState';
@@ -47,7 +46,6 @@ export interface StreamingState {
   queuedMessageCount?: number;
   queuedMessages?: readonly AgentQueuedMessageItem[];
   messageQueueVersion?: number;
-  activeTurnTimeline?: ActiveTurnTimelineState | null;
 }
 
 export type PendingForegroundConversationActivation =
@@ -166,7 +164,6 @@ export interface HelperContext {
   markdownSessionRegistry?: AgentMarkdownSessionRegistry;
   /** Canonical Webview-local owner for conversation render snapshots and activation. */
   conversationRenderCoordinator?: ConversationRenderCoordinator;
-  releaseTurnRendering?: (conversationId: string, messageId: string) => void;
   disposeConversationRendering?: (
     conversationId: string,
     reason: 'conversation-delete' | 'confirmed-empty-conversation',

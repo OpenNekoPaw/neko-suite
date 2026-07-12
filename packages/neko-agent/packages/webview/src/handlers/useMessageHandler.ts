@@ -155,7 +155,6 @@ export interface UseMessageHandlerProps {
  */
 export interface UseMessageHandlerReturn {
   handleMessage: (event: MessageEvent<ExtensionToWebviewMessage>) => void;
-  releaseTurnRendering: (conversationId: string, messageId: string) => void;
   disposeConversationRendering: (
     conversationId: string,
     reason: 'conversation-delete' | 'confirmed-empty-conversation',
@@ -270,7 +269,6 @@ export function useMessageHandler(props: UseMessageHandlerProps): UseMessageHand
         isThinking: false,
         queuedMessageCount: 0,
         queuedMessages: [],
-        activeTurnTimeline: null,
       };
       const updated = updater(currentMessages, currentStreaming);
       const snapshot = ingestConversationRenderSnapshot({
@@ -278,7 +276,6 @@ export function useMessageHandler(props: UseMessageHandlerProps): UseMessageHand
         conversationId,
         messages: updated.messages,
         streaming: updated.streaming,
-        kind: 'timeline-commit',
       });
       commitConversationSnapshotProjection({
         snapshot,
@@ -359,7 +356,6 @@ export function useMessageHandler(props: UseMessageHandlerProps): UseMessageHand
       updateNonCurrentConversation,
       markdownSessionRegistry,
       conversationRenderCoordinator,
-      releaseTurnRendering: renderRuntime.releaseTurn,
       disposeConversationRendering: renderRuntime.disposeConversation,
       pendingForegroundConversationActivationRef,
       tabStateRevisionRef,
@@ -451,7 +447,6 @@ export function useMessageHandler(props: UseMessageHandlerProps): UseMessageHand
 
   return {
     handleMessage,
-    releaseTurnRendering: renderRuntime.releaseTurn,
     disposeConversationRendering: renderRuntime.disposeConversation,
   };
 }

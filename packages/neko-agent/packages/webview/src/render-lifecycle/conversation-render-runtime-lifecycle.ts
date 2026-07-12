@@ -13,7 +13,6 @@ export interface ConversationRenderRuntimeLifecycle {
   attachComponent(): void;
   detachComponent(): void;
   setVisibility(visibility: WebviewRenderVisibility): void;
-  releaseTurn(conversationId: string, messageId: string): void;
   disposeConversation(
     conversationId: string,
     reason: 'conversation-delete' | 'confirmed-empty-conversation',
@@ -49,9 +48,6 @@ export function createConversationRenderRuntimeLifecycle(input: {
         throw new Error('Cannot change visibility for a disposed Webview render realm.');
       }
       visibility = nextVisibility;
-    },
-    releaseTurn(conversationId, messageId): void {
-      input.markdown.releaseTurn(conversationId, messageId);
     },
     disposeConversation(conversationId, reason): void {
       input.markdown.disposeConversation(conversationId);

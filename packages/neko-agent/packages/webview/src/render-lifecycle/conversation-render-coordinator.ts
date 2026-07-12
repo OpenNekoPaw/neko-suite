@@ -71,7 +71,6 @@ export class ConversationRenderCoordinator {
 
     const next = createNextSnapshot(current, mutation);
     if (next === current) return current;
-    validateTimelineIdentity(next);
     this.snapshots.set(mutation.conversationId, next);
     this.publishRevisions([mutation.conversationId]);
     return next;
@@ -232,13 +231,6 @@ function createNextSnapshot(
         messages: [...mutation.messages],
         streaming: copyStreaming(mutation.streaming),
       };
-    case 'timeline-commit':
-      return {
-        ...base,
-        revision: base.revision + 1,
-        messages: [...mutation.messages],
-        streaming: copyStreaming(mutation.streaming),
-      };
     case 'queue-status':
       return {
         ...base,
@@ -262,16 +254,13 @@ function createNextSnapshot(
           ...base.streaming,
           streamingMessageId: null,
           isThinking: false,
-          activeTurnTimeline: base.streaming.activeTurnTimeline
-            ? { ...base.streaming.activeTurnTimeline, completed: true }
-            : null,
         },
       };
   }
 }
 
 function emptyStreamingForMutation(mutation: RevisionedMutation): ConversationStreamingSnapshot {
-  if (mutation.kind === 'host-snapshot' || mutation.kind === 'timeline-commit') {
+  if (mutation.kind === 'host-snapshot') {
     return copyStreaming(mutation.streaming);
   }
   return {
@@ -279,7 +268,6 @@ function emptyStreamingForMutation(mutation: RevisionedMutation): ConversationSt
     isThinking: false,
     queuedMessageCount: 0,
     queuedMessages: [],
-    activeTurnTimeline: null,
   };
 }
 
@@ -288,20 +276,6 @@ function copyStreaming(streaming: ConversationStreamingSnapshot): ConversationSt
     ...streaming,
     queuedMessages: [...streaming.queuedMessages],
   };
-}
-
-function validateTimelineIdentity(snapshot: ConversationRenderSnapshot): void {
-  const timeline = snapshot.streaming.activeTurnTimeline;
-  if (!timeline || timeline.conversationId === snapshot.conversationId) return;
-  throw lifecycleError({
-    code: 'conversation-identity-mismatch',
-    message: `Timeline conversation ${timeline.conversationId} cannot belong to ${snapshot.conversationId}.`,
-    conversationId: snapshot.conversationId,
-    currentRevision: snapshot.revision - 1,
-    targetRevision: snapshot.revision,
-    messageId: timeline.messageId,
-    turnId: timeline.turnId,
-  });
 }
 
 function lifecycleError(
