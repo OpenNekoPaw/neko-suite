@@ -96,10 +96,7 @@ function createNodeEnvironmentPort(options: NodeHostAdapterOptions): HostEnviron
       return {
         platform: readNodePlatform(process.platform),
         arch: process.arch,
-        locale:
-          options.locale ??
-          process.env['NEKO_LOCALE'] ??
-          Intl.DateTimeFormat().resolvedOptions().locale,
+        locale: options.locale ?? Intl.DateTimeFormat().resolvedOptions().locale,
         env: options.env ?? process.env,
       };
     },

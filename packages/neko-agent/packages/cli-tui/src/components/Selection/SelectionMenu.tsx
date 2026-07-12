@@ -12,7 +12,7 @@
 import React, { useState } from 'react';
 import { Box, Text, useInput } from 'ink';
 import { tokens } from '../../theme/tokens';
-import { getTuiLabels } from '../../core/tui-locale';
+import { useAgentTerminalPresentation } from '../../presentation/react-context';
 import type { PendingSelection } from '../../stores/ui-store';
 
 interface SelectionMenuProps {
@@ -25,7 +25,7 @@ export function SelectionMenu({ selection }: SelectionMenuProps): React.JSX.Elem
     const activeIdx = selection.items.findIndex((item) => item.active);
     return activeIdx >= 0 ? activeIdx : 0;
   });
-  const labels = getTuiLabels();
+  const presentation = useAgentTerminalPresentation();
 
   const items = selection.items;
   const maxVisible = 8;
@@ -87,7 +87,7 @@ export function SelectionMenu({ selection }: SelectionMenuProps): React.JSX.Elem
       {hasScrollUp ? (
         <Text dimColor>
           {' '}
-          ↑ {scrollTop} {labels.chrome.more}
+          ↑ {scrollTop} {presentation.t('agent.terminal.chrome.more')}
         </Text>
       ) : null}
 
@@ -111,12 +111,12 @@ export function SelectionMenu({ selection }: SelectionMenuProps): React.JSX.Elem
       {hasScrollDown ? (
         <Text dimColor>
           {' '}
-          ↓ {total - scrollTop - visibleCount} {labels.chrome.more}
+          ↓ {total - scrollTop - visibleCount} {presentation.t('agent.terminal.chrome.more')}
         </Text>
       ) : null}
 
       {/* Hint */}
-      <Text dimColor>{labels.chrome.selectionHint}</Text>
+      <Text dimColor>{presentation.t('agent.terminal.chrome.selectionHint')}</Text>
     </Box>
   );
 }

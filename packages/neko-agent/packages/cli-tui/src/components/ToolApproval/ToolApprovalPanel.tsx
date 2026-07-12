@@ -14,6 +14,7 @@ import React from 'react';
 import { Box, Text, useInput } from 'ink';
 import type { PendingApproval } from '../../stores/ui-store';
 import { tokens } from '../../theme/tokens';
+import { useAgentTerminalPresentation } from '../../presentation/react-context';
 import { DiffPreview } from './DiffPreview';
 import { CommandPreview } from './CommandPreview';
 
@@ -50,6 +51,8 @@ export function ToolApprovalPanel({
   onApprove,
   onReject,
 }: ToolApprovalPanelProps): React.JSX.Element {
+  const presentation = useAgentTerminalPresentation();
+
   useInput((input) => {
     if (input === 'y' || input === 'Y' || input === 'a' || input === 'A') {
       onApprove();
@@ -69,7 +72,7 @@ export function ToolApprovalPanel({
     >
       {/* Header */}
       <Text bold color={tokens.warning}>
-        Tool Approval Required
+        {presentation.t('agent.terminal.approval.required')}
       </Text>
 
       {/* Tool name */}
@@ -90,15 +93,15 @@ export function ToolApprovalPanel({
           <Text color={tokens.approval.approve} bold>
             [y]
           </Text>
-          <Text>es </Text>
+          <Text>{presentation.t('agent.terminal.approval.yes')} </Text>
           <Text color={tokens.approval.reject} bold>
             [n]
           </Text>
-          <Text>o </Text>
+          <Text>{presentation.t('agent.terminal.approval.no')} </Text>
           <Text color={tokens.info} bold>
             [a]
           </Text>
-          <Text>lways</Text>
+          <Text>{presentation.t('agent.terminal.approval.always')}</Text>
         </Text>
       </Box>
     </Box>

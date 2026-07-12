@@ -1,25 +1,38 @@
+import { AGENT_COMMAND_MESSAGE_SOURCE } from '@neko/agent/commands/terminal-messages';
+import { createStrictTranslator, type SupportedLocale } from '@neko/shared/i18n';
 import React from 'react';
-import { render } from 'ink-testing-library';
+import { render as inkRender } from 'ink-testing-library';
 import { afterEach, describe, expect, it } from 'vitest';
 import { DEFAULT_CLI_CONFIG } from '../../core/types';
+import { createAgentTerminalPresentationContext } from '../../presentation/context';
+import { createAgentTerminalFormatters } from '../../presentation/formatters';
+import { AgentTerminalPresentationProvider } from '../../presentation/react-context';
+import { CLI_TERMINAL_MESSAGE_SOURCE } from '../../presentation/terminal-messages';
 import { useAgentStore } from '../../stores/agent-store';
 import { useConfigStore } from '../../stores/config-store';
 import { StatusBar } from './StatusBar';
 
-const originalNekoLocale = process.env.NEKO_LOCALE;
-
 afterEach(() => {
-  if (originalNekoLocale === undefined) {
-    delete process.env.NEKO_LOCALE;
-  } else {
-    process.env.NEKO_LOCALE = originalNekoLocale;
-  }
   useAgentStore.getState().reset();
 });
 
+function renderWithPresentation(node: React.ReactElement, locale: SupportedLocale = 'en') {
+  const presentation = createAgentTerminalPresentationContext({
+    translator: createStrictTranslator(locale, [
+      AGENT_COMMAND_MESSAGE_SOURCE,
+      CLI_TERMINAL_MESSAGE_SOURCE,
+    ] as const),
+    formatters: createAgentTerminalFormatters({ locale, timeZone: 'UTC' }),
+  });
+  return inkRender(
+    <AgentTerminalPresentationProvider value={presentation}>
+      {node}
+    </AgentTerminalPresentationProvider>,
+  );
+}
+
 describe('StatusBar i18n', () => {
   it('uses Chinese chrome labels when TUI locale is zh', () => {
-    process.env.NEKO_LOCALE = 'zh-CN';
     useConfigStore.getState().replaceConfig({
       ...DEFAULT_CLI_CONFIG,
       provider: 'nekoapi-chat',
@@ -32,15 +45,14 @@ describe('StatusBar i18n', () => {
       },
     });
 
-    const { lastFrame } = render(<StatusBar />);
+    const { lastFrame } = renderWithPresentation(<StatusBar />, 'zh-cn');
 
-    expect(lastFrame()).toContain('助理:自动');
+    expect(lastFrame()).toContain('智能体:自动');
     expect(lastFrame()).toContain('对话:');
     expect(lastFrame()).toContain('媒体:图像:');
   });
 
   it('uses the live context token estimate instead of completed provider usage', () => {
-    process.env.NEKO_LOCALE = 'en-US';
     useConfigStore.getState().replaceConfig({
       ...DEFAULT_CLI_CONFIG,
       provider: 'nekoapi-chat',
@@ -62,14 +74,13 @@ describe('StatusBar i18n', () => {
     });
     useAgentStore.getState().setContextTokenCount(12345);
 
-    const { lastFrame } = render(<StatusBar />);
+    const { lastFrame } = renderWithPresentation(<StatusBar />);
 
     expect(lastFrame()).toContain('ctx:12.3K/384.0K');
     expect(lastFrame()).not.toContain('ctx:0/384.0K');
   });
 
   it('shows when pending messages are paused after active-turn cancellation', () => {
-    process.env.NEKO_LOCALE = 'en-US';
     useConfigStore.getState().replaceConfig(DEFAULT_CLI_CONFIG);
     useAgentStore.getState().setMessageQueueSnapshot({
       conversationId: 'conv-1',
@@ -87,7 +98,7 @@ describe('StatusBar i18n', () => {
     });
     useAgentStore.getState().setMessageQueuePausedAfterCancel(true);
 
-    const { lastFrame } = render(<StatusBar />);
+    const { lastFrame } = renderWithPresentation(<StatusBar />);
 
     expect(lastFrame()).toContain('queue1');
     expect(lastFrame()).toContain('Queue paused after');

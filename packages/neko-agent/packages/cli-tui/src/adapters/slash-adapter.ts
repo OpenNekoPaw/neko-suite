@@ -8,18 +8,19 @@
 import {
   isSlashCommand,
   isSkillInvocation,
-  handleSlashCommand,
   handleSkillInvocation,
   type SlashCommandContext,
 } from '../core/slash-commands';
 import type { CLIConfig } from '../core/types';
 import type { SkillService, ToolRegistry } from '@neko/agent';
-import type { TuiLocale } from '../core/tui-locale';
+import type { AgentTerminalPresentationContext } from '../presentation/context';
+import { presentSkillCommand } from '../presentation/skill-presentation';
+import type { AgentTerminalMessageKey } from '../presentation/terminal-messages';
 
 export { isSlashCommand, isSkillInvocation };
 
 export interface TUISlashCommandContext {
-  readonly locale?: TuiLocale;
+  readonly presentation: AgentTerminalPresentationContext<AgentTerminalMessageKey>;
   readonly config: CLIConfig;
   skillService?: SkillService;
   toolRegistry?: ToolRegistry;
@@ -28,49 +29,9 @@ export interface TUISlashCommandContext {
 }
 
 /**
- * Handle a slash command in TUI context.
- * Adapts TUI context to CLI SlashCommandContext and delegates.
+ * Handle a direct Skill invocation in TUI context.
+ * Projects semantic Skill outcomes through the canonical terminal Presenter.
  */
-export async function handleTUISlashCommand(
-  input: string,
-  context: TUISlashCommandContext,
-): Promise<{
-  handled: boolean;
-  output?: string;
-  error?: string;
-  agentPrompt?: string;
-  executionOverrides?: {
-    metadata?: Record<string, unknown>;
-  };
-  lifecycleActivation?: {
-    readonly skillName: string;
-    readonly args?: string;
-  };
-}> {
-  const cliContext: SlashCommandContext = {
-    locale: context.locale,
-    config: context.config,
-    skillService: context.skillService,
-    toolRegistry: context.toolRegistry,
-    onConfigUpdate: context.onConfigUpdate,
-  };
-
-  const result = await handleSlashCommand(input, cliContext);
-
-  if (result.output) {
-    context.onOutput(result.output);
-  }
-
-  return {
-    handled: result.handled,
-    output: result.output,
-    error: result.error,
-    agentPrompt: result.agentPrompt,
-    executionOverrides: result.executionOverrides,
-    lifecycleActivation: result.lifecycleActivation,
-  };
-}
-
 export async function handleTUISkillInvocation(
   input: string,
   context: TUISlashCommandContext,
@@ -78,6 +39,7 @@ export async function handleTUISkillInvocation(
   handled: boolean;
   output?: string;
   error?: string;
+  diagnosticCode?: string;
   agentPrompt?: string;
   executionOverrides?: {
     metadata?: Record<string, unknown>;
@@ -88,7 +50,7 @@ export async function handleTUISkillInvocation(
   };
 }> {
   const cliContext: SlashCommandContext = {
-    locale: context.locale,
+    locale: context.presentation.uiLocale,
     config: context.config,
     skillService: context.skillService,
     toolRegistry: context.toolRegistry,
@@ -96,15 +58,20 @@ export async function handleTUISkillInvocation(
   };
 
   const result = await handleSkillInvocation(input, cliContext);
+  const projection = presentSkillCommand(result.semantic, context.presentation);
+  const output = projection.kind === 'output' ? projection.output : undefined;
+  const error = projection.kind === 'error' ? projection.error : undefined;
+  const diagnosticCode = projection.kind === 'error' ? projection.diagnosticCode : undefined;
 
-  if (result.output) {
-    context.onOutput(result.output);
+  if (output) {
+    context.onOutput(output);
   }
 
   return {
     handled: result.handled,
-    output: result.output,
-    error: result.error,
+    output,
+    error,
+    diagnosticCode,
     agentPrompt: result.agentPrompt,
     executionOverrides: result.executionOverrides,
     lifecycleActivation: result.lifecycleActivation,

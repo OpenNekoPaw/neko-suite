@@ -68,6 +68,27 @@ import type {
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import type { CLIConfig } from '../core/types';
+import type { SupportedLocale } from '@neko/shared/i18n';
+import type { AgentTerminalPresentationContext } from '../presentation/context';
+import type { AgentTerminalMessageKey } from '../presentation/terminal-messages';
+import { presentStageGuardianIssue } from '../presentation/stage-guardian-presentation';
+import { presentQueueCommand } from '../presentation/work-queue-presentation';
+import {
+  presentMediaBackgroundDiagnostic,
+  presentContinuationDiscarded,
+  presentContinuationReady,
+  presentQueuedContinuation,
+  presentMediaResultPersistenceFailure,
+  presentResourceCacheGcFailure,
+  presentResumeFallback,
+  presentSkillActivationRejected,
+  presentSkillDeactivationRejected,
+  presentTaskResultContinuation,
+  presentTaskResultObservationDiagnostic,
+  presentTaskStatusRefreshFailure,
+  presentWorkspaceContentDiagnostic,
+  presentWorkspaceRuntimeStateFailure,
+} from '../presentation/runtime-presentation';
 import type { ExecutionMode, Message as TuiMessage } from '../types/state';
 import {
   type AgentCapabilityProvider,
@@ -88,9 +109,9 @@ import {
   createTuiCapabilityLoader,
   type TuiCapabilityLoaderResult,
 } from '../core/tui-capability-loader';
-import { detectTuiLocale } from '../core/tui-locale';
-import { formatTuiReferenceDiagnostics } from '../core/reference-diagnostics';
-import { formatTuiQueueError } from '../core/message-queue-format';
+import { presentReferenceLoadingDiagnostics } from '../presentation/reference-presentation';
+import { presentTuiConversationIdDiagnostic } from '../presentation/conversation-presentation';
+import { toQueueOperationDiagnostic } from '../core/message-queue-semantics';
 import {
   connectTuiMcpServer,
   createTuiMcpServerSnapshots,
@@ -121,8 +142,12 @@ import {
 import {
   assertCanonicalTuiConversationId,
   createTuiConversationId,
+  TuiConversationIdError,
 } from '../core/tui-conversation-id';
-import { createNodeWorkspaceContentPolicy } from '../host/node-workspace-content-host';
+import {
+  createNodeWorkspaceContentPolicy,
+  NodeWorkspaceContentError,
+} from '../host/node-workspace-content-host';
 import { runNodeResourceCacheStartupGc } from '../host/node-resource-cache-startup-gc';
 import { NodeMediaTaskDeliveryHost } from '../host/node-media-task-delivery-host';
 import { createTuiMediaBackgroundTasks } from '../core/tui-media-background-tasks';
@@ -163,6 +188,10 @@ export interface UseAgentSessionOptions {
   readonly capabilityProviders?: readonly AgentCapabilityProvider[];
   /** Optional persisted conversation id to load through the Ink TUI session path. */
   readonly resumeConversationId?: string;
+  /** Invocation-local terminal presentation shared by router and Ink event projection. */
+  readonly presentation: AgentTerminalPresentationContext<AgentTerminalMessageKey>;
+  /** Concrete built-in prompt locale resolved once during CLI bootstrap. */
+  readonly promptLocale: SupportedLocale;
 }
 
 export interface AgentSessionHandle {
@@ -269,6 +298,28 @@ export interface AgentSessionHandle {
  * 2. Execute session → iterate AgentEvent stream
  * 3. Route events through EventAdapter → stores
  */
+function presentQueueFailure(
+  error: unknown,
+  presentation: AgentTerminalPresentationContext<AgentTerminalMessageKey>,
+): string {
+  const projection = presentQueueCommand(toQueueOperationDiagnostic(error), presentation);
+  if (projection.kind !== 'error') {
+    throw new Error('Queue operation failure must project to a terminal diagnostic.');
+  }
+  return projection.error;
+}
+
+function presentQueueOutput(
+  result: Parameters<typeof presentQueueCommand>[0],
+  presentation: AgentTerminalPresentationContext<AgentTerminalMessageKey>,
+): string {
+  const projection = presentQueueCommand(result, presentation);
+  if (projection.kind !== 'output') {
+    throw new Error('Queue success must project to terminal output.');
+  }
+  return projection.output;
+}
+
 export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHandle {
   const {
     config,
@@ -276,7 +327,11 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
     taskManager: providedTaskManager,
     capabilityProviders,
     resumeConversationId,
+    presentation,
+    promptLocale,
   } = options;
+  const uiLocale = presentation.uiLocale;
+  const promptDomainLocale = promptLocale === 'zh-cn' ? 'zh' : 'en';
   const sessionRef = useRef<IAgentSession | null>(null);
   const adapterRef = useRef<IEventAdapter | null>(null);
   const inputProcessorRef = useRef<InputProcessor | null>(null);
@@ -294,6 +349,7 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
   const taskResultObservationRuntimeRef = useRef<AgentTaskResultObservationRuntime | null>(null);
   const mediaDeliveryHostRef = useRef<NodeMediaTaskDeliveryHost | null>(null);
   const taskTerminalUnsubscribeRef = useRef<(() => void) | null>(null);
+  const stageGuardianUnsubscribeRef = useRef<(() => void) | null>(null);
   const capabilityLoadResultRef = useRef<TuiCapabilityLoaderResult | null>(null);
   const conversationStorageRef = useRef<FileConversationStorage | null>(null);
   const workspaceRuntimeStateRef = useRef<AgentWorkspaceRuntimeStateRuntime | null>(null);
@@ -313,7 +369,7 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
   const [isReady, setIsReady] = useState(false);
   const [capabilityRevision, setCapabilityRevision] = useState(0);
   const [slashCommands, setSlashCommands] = useState<readonly TuiSlashCommandOption[]>(
-    createTuiSlashCommandCatalog(),
+    createTuiSlashCommandCatalog(undefined, presentation),
   );
   const [, setSkillCatalogVersion] = useState(0);
 
@@ -325,29 +381,29 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
     workspaceRuntimeStateErrorRef.current = message;
     useConversationStore
       .getState()
-      .addError(new Error(`Workspace runtime state sync failed: ${message}`));
+      .addError(new Error(presentWorkspaceRuntimeStateFailure(message, presentation)));
   }, []);
 
   const refreshTaskSummary = useCallback(async (): Promise<void> => {
     const taskManager = taskManagerRef.current;
     if (!taskManager) {
-      useAgentStore.getState().setRunningTaskSummary(null);
+      useAgentStore.getState().setRunningTasks([]);
       return;
     }
 
     try {
       const tasks = await taskManager.list();
       taskSummaryErrorRef.current = null;
-      useAgentStore.getState().setRunningTaskSummary(formatRunningTaskSummary(tasks));
+      useAgentStore.getState().setRunningTasks(selectRunningTasks(tasks));
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       if (taskSummaryErrorRef.current !== message) {
         taskSummaryErrorRef.current = message;
         useConversationStore
           .getState()
-          .addError(new Error(`Task status refresh failed: ${message}`));
+          .addError(new Error(presentTaskStatusRefreshFailure(message, presentation)));
       }
-      useAgentStore.getState().setRunningTaskSummary(null);
+      useAgentStore.getState().setRunningTasks([]);
     }
   }, []);
 
@@ -379,7 +435,6 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
       const mediaModels = currentConfig.defaultMediaModels ?? {};
       const errorMessage =
         input.errorMessage !== undefined ? input.errorMessage : agentState.error?.message;
-      const llmParameterSummary = formatLlmParameterSummary(currentConfig.llmConfig);
 
       const conversation: AgentWorkspaceRuntimeStatePatch['conversation'] = {
         conversationId: conversationIdRef.current,
@@ -399,7 +454,6 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
         ...(contextTokenCount !== null ? { contextTokenCount } : {}),
         ...(queueSnapshot ? { messageQueue: queueSnapshot } : {}),
         ...(Object.keys(mediaModels).length > 0 ? { mediaModels } : {}),
-        ...(llmParameterSummary ? { llmParameterSummary } : {}),
         ...(agentState.activeSkillLifecycleRecords.length > 0
           ? { activeSkills: agentState.activeSkillLifecycleRecords }
           : {}),
@@ -534,7 +588,7 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
               result.error instanceof Error ? result.error.message : String(result.error);
             useConversationStore
               .getState()
-              .addError(new Error(`Resource cache startup GC failed: ${message}`));
+              .addError(new Error(presentResourceCacheGcFailure(message, presentation)));
           }
         }
         conversationStorageRef.current = createFileConversationStorage(config.workDir);
@@ -556,7 +610,7 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
           } else {
             useConversationStore
               .getState()
-              .addSystemMessage(`Conversation "${requestedResumeId}" not found; starting fresh.`);
+              .addSystemMessage(presentResumeFallback(requestedResumeId, presentation));
           }
         }
 
@@ -565,20 +619,19 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
         const profileRegistries = createAgentCapabilityRuntimeRegistries();
 
         // 3. Skills
-        const detectedLocale = detectTuiLocale();
         const skillLoader = createNodeSkillLoader(fs, path);
         const skillService = createSkillService();
         skillServiceRef.current = skillService;
         const sessionSkillRuntime = createTuiSessionSkillRuntime({
           skillLoader,
           config,
-          locale: detectedLocale,
+          locale: promptDomainLocale,
         });
         const loadedSkills = await sessionSkillRuntime.scanSkills();
         for (const skill of loadedSkills) {
           skillService.registry.registerSkill(skill);
         }
-        setSlashCommands(createTuiSlashCommandCatalog(loadedSkills, detectedLocale));
+        setSlashCommands(createTuiSlashCommandCatalog(loadedSkills, presentation));
         setSkillCatalogVersion((version) => version + 1);
 
         const skillLifecycleRuntime = ensureHookSkillLifecycleRuntime(
@@ -593,7 +646,7 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
           artifactProfileRegistry: profileRegistries.artifactProfileRegistry,
           creationProfileRegistry: profileRegistries.creationProfileRegistry,
           providerExpressionProfileRegistry: profileRegistries.providerExpressionProfileRegistry,
-          locale: detectedLocale,
+          locale: promptDomainLocale,
         });
         const capabilityLoadResult = capabilityLoader.registerProviders([
           ...withTuiDefaultCapabilityProviders({
@@ -639,7 +692,7 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
         // 5. System Prompt
         const executionMode = useAgentStore.getState().executionMode;
         const basePromptBuilder = createSystemPromptBuilder({
-          locale: detectedLocale,
+          locale: promptDomainLocale,
           mode: executionMode === 'plan' ? 'plan' : 'default',
         });
         const systemPrompt = buildSystemPromptWithContext(basePromptBuilder, {
@@ -679,7 +732,7 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
           workspaceRoot: config.workDir,
           authorizedReadRoots: contentPolicy.authorizedReadRoots,
           contextSettings: config.contextSettings,
-          locale: detectedLocale,
+          promptLocale,
           maxIterations: 50,
           taskManager,
           conversationId: conversationIdRef.current,
@@ -709,6 +762,12 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
         promptBuilderRef.current = runtimeSession.promptBuilder;
 
         sessionRef.current = session;
+        stageGuardianUnsubscribeRef.current?.();
+        stageGuardianUnsubscribeRef.current = session.onStageGuardianIssue((issue) => {
+          useConversationStore
+            .getState()
+            .addSystemMessage(presentStageGuardianIssue(issue, presentation));
+        });
         if (resumeRecord) {
           session.loadHistory(resumeRecord.messages, resumeRecord.messageEventIds);
           useConversationStore
@@ -754,7 +813,10 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
                       syncWorkspaceRuntimeState({ status: 'running' });
                       adapterRef.current?.handleEvent({
                         type: 'messageQueued',
-                        content: `Message queued (${snapshot.pendingCount} pending)`,
+                        content: presentQueueOutput(
+                          { kind: 'enqueued', pendingCount: snapshot.pendingCount },
+                          presentation,
+                        ),
                         pendingCount: snapshot.pendingCount,
                         queuedMessageItem: item,
                         messageQueueSnapshot: snapshot,
@@ -771,7 +833,7 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
             requestUserContinuation: (request) => {
               useConversationStore
                 .getState()
-                .addSystemMessage(`Task result is ready. Continue with: ${request.prompt}`);
+                .addSystemMessage(presentTaskResultContinuation(request.prompt, presentation));
             },
             dispatchIdleAgentTurn: async (request) => {
               const submitInternalContinuation = submitInternalContinuationRef.current;
@@ -793,7 +855,11 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
             },
           },
           onDiagnostic: (diagnostic) => {
-            useConversationStore.getState().addError(new Error(diagnostic.message));
+            useConversationStore
+              .getState()
+              .addError(
+                new Error(presentTaskResultObservationDiagnostic(diagnostic, presentation)),
+              );
           },
         });
         void refreshTaskSummary();
@@ -814,7 +880,7 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
               for (const skill of skills) {
                 skillService.registry.registerSkill(skill);
               }
-              setSlashCommands(createTuiSlashCommandCatalog(skills, detectedLocale));
+              setSlashCommands(createTuiSlashCommandCatalog(skills, presentation));
               setSkillCatalogVersion((version) => version + 1);
               return created;
             },
@@ -839,12 +905,20 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
           conversationStore: () => useConversationStore.getState(),
           agentStore: () => useAgentStore.getState(),
           uiStore: () => useUIStore.getState(),
+          presentation,
         });
 
         isReadyRef.current = true;
         setIsReady(true);
       } catch (error) {
-        const err = error instanceof Error ? error : new Error(String(error));
+        const err =
+          error instanceof NodeWorkspaceContentError
+            ? new Error(presentWorkspaceContentDiagnostic(error.diagnostic, presentation))
+            : error instanceof TuiConversationIdError
+              ? new Error(presentTuiConversationIdDiagnostic(error.diagnostic, presentation))
+              : error instanceof Error
+                ? error
+                : new Error(String(error));
         useAgentStore.getState().setError(err);
         useConversationStore.getState().addError(err);
       }
@@ -857,13 +931,15 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
       setIsReady(false);
       taskTerminalUnsubscribeRef.current?.();
       taskTerminalUnsubscribeRef.current = null;
+      stageGuardianUnsubscribeRef.current?.();
+      stageGuardianUnsubscribeRef.current = null;
       taskResultObservationRuntimeRef.current?.dispose();
       taskResultObservationRuntimeRef.current = null;
       mediaDeliveryHostRef.current?.dispose();
       mediaDeliveryHostRef.current = null;
       streamRuntimeRef.current.dispose();
       taskManagerRef.current = null;
-      useAgentStore.getState().setRunningTaskSummary(null);
+      useAgentStore.getState().setRunningTasks([]);
       runtimeSessionRef.current?.messageQueue.clear();
       runtimeSessionRef.current = null;
       sessionRef.current?.dispose();
@@ -884,7 +960,10 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
       let finalPrompt = prompt;
       if (inputProcessor) {
         const processed = await inputProcessor.process(prompt);
-        const referenceDiagnostic = formatTuiReferenceDiagnostics(processed.errors);
+        const referenceDiagnostic = presentReferenceLoadingDiagnostics(
+          processed.errors,
+          presentation,
+        );
         if (referenceDiagnostic) {
           throw new Error(referenceDiagnostic);
         }
@@ -899,7 +978,11 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
         useConversationStore.getState().addUserMessage(prompt);
       } else {
         useConversationStore.getState().addSystemMessage({
-          content: formatContinuationSystemMessage(options),
+          content: presentContinuationReady(
+            options.source,
+            options.continuationMetadata,
+            presentation,
+          ),
           source: options.source,
           displayKind: options.displayKind ?? displayKindForTurnSource(options.source),
           metadata: options.continuationMetadata,
@@ -915,7 +998,7 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
         session.getExecutionMode() === 'plan' ? createPlanModeCreationMetadata() : undefined,
         options.metadata,
       );
-      const currentConfig = useConfigStore.getState().config;
+      const currentConfig = config;
       const metadata = mergeTuiMediaModelMetadata(
         creationMetadata,
         currentConfig.defaultMediaModels,
@@ -932,7 +1015,7 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
         }),
         {
           onEvent: (event) => {
-            handleTuiRuntimeSideEffectEvent(event);
+            handleTuiRuntimeSideEffectEvent(event, presentation);
             syncWorkspaceRuntimeState(projectRuntimeStateFromEvent(event, session));
             if (event.type === 'done') {
               finalUsage = event.usage;
@@ -962,18 +1045,20 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
                     },
                   })
                   .catch((error: unknown) => {
-                    const suffix = error instanceof Error ? `: ${error.message}` : '';
                     useConversationStore
                       .getState()
-                      .addError(new Error(`Failed to persist media task result URLs${suffix}`));
+                      .addError(
+                        new Error(presentMediaResultPersistenceFailure(error, presentation)),
+                      );
                   });
               },
               onTaskProgress: () => {
                 void refreshTaskSummary();
               },
-              onDiagnostic: (message, error) => {
-                const suffix = error instanceof Error ? `: ${error.message}` : '';
-                useConversationStore.getState().addError(new Error(`${message}${suffix}`));
+              onDiagnostic: (diagnostic) => {
+                useConversationStore
+                  .getState()
+                  .addError(new Error(presentMediaBackgroundDiagnostic(diagnostic, presentation)));
               },
             })
           : undefined;
@@ -1090,13 +1175,16 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
           syncWorkspaceRuntimeState({ status: 'running' });
           adapter.handleEvent({
             type: 'messageQueued',
-            content: `Message queued (${snapshot.pendingCount} pending)`,
+            content: presentQueueOutput(
+              { kind: 'enqueued', pendingCount: snapshot.pendingCount },
+              presentation,
+            ),
             pendingCount: snapshot.pendingCount,
             queuedMessageItem: item,
             messageQueueSnapshot: snapshot,
           });
         } catch (error) {
-          const message = formatTuiQueueError(error);
+          const message = presentQueueFailure(error, presentation);
           useAgentStore.getState().setMessageQueueDiagnostic(message);
           useConversationStore.getState().addError(new Error(message));
         }
@@ -1159,7 +1247,7 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
         syncWorkspaceRuntimeState({ status: 'running' });
         adapter.handleEvent({
           type: 'messageQueued',
-          content: formatQueuedContinuationEvent(item),
+          content: presentQueuedContinuation(item, snapshot.pendingCount, presentation),
           pendingCount: snapshot.pendingCount,
           queuedMessageItem: item,
           messageQueueSnapshot: snapshot,
@@ -1292,7 +1380,7 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
       const item = queue.discardContinuation(queueItemId);
       projectRuntimeMessageQueue(queue);
       useConversationStore.getState().addSystemMessage({
-        content: `Continuation discarded: ${item.id}`,
+        content: presentContinuationDiscarded(item.id, presentation),
         source: normalizeTurnSource(item.source),
         displayKind: item.displayKind ?? displayKindForTurnSource(normalizeTurnSource(item.source)),
         metadata: item.metadata,
@@ -1300,7 +1388,12 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
       syncWorkspaceRuntimeState();
       return item;
     },
-    [projectRuntimeMessageQueue, requireRuntimeMessageQueue, syncWorkspaceRuntimeState],
+    [
+      presentation,
+      projectRuntimeMessageQueue,
+      requireRuntimeMessageQueue,
+      syncWorkspaceRuntimeState,
+    ],
   );
 
   const editQueuedMessage = useCallback(
@@ -1334,7 +1427,7 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
         syncWorkspaceRuntimeState({ status: 'idle', phase: 'idle' });
       }
     },
-    [syncWorkspaceRuntimeState],
+    [presentation, syncWorkspaceRuntimeState],
   );
 
   const updateModel = useCallback(
@@ -1371,23 +1464,8 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
   );
 
   const validateLlmConfig = useCallback(
-    (llmConfig: AgentLlmConfig): TuiParameterValidationResult => {
-      const config = useConfigStore.getState().config;
-      const result = projectCliLlmParameters(config, llmConfig);
-      if (result.diagnostics.length > 0) {
-        return {
-          config: llmConfig,
-          diagnostics: result.diagnostics.map((diagnostic) => diagnostic.message),
-        };
-      }
-
-      return {
-        config: llmConfig,
-        chatOptions: result.chatOptions,
-        providerOptions: result.providerOptions,
-        summary: formatLlmProjectionSummary(result),
-      };
-    },
+    (llmConfig: AgentLlmConfig): TuiParameterValidationResult =>
+      projectCliLlmParameters(useConfigStore.getState().config, llmConfig),
     [],
   );
 
@@ -1436,13 +1514,13 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
       if (!result.ok) {
         useConversationStore
           .getState()
-          .addSystemMessage(result.message ?? `Skill "${name}" was not activated`);
+          .addSystemMessage(presentSkillActivationRejected(name, presentation));
         return false;
       }
       syncWorkspaceRuntimeState();
       return true;
     },
-    [syncWorkspaceRuntimeState],
+    [presentation, syncWorkspaceRuntimeState],
   );
 
   const deactivateSkill = useCallback(
@@ -1470,13 +1548,13 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
       if (!result.ok) {
         useConversationStore
           .getState()
-          .addSystemMessage(result.message ?? 'Skill lifecycle clear rejected');
+          .addSystemMessage(presentSkillDeactivationRejected(presentation));
         return false;
       }
       syncWorkspaceRuntimeState();
       return true;
     },
-    [syncWorkspaceRuntimeState],
+    [presentation, syncWorkspaceRuntimeState],
   );
 
   const updateMode = useCallback(
@@ -1484,9 +1562,8 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
       const session = sessionRef.current;
       if (!session) return;
       const config = useConfigStore.getState().config;
-      const locale = detectTuiLocale();
       const builder = createSystemPromptBuilder({
-        locale,
+        locale: promptDomainLocale,
         mode: mode === 'plan' ? 'plan' : 'default',
       });
       // Reuse previously loaded AGENTS.md via sync rebuild
@@ -1499,14 +1576,14 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
       const systemPrompt = buildSystemPromptWithContext(builder, config);
       session.configure({
         systemPrompt,
-        locale,
+        locale: promptDomainLocale,
         agentsOverride: builder.buildAgentsOverlay() ?? undefined,
       });
       session.setExecutionMode(mode);
       useAgentStore.getState().setExecutionMode(mode);
       syncWorkspaceRuntimeState();
     },
-    [syncWorkspaceRuntimeState],
+    [promptDomainLocale, syncWorkspaceRuntimeState],
   );
 
   const getContextTokenCount = useCallback((): number | null => {
@@ -1673,7 +1750,10 @@ function ensureHookSkillLifecycleRuntime(
   return ref.current;
 }
 
-function projectCliLlmParameters(config: CLIConfig, llmConfig: AgentLlmConfig) {
+function projectCliLlmParameters(
+  config: CLIConfig,
+  llmConfig: AgentLlmConfig,
+): TuiParameterValidationResult {
   const manager = new ConfigManager({
     userConfigManager: new FileUserConfigManager(),
     workspacePath: config.workDir,
@@ -1682,51 +1762,35 @@ function projectCliLlmParameters(config: CLIConfig, llmConfig: AgentLlmConfig) {
     const providerId = config.chatModel?.providerId ?? config.provider;
     const modelId = config.chatModel?.modelId ?? config.model;
     const provider = manager.getProvider(providerId);
-    const model = manager.getModel(modelId);
     if (!provider) {
-      throw new Error(`Provider "${providerId}" is not configured.`);
+      return {
+        config: llmConfig,
+        diagnostics: [{ code: 'provider-not-configured', providerId }],
+      };
     }
+    const model = manager.getModel(modelId);
     if (!model) {
-      throw new Error(`Model "${modelId}" is not configured.`);
+      return {
+        config: llmConfig,
+        diagnostics: [{ code: 'model-not-configured', modelId }],
+      };
     }
-    return projectLlmParameters({ provider, model, llmConfig });
+
+    const result = projectLlmParameters({ provider, model, llmConfig });
+    if (result.diagnostics.length > 0) {
+      return {
+        config: llmConfig,
+        diagnostics: result.diagnostics.map(({ code, field }) => ({ code, field })),
+      };
+    }
+    return {
+      config: llmConfig,
+      chatOptions: result.chatOptions,
+      providerOptions: result.providerOptions,
+    };
   } finally {
     manager.dispose();
   }
-}
-
-function formatLlmProjectionSummary(result: ReturnType<typeof projectLlmParameters>): string {
-  const applied = [
-    result.chatOptions.temperature !== undefined
-      ? `temperature=${result.chatOptions.temperature}`
-      : undefined,
-    result.chatOptions.topP !== undefined ? `topP=${result.chatOptions.topP}` : undefined,
-    result.chatOptions.maxTokens !== undefined
-      ? `maxTokens=${result.chatOptions.maxTokens}`
-      : undefined,
-    result.chatOptions.thinkingBudget !== undefined
-      ? `thinkingBudget=${result.chatOptions.thinkingBudget}`
-      : undefined,
-    Object.keys(result.providerOptions).length > 0
-      ? `providerOptions=${Object.keys(result.providerOptions).join(',')}`
-      : undefined,
-  ].filter(Boolean);
-  return applied.length > 0 ? `Applied: ${applied.join(', ')}` : 'Applied: provider defaults';
-}
-
-function formatLlmParameterSummary(llmConfig: AgentLlmConfig | undefined): string | undefined {
-  if (!llmConfig) return undefined;
-  const entries = [
-    llmConfig.reasoningPreset ? `reasoning=${llmConfig.reasoningPreset}` : undefined,
-    llmConfig.verbosityPreset ? `verbosity=${llmConfig.verbosityPreset}` : undefined,
-    llmConfig.creativityPreset ? `creativity=${llmConfig.creativityPreset}` : undefined,
-    ...(llmConfig.advanced
-      ? Object.entries(llmConfig.advanced).map(([key, value]) =>
-          value !== undefined ? `${key}=${value}` : undefined,
-        )
-      : []),
-  ].filter((entry): entry is string => Boolean(entry));
-  return entries.length > 0 ? entries.join(', ') : undefined;
 }
 
 async function* observeTuiSessionEvents(
@@ -1741,7 +1805,10 @@ async function* observeTuiSessionEvents(
   }
 }
 
-function handleTuiRuntimeSideEffectEvent(event: AgentEvent): void {
+function handleTuiRuntimeSideEffectEvent(
+  event: AgentEvent,
+  presentation: AgentTerminalPresentationContext<AgentTerminalMessageKey>,
+): void {
   switch (event.type) {
     case 'tool_confirmation': {
       if (!event.toolConfirmation) return;
@@ -1761,10 +1828,11 @@ function handleTuiRuntimeSideEffectEvent(event: AgentEvent): void {
       return;
     }
     case 'error': {
+      const externalMessage = readExternalErrorMessage(event);
       const error =
-        event.error instanceof Error
+        event.error instanceof Error && externalMessage
           ? event.error
-          : new Error(event.error?.message ?? 'Agent execution failed');
+          : new Error(externalMessage ?? presentation.t('agent.terminal.timeline.fallback.error'));
       useAgentStore.getState().setError(error);
       useConversationStore.getState().addError(error);
       return;
@@ -1778,7 +1846,7 @@ function isTerminalTimelineMessage(
   message: AgentEventStreamRuntimeMessage,
 ): message is RuntimeTerminalTimelineMessage {
   return (
-    message.type === 'agentTurnTimeline' ||
+    message.type === 'agentTurnTimelineUpdate' ||
     message.type === 'taskCreated' ||
     message.type === 'taskUpdated'
   );
@@ -1822,11 +1890,16 @@ function projectRuntimeStateFromEvent(
         status: 'error',
         phase: 'idle',
         contextTokenCount: session.getTokenCount(),
-        errorMessage: event.error?.message ?? 'Agent execution failed',
+        errorMessage: readExternalErrorMessage(event) ?? null,
       };
     default:
       return { contextTokenCount: session.getTokenCount() };
   }
+}
+
+function readExternalErrorMessage(event: AgentEvent): string | undefined {
+  const message = event.error?.message;
+  return typeof message === 'string' && message.trim().length > 0 ? message : undefined;
 }
 
 function shouldRefreshTaskSummaryFromEvent(event: AgentEvent): boolean {
@@ -1839,22 +1912,11 @@ function shouldRefreshTaskSummaryFromEvent(event: AgentEvent): boolean {
   );
 }
 
-function formatRunningTaskSummary(tasks: readonly Task[]): string | null {
+function selectRunningTasks(tasks: readonly Task[]): readonly Task[] {
   const activeTasks = tasks
     .filter((task) => task.status === 'pending' || task.status === 'running')
     .sort((left, right) => right.updatedAt - left.updatedAt);
-  const first = activeTasks[0];
-  if (!first) {
-    return null;
-  }
-
-  const progress = Number.isFinite(first.progress) ? Math.round(first.progress) : 0;
-  const suffix = activeTasks.length > 1 ? ` +${activeTasks.length - 1}` : '';
-  return `${activeTasks.length} ${first.status} ${trimTaskId(first.id)} ${progress}%${suffix}`;
-}
-
-function trimTaskId(taskId: string): string {
-  return taskId.length > 28 ? `${taskId.slice(0, 25)}...` : taskId;
+  return activeTasks;
 }
 
 function normalizeTurnSource(source: AgentQueuedMessageSource): AgentTurnSource {
@@ -1867,31 +1929,6 @@ function displayKindForTurnSource(source: AgentTurnSource): AgentQueuedMessageDi
   if (source === 'subagent-result-continuation') return 'subagent-continuation';
   if (source === 'system-continuation') return 'system-continuation';
   return 'user-message';
-}
-
-function formatContinuationSystemMessage(options: ExecutePromptOptions): string {
-  const metadata = options.continuationMetadata;
-  if (options.source === 'task-result-continuation') {
-    const task = metadata?.taskId ? ` ${trimTaskId(metadata.taskId)}` : '';
-    return `Task result ready${task}. Continuing from the completed async result.`;
-  }
-  if (options.source === 'subagent-result-continuation') {
-    const subagent = metadata?.subagentId ? ` ${metadata.subagentId}` : '';
-    return `Subagent result ready${subagent}. Continuing from the completed subagent result.`;
-  }
-  return 'System continuation ready. Continuing Agent execution.';
-}
-
-function formatQueuedContinuationEvent(item: AgentQueuedMessageItem): string {
-  if (normalizeTurnSource(item.source) === 'task-result-continuation') {
-    const task = item.metadata?.taskId ? ` ${trimTaskId(item.metadata.taskId)}` : '';
-    return `Task continuation queued${task}`;
-  }
-  if (normalizeTurnSource(item.source) === 'subagent-result-continuation') {
-    const subagent = item.metadata?.subagentId ? ` ${item.metadata.subagentId}` : '';
-    return `Subagent result continuation queued${subagent}`;
-  }
-  return `System continuation queued: ${item.id}`;
 }
 
 function deriveConversationTitle(messages: readonly ChatMessage[]): string {

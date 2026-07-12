@@ -10,6 +10,11 @@ import { isCanonicalConversationId } from '@neko/agent';
 import { DEFAULT_CLI_CONFIG, type CLIConfig } from '../../core/types';
 import { createTuiReferenceSuggestions } from '../../components/Input/reference-suggestions';
 import { useAgentSession } from '../useAgentSession';
+import { AGENT_COMMAND_MESSAGE_SOURCE } from '@neko/agent/commands/terminal-messages';
+import { createStrictTranslator } from '@neko/shared/i18n';
+import { createAgentTerminalPresentationContext } from '../../presentation/context';
+import { createAgentTerminalFormatters } from '../../presentation/formatters';
+import { CLI_TERMINAL_MESSAGE_SOURCE } from '../../presentation/terminal-messages';
 
 let tempRoot: string;
 
@@ -20,6 +25,14 @@ beforeEach(async () => {
 afterEach(async () => {
   cleanup();
   await fs.rm(tempRoot, { recursive: true, force: true });
+});
+
+const TEST_PRESENTATION = createAgentTerminalPresentationContext({
+  translator: createStrictTranslator('en', [
+    AGENT_COMMAND_MESSAGE_SOURCE,
+    CLI_TERMINAL_MESSAGE_SOURCE,
+  ] as const),
+  formatters: createAgentTerminalFormatters({ locale: 'en', timeZone: 'UTC' }),
 });
 
 describe('useAgentSession reference contributors', () => {
@@ -43,10 +56,12 @@ describe('useAgentSession reference contributors', () => {
     await waitFor(() => snapshots.some((names) => names.includes('浪客参考')));
 
     expect(snapshots.at(-1)).toContain('浪客参考');
-    expect(conversationIds.some((conversationId) => isCanonicalConversationId(conversationId))).toBe(
+    expect(
+      conversationIds.some((conversationId) => isCanonicalConversationId(conversationId)),
+    ).toBe(true);
+    expect(conversationIds.every((conversationId) => !conversationId.startsWith('cli-'))).toBe(
       true,
     );
-    expect(conversationIds.every((conversationId) => !conversationId.startsWith('cli-'))).toBe(true);
   });
 });
 
@@ -58,6 +73,8 @@ function ReferenceContributorProbe(props: {
 }): React.JSX.Element {
   const session = useAgentSession({
     config: props.config,
+    presentation: TEST_PRESENTATION,
+    promptLocale: 'en',
     service: createNoopService(),
     capabilityProviders: props.capabilityProviders,
   });
@@ -66,6 +83,7 @@ function ReferenceContributorProbe(props: {
     let cancelled = false;
     void createTuiReferenceSuggestions({
       workspaceRoot: props.config.workDir,
+      presentation: TEST_PRESENTATION,
       referenceContributors: session.getReferenceContributors(),
       limit: 10,
     }).then((suggestions) => {

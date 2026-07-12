@@ -9,6 +9,7 @@ import React from 'react';
 import { Box, Text } from 'ink';
 import { computeDiff, computeDiffStats, type DiffLine } from '@neko/shared';
 import { tokens } from '../../theme/tokens';
+import { useAgentTerminalPresentation } from '../../presentation/react-context';
 
 interface DiffPreviewProps {
   /** Original content */
@@ -27,6 +28,7 @@ export function DiffPreview({
   filePath,
   maxLines = 30,
 }: DiffPreviewProps): React.JSX.Element {
+  const presentation = useAgentTerminalPresentation();
   const diffLines = computeDiff(oldContent, newContent);
   const stats = computeDiffStats(diffLines);
   const displayLines = diffLines.slice(0, maxLines);
@@ -56,7 +58,16 @@ export function DiffPreview({
       ))}
 
       {/* Truncation notice */}
-      {hasMore ? <Text dimColor>... {diffLines.length - maxLines} more lines</Text> : null}
+      {hasMore ? (
+        <Text dimColor>
+          {presentation.t(
+            diffLines.length - maxLines === 1
+              ? 'agent.terminal.approval.moreLines.one'
+              : 'agent.terminal.approval.moreLines.many',
+            { count: presentation.format.count(diffLines.length - maxLines) },
+          )}
+        </Text>
+      ) : null}
     </Box>
   );
 }

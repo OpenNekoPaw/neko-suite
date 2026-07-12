@@ -29,7 +29,9 @@ import { useConversationStore } from '../stores/conversation-store';
 import { useConfigStore } from '../stores/config-store';
 import { useUIStore } from '../stores/ui-store';
 import { createTuiSkillInvocationCatalog } from '../core/slash-command-catalog';
-import { getTuiLabels } from '../core/tui-locale';
+import type { AgentTerminalInvocationContext } from '../core/node-locale-bootstrap';
+import { AgentTerminalPresentationProvider } from '../presentation/react-context';
+import { presentReferenceSuggestionError } from '../presentation/reference-presentation';
 import {
   createTuiAutomationAppPort,
   type TuiAutomationSessionHandle,
@@ -47,16 +49,27 @@ interface AppProps {
   readonly initialPrompt?: string;
   /** Optional persisted conversation id to resume inside the Ink TUI session. */
   readonly resumeConversationId?: string;
+  /** Immutable Locale and terminal presentation composition for this invocation. */
+  readonly terminal: AgentTerminalInvocationContext;
   /** Optional local developer automation controller. */
   readonly automation?: TuiDebugAutomationController;
 }
 
-export function App({
+export function App(props: AppProps): React.JSX.Element {
+  return (
+    <AgentTerminalPresentationProvider value={props.terminal.presentation}>
+      <AppContent {...props} />
+    </AgentTerminalPresentationProvider>
+  );
+}
+
+function AppContent({
   config,
   service,
   capabilityProviders,
   initialPrompt,
   resumeConversationId,
+  terminal,
   automation,
 }: AppProps): React.JSX.Element {
   const pendingApproval = useUIStore((s) => s.pendingApproval);
@@ -85,6 +98,8 @@ export function App({
     service,
     capabilityProviders,
     resumeConversationId,
+    presentation: terminal.presentation,
+    promptLocale: terminal.promptLocale,
   });
   const agentSessionRef = useRef<TuiAutomationSessionHandle>(agentSession);
   agentSessionRef.current = agentSession;
@@ -148,6 +163,7 @@ export function App({
       referenceRequestIdRef.current = requestId;
       void createTuiReferenceSuggestions({
         workspaceRoot: config.workDir,
+        presentation: terminal.presentation,
         query,
         referenceContributors: getReferenceContributors(),
       }).then(
@@ -158,10 +174,9 @@ export function App({
         },
         (error) => {
           if (!cancelled && referenceRequestIdRef.current === requestId) {
-            const message = error instanceof Error ? error.message : String(error);
             useConversationStore
               .getState()
-              .addError(new Error(`Reference suggestion error: ${message}`));
+              .addError(new Error(presentReferenceSuggestionError(error, terminal.presentation)));
           }
         },
       );
@@ -169,7 +184,7 @@ export function App({
         cancelled = true;
       };
     },
-    [config.workDir, getReferenceContributors, slashCommands],
+    [config.workDir, getReferenceContributors, slashCommands, terminal.presentation],
   );
 
   useEffect(() => refreshReferenceSuggestions(), [refreshReferenceSuggestions]);
@@ -207,6 +222,8 @@ export function App({
     resumeConversation,
     getHistory,
     syncRuntimeState,
+    presentation: terminal.presentation,
+    userConfigPath: terminal.userConfigPath,
   });
 
   // Global keyboard shortcuts
@@ -268,15 +285,23 @@ export function App({
   // Build plan review selection menu items (shown when pendingPlanReview is true)
   const planReviewSelection = pendingPlanReview
     ? {
-        title: 'Plan ready — what next?',
+        title: terminal.presentation.t('agent.terminal.planReview.title'),
         items: [
           {
             id: 'execute',
-            label: '✅ Execute',
-            description: 'Switch to auto mode and run the plan',
+            label: terminal.presentation.t('agent.terminal.planReview.execute.label'),
+            description: terminal.presentation.t('agent.terminal.planReview.execute.description'),
           },
-          { id: 'modify', label: '✏️  Modify', description: 'Edit your message and re-plan' },
-          { id: 'cancel', label: '❌ Cancel', description: 'Stay in plan mode' },
+          {
+            id: 'modify',
+            label: terminal.presentation.t('agent.terminal.planReview.modify.label'),
+            description: terminal.presentation.t('agent.terminal.planReview.modify.description'),
+          },
+          {
+            id: 'cancel',
+            label: terminal.presentation.t('agent.terminal.planReview.cancel.label'),
+            description: terminal.presentation.t('agent.terminal.planReview.cancel.description'),
+          },
         ],
         resolve: (selectedId: string | null) => {
           if (selectedId === 'execute') {
@@ -294,10 +319,14 @@ export function App({
         promoteQueuedMessage(queueItemId);
         setQueueActionNotice(null);
       } catch (error) {
-        setQueueActionNotice(error instanceof Error ? error.message : String(error));
+        setQueueActionNotice(
+          terminal.presentation.t('agent.terminal.diagnostic.queue.operationFailed', {
+            detail: error instanceof Error ? error.message : String(error),
+          }),
+        );
       }
     },
-    [promoteQueuedMessage],
+    [promoteQueuedMessage, terminal.presentation],
   );
 
   const handleQueueCancel = useCallback(
@@ -306,10 +335,14 @@ export function App({
         cancelQueuedMessage(queueItemId);
         setQueueActionNotice(null);
       } catch (error) {
-        setQueueActionNotice(error instanceof Error ? error.message : String(error));
+        setQueueActionNotice(
+          terminal.presentation.t('agent.terminal.diagnostic.queue.operationFailed', {
+            detail: error instanceof Error ? error.message : String(error),
+          }),
+        );
       }
     },
-    [cancelQueuedMessage],
+    [cancelQueuedMessage, terminal.presentation],
   );
 
   const handleQueueEdit = useCallback(
@@ -318,11 +351,17 @@ export function App({
         (candidate) => candidate.id === queueItemId,
       );
       if (!item) {
-        setQueueActionNotice(`Unknown queue item: ${queueItemId}`);
+        setQueueActionNotice(
+          terminal.presentation.t('agent.terminal.queue.unknownItem', { itemId: queueItemId }),
+        );
         return;
       }
       if (item.source !== 'user' && item.source !== 'composer') {
-        setQueueActionNotice(`Queued continuation cannot be edited: ${queueItemId}`);
+        setQueueActionNotice(
+          terminal.presentation.t('agent.terminal.queue.continuationNotEditable', {
+            itemId: queueItemId,
+          }),
+        );
         return;
       }
 
@@ -336,16 +375,20 @@ export function App({
             setQueueActionNotice(null);
             return true;
           } catch (error) {
-            setQueueActionNotice(error instanceof Error ? error.message : String(error));
+            setQueueActionNotice(
+              terminal.presentation.t('agent.terminal.diagnostic.queue.operationFailed', {
+                detail: error instanceof Error ? error.message : String(error),
+              }),
+            );
             return false;
           }
         },
         onConflict: () => {
-          setQueueActionNotice(getTuiLabels().queue.draftConflict);
+          setQueueActionNotice(terminal.presentation.t('agent.terminal.queue.draftConflict'));
         },
       });
     },
-    [cancelQueuedMessage, getMessageQueueSnapshot],
+    [cancelQueuedMessage, getMessageQueueSnapshot, terminal.presentation],
   );
 
   const inputDisabled = !!pendingSelection || pendingPlanReview;
@@ -357,6 +400,7 @@ export function App({
         description: skill.description ?? undefined,
         enabled: skill.enabled,
       })),
+    terminal.presentation,
   ).map((skill) => ({
     trigger: '$' as const,
     name: skill.name.startsWith('$') ? skill.name.slice(1) : skill.name,

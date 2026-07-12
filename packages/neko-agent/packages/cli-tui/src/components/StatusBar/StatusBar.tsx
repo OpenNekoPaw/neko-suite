@@ -13,7 +13,15 @@ import { resolveAgentTokenBudget } from '@neko/shared';
 import { useAgentStore } from '../../stores/agent-store';
 import { useConfigStore } from '../../stores/config-store';
 import { tokens } from '../../theme/tokens';
-import { formatTuiLabel, getTuiLabels, type TuiLabels } from '../../core/tui-locale';
+import type { AgentTerminalPresentationContext } from '../../presentation/context';
+import { useAgentTerminalPresentation } from '../../presentation/react-context';
+import {
+  presentExecutionMode,
+  presentMediaCategory,
+  presentSessionMode,
+  presentTaskStatus,
+} from '../../presentation/terminal-label-presentation';
+import type { AgentTerminalMessageKey } from '../../presentation/terminal-messages';
 import { TokenUsage } from './TokenUsage';
 
 export function StatusBar(): React.JSX.Element {
@@ -23,17 +31,17 @@ export function StatusBar(): React.JSX.Element {
   const lifecycleRecords = useAgentStore((s) => s.activeSkillLifecycleRecords);
   const queueSnapshot = useAgentStore((s) => s.messageQueue.snapshot);
   const queuePausedAfterCancel = useAgentStore((s) => s.messageQueue.pausedAfterCancel);
-  const runningTaskSummary = useAgentStore((s) => s.tasks.runningSummary);
+  const runningTasks = useAgentStore((s) => s.tasks.running);
   const usage = useAgentStore((s) => s.usage);
   const contextTokenCount = useAgentStore((s) => s.contextTokens.count);
   const config = useConfigStore((s) => s.config);
-  const labels = getTuiLabels();
+  const presentation = useAgentTerminalPresentation();
 
   const chatModel = truncateModel(
     `${config.chatModel?.providerId ?? config.provider}:${config.chatModel?.modelId ?? config.model}`,
   );
-  const mediaModels = formatMediaModels(config.defaultMediaModels, labels);
-  const perceptionModels = formatMediaModels(config.perceptionModels, labels);
+  const mediaModels = formatMediaModels(config.defaultMediaModels, presentation);
+  const perceptionModels = formatMediaModels(config.perceptionModels, presentation);
   const tokenBudget = resolveAgentTokenBudget({
     modelId: config.chatModel?.modelId ?? config.model,
     contextWindow: config.chatModel?.contextWindow,
@@ -46,44 +54,44 @@ export function StatusBar(): React.JSX.Element {
     <Box paddingLeft={1} paddingRight={1}>
       {/* Mode badge — leftmost */}
       <Text color={sessionModeColor(sessionMode)}>
-        {formatTuiLabel(labels.sessionModes, sessionMode)}
+        {presentSessionMode(sessionMode, presentation)}
       </Text>
       <Text dimColor>:</Text>
-      <Text color={modeColor(mode)}>{formatTuiLabel(labels.executionModes, mode)}</Text>
+      <Text color={modeColor(mode)}>{presentExecutionMode(mode, presentation)}</Text>
       <Text dimColor> | </Text>
 
       {/* Active skill badge */}
       {lifecycleRecords.length > 0 ? (
         <>
-          <Text color={tokens.info}>{labels.chrome.skills}:</Text>
-          <Text color={tokens.info}>{formatLifecycleRecords(lifecycleRecords, labels)}</Text>
+          <Text color={tokens.info}>{presentation.t('agent.terminal.chrome.skills')}:</Text>
+          <Text color={tokens.info}>{formatLifecycleRecords(lifecycleRecords, presentation)}</Text>
           <Text dimColor> | </Text>
         </>
       ) : activeSkill ? (
         <>
-          <Text color={tokens.info}>{labels.chrome.skill}:</Text>
+          <Text color={tokens.info}>{presentation.t('agent.terminal.chrome.skill')}:</Text>
           <Text color={tokens.info}>{activeSkill}</Text>
           <Text dimColor> | </Text>
         </>
       ) : null}
 
       {/* Chat model */}
-      <Text dimColor>{labels.chrome.chat}:</Text>
+      <Text dimColor>{presentation.t('agent.terminal.chrome.chat')}:</Text>
       <Text>{chatModel}</Text>
       <Text dimColor> | </Text>
 
       {/* Media models */}
-      <Text dimColor>{labels.chrome.media}:</Text>
+      <Text dimColor>{presentation.t('agent.terminal.chrome.media')}:</Text>
       {mediaModels ? (
         <Text>{mediaModels}</Text>
       ) : (
-        <Text color={tokens.muted}>{labels.chrome.none}</Text>
+        <Text color={tokens.muted}>{presentation.t('agent.terminal.chrome.none')}</Text>
       )}
 
       {perceptionModels ? (
         <>
           <Text dimColor> | </Text>
-          <Text dimColor>Perception:</Text>
+          <Text dimColor>{presentation.t('agent.terminal.chrome.perception')}:</Text>
           <Text>{perceptionModels}</Text>
         </>
       ) : null}
@@ -91,19 +99,22 @@ export function StatusBar(): React.JSX.Element {
       {queueSnapshot && queueSnapshot.pendingCount > 0 ? (
         <>
           <Text dimColor> | </Text>
-          <Text color={tokens.warning}>{labels.chrome.queue}:</Text>
+          <Text color={tokens.warning}>{presentation.t('agent.terminal.chrome.queue')}:</Text>
           <Text color={tokens.warning}>{queueSnapshot.pendingCount}</Text>
           {queuePausedAfterCancel ? (
-            <Text color={tokens.warning}> ({labels.queue.pausedAfterCancel})</Text>
+            <Text color={tokens.warning}>
+              {' '}
+              ({presentation.t('agent.terminal.queue.pausedAfterCancel')})
+            </Text>
           ) : null}
         </>
       ) : null}
 
-      {runningTaskSummary ? (
+      {runningTasks.length > 0 ? (
         <>
           <Text dimColor> | </Text>
-          <Text color={tokens.info}>{labels.chrome.task}:</Text>
-          <Text color={tokens.info}>{runningTaskSummary}</Text>
+          <Text color={tokens.info}>{presentation.t('agent.terminal.chrome.task')}:</Text>
+          <Text color={tokens.info}>{formatRunningTasks(runningTasks, presentation)}</Text>
         </>
       ) : null}
 
@@ -122,6 +133,20 @@ export function StatusBar(): React.JSX.Element {
       />
     </Box>
   );
+}
+
+function formatRunningTasks(
+  tasks: readonly import('@neko/shared').Task[],
+  presentation: AgentTerminalPresentationContext<AgentTerminalMessageKey>,
+): string {
+  const first = tasks[0];
+  if (!first) {
+    throw new Error('Running task projection requires at least one task.');
+  }
+  const progress = Number.isFinite(first.progress) ? Math.round(first.progress) : 0;
+  const taskId = first.id.length > 28 ? `${first.id.slice(0, 25)}...` : first.id;
+  const suffix = tasks.length > 1 ? ` +${tasks.length - 1}` : '';
+  return `${tasks.length} ${presentTaskStatus(first.status, presentation)} ${taskId} ${progress}%${suffix}`;
 }
 
 function sessionModeColor(mode: string): string {
@@ -161,13 +186,13 @@ function truncateModel(model: string): string {
 
 function formatMediaModels(
   mediaModels: { image?: string; video?: string; audio?: string } | undefined,
-  labels: TuiLabels,
+  presentation: AgentTerminalPresentationContext<AgentTerminalMessageKey>,
 ): string | null {
   if (!mediaModels) return null;
   const values = (['image', 'video', 'audio'] as const)
     .map((category) =>
       mediaModels[category]
-        ? `${formatTuiLabel(labels.mediaCategories, category)}:${truncateModel(mediaModels[category])}`
+        ? `${presentMediaCategory(category, presentation)}:${truncateModel(mediaModels[category])}`
         : undefined,
     )
     .filter((value): value is string => Boolean(value));
@@ -176,11 +201,11 @@ function formatMediaModels(
 
 function formatLifecycleRecords(
   records: readonly import('@neko/shared').ActiveSkillLifecycleRecordProjection[],
-  labels: TuiLabels,
+  presentation: AgentTerminalPresentationContext<AgentTerminalMessageKey>,
 ): string {
   const first = records[0];
   if (!first) return '0';
   const suffix = records.length > 1 ? `+${records.length - 1}` : '';
-  const lock = first.clearable ? '' : ` ${labels.chrome.locked}`;
+  const lock = first.clearable ? '' : ` ${presentation.t('agent.terminal.chrome.locked')}`;
   return `${first.skillName}[${first.slot}]${suffix}${lock}`;
 }

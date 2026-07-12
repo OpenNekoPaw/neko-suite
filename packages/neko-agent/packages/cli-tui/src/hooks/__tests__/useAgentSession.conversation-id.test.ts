@@ -11,6 +11,7 @@ import { DEFAULT_CLI_CONFIG, type CLIConfig } from '../../core/types';
 import { useAgentStore } from '../../stores/agent-store';
 import { useConversationStore } from '../../stores/conversation-store';
 import { useAgentSession } from '../useAgentSession';
+import { createTestAgentTerminalPresentation } from '../../presentation/testing';
 
 let tempRoot: string;
 
@@ -46,7 +47,9 @@ describe('useAgentSession conversation identity', () => {
       conversationIds.some((conversationId) => isCanonicalConversationId(conversationId)),
     );
 
-    expect(conversationIds.every((conversationId) => !conversationId.startsWith('cli-'))).toBe(true);
+    expect(conversationIds.every((conversationId) => !conversationId.startsWith('cli-'))).toBe(
+      true,
+    );
   });
 
   it('rejects old cli resume ids before loading persisted records', async () => {
@@ -62,10 +65,9 @@ describe('useAgentSession conversation identity', () => {
       }),
     );
 
-    await waitFor(() =>
-      useAgentStore
-        .getState()
-        .error?.message.includes('TUI resume conversation id must be canonical') === true,
+    await waitFor(
+      () =>
+        useAgentStore.getState().error?.message.includes('TUI 恢复对话 ID 必须是规范 ID') === true,
     );
 
     expect(useAgentStore.getState().status).toBe('error');
@@ -79,6 +81,8 @@ function ConversationIdProbe(props: {
 }): React.JSX.Element {
   const session = useAgentSession({
     config: props.config,
+    presentation: createTestAgentTerminalPresentation('zh-cn'),
+    promptLocale: 'zh-cn',
     service: createNoopService(),
     resumeConversationId: props.resumeConversationId,
   });

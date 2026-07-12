@@ -13,6 +13,8 @@ import type {
   AgentTurnSource,
 } from '@neko-agent/types';
 
+import type { Task } from '@neko/shared';
+
 export type TerminalTimelineRowKind =
   'assistant_text' | 'thinking' | 'tool' | 'task' | 'media' | 'error' | 'diagnostic';
 
@@ -143,7 +145,7 @@ export interface MessageQueueState {
 }
 
 export interface TaskStatusState {
-  readonly runningSummary: string | null;
+  readonly running: readonly Task[];
 }
 
 /**

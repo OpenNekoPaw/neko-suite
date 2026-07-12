@@ -12,6 +12,9 @@ import type { AgentEvent } from '@neko/agent';
 import type { useConversationStore } from '../stores/conversation-store';
 import type { useAgentStore } from '../stores/agent-store';
 import type { useUIStore, PendingApproval } from '../stores/ui-store';
+import type { AgentTerminalPresentationContext } from '../presentation/context';
+import type { AgentTerminalMessageKey } from '../presentation/terminal-messages';
+import { presentQueuedContinuation } from '../presentation/runtime-presentation';
 import {
   createTerminalTimelineProjector,
   type TerminalTimelineMessage,
@@ -38,6 +41,7 @@ export interface EventAdapterDeps {
   readonly conversationStore: StoreAccessor<ConversationStore>;
   readonly agentStore: StoreAccessor<AgentStore>;
   readonly uiStore: StoreAccessor<UIStore>;
+  readonly presentation: AgentTerminalPresentationContext<AgentTerminalMessageKey>;
 }
 
 /**
@@ -57,7 +61,7 @@ export function createEventAdapter(deps: EventAdapterDeps): IEventAdapter {
   const conversationStore = createStoreAccessor(deps.conversationStore);
   const agentStore = createStoreAccessor(deps.agentStore);
   const uiStore = createStoreAccessor(deps.uiStore);
-  const timelineProjector = createTerminalTimelineProjector();
+  const timelineProjector = createTerminalTimelineProjector({ presentation: deps.presentation });
   let hasStartedMessage = false;
   let currentDelta = '';
 
@@ -205,7 +209,11 @@ export function createEventAdapter(deps: EventAdapterDeps): IEventAdapter {
           }
           if (event.queuedMessageItem && isInternalContinuation(event.queuedMessageItem)) {
             conversationStore().addSystemMessage(
-              formatQueuedContinuationSystemText(event.queuedMessageItem, event.pendingCount ?? 1),
+              presentQueuedContinuation(
+                event.queuedMessageItem,
+                event.pendingCount ?? 1,
+                deps.presentation,
+              ),
             );
           }
           break;
@@ -230,24 +238,6 @@ export function createEventAdapter(deps: EventAdapterDeps): IEventAdapter {
 
 function isInternalContinuation(item: import('@neko-agent/types').AgentQueuedMessageItem): boolean {
   return item.source !== 'user' && item.source !== 'composer';
-}
-
-function formatQueuedContinuationSystemText(
-  item: import('@neko-agent/types').AgentQueuedMessageItem,
-  pendingCount: number,
-): string {
-  if (item.source === 'task-result-continuation') {
-    const suffix = item.metadata?.taskId ? ` ${item.metadata.taskId}` : ` ${item.id}`;
-    return `Task continuation queued:${suffix} (${pendingCount} pending)`;
-  }
-  if (item.source === 'subagent-result-continuation') {
-    const suffix = item.metadata?.subagentId ? ` ${item.metadata.subagentId}` : ` ${item.id}`;
-    return `Subagent result continuation queued:${suffix} (${pendingCount} pending)`;
-  }
-  if (item.source === 'system-continuation') {
-    return `System continuation queued: ${item.id} (${pendingCount} pending)`;
-  }
-  throw new Error(`User queue item ${item.id} must not be projected into the transcript.`);
 }
 
 function createStoreAccessor<TStore>(store: StoreAccessor<TStore>): () => TStore {

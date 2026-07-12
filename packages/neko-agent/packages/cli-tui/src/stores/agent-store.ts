@@ -16,7 +16,7 @@ import type {
   TokenUsage,
   IterationProgress,
 } from '../types/state';
-import type { ActiveSkillLifecycleRecordProjection } from '@neko/shared';
+import type { ActiveSkillLifecycleRecordProjection, Task } from '@neko/shared';
 
 export interface AgentSlice {
   // State
@@ -46,7 +46,7 @@ export interface AgentSlice {
   setMessageQueueSnapshot: (snapshot: MessageQueueState['snapshot']) => void;
   setMessageQueueDiagnostic: (diagnostic: string | null) => void;
   setMessageQueuePausedAfterCancel: (paused: boolean) => void;
-  setRunningTaskSummary: (summary: string | null) => void;
+  setRunningTasks: (tasks: readonly Task[]) => void;
   setSessionMode: (mode: SessionMode) => void;
   setExecutionMode: (mode: ExecutionMode) => void;
   setActiveSkill: (name: string | null) => void;
@@ -71,7 +71,7 @@ const initialState = {
     pausedAfterCancel: false,
   } as MessageQueueState,
   tasks: {
-    runningSummary: null,
+    running: [],
   } as TaskStatusState,
   activeSkill: null as string | null,
   activeSkillLifecycleRecords: [] as readonly ActiveSkillLifecycleRecordProjection[],
@@ -150,10 +150,10 @@ export const useAgentStore = create<AgentSlice>((set) => ({
     }));
   },
 
-  setRunningTaskSummary: (summary) => {
+  setRunningTasks: (tasks) => {
     set({
       tasks: {
-        runningSummary: summary,
+        running: [...tasks],
       },
     });
   },

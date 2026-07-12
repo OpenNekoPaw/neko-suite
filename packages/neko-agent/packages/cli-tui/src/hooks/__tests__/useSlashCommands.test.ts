@@ -1,6 +1,10 @@
 import React from 'react';
 import { describe, expect, it, beforeEach, vi } from 'vitest';
 import { render } from 'ink-testing-library';
+import { AGENT_COMMAND_MESSAGE_SOURCE } from '@neko/agent/commands/terminal-messages';
+import { createStrictTranslator } from '@neko/shared/i18n';
+import { createAgentTerminalPresentationContext } from '../../presentation/context';
+import { CLI_TERMINAL_MESSAGE_SOURCE } from '../../presentation/terminal-messages';
 import { useSlashCommands } from '../useSlashCommands';
 import { useAgentStore } from '../../stores/agent-store';
 import { useConversationStore } from '../../stores/conversation-store';
@@ -165,7 +169,7 @@ describe('useSlashCommands Skill lifecycle commands', () => {
     expect(activateSkill).not.toHaveBeenCalled();
     expect(submit).not.toHaveBeenCalled();
     expect(lastSystemMessage()).toContain(
-      'not-queueable: Skill invocations cannot be queued while an Agent turn is running.',
+      'Queue operation failed (not-queueable): Skill invocations cannot be queued while an Agent turn is running.',
     );
   });
 
@@ -201,6 +205,65 @@ describe('useSlashCommands Skill lifecycle commands', () => {
 
     expect(listTasks).toHaveBeenCalledTimes(1);
     expect(lastSystemMessage()).toBe('No tasks.');
+  });
+
+  it('captures each owning status store once per snapshot and shows the captured user config path', async () => {
+    const originalAgentGetState = useAgentStore.getState;
+    const originalConfigGetState = useConfigStore.getState;
+    let agentReads = 0;
+    let configReads = 0;
+    const agentSpy = vi.spyOn(useAgentStore, 'getState').mockImplementation(() => {
+      agentReads += 1;
+      if (agentReads > 1) {
+        throw new Error('Agent store was read more than once by the status snapshot.');
+      }
+      return originalAgentGetState();
+    });
+    const configSpy = vi.spyOn(useConfigStore, 'getState').mockImplementation(() => {
+      configReads += 1;
+      if (configReads > 1) {
+        throw new Error('Config store was read more than once by the status snapshot.');
+      }
+      return originalConfigGetState();
+    });
+
+    try {
+      const handleCommand = renderHarness({
+        activateSkill: vi.fn(() => true),
+        deactivateSkill: vi.fn(),
+      });
+
+      await handleCommand('/status');
+
+      expect(agentReads).toBe(1);
+      expect(configReads).toBe(1);
+      expect(lastSystemMessage()).toContain('User config: /Users/neko/.neko/config.toml');
+    } finally {
+      agentSpy.mockRestore();
+      configSpy.mockRestore();
+    }
+  });
+
+  it('captures fresh best-effort store state for each new /status composition', async () => {
+    const handleCommand = renderHarness({
+      activateSkill: vi.fn(() => true),
+      deactivateSkill: vi.fn(),
+    });
+
+    await handleCommand('/status');
+    const first = lastSystemMessage();
+
+    useConfigStore.getState().setConfig({
+      chatModel: { providerId: 'openai', modelId: 'gpt-5.3-codex' },
+    });
+    useAgentStore.getState().setRunning();
+    await handleCommand('/status');
+    const second = lastSystemMessage();
+
+    expect(first).toContain('Model: anthropic:claude-sonnet-4-20250514');
+    expect(first).toContain('Status: idle');
+    expect(second).toContain('Model: openai:gpt-5.3-codex');
+    expect(second).toContain('Status: running');
   });
 
   it('updates default media models through /model media commands', async () => {
@@ -247,6 +310,14 @@ function renderHarness(actions: {
       getMessageQueueSnapshot: actions.getMessageQueueSnapshot,
       listTasks: actions.listTasks,
       getSkillService: () => createSkillServiceMock(),
+      presentation: createAgentTerminalPresentationContext({
+        translator: createStrictTranslator('en', [
+          AGENT_COMMAND_MESSAGE_SOURCE,
+          CLI_TERMINAL_MESSAGE_SOURCE,
+        ] as const),
+        formatters: { count: String, dateTime: String, duration: String, bytes: String },
+      }),
+      userConfigPath: '/Users/neko/.neko/config.toml',
     }));
     return React.createElement(React.Fragment);
   }

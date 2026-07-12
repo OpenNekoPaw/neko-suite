@@ -8,11 +8,8 @@
 import React, { useState } from 'react';
 import { Box, Text, useInput } from 'ink';
 import { tokens } from '../../theme/tokens';
-import { getTuiLabels } from '../../core/tui-locale';
-import {
-  createTuiSlashCommandCatalog,
-  type TuiSlashCommandOption,
-} from '../../core/slash-command-catalog';
+import { useAgentTerminalPresentation } from '../../presentation/react-context';
+import type { TuiSlashCommandOption } from '../../core/slash-command-catalog';
 
 export type SlashCommandOption = TuiSlashCommandOption;
 
@@ -34,7 +31,7 @@ export function SlashCommandMenu({
   onDismiss,
 }: SlashCommandMenuProps): React.JSX.Element {
   const [selectedIndex, setSelectedIndex] = useState(0);
-  const labels = getTuiLabels();
+  const presentation = useAgentTerminalPresentation();
 
   // Filter commands based on input
   const filterText = filter.startsWith('/') ? filter.slice(1).toLowerCase() : filter.toLowerCase();
@@ -68,7 +65,7 @@ export function SlashCommandMenu({
   if (filtered.length === 0) {
     return (
       <Box marginLeft={2}>
-        <Text dimColor>{labels.chrome.noMatchingCommands}</Text>
+        <Text dimColor>{presentation.t('agent.terminal.chrome.noMatchingCommands')}</Text>
       </Box>
     );
   }
@@ -89,15 +86,9 @@ export function SlashCommandMenu({
       {filtered.length > 8 ? (
         <Text dimColor>
           {' '}
-          ... {filtered.length - 8} {labels.chrome.more}
+          ... {filtered.length - 8} {presentation.t('agent.terminal.chrome.more')}
         </Text>
       ) : null}
     </Box>
   );
 }
-
-/**
- * Built-in slash commands available in TUI mode.
- * Dynamically derived from shared builtin-commands.ts.
- */
-export const TUI_COMMANDS: SlashCommandOption[] = createTuiSlashCommandCatalog();

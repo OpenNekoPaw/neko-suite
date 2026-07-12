@@ -3,6 +3,7 @@ import { createEventAdapter } from './event-adapter';
 import { useAgentStore } from '../stores/agent-store';
 import { useConversationStore } from '../stores/conversation-store';
 import { useUIStore } from '../stores/ui-store';
+import { createTestAgentTerminalPresentation } from '../presentation/testing';
 
 describe('createEventAdapter queue projection', () => {
   it('projects user queue snapshots without adding pending items to the transcript', () => {
@@ -11,6 +12,7 @@ describe('createEventAdapter queue projection', () => {
       agentStore: useAgentStore.getState,
       conversationStore: useConversationStore.getState,
       uiStore: useUIStore.getState,
+      presentation: createTestAgentTerminalPresentation(),
     });
 
     adapter.handleEvent({
@@ -72,6 +74,7 @@ describe('createEventAdapter queue projection', () => {
       agentStore: useAgentStore.getState,
       conversationStore: useConversationStore.getState,
       uiStore: useUIStore.getState,
+      presentation: createTestAgentTerminalPresentation('zh-cn'),
     });
 
     adapter.handleEvent({
@@ -105,7 +108,7 @@ describe('createEventAdapter queue projection', () => {
     expect(useConversationStore.getState().messages).toEqual([
       expect.objectContaining({
         role: 'system',
-        content: 'Task continuation queued: task-123 (1 pending)',
+        content: '任务续跑已入队：task-123（1 条待处理）',
       }),
     ]);
     expect(
@@ -121,6 +124,7 @@ describe('createEventAdapter timeline projection', () => {
       agentStore: useAgentStore.getState,
       conversationStore: useConversationStore.getState,
       uiStore: useUIStore.getState,
+      presentation: createTestAgentTerminalPresentation(),
     });
 
     adapter.handleEvent({ type: 'text_delta', content: 'Before tool. ' });
@@ -159,6 +163,7 @@ describe('createEventAdapter timeline projection', () => {
       agentStore: useAgentStore.getState,
       conversationStore: useConversationStore.getState,
       uiStore: useUIStore.getState,
+      presentation: createTestAgentTerminalPresentation(),
     });
 
     adapter.handleEvent({

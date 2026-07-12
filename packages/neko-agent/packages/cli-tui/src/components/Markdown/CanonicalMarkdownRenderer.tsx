@@ -1,11 +1,15 @@
 import React, { useEffect, useLayoutEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { Box, Text } from 'ink';
-import { getTuiLabels } from '../../core/tui-locale';
 import {
   TerminalMarkdownController,
   type TerminalMarkdownControllerSnapshot,
 } from '../../markdown/controller';
 import { createFatalMarkdownPresentation } from '../../markdown/diagnostic-presentation';
+import { useAgentTerminalPresentation } from '../../presentation/react-context';
+import {
+  createTerminalMarkdownMessages,
+  type TerminalMarkdownMessages,
+} from '../../presentation/terminal-label-presentation';
 import { encodeTerminalSegments } from '../../markdown/safe-encoding';
 import { createTerminalMarkdownThemeResolver } from '../../markdown/theme';
 import type { TerminalLine } from '../../markdown/terminal-blocks';
@@ -28,7 +32,8 @@ export function CanonicalMarkdownRenderer({
     1,
     useUIStore((state) => state.terminalSize.columns),
   );
-  const labels = getTuiLabels().markdown;
+  const presentation = useAgentTerminalPresentation();
+  const labels = useMemo(() => createTerminalMarkdownMessages(presentation), [presentation]);
   const capabilities = detectCapabilities();
   const [fatalDetail, setFatalDetail] = useState<string | undefined>(undefined);
   const controller = useMemo(
@@ -63,16 +68,19 @@ export function CanonicalMarkdownRenderer({
 
   useEffect(() => () => controller.dispose(), [controller]);
 
-  if (fatalDetail !== undefined) return <FatalMarkdownBlock detail={fatalDetail} />;
+  if (fatalDetail !== undefined) return <FatalMarkdownBlock detail={fatalDetail} labels={labels} />;
   if (snapshot.result.status === 'failed') {
     return (
       <FatalMarkdownBlock
         detail={snapshot.result.diagnostics.map((item) => item.code).join(', ')}
+        labels={labels}
       />
     );
   }
   if (snapshot.layout === undefined) {
-    return <FatalMarkdownBlock detail="Canonical Markdown layout is unavailable." />;
+    return (
+      <FatalMarkdownBlock detail="Canonical Markdown layout is unavailable." labels={labels} />
+    );
   }
 
   return <TerminalMarkdownLayoutView snapshot={snapshot} capabilities={capabilities} />;
@@ -116,8 +124,14 @@ function TerminalLineView({
   return <Text>{encoded.text}</Text>;
 }
 
-function FatalMarkdownBlock({ detail }: { readonly detail: string }): React.JSX.Element {
-  const presentation = createFatalMarkdownPresentation(detail, getTuiLabels().markdown);
+function FatalMarkdownBlock({
+  detail,
+  labels,
+}: {
+  readonly detail: string;
+  readonly labels: TerminalMarkdownMessages;
+}): React.JSX.Element {
+  const presentation = createFatalMarkdownPresentation(detail, labels);
   return (
     <Box borderStyle="round" borderColor="red" paddingX={1} flexDirection="column">
       <Text>{presentation.segments.map((segment) => segment.text).join('')}</Text>

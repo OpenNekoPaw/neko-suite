@@ -2,25 +2,30 @@ import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render } from 'ink-testing-library';
 import { useAgentStore } from '../../stores/agent-store';
-import { InputEditor } from './InputEditor';
+import type { SupportedLocale } from '@neko/shared/i18n';
+import { AgentTerminalPresentationProvider } from '../../presentation/react-context';
+import { createTestAgentTerminalPresentation } from '../../presentation/testing';
+import { InputEditor as InputEditorImpl } from './InputEditor';
 import {
   createTuiSkillInvocationCatalog,
   createTuiSlashCommandCatalog,
 } from '../../core/slash-command-catalog';
 
-const originalNekoLocale = process.env.NEKO_LOCALE;
+let testLocale: SupportedLocale = 'en';
+
+function InputEditor(props: React.ComponentProps<typeof InputEditorImpl>): React.JSX.Element {
+  return React.createElement(AgentTerminalPresentationProvider, {
+    value: createTestAgentTerminalPresentation(testLocale),
+    children: React.createElement(InputEditorImpl, props),
+  });
+}
 
 beforeEach(() => {
-  process.env.NEKO_LOCALE = 'en';
+  testLocale = 'en';
   useAgentStore.getState().reset();
 });
 
 afterEach(() => {
-  if (originalNekoLocale === undefined) {
-    delete process.env.NEKO_LOCALE;
-  } else {
-    process.env.NEKO_LOCALE = originalNekoLocale;
-  }
   cleanup();
 });
 
@@ -86,11 +91,14 @@ describe('InputEditor prefix suggestions', () => {
   });
 
   it('renders localized slash command descriptions in Chinese suggestion menus', async () => {
-    process.env.NEKO_LOCALE = 'zh-CN';
+    testLocale = 'zh-cn';
     const instance = render(
       React.createElement(InputEditor, {
         onSubmit: vi.fn(),
-        commands: createTuiSlashCommandCatalog(undefined, 'zh'),
+        commands: createTuiSlashCommandCatalog(
+          undefined,
+          createTestAgentTerminalPresentation('zh-cn'),
+        ),
       }),
     );
 
@@ -126,10 +134,10 @@ describe('InputEditor prefix suggestions', () => {
   });
 
   it('keeps Skill keywords in English while localizing tags and fallback descriptions', async () => {
-    process.env.NEKO_LOCALE = 'zh-CN';
+    testLocale = 'zh-cn';
     const skills = createTuiSkillInvocationCatalog(
       [{ name: 'quality-review', enabled: true }],
-      'zh',
+      createTestAgentTerminalPresentation('zh-cn'),
     ).map((skill) => ({
       trigger: '$' as const,
       name: skill.name.slice(1),
@@ -291,7 +299,7 @@ describe('InputEditor prefix suggestions', () => {
   });
 
   it('localizes reference overflow chrome when TUI locale is Chinese', async () => {
-    process.env.NEKO_LOCALE = 'zh-CN';
+    testLocale = 'zh-cn';
     const references = Array.from({ length: 10 }, (_, index) => ({
       trigger: '@' as const,
       name: `asset-${index}.png`,

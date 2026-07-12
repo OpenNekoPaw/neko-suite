@@ -8,6 +8,7 @@
 import React from 'react';
 import { Box, Text } from 'ink';
 import { tokens } from '../../theme/tokens';
+import { useAgentTerminalPresentation } from '../../presentation/react-context';
 
 interface CommandPreviewProps {
   /** The command string */
@@ -17,12 +18,14 @@ interface CommandPreviewProps {
 }
 
 export function CommandPreview({ command, cwd }: CommandPreviewProps): React.JSX.Element {
+  const presentation = useAgentTerminalPresentation();
+
   return (
     <Box flexDirection="column">
       {cwd ? (
         <Text dimColor>
-          {'  cwd: '}
-          {cwd}
+          {'  '}
+          {presentation.t('agent.terminal.approval.cwd', { cwd })}
         </Text>
       ) : null}
       <Box>

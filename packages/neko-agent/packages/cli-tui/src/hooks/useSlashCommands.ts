@@ -13,8 +13,6 @@ import type {
   SkillService,
   ToolRegistry,
 } from '@neko/agent';
-import type { ActiveSkillLifecycleRecordProjection } from '@neko/shared';
-import type { AgentLlmConfig } from '@neko-agent/types';
 import {
   handleTUISkillInvocation,
   isSkillInvocation,
@@ -31,15 +29,30 @@ import {
   type TuiMcpPorts,
   type TuiCapabilityPorts,
 } from '../core/tui-command-router';
-import { detectTuiLocale } from '../core/tui-locale';
 import { AgentMessageQueueOperationError } from '@neko/agent/runtime';
-import { formatTuiQueueError } from '../core/message-queue-format';
+import type { ChatModelOption } from '@neko/shared';
+import { toQueueOperationDiagnostic } from '../core/message-queue-semantics';
+import { presentQueueCommand } from '../presentation/work-queue-presentation';
 import { useAgentStore } from '../stores/agent-store';
 import { useConfigStore } from '../stores/config-store';
 import { useConversationStore } from '../stores/conversation-store';
 import { useUIStore, type SelectionMenuItem } from '../stores/ui-store';
+import type { AgentTerminalPresentationContext } from '../presentation/context';
+import type { AgentTerminalMessageKey } from '../presentation/terminal-messages';
+import { presentCommandShellDiagnostic } from '../presentation/command-shell-presentation';
 
 export { isSlashCommand, isSkillInvocation };
+
+function presentQueueFailure(
+  error: unknown,
+  presentation: AgentTerminalPresentationContext<AgentTerminalMessageKey>,
+): string {
+  const projection = presentQueueCommand(toQueueOperationDiagnostic(error), presentation);
+  if (projection.kind !== 'error') {
+    throw new Error('Queue operation failure must project to a terminal diagnostic.');
+  }
+  return projection.error;
+}
 
 interface SlashCommandHandlers {
   /** Handle a slash command input */
@@ -93,6 +106,8 @@ interface SlashCommandSessionActions {
   resumeConversation?: (record: ConversationRecord) => Promise<void>;
   getHistory?: () => ChatMessage[];
   syncRuntimeState?: () => void;
+  presentation: AgentTerminalPresentationContext<AgentTerminalMessageKey>;
+  userConfigPath: string;
 }
 
 type AgentSessionHandleParameterValidator = NonNullable<
@@ -105,7 +120,7 @@ type AgentSessionHandleParameterApplier = NonNullable<
 export function useSlashCommands(sessionActions: SlashCommandSessionActions): SlashCommandHandlers {
   const handleCommand = useCallback(
     async (input: string) => {
-      if (isAgentRunning() && !isAllowedRunningCommand(input)) {
+      if (!isAllowedRunningCommand(input) && isAgentRunning()) {
         const error = isSkillInvocation(input)
           ? new AgentMessageQueueOperationError(
               'not-queueable',
@@ -115,7 +130,7 @@ export function useSlashCommands(sessionActions: SlashCommandSessionActions): Sl
               'not-queueable',
               'Commands cannot be queued while an Agent turn is running.',
             );
-        const message = formatTuiQueueError(error);
+        const message = presentQueueFailure(error, sessionActions.presentation);
         useAgentStore.getState().setMessageQueueDiagnostic(message);
         useConversationStore.getState().addError(new Error(message));
         return;
@@ -130,14 +145,20 @@ export function useSlashCommands(sessionActions: SlashCommandSessionActions): Sl
         const result = await handleTuiControlCommand(input, createInkRouterContext(sessionActions));
 
         if (!result.handled) {
-          addSystemMessage(`Unknown command: ${input}. Type /help for available commands.`);
-          return;
+          throw new Error('TUI command router returned an unhandled slash command.');
         }
 
         await projectCommandResult(result, sessionActions);
       } catch (error) {
-        const msg = error instanceof Error ? error.message : String(error);
-        useConversationStore.getState().addError(new Error(`Command error: ${msg}`));
+        const detail = error instanceof Error ? error.message : String(error);
+        const projection = presentCommandShellDiagnostic(
+          { kind: 'command-failed', detail },
+          sessionActions.presentation,
+        );
+        if (projection.kind !== 'error') {
+          throw new Error('Command failure must project to a terminal diagnostic.');
+        }
+        useConversationStore.getState().addError(new Error(projection.error));
       }
     },
     [sessionActions],
@@ -180,6 +201,7 @@ async function handleSkillInvocationCommand(
   const config = useConfigStore.getState().config;
   try {
     const result = await handleTUISkillInvocation(input, {
+      presentation: sessionActions.presentation,
       config,
       skillService: sessionActions.getSkillService?.(),
       toolRegistry: sessionActions.getToolRegistry?.(),
@@ -207,8 +229,15 @@ async function handleSkillInvocationCommand(
       await sessionActions.submit(result.agentPrompt, result.executionOverrides);
     }
   } catch (error) {
-    const msg = error instanceof Error ? error.message : String(error);
-    useConversationStore.getState().addError(new Error(`Skill invocation error: ${msg}`));
+    const detail = error instanceof Error ? error.message : String(error);
+    const projection = presentCommandShellDiagnostic(
+      { kind: 'skill-invocation-failed', detail },
+      sessionActions.presentation,
+    );
+    if (projection.kind !== 'error') {
+      throw new Error('Skill invocation failure must project to a terminal diagnostic.');
+    }
+    useConversationStore.getState().addError(new Error(projection.error));
   }
 }
 
@@ -217,8 +246,9 @@ function createInkRouterContext(
 ): TuiCommandRouterContext {
   const config = useConfigStore.getState().config;
   return {
+    presentation: sessionActions.presentation,
     slash: {
-      locale: detectTuiLocale(),
+      locale: sessionActions.presentation.uiLocale,
       config,
       skillService: sessionActions.getSkillService?.(),
       toolRegistry: sessionActions.getToolRegistry?.(),
@@ -243,7 +273,6 @@ function createInkRouterContext(
         clear: () => {
           sessionActions.clearHistory();
           useConversationStore.getState().clearMessages();
-          useConversationStore.getState().addUserMessage('[History cleared]');
         },
       },
       mode: {
@@ -251,11 +280,9 @@ function createInkRouterContext(
         setSessionMode: (mode) => {
           useAgentStore.getState().setSessionMode(mode);
           sessionActions.syncRuntimeState?.();
-          return `Session mode set to: ${mode}`;
         },
         setExecutionMode: (mode) => {
           sessionActions.updateMode?.(mode);
-          return `${mode[0]?.toUpperCase()}${mode.slice(1)} mode enabled`;
         },
       },
       model: {
@@ -264,10 +291,25 @@ function createInkRouterContext(
           const currentConfig = useConfigStore.getState().config;
           return getProviderModels(currentConfig.provider, currentConfig.workDir);
         },
-        selectChatModel: (model) => sessionActions.updateModel?.(model),
+        ...(sessionActions.updateModel
+          ? {
+              selectChatModel: (model: string | TuiModelIdentity): TuiModelIdentity => {
+                sessionActions.updateModel?.(model);
+                const currentConfig = useConfigStore.getState().config;
+                const selected = currentConfig.chatModel;
+                if (selected === undefined) {
+                  throw new Error('Chat model mutation did not produce canonical config state.');
+                }
+                return resolveConfiguredModelIdentity(
+                  `${selected.providerId}:${selected.modelId}`,
+                  listChatModelOptions(currentConfig.workDir),
+                  selected.providerId,
+                  typeof model === 'string' ? undefined : model,
+                );
+              },
+            }
+          : {}),
         selectMenuItem: (input) => showSelection(input.title, [...input.items]),
-        selectModelFromMenu: (input) =>
-          showModelPicker(input.title, [...input.models], input.currentModel),
       },
       media: {
         listMediaModelOptions: () =>
@@ -290,10 +332,24 @@ function createInkRouterContext(
             },
           });
           sessionActions.syncRuntimeState?.();
+          const updatedConfig = useConfigStore.getState().config;
+          const stored = updatedConfig.defaultMediaModels?.[category];
+          if (stored === undefined) {
+            throw new Error('Media model mutation did not produce canonical config state.');
+          }
+          return stored === 'none'
+            ? 'none'
+            : resolveConfiguredModelIdentity(
+                stored,
+                listChatModelOptions(updatedConfig.workDir),
+                model === 'none' ? updatedConfig.provider : model.providerId,
+                model === 'none' ? undefined : model,
+              );
         },
         resetMediaModels: () => {
           useConfigStore.getState().setConfig({ defaultMediaModels: {} });
           sessionActions.syncRuntimeState?.();
+          return { ...(useConfigStore.getState().config.defaultMediaModels ?? {}) };
         },
       },
       perception: {
@@ -313,10 +369,20 @@ function createInkRouterContext(
           }
           useConfigStore.getState().setConfig({ perceptionModels: next });
           sessionActions.syncRuntimeState?.();
+          const updatedConfig = useConfigStore.getState().config;
+          const stored = updatedConfig.perceptionModels?.[category];
+          if (stored === undefined) return 'auto';
+          return resolveConfiguredModelIdentity(
+            stored,
+            listChatModelOptions(updatedConfig.workDir),
+            model === 'auto' ? updatedConfig.provider : model.providerId,
+            model === 'auto' ? undefined : model,
+          );
         },
         resetPerceptionModels: () => {
           useConfigStore.getState().setConfig({ perceptionModels: {} });
           sessionActions.syncRuntimeState?.();
+          return { ...(useConfigStore.getState().config.perceptionModels ?? {}) };
         },
       },
       parameters: {
@@ -334,48 +400,21 @@ function createInkRouterContext(
         selectSkillFromMenu: (input) => showSelection(input.title, [...input.items]),
       },
       context: {
-        getTokenCount: () => {
-          const count = sessionActions.getContextTokenCount?.();
-          if (count === null || count === undefined) {
-            throw new Error('Context token estimate unavailable');
-          }
-          return count;
-        },
         compact: sessionActions.compactContext,
       },
       queue: sessionActions.getMessageQueueSnapshot
         ? {
-            getSnapshot: () => {
-              const snapshot = sessionActions.getMessageQueueSnapshot?.();
-              if (!snapshot) {
-                throw new Error('Message queue snapshot unavailable');
-              }
-              return snapshot;
-            },
-            promote: (queueItemId) => {
-              if (!sessionActions.promoteQueuedMessage) {
-                throw new Error('Queue promote is not available for this session.');
-              }
-              return sessionActions.promoteQueuedMessage(queueItemId);
-            },
-            cancel: (queueItemId) => {
-              if (!sessionActions.cancelQueuedMessage) {
-                throw new Error('Queue cancel is not available for this session.');
-              }
-              return sessionActions.cancelQueuedMessage(queueItemId);
-            },
-            discardContinuation: (queueItemId) => {
-              if (!sessionActions.discardQueuedContinuation) {
-                throw new Error('Queue continuation discard is not available for this session.');
-              }
-              return sessionActions.discardQueuedContinuation(queueItemId);
-            },
-            edit: (queueItemId, content) => {
-              if (!sessionActions.editQueuedMessage) {
-                throw new Error('Queue edit is not available for this session.');
-              }
-              return sessionActions.editQueuedMessage(queueItemId, content);
-            },
+            getSnapshot: sessionActions.getMessageQueueSnapshot,
+            ...(sessionActions.promoteQueuedMessage
+              ? { promote: sessionActions.promoteQueuedMessage }
+              : {}),
+            ...(sessionActions.cancelQueuedMessage
+              ? { cancel: sessionActions.cancelQueuedMessage }
+              : {}),
+            ...(sessionActions.discardQueuedContinuation
+              ? { discardContinuation: sessionActions.discardQueuedContinuation }
+              : {}),
+            ...(sessionActions.editQueuedMessage ? { edit: sessionActions.editQueuedMessage } : {}),
           }
         : undefined,
       task: sessionActions.listTasks
@@ -404,23 +443,78 @@ function createInkRouterContext(
           : undefined,
       status: {
         getSnapshot: () => {
-          const status = useAgentStore.getState();
+          const agentState = useAgentStore.getState();
           return {
-            sessionMode: status.sessionMode,
-            executionMode: status.executionMode,
-            agentStatus: status.status,
-            tokensTotal: status.usage.total,
-            chatModelIdentity: formatConfigChatModel(useConfigStore.getState().config),
-            mediaModelSummary: formatMediaModelSummary(useConfigStore.getState().config),
-            perceptionModelSummary: formatPerceptionModelSummary(useConfigStore.getState().config),
-            llmParameterSummary: formatLlmParameterSummary(useConfigStore.getState().config),
-            activeSkillSummary: formatActiveSkillSummary(status.activeSkillLifecycleRecords),
-            queueCount: status.messageQueue.snapshot?.pendingCount ?? 0,
-            runningTaskSummary: status.tasks.runningSummary ?? undefined,
+            config,
+            execution: {
+              sessionMode: agentState.sessionMode,
+              executionMode: agentState.executionMode,
+              status: agentState.status,
+            },
+            usage: agentState.usage,
+            ...(agentState.contextTokens.count === null
+              ? {}
+              : { contextTokenCount: agentState.contextTokens.count }),
+            activeSkills: agentState.activeSkillLifecycleRecords,
+            ...(agentState.messageQueue.snapshot === null
+              ? {}
+              : { messageQueue: agentState.messageQueue.snapshot }),
+            ...(agentState.tasks.running[0] === undefined
+              ? {}
+              : { runningTask: agentState.tasks.running[0] }),
+            userConfigPath: sessionActions.userConfigPath,
           };
         },
       },
     },
+  };
+}
+
+function resolveConfiguredModelIdentity(
+  storedIdentity: string,
+  options: readonly ChatModelOption[],
+  fallbackProviderId: string,
+  requested?: TuiModelIdentity,
+): TuiModelIdentity {
+  const option = options.find(
+    (candidate) =>
+      candidate.id === storedIdentity ||
+      candidate.modelId === storedIdentity ||
+      `${candidate.providerId}:${candidate.modelId}` === storedIdentity ||
+      `${candidate.providerId}/${candidate.modelId}` === storedIdentity,
+  );
+  if (option !== undefined) {
+    return {
+      providerId: option.providerId,
+      modelId: option.modelId,
+      ...(option.providerExpressionProfileId
+        ? { providerExpressionProfileId: option.providerExpressionProfileId }
+        : {}),
+      optionId: option.id,
+      label: option.label,
+      ...(option.category ? { category: option.category } : {}),
+      ...(option.capabilities ? { capabilities: option.capabilities } : {}),
+    };
+  }
+
+  const separator = storedIdentity.includes('/') ? '/' : storedIdentity.includes(':') ? ':' : null;
+  const [providerId, modelId] =
+    separator === null ? [fallbackProviderId, storedIdentity] : storedIdentity.split(separator, 2);
+  if (!providerId || !modelId) {
+    throw new Error(`Invalid canonical model identity returned by config: ${storedIdentity}`);
+  }
+  if (
+    requested !== undefined &&
+    requested.providerId === providerId &&
+    requested.modelId === modelId
+  ) {
+    return requested;
+  }
+  return {
+    providerId,
+    modelId,
+    optionId: storedIdentity,
+    label: `${providerId} / ${modelId}`,
   };
 }
 
@@ -479,76 +573,4 @@ function showSelection(title: string, items: readonly SelectionMenuItem[]): Prom
       },
     });
   });
-}
-
-/** Show a model picker and return the selected model. */
-async function showModelPicker(
-  title: string,
-  models: readonly string[],
-  currentModel: string,
-): Promise<string | null> {
-  const items: SelectionMenuItem[] = models.map((model) => ({
-    id: model,
-    label: model,
-    active: model === currentModel,
-  }));
-
-  return showSelection(title, items);
-}
-
-function formatActiveSkillSummary(
-  records: readonly ActiveSkillLifecycleRecordProjection[],
-): string | undefined {
-  const first = records[0];
-  if (!first) {
-    return undefined;
-  }
-  const suffix = records.length > 1 ? `+${records.length - 1}` : '';
-  return `${first.skillName}[${first.slot}]${suffix}`;
-}
-
-function formatConfigChatModel(config: {
-  provider: string;
-  model: string;
-  chatModel?: { providerId: string; modelId: string };
-}): string {
-  const providerId = config.chatModel?.providerId ?? config.provider;
-  const modelId = config.chatModel?.modelId ?? config.model;
-  return `${providerId}:${modelId}`;
-}
-
-function formatMediaModelSummary(config: {
-  defaultMediaModels?: { image?: string; video?: string; audio?: string };
-}): string | undefined {
-  const media = config.defaultMediaModels ?? {};
-  const entries = (['image', 'video', 'audio'] as const)
-    .map((category) => (media[category] ? `${category}=${media[category]}` : undefined))
-    .filter((entry): entry is string => Boolean(entry));
-  return entries.length > 0 ? entries.join(', ') : undefined;
-}
-
-function formatPerceptionModelSummary(config: {
-  perceptionModels?: { image?: string; video?: string; audio?: string };
-}): string | undefined {
-  const perception = config.perceptionModels ?? {};
-  const entries = (['image', 'video', 'audio'] as const)
-    .map((category) => (perception[category] ? `${category}=${perception[category]}` : undefined))
-    .filter((entry): entry is string => Boolean(entry));
-  return entries.length > 0 ? entries.join(', ') : undefined;
-}
-
-function formatLlmParameterSummary(config: { llmConfig?: AgentLlmConfig }): string | undefined {
-  const llmConfig = config.llmConfig;
-  if (!llmConfig) return undefined;
-  const entries = [
-    llmConfig.reasoningPreset ? `reasoning=${llmConfig.reasoningPreset}` : undefined,
-    llmConfig.verbosityPreset ? `verbosity=${llmConfig.verbosityPreset}` : undefined,
-    llmConfig.creativityPreset ? `creativity=${llmConfig.creativityPreset}` : undefined,
-    ...(llmConfig.advanced
-      ? Object.entries(llmConfig.advanced).map(([key, value]) =>
-          value !== undefined ? `${key}=${value}` : undefined,
-        )
-      : []),
-  ].filter((entry): entry is string => Boolean(entry));
-  return entries.length > 0 ? entries.join(', ') : undefined;
 }

@@ -194,7 +194,7 @@ export const useConversationStore = create<ConversationSlice>((set) => ({
         {
           id: nextId(),
           role: 'system' as const,
-          content: `Error: ${error.message}`,
+          content: error.message,
           toolCalls: [],
           todos: [],
           timestamp: Date.now(),

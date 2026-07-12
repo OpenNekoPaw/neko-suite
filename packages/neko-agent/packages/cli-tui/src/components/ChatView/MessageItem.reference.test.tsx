@@ -1,6 +1,7 @@
 import React from 'react';
-import { cleanup, render } from 'ink-testing-library';
+import { cleanup } from 'ink-testing-library';
 import { afterEach, describe, expect, it } from 'vitest';
+import { renderWithPresentation } from '../../__tests__/render-with-presentation';
 import type { Message } from '../../types/state';
 import { MessageItem } from './MessageItem';
 
@@ -19,7 +20,7 @@ describe('MessageItem reference presentation', () => {
       timestamp: 1,
     };
 
-    const view = render(<MessageItem message={message} />);
+    const view = renderWithPresentation(<MessageItem message={message} />);
 
     expect(view.lastFrame()).toContain('@[Kmoe][BLAME！(新裝版)]卷01.epub');
     expect(view.lastFrame()).not.toContain('${A}/epub/animation/Blame/');

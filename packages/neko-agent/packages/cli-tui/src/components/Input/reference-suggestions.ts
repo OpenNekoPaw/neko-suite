@@ -9,8 +9,18 @@ import type {
   ResolvedMediaLibrary,
 } from '@neko/shared';
 import type { InputSuggestionOption } from './input-suggestions';
-import { formatTuiLabel, getTuiLabels } from '../../core/tui-locale';
-import { createNodeWorkspaceContentPolicy } from '../../host/node-workspace-content-host';
+import type { AgentTerminalPresentationContext } from '../../presentation/context';
+import {
+  presentMediaCategory,
+  presentReferenceSource,
+  presentSuggestionKind,
+} from '../../presentation/terminal-label-presentation';
+import type { AgentTerminalMessageKey } from '../../presentation/terminal-messages';
+import { TuiReferenceSuggestionError } from '../../core/reference-diagnostics';
+import {
+  createNodeWorkspaceContentPolicy,
+  NodeWorkspaceContentError,
+} from '../../host/node-workspace-content-host';
 
 export interface TuiReferenceSuggestionOptions {
   readonly workspaceRoot: string;
@@ -20,6 +30,7 @@ export interface TuiReferenceSuggestionOptions {
   readonly excludedDirectories?: readonly string[];
   readonly extraReferences?: readonly TuiMentionReferenceCandidate[];
   readonly referenceContributors?: readonly AgentReferenceContributor[];
+  readonly presentation: AgentTerminalPresentationContext<AgentTerminalMessageKey>;
 }
 
 export type TuiMentionReferenceKind =
@@ -187,14 +198,19 @@ export async function createTuiReferenceSuggestions(
   });
   const contributedReferenceSuggestions = await listContributedReferenceSuggestions({
     contributors: options.referenceContributors ?? [],
+    presentation: options.presentation,
     workspaceRoot: root,
     limit,
     query,
   });
-  const assetLibrarySuggestions = assetLibraryCandidates.map(mentionReferenceCandidateToSuggestion);
-  const searchIndexSuggestions = searchIndexCandidates.map(mentionReferenceCandidateToSuggestion);
-  const extraReferenceSuggestions = (options.extraReferences ?? []).map(
-    mentionReferenceCandidateToSuggestion,
+  const assetLibrarySuggestions = assetLibraryCandidates.map((candidate) =>
+    mentionReferenceCandidateToSuggestion(candidate, options.presentation),
+  );
+  const searchIndexSuggestions = searchIndexCandidates.map((candidate) =>
+    mentionReferenceCandidateToSuggestion(candidate, options.presentation),
+  );
+  const extraReferenceSuggestions = (options.extraReferences ?? []).map((candidate) =>
+    mentionReferenceCandidateToSuggestion(candidate, options.presentation),
   );
   const pathBackedLibraryRefs = new Set<string>();
   for (const candidate of localLibraryCandidates) {
@@ -234,23 +250,25 @@ export async function createTuiReferenceSuggestions(
   const workspaceFileSuggestions = files
     .filter((file) => !pathBackedLibraryRefs.has(file.relativePath))
     .slice(0, remainingFileLimit)
-    .map(workspaceFileCandidateToSuggestion);
+    .map((file) => workspaceFileCandidateToSuggestion(file, options.presentation));
 
   const suggestions = [
-    ...localLibraryCandidates.map(localLibraryCandidateToSuggestion),
+    ...localLibraryCandidates.map((file) =>
+      localLibraryCandidateToSuggestion(file, options.presentation),
+    ),
     ...assetLibrarySuggestions,
     ...searchIndexSuggestions,
     ...contributedReferenceSuggestions,
     ...extraReferenceSuggestions,
     ...workspaceFileSuggestions,
-  ]
-    .filter(uniqueSuggestion());
+  ].filter(uniqueSuggestion());
 
-  return (query
-    ? suggestions
-        .filter((suggestion) => matchesSuggestionQuery(suggestion, query))
-        .sort((left, right) => compareSuggestionByQuery(left, right, query))
-    : suggestions
+  return (
+    query
+      ? suggestions
+          .filter((suggestion) => matchesSuggestionQuery(suggestion, query))
+          .sort((left, right) => compareSuggestionByQuery(left, right, query))
+      : suggestions
   ).slice(0, limit);
 }
 
@@ -259,6 +277,7 @@ async function listContributedReferenceSuggestions(input: {
   readonly workspaceRoot: string;
   readonly limit: number;
   readonly query?: string;
+  readonly presentation: AgentTerminalPresentationContext<AgentTerminalMessageKey>;
 }): Promise<readonly InputSuggestionOption[]> {
   const suggestions: InputSuggestionOption[] = [];
   for (const contributor of input.contributors) {
@@ -271,7 +290,7 @@ async function listContributedReferenceSuggestions(input: {
       workspaceRoot: input.workspaceRoot,
     });
     for (const candidate of result.candidates) {
-      suggestions.push(agentReferenceCandidateToSuggestion(candidate));
+      suggestions.push(agentReferenceCandidateToSuggestion(candidate, input.presentation));
       if (suggestions.length >= input.limit) {
         break;
       }
@@ -517,7 +536,18 @@ async function listSearchIndexReferenceCandidates(
 async function readResolvedMediaLibraries(
   workspaceRoot: string,
 ): Promise<readonly ResolvedMediaLibrary[]> {
-  return createNodeWorkspaceContentPolicy({ workDir: workspaceRoot }).mediaLibraries;
+  try {
+    return createNodeWorkspaceContentPolicy({ workDir: workspaceRoot }).mediaLibraries;
+  } catch (error) {
+    if (error instanceof NodeWorkspaceContentError) {
+      throw new TuiReferenceSuggestionError({
+        code: error.diagnostic.code,
+        filePath: error.diagnostic.filePath,
+        detail: error.diagnostic.detail,
+      });
+    }
+    throw error;
+  }
 }
 
 async function readOptionalJsonFile(filePath: string): Promise<unknown | undefined> {
@@ -528,13 +558,21 @@ async function readOptionalJsonFile(filePath: string): Promise<unknown | undefin
     if (isFileNotFoundError(error)) {
       return undefined;
     }
-    throw new Error(`Failed to read ${filePath}: ${formatUnknownError(error)}`);
+    throw new TuiReferenceSuggestionError({
+      code: 'read-failed',
+      filePath,
+      detail: formatUnknownError(error),
+    });
   }
 
   try {
     return JSON.parse(content) as unknown;
   } catch (error) {
-    throw new Error(`Failed to parse ${filePath}: ${formatUnknownError(error)}`);
+    throw new TuiReferenceSuggestionError({
+      code: 'parse-failed',
+      filePath,
+      detail: formatUnknownError(error),
+    });
   }
 }
 
@@ -544,14 +582,20 @@ async function readAssetLibraryFile(filePath: string): Promise<AssetLibraryFile 
     return undefined;
   }
   if (!isRecord(value)) {
-    throw new Error(`${ASSET_LIBRARY_FILE} must contain a JSON object.`);
+    throw new TuiReferenceSuggestionError({
+      code: 'expected-object',
+      source: ASSET_LIBRARY_FILE,
+    });
   }
   const entities = value['entities'];
   if (entities === undefined) {
     return { entities: [] };
   }
   if (!Array.isArray(entities)) {
-    throw new Error(`${ASSET_LIBRARY_FILE}.entities must be an array.`);
+    throw new TuiReferenceSuggestionError({
+      code: 'expected-array',
+      source: `${ASSET_LIBRARY_FILE}.entities`,
+    });
   }
   return {
     entities: entities.map((entity, index) => readAssetEntity(entity, index)),
@@ -560,12 +604,18 @@ async function readAssetLibraryFile(filePath: string): Promise<AssetLibraryFile 
 
 function readAssetEntity(value: unknown, index: number): AssetEntity {
   if (!isRecord(value)) {
-    throw new Error(`${ASSET_LIBRARY_FILE}.entities[${index}] must be a JSON object.`);
+    throw new TuiReferenceSuggestionError({
+      code: 'expected-entry-object',
+      source: `${ASSET_LIBRARY_FILE}.entities`,
+      index,
+    });
   }
   if (!isAssetEntity(value)) {
-    throw new Error(
-      `${ASSET_LIBRARY_FILE}.entities[${index}] must be a valid asset entity with id, name, category, metadata, variants, tags, usageCount, createdAt, and updatedAt.`,
-    );
+    throw new TuiReferenceSuggestionError({
+      code: 'invalid-entry',
+      source: `${ASSET_LIBRARY_FILE}.entities`,
+      index,
+    });
   }
   return value;
 }
@@ -597,14 +647,20 @@ async function readSearchIndexFile(filePath: string): Promise<SearchIndexFile | 
     return undefined;
   }
   if (!isRecord(value)) {
-    throw new Error(`${SEARCH_INDEX_CACHE_FILE} must contain a JSON object.`);
+    throw new TuiReferenceSuggestionError({
+      code: 'expected-object',
+      source: SEARCH_INDEX_CACHE_FILE,
+    });
   }
   const entries = value['entries'];
   if (entries === undefined) {
     return { entries: [] };
   }
   if (!Array.isArray(entries)) {
-    throw new Error(`${SEARCH_INDEX_CACHE_FILE}.entries must be an array.`);
+    throw new TuiReferenceSuggestionError({
+      code: 'expected-array',
+      source: `${SEARCH_INDEX_CACHE_FILE}.entries`,
+    });
   }
   return {
     entries: entries.map((entry, index) => readSearchIndexEntry(entry, index)),
@@ -613,7 +669,11 @@ async function readSearchIndexFile(filePath: string): Promise<SearchIndexFile | 
 
 function readSearchIndexEntry(value: unknown, index: number): SearchIndexEntry {
   if (!isRecord(value)) {
-    throw new Error(`${SEARCH_INDEX_CACHE_FILE}.entries[${index}] must be a JSON object.`);
+    throw new TuiReferenceSuggestionError({
+      code: 'expected-entry-object',
+      source: `${SEARCH_INDEX_CACHE_FILE}.entries`,
+      index,
+    });
   }
   return {
     ...readOptionalStringProperty(
@@ -649,7 +709,11 @@ function readOptionalStringProperty(
     return {};
   }
   if (typeof property !== 'string') {
-    throw new Error(`${sourceLabel}.${key} must be a string.`);
+    throw new TuiReferenceSuggestionError({
+      code: 'expected-string-field',
+      source: sourceLabel,
+      field: key,
+    });
   }
   return property.length > 0 ? { [key]: property } : {};
 }
@@ -718,13 +782,15 @@ async function listLibraryRootFiles(input: {
   return results;
 }
 
-function workspaceFileCandidateToSuggestion(file: WorkspaceFileCandidate): InputSuggestionOption {
-  const labels = getTuiLabels();
+function workspaceFileCandidateToSuggestion(
+  file: WorkspaceFileCandidate,
+  presentation: AgentTerminalPresentationContext<AgentTerminalMessageKey>,
+): InputSuggestionOption {
   return {
     trigger: '@' as const,
     name: file.relativePath,
     matchText: file.relativePath,
-    description: `${labels.referenceSources['workspace file']} · ${formatByteSize(file.size)}`,
+    description: `${presentReferenceSource('workspace file', presentation)} · ${presentation.format.bytes(file.size)}`,
     kind: 'file',
     insertText: `${formatMentionInsertText(file.relativePath)} `,
   };
@@ -732,10 +798,10 @@ function workspaceFileCandidateToSuggestion(file: WorkspaceFileCandidate): Input
 
 function localLibraryCandidateToSuggestion(
   file: LocalLibraryReferenceCandidate,
+  presentation: AgentTerminalPresentationContext<AgentTerminalMessageKey>,
 ): InputSuggestionOption {
-  const labels = getTuiLabels();
-  const libraryLabel = formatTuiLabel(labels.referenceSources, file.libraryLabel);
-  const mediaType = formatTuiLabel(labels.mediaCategories, file.mediaType);
+  const libraryLabel = presentReferenceSource(file.libraryLabel, presentation);
+  const mediaType = presentMediaCategory(file.mediaType, presentation);
   return {
     trigger: '@' as const,
     name: file.relativePath,
@@ -749,7 +815,7 @@ function localLibraryCandidateToSuggestion(
       libraryLabel,
       mediaType,
     ].join(' '),
-    description: `${libraryLabel} · ${mediaType} · ${formatByteSize(file.size)}`,
+    description: `${libraryLabel} · ${mediaType} · ${presentation.format.bytes(file.size)}`,
     kind: file.kind,
     insertText: `${formatMentionInsertText(file.relativePath)} `,
   };
@@ -757,6 +823,7 @@ function localLibraryCandidateToSuggestion(
 
 function mentionReferenceCandidateToSuggestion(
   candidate: TuiMentionReferenceCandidate,
+  presentation: AgentTerminalPresentationContext<AgentTerminalMessageKey>,
 ): InputSuggestionOption {
   const safeFilePath =
     candidate.filePath && isTerminalSafeReferencePath(candidate.filePath)
@@ -778,7 +845,7 @@ function mentionReferenceCandidateToSuggestion(
     ]
       .filter((value): value is string => typeof value === 'string' && value.length > 0)
       .join(' '),
-    description: formatMentionCandidateDescription(candidate, safeFilePath),
+    description: formatMentionCandidateDescription(candidate, safeFilePath, presentation),
     kind: candidate.kind,
     insertText:
       candidate.insertText ??
@@ -788,14 +855,14 @@ function mentionReferenceCandidateToSuggestion(
 
 function agentReferenceCandidateToSuggestion(
   candidate: AgentReferenceCandidate,
+  presentation: AgentTerminalPresentationContext<AgentTerminalMessageKey>,
 ): InputSuggestionOption {
-  const labels = getTuiLabels();
   const safePath =
     candidate.path && isTerminalSafeReferencePath(candidate.path)
       ? normalizeTerminalPath(candidate.path)
       : undefined;
-  const source = formatTuiLabel(labels.referenceSources, candidate.source);
-  const kind = formatTuiLabel(labels.suggestionKinds, candidate.kind);
+  const source = presentReferenceSource(candidate.source, presentation);
+  const kind = presentSuggestionKind(candidate.kind, presentation);
   const insertText = candidate.insertText.endsWith(' ')
     ? candidate.insertText
     : `${candidate.insertText} `;
@@ -844,11 +911,11 @@ function toTuiMentionReferenceKind(kind: AgentReferenceCandidate['kind']): TuiMe
 function formatMentionCandidateDescription(
   candidate: TuiMentionReferenceCandidate,
   safeFilePath: string | undefined,
+  presentation: AgentTerminalPresentationContext<AgentTerminalMessageKey>,
 ): string {
-  const labels = getTuiLabels();
   return [
-    candidate.source ? formatTuiLabel(labels.referenceSources, candidate.source) : undefined,
-    candidate.mediaType ? formatTuiLabel(labels.mediaCategories, candidate.mediaType) : undefined,
+    candidate.source ? presentReferenceSource(candidate.source, presentation) : undefined,
+    candidate.mediaType ? presentMediaCategory(candidate.mediaType, presentation) : undefined,
     candidate.entityType,
     candidate.description,
     safeFilePath,
@@ -862,13 +929,6 @@ function formatMentionInsertText(relativePath: string): string {
     return `@"${relativePath.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
   }
   return `@${relativePath}`;
-}
-
-function formatByteSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  const kib = bytes / 1024;
-  if (kib < 1024) return `${kib.toFixed(1)} KiB`;
-  return `${(kib / 1024).toFixed(1)} MiB`;
 }
 
 function detectMentionMediaType(filePath: string): TuiMentionMediaType | null {

@@ -13,13 +13,14 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { Box, Text, useInput } from 'ink';
 import { tokens } from '../../theme/tokens';
-import { TUI_COMMANDS, type SlashCommandOption } from './SlashCommandMenu';
+import type { SlashCommandOption } from './SlashCommandMenu';
 import {
   deriveInputSuggestionMenu,
   selectInputSuggestion,
   type InputSuggestionOption,
 } from './input-suggestions';
-import { formatTuiLabel, getTuiLabels } from '../../core/tui-locale';
+import { useAgentTerminalPresentation } from '../../presentation/react-context';
+import { presentSuggestionKind } from '../../presentation/terminal-label-presentation';
 import { ReferenceAwareText } from '../shared/ReferenceAwareText';
 
 export interface InputEditorDraftRequest {
@@ -82,7 +83,7 @@ export function InputEditor({
   prompt = '>',
   onSlashCommand,
   onSkillInvocation,
-  commands = TUI_COMMANDS,
+  commands = [],
   skills = [],
   references = [],
   onReferenceQueryChange,
@@ -102,7 +103,7 @@ export function InputEditor({
     ? deriveInputSuggestionMenu(value, { commands, skills, references })
     : null;
   const filtered = activeMenu?.options ?? [];
-  const labels = getTuiLabels();
+  const presentation = useAgentTerminalPresentation();
 
   valueRef.current = value;
   menuOpenRef.current = menuOpen;
@@ -327,8 +328,8 @@ export function InputEditor({
           trigger={activeMenu.trigger}
           items={filtered}
           selectedIndex={menuIndex}
-          moreLabel={labels.chrome.more}
-          kindLabels={labels.suggestionKinds}
+          moreLabel={presentation.t('agent.terminal.chrome.more')}
+          presentKind={(kind) => presentSuggestionKind(kind, presentation)}
           maxVisible={8}
         />
       ) : null}
@@ -341,7 +342,9 @@ export function InputEditor({
         paddingLeft={1}
         paddingRight={1}
       >
-        {isMultiLine ? <Text dimColor> {labels.chrome.multiLineHint}</Text> : null}
+        {isMultiLine ? (
+          <Text dimColor> {presentation.t('agent.terminal.chrome.multiLineHint')}</Text>
+        ) : null}
 
         {isEmpty && !disabled ? (
           <Box>
@@ -413,7 +416,7 @@ interface SuggestionMenuProps {
   readonly items: readonly InputSuggestionOption[];
   readonly selectedIndex: number;
   readonly moreLabel: string;
-  readonly kindLabels: Readonly<Record<string, string>>;
+  readonly presentKind: (kind: string) => string;
   /** Max visible rows before scrolling */
   readonly maxVisible?: number;
 }
@@ -423,7 +426,7 @@ function SuggestionMenu({
   items,
   selectedIndex,
   moreLabel,
-  kindLabels,
+  presentKind,
   maxVisible = 8,
 }: SuggestionMenuProps): React.JSX.Element {
   const total = items.length;
@@ -470,7 +473,7 @@ function SuggestionMenu({
               {trigger}
               {item.name}
             </Text>
-            {item.kind ? <Text dimColor> [{formatTuiLabel(kindLabels, item.kind)}]</Text> : null}
+            {item.kind ? <Text dimColor> [{presentKind(item.kind)}]</Text> : null}
             {item.description ? <Text dimColor> {item.description}</Text> : null}
           </Box>
         );

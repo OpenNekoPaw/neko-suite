@@ -15,6 +15,11 @@ import { ThinkingBlock } from './ThinkingBlock';
 import { TodoList } from './TodoList';
 import { CanonicalMarkdownRenderer } from '../Markdown/CanonicalMarkdownRenderer';
 import { ReferenceAwareText } from '../shared/ReferenceAwareText';
+import { useAgentTerminalPresentation } from '../../presentation/react-context';
+import {
+  presentTimelineFailure,
+  presentTimelineProcessLabel,
+} from '../../presentation/timeline-presentation';
 
 interface MessageItemProps {
   readonly message: Message;
@@ -30,6 +35,8 @@ export function MessageItem({
   currentDelta = '',
   currentThinking = '',
 }: MessageItemProps): React.JSX.Element {
+  const presentation = useAgentTerminalPresentation();
+
   if (message.role === 'user') {
     return (
       <Box flexDirection="column" marginBottom={1}>
@@ -51,7 +58,11 @@ export function MessageItem({
         paddingLeft={1}
         paddingRight={1}
       >
-        <Text color={message.isError ? tokens.error : undefined}>{message.content}</Text>
+        <Text color={message.isError ? tokens.error : undefined}>
+          {message.isError
+            ? presentation.t('agent.terminal.message.systemError', { detail: message.content })
+            : message.content}
+        </Text>
       </Box>
     );
   }
@@ -103,6 +114,8 @@ export function MessageItem({
 }
 
 function TimelineRowLine({ row }: { readonly row: TerminalTimelineRow }): React.JSX.Element {
+  const presentation = useAgentTerminalPresentation();
+
   switch (row.kind) {
     case 'assistant_text':
       return row.status === 'streaming' || row.content ? (
@@ -123,17 +136,23 @@ function TimelineRowLine({ row }: { readonly row: TerminalTimelineRow }): React.
         />
       );
     case 'tool':
-      return <TimelineProcessLine row={row} label={row.toolName ?? 'tool'} />;
+      return (
+        <TimelineProcessLine row={row} label={presentTimelineProcessLabel(row, presentation)} />
+      );
     case 'task':
-      return <TimelineProcessLine row={row} label={row.taskTitle ?? row.taskId ?? 'task'} />;
+      return (
+        <TimelineProcessLine row={row} label={presentTimelineProcessLabel(row, presentation)} />
+      );
     case 'media':
-      return <TimelineProcessLine row={row} label={row.taskTitle ?? row.taskId ?? 'media'} />;
+      return (
+        <TimelineProcessLine row={row} label={presentTimelineProcessLabel(row, presentation)} />
+      );
     case 'error':
     case 'diagnostic':
       return (
         <Box>
           <Text color={tokens.error}>✗</Text>
-          <Text color={tokens.error}> {row.content ?? row.details ?? 'Timeline error'}</Text>
+          <Text color={tokens.error}> {presentTimelineFailure(row, presentation)}</Text>
           <TimelineAnchor row={row} />
         </Box>
       );

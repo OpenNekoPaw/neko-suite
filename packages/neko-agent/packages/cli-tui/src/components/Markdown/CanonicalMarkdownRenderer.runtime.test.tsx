@@ -7,15 +7,29 @@ import {
 } from '../../markdown/path-observer';
 import { useUIStore } from '../../stores/ui-store';
 import { DEFAULT_MARKDOWN_RESOURCE_POLICY } from '../../markdown/resource-policy';
-import { CanonicalMarkdownRenderer } from './CanonicalMarkdownRenderer';
+import { AgentTerminalPresentationProvider } from '../../presentation/react-context';
+import { createTestAgentTerminalPresentation } from '../../presentation/testing';
+import {
+  CanonicalMarkdownRenderer as CanonicalMarkdownRendererImpl,
+  type CanonicalMarkdownRendererProps,
+} from './CanonicalMarkdownRenderer';
 
 const originalStdoutTty = Object.getOwnPropertyDescriptor(process.stdout, 'isTTY');
+const TEST_PRESENTATION = createTestAgentTerminalPresentation('en');
+
+function CanonicalMarkdownRenderer(props: CanonicalMarkdownRendererProps): React.JSX.Element {
+  return (
+    <AgentTerminalPresentationProvider value={TEST_PRESENTATION}>
+      <CanonicalMarkdownRendererImpl {...props} />
+    </AgentTerminalPresentationProvider>
+  );
+}
+
 const originalEnv = {
   NO_COLOR: process.env.NO_COLOR,
   FORCE_COLOR: process.env.FORCE_COLOR,
   TERM: process.env.TERM,
   TERM_PROGRAM: process.env.TERM_PROGRAM,
-  NEKO_LOCALE: process.env.NEKO_LOCALE,
 };
 
 afterEach(() => {
@@ -23,7 +37,6 @@ afterEach(() => {
   restoreEnv('FORCE_COLOR', originalEnv.FORCE_COLOR);
   restoreEnv('TERM', originalEnv.TERM);
   restoreEnv('TERM_PROGRAM', originalEnv.TERM_PROGRAM);
-  restoreEnv('NEKO_LOCALE', originalEnv.NEKO_LOCALE);
   if (originalStdoutTty === undefined) delete (process.stdout as { isTTY?: boolean }).isTTY;
   else Object.defineProperty(process.stdout, 'isTTY', originalStdoutTty);
   vi.useRealTimers();
@@ -190,7 +203,6 @@ function configureTerminal(options: {
 }): void {
   Object.defineProperty(process.stdout, 'isTTY', { configurable: true, value: true });
   process.env.TERM = options.term;
-  process.env.NEKO_LOCALE = 'en-US';
   delete process.env.NO_COLOR;
   delete process.env.FORCE_COLOR;
   if (options.termProgram === undefined) delete process.env.TERM_PROGRAM;

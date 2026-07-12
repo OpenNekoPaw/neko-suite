@@ -1,7 +1,8 @@
 import React from 'react';
 import { Box } from 'ink';
-import { cleanup, render } from 'ink-testing-library';
+import { cleanup } from 'ink-testing-library';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { renderWithPresentation } from '../../__tests__/render-with-presentation';
 import { useAgentStore } from '../../stores/agent-store';
 import { useConversationStore } from '../../stores/conversation-store';
 import { useUIStore } from '../../stores/ui-store';
@@ -29,7 +30,7 @@ describe('ChatView runtime viewport', () => {
       })),
     );
 
-    const view = render(
+    const view = renderWithPresentation(
       <Box height={4} flexDirection="column">
         <ChatView />
       </Box>,

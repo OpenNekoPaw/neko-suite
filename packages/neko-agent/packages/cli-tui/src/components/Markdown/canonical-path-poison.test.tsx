@@ -2,8 +2,8 @@ import React from 'react';
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { render } from 'ink-testing-library';
 import { afterEach, describe, expect, it } from 'vitest';
+import { renderWithPresentation } from '../../__tests__/render-with-presentation';
 import { MessageItem } from '../ChatView/MessageItem';
 import {
   subscribeTerminalMarkdownPathEvents,
@@ -44,7 +44,9 @@ describe('assistant Markdown canonical-path poison gates', () => {
     const events: TerminalMarkdownPathEvent[] = [];
     const unsubscribe = subscribeTerminalMarkdownPathEvents((event) => events.push(event));
     const message = assistantMessage('stream-message', '');
-    const view = render(<MessageItem message={message} isStreaming currentDelta="**fir" />);
+    const view = renderWithPresentation(
+      <MessageItem message={message} isStreaming currentDelta="**fir" />,
+    );
     view.rerender(<MessageItem message={message} isStreaming currentDelta="**first delta**" />);
     const finalized = assistantMessage('stream-message', '**first delta**');
     view.rerender(<MessageItem message={finalized} />);
@@ -61,7 +63,7 @@ describe('assistant Markdown canonical-path poison gates', () => {
     const events: TerminalMarkdownPathEvent[] = [];
     const unsubscribe = subscribeTerminalMarkdownPathEvents((event) => events.push(event));
     const historical = assistantMessage('history-message', '# Historical');
-    const historyView = render(<MessageItem message={historical} />);
+    const historyView = renderWithPresentation(<MessageItem message={historical} />);
     expect(historyView.lastFrame()).toContain('Historical');
 
     const timeline = assistantMessage('timeline-message', '');
@@ -75,7 +77,7 @@ describe('assistant Markdown canonical-path poison gates', () => {
         timestamp: 1,
       },
     ];
-    const timelineView = render(<MessageItem message={timeline} />);
+    const timelineView = renderWithPresentation(<MessageItem message={timeline} />);
     timeline.timelineRows = [
       {
         ...timeline.timelineRows[0]!,

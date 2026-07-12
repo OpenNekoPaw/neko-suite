@@ -1,23 +1,45 @@
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import { AGENT_COMMAND_MESSAGE_SOURCE } from '@neko/agent/commands/terminal-messages';
+import { createStrictTranslator } from '@neko/shared/i18n';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { createTuiReferenceSuggestions } from './reference-suggestions';
+import { createAgentTerminalPresentationContext } from '../../presentation/context';
+import { createAgentTerminalFormatters } from '../../presentation/formatters';
+import { CLI_TERMINAL_MESSAGE_SOURCE } from '../../presentation/terminal-messages';
+import {
+  createTuiReferenceSuggestions as createTuiReferenceSuggestionsWithOptions,
+  type TuiReferenceSuggestionOptions,
+} from './reference-suggestions';
 
 let tempRoot: string;
-const originalNekoLocale = process.env.NEKO_LOCALE;
+function createTestPresentation(locale: 'en' | 'zh-cn') {
+  return createAgentTerminalPresentationContext({
+    translator: createStrictTranslator(locale, [
+      AGENT_COMMAND_MESSAGE_SOURCE,
+      CLI_TERMINAL_MESSAGE_SOURCE,
+    ] as const),
+    formatters: createAgentTerminalFormatters({ locale, timeZone: 'UTC' }),
+  });
+}
+
+const TEST_PRESENTATION = createTestPresentation('en');
+const TEST_ZH_PRESENTATION = createTestPresentation('zh-cn');
+
+async function createTuiReferenceSuggestions(
+  options: Omit<TuiReferenceSuggestionOptions, 'presentation'>,
+) {
+  return createTuiReferenceSuggestionsWithOptions({
+    ...options,
+    presentation: TEST_PRESENTATION,
+  });
+}
 
 beforeEach(async () => {
-  process.env.NEKO_LOCALE = 'en';
   tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'neko-tui-refs-'));
 });
 
 afterEach(async () => {
-  if (originalNekoLocale === undefined) {
-    delete process.env.NEKO_LOCALE;
-  } else {
-    process.env.NEKO_LOCALE = originalNekoLocale;
-  }
   await fs.rm(tempRoot, { recursive: true, force: true });
 });
 
@@ -96,11 +118,13 @@ describe('createTuiReferenceSuggestions', () => {
   });
 
   it('localizes local library descriptions when TUI locale is Chinese', async () => {
-    process.env.NEKO_LOCALE = 'zh-CN';
     await fs.mkdir(path.join(tempRoot, 'assets'), { recursive: true });
     await fs.writeFile(path.join(tempRoot, 'assets', 'hero.png'), 'image\n');
 
-    const suggestions = await createTuiReferenceSuggestions({ workspaceRoot: tempRoot });
+    const suggestions = await createTuiReferenceSuggestionsWithOptions({
+      workspaceRoot: tempRoot,
+      presentation: TEST_ZH_PRESENTATION,
+    });
 
     expect(suggestions[0]).toMatchObject({
       name: 'assets/hero.png',

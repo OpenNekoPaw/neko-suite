@@ -7,23 +7,34 @@ import {
   subscribeTerminalMarkdownPathEvents,
   type TerminalMarkdownPathEvent,
 } from '../../markdown/path-observer';
-import { CanonicalMarkdownRenderer } from './CanonicalMarkdownRenderer';
+import { AgentTerminalPresentationProvider } from '../../presentation/react-context';
+import { createTestAgentTerminalPresentation } from '../../presentation/testing';
+import {
+  CanonicalMarkdownRenderer as CanonicalMarkdownRendererImpl,
+  type CanonicalMarkdownRendererProps,
+} from './CanonicalMarkdownRenderer';
+
+const TEST_PRESENTATION = createTestAgentTerminalPresentation('en');
+
+function CanonicalMarkdownRenderer(props: CanonicalMarkdownRendererProps): React.JSX.Element {
+  return (
+    <AgentTerminalPresentationProvider value={TEST_PRESENTATION}>
+      <CanonicalMarkdownRendererImpl {...props} />
+    </AgentTerminalPresentationProvider>
+  );
+}
 
 const originalNoColor = process.env.NO_COLOR;
-const originalLocale = process.env.NEKO_LOCALE;
 afterEach(() => {
   vi.useRealTimers();
   if (originalNoColor === undefined) delete process.env.NO_COLOR;
   else process.env.NO_COLOR = originalNoColor;
-  if (originalLocale === undefined) delete process.env.NEKO_LOCALE;
-  else process.env.NEKO_LOCALE = originalLocale;
 });
 
 describe('CanonicalMarkdownRenderer', () => {
   it('keeps one session from first delta through same-session finalization', async () => {
     vi.useFakeTimers();
     process.env.NO_COLOR = '1';
-    process.env.NEKO_LOCALE = 'en-US';
     useUIStore.getState().setTerminalSize({ columns: 40, rows: 20 });
     const events: TerminalMarkdownPathEvent[] = [];
     const unsubscribe = subscribeTerminalMarkdownPathEvents((event) => events.push(event));
@@ -59,7 +70,6 @@ describe('CanonicalMarkdownRenderer', () => {
   it('reflows on resize without creating a new parse revision', async () => {
     vi.useFakeTimers();
     process.env.NO_COLOR = '1';
-    process.env.NEKO_LOCALE = 'en-US';
     const events: TerminalMarkdownPathEvent[] = [];
     const unsubscribe = subscribeTerminalMarkdownPathEvents((event) => events.push(event));
     useUIStore.getState().setTerminalSize({ columns: 30, rows: 20 });
@@ -100,7 +110,6 @@ describe('CanonicalMarkdownRenderer', () => {
 
   it('fails visibly instead of resetting to a final-only or raw-text renderer', () => {
     process.env.NO_COLOR = '1';
-    process.env.NEKO_LOCALE = 'en-US';
     const view = render(
       <CanonicalMarkdownRenderer sessionKey="message-3" source="append only" isFinal={false} />,
     );

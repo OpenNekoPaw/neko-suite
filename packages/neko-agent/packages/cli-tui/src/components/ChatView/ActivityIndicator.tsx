@@ -14,8 +14,14 @@ import React from 'react';
 import { Box, Text } from 'ink';
 import { useAgentStore } from '../../stores/agent-store';
 import { useConversationStore } from '../../stores/conversation-store';
-import { useTimer, formatDuration } from '../../hooks/useTimer';
+import { useTimer } from '../../hooks/useTimer';
 import { tokens } from '../../theme/tokens';
+import { useAgentTerminalPresentation } from '../../presentation/react-context';
+import {
+  presentGeneratingActivity,
+  presentProcessingActivity,
+  presentThinkingActivity,
+} from '../../presentation/activity-presentation';
 import { Spinner } from '../shared/Spinner';
 
 export function ActivityIndicator(): React.JSX.Element | null {
@@ -25,6 +31,7 @@ export function ActivityIndicator(): React.JSX.Element | null {
   const isStreaming = useConversationStore((s) => s.isStreaming);
   const currentThinking = useConversationStore((s) => s.currentThinking);
   const elapsed = useTimer();
+  const presentation = useAgentTerminalPresentation();
 
   if (status !== 'running') return null;
 
@@ -45,8 +52,14 @@ export function ActivityIndicator(): React.JSX.Element | null {
           <Spinner />
           <Text dimColor>
             {' '}
-            Processing{iteration.max > 0 ? ` (${iteration.current}/${iteration.max})` : ''}
-            {elapsed > 0 ? ` ${formatDuration(elapsed)}` : ''}
+            {presentProcessingActivity(
+              {
+                current: iteration.current,
+                max: iteration.max,
+                elapsedSeconds: elapsed,
+              },
+              presentation,
+            )}
           </Text>
         </Box>
       </Box>
@@ -72,14 +85,8 @@ export function ActivityIndicator(): React.JSX.Element | null {
         <Box>
           <Text color={tokens.muted}>{'  · '}</Text>
           <Text color={tokens.muted} italic>
-            Thinking…
+            {presentThinkingActivity({ elapsedSeconds: elapsed }, presentation)}
           </Text>
-          {elapsed > 0 ? (
-            <Text color={tokens.muted} italic>
-              {' '}
-              (thought for {formatDuration(elapsed)})
-            </Text>
-          ) : null}
         </Box>
       ) : null}
 
@@ -89,8 +96,7 @@ export function ActivityIndicator(): React.JSX.Element | null {
           <Spinner />
           <Text dimColor>
             {' '}
-            Generating
-            {elapsed > 0 ? ` ${formatDuration(elapsed)}` : ''}
+            {presentGeneratingActivity({ elapsedSeconds: elapsed }, presentation)}
           </Text>
         </Box>
       ) : null}

@@ -1,25 +1,39 @@
+import { AGENT_COMMAND_MESSAGE_SOURCE } from '@neko/agent/commands/terminal-messages';
+import { createStrictTranslator, type SupportedLocale } from '@neko/shared/i18n';
 import React from 'react';
-import { cleanup, render } from 'ink-testing-library';
+import { cleanup, render as inkRender } from 'ink-testing-library';
 import { Box, Text } from 'ink';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { createAgentTerminalPresentationContext } from '../../presentation/context';
+import { createAgentTerminalFormatters } from '../../presentation/formatters';
+import { AgentTerminalPresentationProvider } from '../../presentation/react-context';
+import { CLI_TERMINAL_MESSAGE_SOURCE } from '../../presentation/terminal-messages';
 import { useAgentStore } from '../../stores/agent-store';
 import { MessageQueuePanel } from './MessageQueuePanel';
-
-const originalLocale = process.env.NEKO_LOCALE;
 
 afterEach(() => {
   cleanup();
   useAgentStore.getState().reset();
-  if (originalLocale === undefined) {
-    delete process.env.NEKO_LOCALE;
-  } else {
-    process.env.NEKO_LOCALE = originalLocale;
-  }
 });
+
+function renderWithPresentation(node: React.ReactElement, locale: SupportedLocale = 'en') {
+  const presentation = createAgentTerminalPresentationContext({
+    translator: createStrictTranslator(locale, [
+      AGENT_COMMAND_MESSAGE_SOURCE,
+      CLI_TERMINAL_MESSAGE_SOURCE,
+    ] as const),
+    formatters: createAgentTerminalFormatters({ locale, timeZone: 'UTC' }),
+  });
+  return inkRender(
+    <AgentTerminalPresentationProvider value={presentation}>
+      {node}
+    </AgentTerminalPresentationProvider>,
+  );
+}
 
 describe('MessageQueuePanel', () => {
   it('renders nothing for an empty queue', () => {
-    const view = render(<MessageQueuePanel />);
+    const view = renderWithPresentation(<MessageQueuePanel />);
     expect(view.lastFrame()).toBe('');
   });
 
@@ -39,7 +53,7 @@ describe('MessageQueuePanel', () => {
       ],
     });
 
-    const frame = render(
+    const frame = renderWithPresentation(
       <Box flexDirection="column">
         <Text>TRANSCRIPT_END</Text>
         <MessageQueuePanel />
@@ -52,7 +66,6 @@ describe('MessageQueuePanel', () => {
   });
 
   it('shows ordered content above the composer without making ids primary copy', () => {
-    process.env.NEKO_LOCALE = 'en-US';
     useAgentStore.getState().setMessageQueueSnapshot({
       conversationId: 'conv-1',
       pendingCount: 2,
@@ -75,7 +88,7 @@ describe('MessageQueuePanel', () => {
       ],
     });
 
-    const frame = render(<MessageQueuePanel />).lastFrame()!;
+    const frame = renderWithPresentation(<MessageQueuePanel />).lastFrame()!;
     expect(frame).toContain('Next turn · 2');
     expect(frame).toContain('1. message: Analyze the first ten pages');
     expect(frame).toContain('2. message: Send the storyboard to Canvas');
@@ -84,7 +97,6 @@ describe('MessageQueuePanel', () => {
   });
 
   it('wires send-next, edit, and cancel shortcuts to the first visible user message', async () => {
-    process.env.NEKO_LOCALE = 'en-US';
     useAgentStore.getState().setMessageQueueSnapshot({
       conversationId: 'conv-1',
       pendingCount: 1,
@@ -102,7 +114,7 @@ describe('MessageQueuePanel', () => {
     const onSendNext = vi.fn();
     const onEdit = vi.fn();
     const onCancel = vi.fn();
-    const view = render(
+    const view = renderWithPresentation(
       <MessageQueuePanel onSendNext={onSendNext} onEdit={onEdit} onCancel={onCancel} />,
     );
 
@@ -132,13 +144,12 @@ describe('MessageQueuePanel', () => {
       ],
     });
 
-    const frame = render(<MessageQueuePanel />).lastFrame()!;
+    const frame = renderWithPresentation(<MessageQueuePanel />).lastFrame()!;
     expect(frame).not.toContain('^E');
     expect(frame).not.toContain('^X');
   });
 
   it('distinguishes priority continuations and collapses extra rows', () => {
-    process.env.NEKO_LOCALE = 'zh-CN';
     useAgentStore.getState().setMessageQueueSnapshot({
       conversationId: 'conv-1',
       pendingCount: 3,
@@ -168,7 +179,7 @@ describe('MessageQueuePanel', () => {
       ],
     });
 
-    const frame = render(<MessageQueuePanel />).lastFrame()!;
+    const frame = renderWithPresentation(<MessageQueuePanel />, 'zh-cn').lastFrame()!;
     expect(frame).toContain('下一轮 · 3');
     expect(frame).toContain('内部续跑优先');
     expect(frame).toContain('任务续跑: 继续处理任务结果');
@@ -176,7 +187,6 @@ describe('MessageQueuePanel', () => {
   });
 
   it('projects the paused-after-cancel state without hiding accepted messages', () => {
-    process.env.NEKO_LOCALE = 'en-US';
     useAgentStore.getState().setMessageQueueSnapshot({
       conversationId: 'conv-1',
       pendingCount: 1,
@@ -193,14 +203,14 @@ describe('MessageQueuePanel', () => {
     });
     useAgentStore.getState().setMessageQueuePausedAfterCancel(true);
 
-    const frame = render(<MessageQueuePanel />).lastFrame()!;
+    const frame = renderWithPresentation(<MessageQueuePanel />).lastFrame()!;
     expect(frame).toContain('Next turn · 1 · Queue paused after cancellation');
     expect(frame).toContain('Keep this follow-up pending');
     expect(frame).toContain('^N Send next');
   });
 });
 
-async function writeInput(instance: ReturnType<typeof render>, value: string): Promise<void> {
+async function writeInput(instance: ReturnType<typeof inkRender>, value: string): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 0));
   instance.stdin.write(value);
   await new Promise((resolve) => setTimeout(resolve, 0));

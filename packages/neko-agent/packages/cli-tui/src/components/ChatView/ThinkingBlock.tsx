@@ -8,6 +8,11 @@
 import React from 'react';
 import { Box, Text } from 'ink';
 import { tokens } from '../../theme/tokens';
+import { useAgentTerminalPresentation } from '../../presentation/react-context';
+import {
+  presentThinkingBlockHeader,
+  presentThinkingBlockMoreLines,
+} from '../../presentation/activity-presentation';
 import { Spinner } from '../shared/Spinner';
 
 interface ThinkingBlockProps {
@@ -24,6 +29,7 @@ export function ThinkingBlock({
   isThinking,
   maxLines = 3,
 }: ThinkingBlockProps): React.JSX.Element {
+  const presentation = useAgentTerminalPresentation();
   const lines = content.split('\n').filter((l) => l.trim());
   const displayLines = lines.slice(0, maxLines);
   const hasMore = lines.length > maxLines;
@@ -36,11 +42,13 @@ export function ThinkingBlock({
           <Text color={tokens.muted} italic>
             {'* '}
           </Text>
-          <Spinner label="Thinking..." />
+          <Spinner
+            label={presentThinkingBlockHeader({ isThinking: true, lineCount: 0 }, presentation)}
+          />
         </Box>
       ) : (
         <Text color={tokens.muted} italic>
-          * Thought for {lines.length} lines
+          {presentThinkingBlockHeader({ isThinking: false, lineCount: lines.length }, presentation)}
         </Text>
       )}
 
@@ -56,7 +64,9 @@ export function ThinkingBlock({
           ))}
           {hasMore ? (
             <Box marginLeft={2}>
-              <Text dimColor>... {lines.length - maxLines} more lines</Text>
+              <Text dimColor>
+                {presentThinkingBlockMoreLines(lines.length - maxLines, presentation)}
+              </Text>
             </Box>
           ) : null}
         </>

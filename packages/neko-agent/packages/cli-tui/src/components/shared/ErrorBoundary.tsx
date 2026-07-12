@@ -8,10 +8,13 @@
 import React from 'react';
 import { Box, Text } from 'ink';
 import { tokens } from '../../theme/tokens';
+import type { AgentTerminalPresentationContext } from '../../presentation/context';
+import { useAgentTerminalPresentation } from '../../presentation/react-context';
+import type { AgentTerminalMessageKey } from '../../presentation/terminal-messages';
 
 interface ErrorBoundaryProps {
   readonly children: React.ReactNode;
-  /** Optional label for identifying the failing region */
+  /** Optional stable label for identifying the failing region. */
   readonly label?: string;
 }
 
@@ -19,26 +22,35 @@ interface ErrorBoundaryState {
   readonly error: Error | null;
 }
 
-export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
-  constructor(props: ErrorBoundaryProps) {
+type PresentationContext = AgentTerminalPresentationContext<AgentTerminalMessageKey>;
+
+export function ErrorBoundary(props: ErrorBoundaryProps): React.JSX.Element {
+  return <StatefulErrorBoundary {...props} presentation={useAgentTerminalPresentation()} />;
+}
+
+class StatefulErrorBoundary extends React.Component<
+  ErrorBoundaryProps & { readonly presentation: PresentationContext },
+  ErrorBoundaryState
+> {
+  public constructor(props: ErrorBoundaryProps & { readonly presentation: PresentationContext }) {
     super(props);
     this.state = { error: null };
   }
 
-  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
+  public static getDerivedStateFromError(error: Error): ErrorBoundaryState {
     return { error };
   }
 
-  override render(): React.ReactNode {
+  public override render(): React.ReactNode {
     if (this.state.error) {
       const label = this.props.label ?? 'Component';
       return (
         <Box flexDirection="column" borderStyle="single" borderColor={tokens.error} paddingX={1}>
           <Text color={tokens.error} bold>
-            {label} crashed
+            {this.props.presentation.t('agent.terminal.errorBoundary.crashed', { label })}
           </Text>
           <Text dimColor>{this.state.error.message}</Text>
-          <Text dimColor>Press Ctrl+L to reset, or Ctrl+C to quit.</Text>
+          <Text dimColor>{this.props.presentation.t('agent.terminal.errorBoundary.recovery')}</Text>
         </Box>
       );
     }

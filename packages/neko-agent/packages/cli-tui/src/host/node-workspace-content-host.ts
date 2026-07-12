@@ -21,6 +21,19 @@ import {
   type NodeHostAdapterOptions,
 } from './node-host-adapter';
 
+export type NodeWorkspaceContentDiagnostic = Readonly<{
+  readonly code: 'read-failed' | 'parse-failed';
+  readonly filePath: string;
+  readonly detail: string;
+}>;
+
+export class NodeWorkspaceContentError extends Error {
+  constructor(readonly diagnostic: NodeWorkspaceContentDiagnostic) {
+    super(`workspace-content:${diagnostic.code}`);
+    this.name = 'NodeWorkspaceContentError';
+  }
+}
+
 export function createNodeWorkspaceContentHostAdapter(
   options: NodeHostAdapterOptions,
 ): NodeHostAdapter {
@@ -85,10 +98,7 @@ export function readNodeWorkspaceContentSnapshot(input: {
 }): HostWorkspaceContentSnapshot {
   const workspaceRoot = path.resolve(input.workspaceRoot);
   const settingsPath = path.join(workspaceRoot, ...WORKSPACE_CONTENT_SETTINGS_SEGMENTS);
-  const localSettingsPath = path.join(
-    workspaceRoot,
-    ...WORKSPACE_CONTENT_LOCAL_SETTINGS_SEGMENTS,
-  );
+  const localSettingsPath = path.join(workspaceRoot, ...WORKSPACE_CONTENT_LOCAL_SETTINGS_SEGMENTS);
   const settings = readMediaLibrarySettings(readOptionalJsonFile(settingsPath), settingsPath);
   const localSettings = readMediaLibraryLocalSettings(
     readOptionalJsonFile(localSettingsPath),
@@ -134,15 +144,21 @@ function readOptionalJsonFile(filePath: string): unknown | undefined {
     if (isMissingFileError(error)) {
       return undefined;
     }
-    throw error;
+    throw new NodeWorkspaceContentError({
+      code: 'read-failed',
+      filePath,
+      detail: error instanceof Error ? error.message : String(error),
+    });
   }
 
   try {
     return JSON.parse(content) as unknown;
   } catch (error) {
-    throw new Error(
-      `Failed to parse ${filePath}: ${error instanceof Error ? error.message : String(error)}`,
-    );
+    throw new NodeWorkspaceContentError({
+      code: 'parse-failed',
+      filePath,
+      detail: error instanceof Error ? error.message : String(error),
+    });
   }
 }
 
