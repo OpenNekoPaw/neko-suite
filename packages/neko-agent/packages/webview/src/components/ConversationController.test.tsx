@@ -123,6 +123,7 @@ vi.mock('@/components/ChatWorkspace', () => ({
   ChatWorkspace: (props: {
     tabRenderStore: TabRenderStore;
     messages?: Message[];
+    setMessages?: (value: Message[] | ((current: Message[]) => Message[])) => void;
     isThinking?: boolean;
     streamingMessageId?: string | null;
     agentState?: AgentState | null;
@@ -190,6 +191,21 @@ vi.mock('@/components/ChatWorkspace', () => ({
         <span data-testid={testId('workspace-messages')}>
           {props.messages?.map((message) => message.content).join('|') ?? ''}
         </span>
+        <button
+          type="button"
+          data-testid={testId('append-workspace-message')}
+          onClick={() =>
+            props.setMessages?.((current) => [
+              ...current,
+              {
+                id: `local-${tabRenderSnapshot.snapshot.tabId}`,
+                role: 'assistant',
+                content: `local ${tabRenderSnapshot.snapshot.conversationId}`,
+                timestamp: 1,
+              },
+            ])
+          }
+        />
         <span data-testid={testId('workspace-streaming-flags')}>
           {props.messages
             ?.map((message) => {
@@ -965,6 +981,39 @@ describe('ConversationController entry state', () => {
     expect(screen.queryByTestId('workspace-runtime-tab-a')).toBeNull();
     expect(screen.getByTestId('workspace-runtime-tab-b')).toBe(workspaceB);
     expect(workspaceB.getAttribute('data-instance-id')).toBe(instanceB);
+  });
+
+  it('scopes retained Tab message mutations to the owning conversation', () => {
+    vi.clearAllMocks();
+    render(<ConversationController {...createProps()} />);
+
+    act(() => {
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          data: {
+            type: 'tabState',
+            tabState: {
+              openTabs: [
+                { id: 'tab-a', title: 'Chat A', conversationId: 'conv-a' },
+                { id: 'tab-b', title: 'Chat B', conversationId: 'conv-b' },
+              ],
+              activeTabId: 'tab-b',
+            },
+          },
+        }),
+      );
+    });
+
+    expect(screen.getByTestId('workspace-messages').textContent).toBe('');
+    fireEvent.click(screen.getByTestId('append-workspace-message-tab-a'));
+
+    expect(screen.getByTestId('workspace-messages').textContent).toBe('');
+    expect(screen.getByTestId('workspace-messages-tab-a').textContent).toBe('local conv-a');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Switch Chat A' }));
+
+    expect(screen.getByTestId('workspace-messages').textContent).toBe('local conv-a');
+    expect(screen.getByTestId('workspace-messages-tab-b').textContent).toBe('');
   });
 
   it('does not mutate cached Markdown streaming state when an ordinary Tab becomes visible', () => {

@@ -53,7 +53,12 @@ import { removeConversationWorkItems } from '@/components/AgentWorkItem';
 import type { PluginsAvailable } from '@/components/ChatView/SendToMenu';
 import type { ProjectFileInfo } from '@/hooks/useConfigState';
 import type { MediaModelSelection } from '@/hooks/useUIState';
-import { useConversationState, useTabManager, type PendingSendInput } from '@/hooks';
+import {
+  useConversationState,
+  useTabManager,
+  type PendingSendInput,
+  type StreamingState,
+} from '@/hooks';
 import {
   useMessageHandler,
   type BoundActiveSkillIndicator,
@@ -552,6 +557,60 @@ export function ConversationController({
   const conversationKind = activeOpenTab?.kind ?? 'chat';
 
   const triggerForceUpdate = useCallback(() => forceUpdate((n) => n + 1), []);
+  const updateConversationRenderState = useCallback(
+    (
+      conversationId: string,
+      updater: (
+        messages: Message[],
+        streaming: StreamingState,
+      ) => {
+        messages: Message[];
+        streaming: StreamingState;
+      },
+    ) => {
+      const currentMessages = conversationMessagesRef.current.get(conversationId) ?? [];
+      const currentStreaming = conversationStreamingRef.current.get(conversationId) ?? {
+        streamingMessageId: null,
+        isThinking: false,
+        queuedMessageCount: 0,
+        queuedMessages: [],
+      };
+      const updated = updater([...currentMessages], currentStreaming);
+      const snapshot = ingestConversationRenderSnapshot({
+        coordinator: conversationRenderCoordinator,
+        conversationId,
+        messages: updated.messages,
+        streaming: updated.streaming,
+      });
+      commitConversationSnapshotProjection({
+        snapshot,
+        conversationMessagesRef,
+        conversationStreamingRef,
+      });
+      if (conversationId === activeConversationIdRef.current) {
+        setMessages([...snapshot.messages]);
+        setIsThinking(updated.streaming.isThinking);
+        setStreamingMessageId(updated.streaming.streamingMessageId);
+        setQueuedMessageCount(updated.streaming.queuedMessageCount ?? 0);
+        setQueuedMessages(updated.streaming.queuedMessages ?? []);
+        streamingMessageIdRef.current = updated.streaming.streamingMessageId;
+      }
+      triggerForceUpdate();
+    },
+    [
+      activeConversationIdRef,
+      conversationMessagesRef,
+      conversationRenderCoordinator,
+      conversationStreamingRef,
+      setIsThinking,
+      setMessages,
+      setQueuedMessageCount,
+      setQueuedMessages,
+      setStreamingMessageId,
+      streamingMessageIdRef,
+      triggerForceUpdate,
+    ],
+  );
   const requestConfigSnapshot = useCallback(() => {
     AgentHostMessages.refreshConfigSnapshot();
   }, []);
@@ -1401,14 +1460,35 @@ export function ConversationController({
             runtime={runtime}
             visible={visible}
             messages={[...sessionState.messages]}
-            setMessages={setMessages}
+            setMessages={(value) =>
+              updateConversationRenderState(tab.conversationId, (currentMessages, streaming) => ({
+                messages: typeof value === 'function' ? value(currentMessages) : [...value],
+                streaming,
+              }))
+            }
             isThinking={sessionState.streaming.isThinking}
-            setIsThinking={setIsThinking}
+            setIsThinking={(value) =>
+              updateConversationRenderState(tab.conversationId, (currentMessages, streaming) => ({
+                messages: currentMessages,
+                streaming: {
+                  ...streaming,
+                  isThinking: typeof value === 'function' ? value(streaming.isThinking) : value,
+                },
+              }))
+            }
             streamingMessageId={sessionState.streaming.streamingMessageId}
             queuedMessageCount={sessionState.streaming.queuedMessageCount ?? 0}
             queuedMessages={sessionState.streaming.queuedMessages ?? []}
-            setStreamingMessageId={setStreamingMessageId}
-            streamingMessageIdRef={streamingMessageIdRef}
+            setStreamingMessageId={(value) =>
+              updateConversationRenderState(tab.conversationId, (currentMessages, streaming) => ({
+                messages: currentMessages,
+                streaming: {
+                  ...streaming,
+                  streamingMessageId:
+                    typeof value === 'function' ? value(streaming.streamingMessageId) : value,
+                },
+              }))
+            }
             foregroundConversationAvailability={foregroundConversationAvailability}
             conversationKind={tab.kind ?? 'chat'}
             characterDialogueSession={tab.characterDialogueSession}

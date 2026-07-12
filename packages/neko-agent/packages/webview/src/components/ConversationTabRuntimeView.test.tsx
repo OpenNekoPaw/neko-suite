@@ -125,7 +125,6 @@ function createProps(
     queuedMessageCount: 0,
     queuedMessages: [],
     setStreamingMessageId: vi.fn(),
-    streamingMessageIdRef: { current: null },
     conversationKind: 'chat',
     clearMessages: vi.fn(),
     settings: createSettings(),

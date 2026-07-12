@@ -1,4 +1,4 @@
-import { useMemo, useSyncExternalStore } from 'react';
+import { useMemo, useRef, useSyncExternalStore } from 'react';
 import type { OpenTab } from '@neko-agent/types';
 import { ChatWorkspace, type ChatWorkspaceProps } from './ChatWorkspace';
 import type { TabRenderRuntime } from '@/render-runtime/tab-render-runtime';
@@ -7,7 +7,7 @@ import { projectConversationProjectionRenderState } from '@/presenters/conversat
 
 export interface ConversationTabRuntimeViewProps extends Omit<
   ChatWorkspaceProps,
-  'isVisible' | 'tabRenderStore'
+  'isVisible' | 'tabRenderStore' | 'streamingMessageIdRef'
 > {
   readonly tab: OpenTab;
   readonly runtime: TabRenderRuntime;
@@ -44,6 +44,8 @@ export function ConversationTabRuntimeView({
     readProjection,
     readProjection,
   );
+  const streamingMessageIdRef = useRef(streamingMessageId);
+  streamingMessageIdRef.current = streamingMessageId;
   const renderState = useMemo(
     () =>
       projectConversationProjectionRenderState({
@@ -71,6 +73,7 @@ export function ConversationTabRuntimeView({
           workItems={[...renderState.workItems]}
           isThinking={renderState.isThinking}
           streamingMessageId={renderState.streamingMessageId}
+          streamingMessageIdRef={streamingMessageIdRef}
           tabRenderStore={runtime.store}
           isVisible={visible}
         />
