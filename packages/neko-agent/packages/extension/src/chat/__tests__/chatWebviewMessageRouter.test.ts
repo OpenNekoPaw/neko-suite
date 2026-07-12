@@ -75,7 +75,6 @@ function createDeps(): ChatWebviewMessageRouterDeps {
     messages: {
       handleUserMessage: vi.fn(),
       searchProjectFiles: vi.fn(),
-      requestAgentTurnTimelineSnapshot: vi.fn(),
     } as any,
     characterDialogue: {
       hasSession: vi.fn(() => false),
@@ -1651,7 +1650,7 @@ describe('handleChatWebviewMessage', () => {
     expect(deps.skillHandler.sendSkillsList).toHaveBeenCalledWith(deps.webview);
   });
 
-  it('routes active Timeline snapshot requests to the owning stream processor', () => {
+  it('rejects the removed Timeline snapshot recovery route visibly', () => {
     const deps = createDeps();
     const request = {
       type: 'requestAgentTurnTimelineSnapshot',
@@ -1666,11 +1665,11 @@ describe('handleChatWebviewMessage', () => {
 
     handleChatWebviewMessage(request, deps);
 
-    expect(deps.messages?.requestAgentTurnTimelineSnapshot).toHaveBeenCalledWith(
-      deps.webview,
-      request,
-    );
-    expect(deps.webview.postMessage).not.toHaveBeenCalled();
+    expect(deps.webview.postMessage).toHaveBeenCalledWith({
+      type: 'globalError',
+      message:
+        'Legacy Timeline snapshot recovery is unsupported. Reattach the Tab projection endpoint.',
+    });
   });
 
   it('routes lifecycle config snapshot refresh without calling settings directly', () => {

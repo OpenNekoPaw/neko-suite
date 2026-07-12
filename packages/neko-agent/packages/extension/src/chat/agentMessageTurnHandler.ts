@@ -14,7 +14,6 @@ import {
   buildAgentCapabilityActivationProgressMessage,
   buildGlobalErrorMessage,
   buildThinkingMessage,
-  type AgentTurnTimelineSnapshotRequest,
 } from '@neko-agent/types';
 import type { IAgentManager } from '../ai/agentManager';
 import type { IAgentRunner } from '../ai/agentRunner';
@@ -213,14 +212,6 @@ export class AgentMessageTurnHandler {
 
   getAgentStateSnapshot(): AgentStateRuntimeEntry[] {
     return this._agentStateRuntime.snapshot();
-  }
-
-  async requestAgentTurnTimelineSnapshot(
-    webview: vscode.Webview,
-    request: AgentTurnTimelineSnapshotRequest,
-  ): Promise<void> {
-    const response = await this._streamProcessor.requestTimelineSnapshot(webview, request);
-    await webview.postMessage(response);
   }
 
   clearAgentState(conversationId: string): void {

@@ -272,9 +272,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<ISkill
       : undefined;
 
   // Create chat view provider
-  const chatViewProvider = new ChatViewProvider(context.extensionUri, context, {
-    ...(streamLifecycleAcceptance ? { timelineSnapshotRouter: streamLifecycleAcceptance } : {}),
-  });
+  const chatViewProvider = new ChatViewProvider(context.extensionUri, context);
 
   if (streamLifecycleAcceptance) {
     await registerStreamLifecycleAcceptanceCommands({

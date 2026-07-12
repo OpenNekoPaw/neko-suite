@@ -13,23 +13,11 @@ export function tryHandleMessageRoute(
 
   switch (message.type) {
     case 'requestAgentTurnTimelineSnapshot':
-      if (deps.messages) {
-        void deps.messages.requestAgentTurnTimelineSnapshot(webview, message);
-      } else {
-        void webview.postMessage({
-          type: 'agentTurnTimelineDiagnostic',
-          schemaVersion: message.schemaVersion,
-          connectionEpoch: message.connectionEpoch,
-          conversationId: message.conversationId,
-          turnId: message.turnId,
-          messageId: message.messageId,
-          code: 'turn-snapshot-unavailable',
-          message: 'Active turn snapshot service is unavailable.',
-          ...(message.lastAppliedDeliveryRevision !== undefined
-            ? { deliveryRevision: message.lastAppliedDeliveryRevision }
-            : {}),
-        });
-      }
+      void webview.postMessage({
+        type: 'globalError',
+        message:
+          'Legacy Timeline snapshot recovery is unsupported. Reattach the Tab projection endpoint.',
+      });
       return true;
 
     case 'sendMessage':

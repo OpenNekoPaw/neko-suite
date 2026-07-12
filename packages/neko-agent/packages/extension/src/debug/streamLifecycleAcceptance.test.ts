@@ -1,6 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AgentEvent } from '@neko/agent';
-import type { AgentTurnTimelineSnapshotRequest } from '@neko-agent/types';
 import { createTableHeavyStreamFixture } from '../../../../test-utils/src/fixtures/table-heavy-stream';
 import {
   createStreamLifecycleAcceptanceFixture,
@@ -57,14 +56,8 @@ describe('StreamLifecycleAcceptanceController', () => {
     expect(acceptance.chunks).toHaveLength(STREAM_LIFECYCLE_ACCEPTANCE_CHUNK_COUNT);
   });
 
-  it('pauses an isolated 4,000-chunk replay, routes owned snapshots, then completes', async () => {
-    const posted: unknown[] = [];
-    const webview = {
-      postMessage: vi.fn(async (message: unknown) => {
-        posted.push(message);
-        return true;
-      }),
-    };
+  it('pauses an isolated 4,000-chunk replay, then completes without Timeline recovery', async () => {
+    const webview = { postMessage: vi.fn(async () => true) };
     let accumulated = '';
     const processor = {
       async processStream(
@@ -77,18 +70,6 @@ describe('StreamLifecycleAcceptanceController', () => {
         }
         return { ...completedResult(), accumulatedResponse: accumulated };
       },
-      async requestTimelineSnapshot(_webview: unknown, request: AgentTurnTimelineSnapshotRequest) {
-        return {
-          type: 'agentTurnTimelineDiagnostic' as const,
-          schemaVersion: 2 as const,
-          connectionEpoch: request.connectionEpoch,
-          conversationId: request.conversationId,
-          turnId: request.turnId,
-          messageId: request.messageId,
-          code: 'turn-snapshot-unavailable' as const,
-          message: 'fake snapshot response',
-        };
-      },
       getTimelineDeliveryMetrics: () => deliveryMetrics(),
       dispose: vi.fn(),
     };
@@ -98,21 +79,10 @@ describe('StreamLifecycleAcceptanceController', () => {
     });
 
     const identity = controller.start(webview as never, 'conversation-1');
-    await controller.waitUntilPaused();
-
-    const request = {
-      type: 'requestAgentTurnTimelineSnapshot',
-      schemaVersion: 2,
-      connectionEpoch: 'acceptance-epoch',
-      ...identity,
-      reason: 'webview-reload',
-      lastAppliedDeliveryRevision: 1,
-    } as const;
-    expect(controller.owns(request)).toBe(true);
-    expect(controller.owns({ ...request, messageId: 'unrelated-message' })).toBe(false);
-
-    await controller.requestSnapshot(webview as never, request);
-    expect(posted).toHaveLength(1);
+    await expect(controller.waitUntilPaused()).resolves.toEqual(identity);
+    expect(webview.postMessage).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'agentTurnTimelineSnapshot' }),
+    );
 
     await controller.continue();
     const report = await controller.waitForCompletion();
@@ -213,7 +183,6 @@ function deliveryMetrics() {
 function fakeProcessor() {
   return {
     processStream: vi.fn(async () => completedResult()),
-    requestTimelineSnapshot: vi.fn(),
     getTimelineDeliveryMetrics: vi.fn(() => deliveryMetrics()),
     dispose: vi.fn(),
   };

@@ -104,10 +104,6 @@ import type {
 } from '@neko/shared/types/creative-ai-invocation';
 import { updateWebviewKeyboardEditableOwner } from '@neko/shared/vscode/extension';
 import { AccountAiCatalogCache } from '../services/accountAiCatalogCache';
-import {
-  tryRouteOwnedAgentTurnTimelineSnapshot,
-  type AgentTurnTimelineSnapshotRouter,
-} from './message/agentTurnTimelineSnapshotRouter';
 
 const logger = getLogger('ChatProvider');
 const AGENT_KEYBOARD_EDITABLE_CONTEXT = 'neko.agent.keyboardEditable';
@@ -323,7 +319,6 @@ export function createChatLocalResourceAccess(
 
 export interface ChatViewProviderOptions {
   readonly localResourceAccess?: AgentLocalResourceAccess;
-  readonly timelineSnapshotRouter?: AgentTurnTimelineSnapshotRouter;
 }
 
 export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disposable {
@@ -987,16 +982,6 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
 
         if (message.type === 'webviewKeyboardEditable') {
           void this._setKeyboardEditable(message.editable);
-          return;
-        }
-
-        if (
-          await tryRouteOwnedAgentTurnTimelineSnapshot({
-            router: this._options.timelineSnapshotRouter,
-            webview,
-            message,
-          })
-        ) {
           return;
         }
 

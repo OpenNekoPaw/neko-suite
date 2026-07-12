@@ -5,13 +5,7 @@ import {
   createConversationProjectionStore,
   type ConversationProjectionStore,
 } from '@neko/agent/runtime';
-import type {
-  AgentTurnTimelineDiagnostic,
-  AgentTurnTimelineMessage,
-  AgentTurnTimelineSnapshotRequest,
-} from '@neko-agent/types';
 import { getLogger } from '../base';
-import type { AgentTurnTimelineSnapshotRouter } from '../chat/message/agentTurnTimelineSnapshotRouter';
 import {
   AgentStreamProcessor,
   type StreamProcessingResult,
@@ -55,10 +49,6 @@ interface StreamLifecycleAcceptanceProcessor {
     events: AsyncIterable<AgentEvent>,
     callbacks: { readonly messageId: string; readonly onPhaseChange: () => void },
   ): Promise<StreamProcessingResult>;
-  requestTimelineSnapshot(
-    webview: vscode.Webview,
-    request: AgentTurnTimelineSnapshotRequest,
-  ): Promise<AgentTurnTimelineMessage | AgentTurnTimelineDiagnostic>;
   getTimelineDeliveryMetrics(
     identity: StreamLifecycleAcceptanceIdentity,
   ): AgentTimelineDeliveryMetrics | undefined;
@@ -83,7 +73,6 @@ function createOwnedAcceptanceProcessor(): StreamLifecycleAcceptanceProcessor {
   });
   return {
     processStream: (...args) => processor.processStream(...args),
-    requestTimelineSnapshot: (...args) => processor.requestTimelineSnapshot(...args),
     getTimelineDeliveryMetrics: (identity) => processor.getTimelineDeliveryMetrics(identity),
     dispose: () => {
       processor.dispose();
@@ -109,9 +98,7 @@ interface ActiveAcceptanceRun {
  * stream boundary. It owns no conversation persistence and never registers an
  * Agent capability, so acceptance traffic cannot mutate user conversation data.
  */
-export class StreamLifecycleAcceptanceController
-  implements AgentTurnTimelineSnapshotRouter, vscode.Disposable
-{
+export class StreamLifecycleAcceptanceController implements vscode.Disposable {
   private readonly createProcessor: () => StreamLifecycleAcceptanceProcessor;
   private readonly createRunId: () => string;
   private activeRun: ActiveAcceptanceRun | undefined;
@@ -171,25 +158,6 @@ export class StreamLifecycleAcceptanceController
 
   async waitForCompletion(): Promise<StreamLifecycleAcceptanceReport> {
     return this.requireActiveRun().completion;
-  }
-
-  owns(request: AgentTurnTimelineSnapshotRequest): boolean {
-    const identity = this.activeRun?.identity;
-    return Boolean(
-      identity &&
-      request.conversationId === identity.conversationId &&
-      request.turnId === identity.turnId &&
-      request.messageId === identity.messageId,
-    );
-  }
-
-  async requestSnapshot(
-    webview: vscode.Webview,
-    request: AgentTurnTimelineSnapshotRequest,
-  ): Promise<void> {
-    const run = this.requireOwnedRun(request);
-    const message = await run.processor.requestTimelineSnapshot(webview, request);
-    await webview.postMessage(message);
   }
 
   dispose(): void {
@@ -281,14 +249,6 @@ export class StreamLifecycleAcceptanceController
       throw new Error('No stream lifecycle acceptance replay has been started.');
     }
     return this.activeRun;
-  }
-
-  private requireOwnedRun(request: AgentTurnTimelineSnapshotRequest): ActiveAcceptanceRun {
-    const run = this.requireActiveRun();
-    if (!this.owns(request)) {
-      throw new Error('Snapshot request is not owned by the active acceptance replay.');
-    }
-    return run;
   }
 }
 
