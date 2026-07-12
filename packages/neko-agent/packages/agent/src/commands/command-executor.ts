@@ -33,12 +33,10 @@ import {
   handleMcp,
 } from './handlers';
 
-const HOST_ONLY_COMMAND_OUTPUT = 'This command is handled by the VSCode extension host.';
-
 const handleHostOnlyCommand: CommandHandler = async () => ({
   handled: true,
   continueExecution: true,
-  output: HOST_ONLY_COMMAND_OUTPUT,
+  semantic: { family: 'core', result: { kind: 'host-only' } },
 });
 
 /**
@@ -109,18 +107,17 @@ export async function executeBuiltinCommand(
     return {
       handled: false,
       continueExecution: true,
-      error: `Unknown command: /${commandName}`,
+      semantic: {
+        family: 'shell',
+        result: { kind: 'diagnostic', code: 'unknown-command', command: commandName },
+      },
     };
   }
 
   // Get the handler
   const handler = COMMAND_HANDLERS[resolvedName as BuiltinCommandName];
   if (!handler) {
-    return {
-      handled: false,
-      continueExecution: true,
-      error: `No handler for command: /${resolvedName}`,
-    };
+    throw new Error(`Builtin command /${resolvedName} has no registered handler.`);
   }
 
   // Execute the handler
@@ -131,7 +128,15 @@ export async function executeBuiltinCommand(
     return {
       handled: true,
       continueExecution: true,
-      error: `Command failed: ${error instanceof Error ? error.message : String(error)}`,
+      semantic: {
+        family: 'shell',
+        result: {
+          kind: 'diagnostic',
+          code: 'command-failed',
+          command: resolvedName,
+          detail: error instanceof Error ? error.message : String(error),
+        },
+      },
     };
   }
 }
@@ -157,7 +162,6 @@ export async function executeSlashCommand(
   const entry = resolveSlashCommandCatalogEntry(command, {
     surface,
     skills,
-    locale: context.locale,
   });
   const resolvedSkill = entry?.source === 'command-artifact' ? entry.skill : undefined;
 
@@ -171,14 +175,25 @@ export async function executeSlashCommand(
       return {
         handled: true,
         continueExecution: true,
-        output: `Skill /${command} activated`,
         data: { injection },
+        semantic: {
+          family: 'shell',
+          result: { kind: 'skill-activated', command },
+        },
       };
     } catch (error) {
       return {
         handled: true,
         continueExecution: true,
-        error: `Failed to execute /${command}: ${error instanceof Error ? error.message : String(error)}`,
+        semantic: {
+          family: 'shell',
+          result: {
+            kind: 'diagnostic',
+            code: 'skill-failed',
+            command,
+            detail: error instanceof Error ? error.message : String(error),
+          },
+        },
       };
     }
   }
@@ -187,7 +202,10 @@ export async function executeSlashCommand(
   return {
     handled: false,
     continueExecution: true,
-    error: `Unknown command: /${command}. Type /help for available commands.`,
+    semantic: {
+      family: 'shell',
+      result: { kind: 'diagnostic', code: 'unknown-command', command },
+    },
   };
 }
 

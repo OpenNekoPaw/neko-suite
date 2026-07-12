@@ -1,3 +1,6 @@
+import type { SupportedLocale } from '@neko/shared/i18n';
+import type { AgentCommandSemanticResult } from './terminal-semantics';
+
 /**
  * Builtin Command Types
  *
@@ -12,8 +15,6 @@ import { BUILTIN_SLASH_COMMAND_ALIASES } from '@neko-agent/types';
  * Builtin command names
  */
 export type BuiltinCommandName = BuiltinSlashCommandName;
-
-export type CommandLocale = 'en' | 'zh';
 
 /**
  * Command aliases mapping
@@ -58,7 +59,7 @@ export type CommandCategory = BuiltinSlashCommandCategory;
  */
 export interface CommandContext {
   /** UI/runtime locale for command-facing text */
-  locale?: CommandLocale;
+  locale?: SupportedLocale;
   /** Skill service for skill management */
   skillService?: {
     /** Skill registry */
@@ -119,21 +120,22 @@ export interface CommandContext {
 }
 
 /**
- * Command execution result
+ * Command execution result.
+ *
+ * Shared handlers return actions, data, and typed semantics only. Human-readable
+ * text is owned by the surface Presenter and must never be returned here.
  */
 export interface CommandResult {
   /** Whether the command was handled */
   handled: boolean;
   /** Whether to continue execution (false = exit for CLI) */
   continueExecution: boolean;
-  /** Output message to display */
-  output?: string;
   /** Action for UI to perform (extension only) */
   action?: CommandAction;
   /** Additional data for the action */
   data?: Record<string, unknown>;
-  /** Error message if failed */
-  error?: string;
+  /** Optional semantic outcome for a surface Presenter. */
+  semantic?: AgentCommandSemanticResult;
 }
 
 /**
@@ -189,7 +191,7 @@ export interface StatusData {
 /**
  * Type-safe mapping of command actions to their data types
  *
- * Use with CommandResultBuilder for type-safe result construction.
+ * Action payload contract shared by handlers and host adapters.
  */
 export interface CommandActionDataMap {
   exit: undefined;
@@ -206,120 +208,6 @@ export interface CommandActionDataMap {
   newConversation: { conversationId?: string };
   clearHistory: undefined;
   compressContext: { beforeTokens?: number; afterTokens?: number };
-}
-
-// =============================================================================
-// Command Result Builder
-// =============================================================================
-
-/**
- * Type-safe builder for command results
- *
- * @example
- * ```typescript
- * // Simple success
- * return new CommandResultBuilder().success('Done!').build();
- *
- * // With action
- * return new CommandResultBuilder()
- *   .action('showStatus', { provider: 'anthropic', model: 'claude-3' })
- *   .build();
- *
- * // Exit command
- * return new CommandResultBuilder().exit('Goodbye!').build();
- *
- * // Error
- * return new CommandResultBuilder().error('Invalid argument').build();
- * ```
- */
-export class CommandResultBuilder {
-  private result: CommandResult = {
-    handled: false,
-    continueExecution: true,
-  };
-
-  /**
-   * Mark command as successfully handled with optional output
-   */
-  success(output?: string): this {
-    this.result.handled = true;
-    if (output !== undefined) {
-      this.result.output = output;
-    }
-    return this;
-  }
-
-  /**
-   * Mark command as failed with error message
-   */
-  error(message: string): this {
-    this.result.handled = true;
-    this.result.error = message;
-    return this;
-  }
-
-  /**
-   * Set an action with type-safe data
-   */
-  action<T extends CommandAction>(action: T, data?: CommandActionDataMap[T]): this {
-    this.result.handled = true;
-    this.result.action = action;
-    if (data !== undefined) {
-      this.result.data = data as Record<string, unknown>;
-    }
-    return this;
-  }
-
-  /**
-   * Exit the CLI/session with optional message
-   */
-  exit(message?: string): this {
-    this.result.handled = true;
-    this.result.continueExecution = false;
-    this.result.action = 'exit';
-    if (message) {
-      this.result.output = message;
-    }
-    return this;
-  }
-
-  /**
-   * Mark as not handled (pass to next handler)
-   */
-  notHandled(): this {
-    this.result.handled = false;
-    return this;
-  }
-
-  /**
-   * Set output message
-   */
-  output(message: string): this {
-    this.result.output = message;
-    return this;
-  }
-
-  /**
-   * Set additional data
-   */
-  data(data: Record<string, unknown>): this {
-    this.result.data = data;
-    return this;
-  }
-
-  /**
-   * Build and return the result
-   */
-  build(): CommandResult {
-    return { ...this.result };
-  }
-}
-
-/**
- * Factory function for creating CommandResultBuilder
- */
-export function commandResult(): CommandResultBuilder {
-  return new CommandResultBuilder();
 }
 
 /**

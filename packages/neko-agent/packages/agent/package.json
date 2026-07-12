@@ -11,6 +11,7 @@
     "./tools": "./src/tools/index.ts",
     "./workspace": "./src/workspace/index.ts",
     "./skill": "./src/skill/index.ts",
+    "./commands/terminal-messages": "./src/commands/terminal-messages.ts",
     "./*": "./src/*"
   },
   "scripts": {

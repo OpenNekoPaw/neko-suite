@@ -9,9 +9,6 @@ export {
   handleStatus,
   handleClear,
   handleExit,
-  generateCliHelpText,
-  generateExtensionHelpText,
-  generateCliStatusText,
   generateExtensionStatusData,
 } from './core-handlers';
 

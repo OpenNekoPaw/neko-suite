@@ -10,13 +10,7 @@ import {
 export type VideoContentSourceKind = 'asset' | 'timeline-render' | 'clip-range';
 
 export type VideoSegmentBasis =
-  | 'shot'
-  | 'scene'
-  | 'speech'
-  | 'silence'
-  | 'music'
-  | 'action'
-  | 'uniform-window';
+  'shot' | 'scene' | 'speech' | 'silence' | 'music' | 'action' | 'uniform-window';
 
 export type ConfidenceLevel = 'high' | 'medium' | 'low';
 

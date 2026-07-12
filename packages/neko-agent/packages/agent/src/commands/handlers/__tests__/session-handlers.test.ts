@@ -1,198 +1,120 @@
-/**
- * Session Handlers Tests
- *
- * Tests for session command handlers: new, resume, compact, plan
- */
+import { describe, expect, it, vi } from 'vitest';
+import { handleCompact, handleNew, handlePlan, handleResume } from '../session-handlers';
+import type { CommandContext, CommandResult } from '../../types';
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { handleNew, handleResume, handleCompact, handlePlan } from '../session-handlers';
-import type { CommandContext } from '../../types';
-
-// Mock context factory
-function createMockContext(overrides?: Partial<CommandContext>): CommandContext {
+function createContext(overrides: Partial<CommandContext> = {}): CommandContext {
   return {
     conversations: {
-      create: vi.fn(),
-      getActiveId: vi.fn().mockReturnValue('conv-123'),
-      list: vi.fn().mockReturnValue([
-        { id: 'conv-1', title: 'Conversation 1' },
-        { id: 'conv-2', title: 'Conversation 2' },
-        { id: 'conv-3', title: 'Conversation 3' },
-      ]),
-    },
-    contextManager: {
-      compress: vi.fn().mockResolvedValue(undefined),
+      list: () => [
+        { id: 'conv-1', title: 'First' },
+        { id: 'conv-2', title: 'Second' },
+      ],
+      getActiveId: () => 'conv-1',
+      create: vi.fn(() => 'conv-new'),
+      clearCurrent: vi.fn(),
     },
     planMode: {
-      toggle: vi.fn().mockReturnValue(true),
-      isEnabled: vi.fn().mockReturnValue(false),
+      isEnabled: () => false,
+      toggle: vi.fn(() => true),
+    },
+    contextManager: {
+      getTokenCount: () => 100,
+      compress: vi.fn(async () => undefined),
     },
     ...overrides,
-  } as unknown as CommandContext;
+  };
 }
 
-describe('handleNew', () => {
-  it('should create new conversation', () => {
-    const context = createMockContext();
-    const result = handleNew([], context);
+async function resolve(result: CommandResult | Promise<CommandResult>): Promise<CommandResult> {
+  return result;
+}
 
-    expect(result.handled).toBe(true);
-    expect(result.continueExecution).toBe(true);
-    expect(result.output).toBe('New conversation created');
-    expect(result.action).toBe('newConversation');
+describe('session command handlers', () => {
+  it('creates a conversation and returns new-session semantics', async () => {
+    const context = createContext();
+    const result = await resolve(handleNew([], context));
+
     expect(context.conversations?.create).toHaveBeenCalled();
+    expect(result).toMatchObject({
+      action: 'newConversation',
+      semantic: { family: 'session', result: { kind: 'new-created' } },
+    });
+    expect(result).not.toHaveProperty('output');
   });
 
-  it('should work without conversations service', () => {
-    const context = createMockContext({ conversations: undefined });
-    const result = handleNew([], context);
+  it('remains semantic-only without a conversation service', async () => {
+    const result = await resolve(handleNew([], createContext({ conversations: undefined })));
 
-    expect(result.handled).toBe(true);
-    expect(result.output).toBe('New conversation created');
+    expect(result.semantic).toEqual({ family: 'session', result: { kind: 'new-created' } });
   });
 
-  it('should work with empty context', () => {
-    const result = handleNew([], {} as CommandContext);
+  it('returns at most five recent conversations as action data', async () => {
+    const conversations = Array.from({ length: 8 }, (_, index) => ({
+      id: `conv-${index}`,
+      title: `Conversation ${index}`,
+    }));
+    const context = createContext({
+      conversations: {
+        list: () => conversations,
+        getActiveId: () => 'conv-0',
+        create: () => 'conv-new',
+        clearCurrent: () => undefined,
+      },
+    });
+    const result = await resolve(handleResume([], context));
 
-    expect(result.handled).toBe(true);
-  });
-});
-
-describe('handleResume', () => {
-  it('should return recent conversations', () => {
-    const context = createMockContext();
-    const result = handleResume([], context);
-
-    expect(result.handled).toBe(true);
-    expect(result.continueExecution).toBe(true);
     expect(result.action).toBe('resumeConversation');
-    expect(result.data?.conversations).toHaveLength(3);
+    expect(result.data?.['conversations']).toEqual(conversations.slice(0, 5));
+    expect(result.semantic).toBeUndefined();
   });
 
-  it('should limit to 5 conversations', () => {
-    const context = createMockContext();
-    context.conversations!.list = vi.fn().mockReturnValue(
-      Array.from({ length: 10 }, (_, i) => ({
-        id: `conv-${i}`,
-        title: `Conversation ${i}`,
-      })),
-    );
+  it('compresses the active conversation and returns compact semantics', async () => {
+    const context = createContext();
+    const result = await resolve(handleCompact([], context));
 
-    const result = handleResume([], context);
-
-    expect(result.data?.conversations).toHaveLength(5);
+    expect(context.contextManager?.compress).toHaveBeenCalledWith('conv-1');
+    expect(result).toMatchObject({
+      action: 'compressContext',
+      semantic: { family: 'session', result: { kind: 'compact-started' } },
+    });
   });
 
-  it('should include conversation id and title', () => {
-    const context = createMockContext();
-    const result = handleResume([], context);
-
-    const firstConv = result.data?.conversations[0];
-    expect(firstConv).toHaveProperty('id');
-    expect(firstConv).toHaveProperty('title');
-  });
-
-  it('should handle empty conversation list', () => {
-    const context = createMockContext();
-    context.conversations!.list = vi.fn().mockReturnValue([]);
-
-    const result = handleResume([], context);
-
-    expect(result.data?.conversations).toEqual([]);
-  });
-
-  it('should work without conversations service', () => {
-    const context = createMockContext({ conversations: undefined });
-    const result = handleResume([], context);
-
-    expect(result.handled).toBe(true);
-    expect(result.data?.conversations).toEqual([]);
-  });
-});
-
-describe('handleCompact', () => {
-  it('should compress context for active conversation', async () => {
-    const context = createMockContext();
-    const result = await handleCompact([], context);
-
-    expect(result.handled).toBe(true);
-    expect(result.continueExecution).toBe(true);
-    expect(result.output).toBe('Context compression initiated');
-    expect(result.action).toBe('compressContext');
-    expect(context.contextManager?.compress).toHaveBeenCalledWith('conv-123');
-  });
-
-  it('should work without active conversation', async () => {
-    const context = createMockContext();
-    context.conversations!.getActiveId = vi.fn().mockReturnValue(null);
-
-    const result = await handleCompact([], context);
-
-    expect(result.handled).toBe(true);
-    expect(context.contextManager?.compress).not.toHaveBeenCalled();
-  });
-
-  it('should work without context manager', async () => {
-    const context = createMockContext({ contextManager: undefined });
-
-    const result = await handleCompact([], context);
-
-    expect(result.handled).toBe(true);
-  });
-
-  it('should work without conversations service', async () => {
-    const context = createMockContext({ conversations: undefined });
-
-    const result = await handleCompact([], context);
-
-    expect(result.handled).toBe(true);
-  });
-
-  it('should handle compression errors gracefully', async () => {
-    const context = createMockContext();
-    context.contextManager!.compress = vi.fn().mockRejectedValue(new Error('Compression failed'));
+  it('propagates compression failures instead of hiding them', async () => {
+    const context = createContext({
+      contextManager: {
+        getTokenCount: () => 100,
+        compress: vi.fn(async () => {
+          throw new Error('Compression failed');
+        }),
+      },
+    });
 
     await expect(handleCompact([], context)).rejects.toThrow('Compression failed');
   });
-});
 
-describe('handlePlan', () => {
-  it('should toggle plan mode on', () => {
-    const context = createMockContext();
-    const result = handlePlan([], context);
+  it.each([
+    [true, 'plan-changed'],
+    [false, 'plan-changed'],
+  ] as const)('returns the actual plan mode state (%s)', async (enabled, kind) => {
+    const context = createContext({
+      planMode: { isEnabled: () => !enabled, toggle: vi.fn(() => enabled) },
+    });
+    const result = await resolve(handlePlan([], context));
 
-    expect(result.handled).toBe(true);
-    expect(result.continueExecution).toBe(true);
-    expect(result.output).toBe('Plan mode enabled');
-    expect(result.action).toBe('togglePlanMode');
-    expect(result.data?.planMode).toBe(true);
-    expect(context.planMode?.toggle).toHaveBeenCalled();
+    expect(result).toMatchObject({
+      action: 'togglePlanMode',
+      data: { planMode: enabled },
+      semantic: { family: 'session', result: { kind, enabled } },
+    });
   });
 
-  it('should toggle plan mode off', () => {
-    const context = createMockContext();
-    context.planMode!.toggle = vi.fn().mockReturnValue(false);
+  it('uses disabled state when the plan service is unavailable', async () => {
+    const result = await resolve(handlePlan([], createContext({ planMode: undefined })));
 
-    const result = handlePlan([], context);
-
-    expect(result.output).toBe('Plan mode disabled');
-    expect(result.data?.planMode).toBe(false);
-  });
-
-  it('should work without plan mode service', () => {
-    const context = createMockContext({ planMode: undefined });
-
-    const result = handlePlan([], context);
-
-    expect(result.handled).toBe(true);
-    expect(result.output).toBe('Plan mode disabled');
-    expect(result.data?.planMode).toBe(false);
-  });
-
-  it('should work with empty context', () => {
-    const result = handlePlan([], {} as CommandContext);
-
-    expect(result.handled).toBe(true);
-    expect(result.data?.planMode).toBe(false);
+    expect(result.data).toEqual({ planMode: false });
+    expect(result.semantic).toEqual({
+      family: 'session',
+      result: { kind: 'plan-changed', enabled: false },
+    });
   });
 });

@@ -31,18 +31,34 @@ function createMockContext(): CommandContext {
 }
 
 describe('handleCommands', () => {
-  it('lists builtin and command artifact slash commands from the unified catalog', async () => {
+  it('returns builtin and command artifact entries from the unified catalog', async () => {
     const result = await handleCommands([], createMockContext());
 
-    expect(result.handled).toBe(true);
-    expect(result.output).toContain('Available Slash Commands:');
-    expect(result.output).toContain('/help');
-    expect(result.output).toContain('Command Artifacts (1):');
-    expect(result.output).toContain('/commit <message>');
-    expect(result.output).toContain('Create a commit message');
+    expect(result).toMatchObject({
+      handled: true,
+      semantic: {
+        family: 'commands',
+        result: { kind: 'commands' },
+      },
+    });
+    if (result.semantic?.family !== 'commands' || result.semantic.result.kind !== 'commands') {
+      throw new Error('Expected command catalog semantics.');
+    }
+    expect(result.semantic.result.commands).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: 'help', source: 'builtin' }),
+        expect.objectContaining({
+          name: 'commit',
+          source: 'command-artifact',
+          description: 'Create a commit message',
+        }),
+      ]),
+    );
+    expect(result).not.toHaveProperty('output');
+    expect(result).not.toHaveProperty('error');
   });
 
-  it('does not list ordinary Skill legacy command fields as slash commands', async () => {
+  it('does not expose ordinary Skill legacy command fields as slash commands', async () => {
     const context = createMockContext();
     const legacySkill = {
       name: 'quality-review',
@@ -53,21 +69,29 @@ describe('handleCommands', () => {
     context.skillService!.registry.listAllSkills = vi.fn(() => [legacySkill]);
 
     const result = await handleCommands([], context);
+    if (result.semantic?.family !== 'commands' || result.semantic.result.kind !== 'commands') {
+      throw new Error('Expected command catalog semantics.');
+    }
 
-    expect(result.output).not.toContain('Command Artifacts');
-    expect(result.output).not.toContain('/review');
+    expect(result.semantic.result.commands).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ name: 'review' })]),
+    );
   });
 
-  it('rejects unsupported subcommands', async () => {
+  it('returns a typed usage diagnostic for unsupported subcommands', async () => {
     const result = await handleCommands(['info'], createMockContext());
 
-    expect(result.handled).toBe(true);
-    expect(result.error).toBe('Usage: /commands');
+    expect(result.semantic).toEqual({
+      family: 'commands',
+      result: { kind: 'diagnostic', code: 'usage' },
+    });
+    expect(result).not.toHaveProperty('output');
+    expect(result).not.toHaveProperty('error');
   });
 });
 
 describe('handleSkills', () => {
-  it('lists dollar invocation for ordinary Skills and slash only for command artifacts', async () => {
+  it('keeps ordinary Skills and command artifacts distinct in semantic rows', async () => {
     const context = createMockContext();
     context.skillService!.registry.listSkills = vi.fn(() => [
       {
@@ -85,9 +109,26 @@ describe('handleSkills', () => {
     ]);
 
     const result = await handleSkills([], context);
-
-    expect(result.output).toContain('quality-review [$quality-review]');
-    expect(result.output).not.toContain('quality-review [$quality-review] [/review]');
-    expect(result.output).toContain('commit [$commit] [/commit]');
+    expect(result.semantic).toEqual({
+      family: 'skills',
+      result: {
+        kind: 'list',
+        skills: [
+          {
+            name: 'quality-review',
+            description: 'Review changed files',
+            enabled: true,
+          },
+          {
+            name: 'commit',
+            command: 'commit',
+            description: 'Create a commit message',
+            enabled: true,
+          },
+        ],
+      },
+    });
+    expect(result).not.toHaveProperty('output');
+    expect(result).not.toHaveProperty('error');
   });
 });

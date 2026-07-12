@@ -222,6 +222,7 @@ function createDeps(): ExtensionSlashCommandRuntimeDeps {
   };
 
   return {
+    locale: 'en',
     conversations,
     skills,
     settings: {

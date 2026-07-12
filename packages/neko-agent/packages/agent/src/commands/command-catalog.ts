@@ -1,10 +1,5 @@
 import type { BuiltinCommand, BuiltinCommandName } from './types';
 import { getBuiltinCommand, getCliCommands, getExtensionCommands } from './builtin-commands';
-import {
-  localizeBuiltinCommandDescription,
-  localizeCommandArtifactDefaultDescription,
-} from './command-localization';
-import type { CommandLocale } from './types';
 
 export type SlashCommandSurface = 'tui' | 'extension';
 
@@ -31,7 +26,7 @@ export type SlashCommandCatalogEntry<TSkill extends SlashCommandSkillLike = Slas
   | {
       readonly source: 'command-artifact';
       readonly name: string;
-      readonly description: string;
+      readonly description?: string;
       readonly aliases: readonly string[];
       readonly category: 'command-artifact';
       readonly supportsArguments: boolean;
@@ -42,7 +37,6 @@ export type SlashCommandCatalogEntry<TSkill extends SlashCommandSkillLike = Slas
 export function listSlashCommandCatalog<TSkill extends SlashCommandSkillLike>(options: {
   readonly surface: SlashCommandSurface;
   readonly skills?: readonly TSkill[];
-  readonly locale?: CommandLocale;
 }): SlashCommandCatalogEntry<TSkill>[] {
   const entries = new Map<string, SlashCommandCatalogEntry<TSkill>>();
 
@@ -50,11 +44,7 @@ export function listSlashCommandCatalog<TSkill extends SlashCommandSkillLike>(op
     entries.set(builtin.name, {
       source: 'builtin',
       name: builtin.name,
-      description: localizeBuiltinCommandDescription(
-        builtin.name,
-        builtin.description,
-        options.locale,
-      ),
+      description: builtin.description,
       aliases: builtin.aliases ?? [],
       ...(builtin.usage ? { usage: builtin.usage } : {}),
       category: builtin.category,
@@ -73,12 +63,11 @@ export function listSlashCommandCatalog<TSkill extends SlashCommandSkillLike>(op
       continue;
     }
 
+    const description = readNonEmptyDescription(skill.description);
     entries.set(commandName, {
       source: 'command-artifact',
       name: commandName,
-      description:
-        readNonEmptyDescription(skill.description) ??
-        localizeCommandArtifactDefaultDescription(commandName, options.locale),
+      ...(description ? { description } : {}),
       aliases: [],
       category: 'command-artifact',
       supportsArguments: skill.supportsArguments ?? false,
@@ -95,7 +84,6 @@ export function resolveSlashCommandCatalogEntry<TSkill extends SlashCommandSkill
   options: {
     readonly surface: SlashCommandSurface;
     readonly skills?: readonly TSkill[];
-    readonly locale?: CommandLocale;
   },
 ): SlashCommandCatalogEntry<TSkill> | undefined {
   const normalized = normalizeCommandName(name);
@@ -108,11 +96,7 @@ export function resolveSlashCommandCatalogEntry<TSkill extends SlashCommandSkill
     return {
       source: 'builtin',
       name: builtin.name,
-      description: localizeBuiltinCommandDescription(
-        builtin.name,
-        builtin.description,
-        options.locale,
-      ),
+      description: builtin.description,
       aliases: builtin.aliases ?? [],
       ...(builtin.usage ? { usage: builtin.usage } : {}),
       category: builtin.category,
@@ -129,12 +113,11 @@ export function resolveSlashCommandCatalogEntry<TSkill extends SlashCommandSkill
       continue;
     }
 
+    const description = readNonEmptyDescription(skill.description);
     return {
       source: 'command-artifact',
       name: commandName,
-      description:
-        readNonEmptyDescription(skill.description) ??
-        localizeCommandArtifactDefaultDescription(commandName, options.locale),
+      ...(description ? { description } : {}),
       aliases: [],
       category: 'command-artifact',
       supportsArguments: skill.supportsArguments ?? false,

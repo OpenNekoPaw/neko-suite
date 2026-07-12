@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { listSlashCommandCatalog, resolveSlashCommandCatalogEntry } from '../command-catalog';
 
-describe('command catalog localization', () => {
-  it('keeps command keywords stable while localizing command-artifact default descriptions', () => {
+describe('command catalog semantics', () => {
+  it('keeps command identities stable and leaves missing artifact descriptions unresolved', () => {
     const skills = [
       {
         name: 'Commit Helper',
@@ -11,24 +11,20 @@ describe('command catalog localization', () => {
         enabled: true,
       },
     ];
-    const commands = listSlashCommandCatalog({
-      surface: 'tui',
-      skills,
-      locale: 'zh',
-    });
+    const commands = listSlashCommandCatalog({ surface: 'tui', skills });
+    const command = commands.find((entry) => entry.name === 'commit');
 
-    expect(commands).toContainEqual(
+    expect(command).toEqual(
       expect.objectContaining({
         source: 'command-artifact',
         name: 'commit',
-        description: '激活命令 /commit',
       }),
     );
-    expect(commands.map((command) => command.name)).toContain('commit');
-    expect(commands.map((command) => command.name)).not.toContain('提交');
+    expect(command).not.toHaveProperty('description');
+    expect(commands.map((entry) => entry.name)).not.toContain('提交');
   });
 
-  it('uses the same localized default description when resolving a command directly', () => {
+  it('returns the same locale-neutral artifact identity when resolving directly', () => {
     const command = resolveSlashCommandCatalogEntry('commit', {
       surface: 'tui',
       skills: [
@@ -39,15 +35,14 @@ describe('command catalog localization', () => {
           enabled: true,
         },
       ],
-      locale: 'zh',
     });
 
     expect(command).toEqual(
       expect.objectContaining({
         source: 'command-artifact',
         name: 'commit',
-        description: '激活命令 /commit',
       }),
     );
+    expect(command).not.toHaveProperty('description');
   });
 });

@@ -12,12 +12,16 @@ import {
   executeSlashCommand,
   getCommandHandler,
 } from '../command-executor';
-import type { CommandContext, CommandResult } from '../types';
+import type { CommandContext } from '../types';
 
 // Mock handlers
 vi.mock('../handlers', () => ({
-  handleHelp: vi.fn(async () => ({ handled: true, continueExecution: true, output: 'Help text' })),
-  handleStatus: vi.fn(async () => ({ handled: true, continueExecution: true, output: 'Status' })),
+  handleHelp: vi.fn(async () => ({ handled: true, continueExecution: true, action: 'showHelp' })),
+  handleStatus: vi.fn(async () => ({
+    handled: true,
+    continueExecution: true,
+    action: 'showStatus',
+  })),
   handleClear: vi.fn(async () => ({ handled: true, continueExecution: true })),
   handleExit: vi.fn(async () => ({ handled: true, continueExecution: false })),
   handleConfig: vi.fn(async () => ({ handled: true, continueExecution: true })),
@@ -120,20 +124,29 @@ describe('executeBuiltinCommand', () => {
 
   it('should execute valid builtin command', async () => {
     const result = await executeBuiltinCommand('help', [], context);
-    expect(result.handled).toBe(true);
-    expect(result.output).toBe('Help text');
+    expect(result).toMatchObject({ handled: true, action: 'showHelp' });
+    expect(result).not.toHaveProperty('output');
+    expect(result).not.toHaveProperty('error');
   });
 
   it('should resolve command aliases', async () => {
     const result = await executeBuiltinCommand('h', [], context);
-    expect(result.handled).toBe(true);
-    expect(result.output).toBe('Help text');
+    expect(result).toMatchObject({ handled: true, action: 'showHelp' });
+    expect(result).not.toHaveProperty('output');
+    expect(result).not.toHaveProperty('error');
   });
 
   it('should return error for unknown command', async () => {
     const result = await executeBuiltinCommand('unknown', [], context);
-    expect(result.handled).toBe(false);
-    expect(result.error).toContain('Unknown command');
+    expect(result).toMatchObject({
+      handled: false,
+      semantic: {
+        family: 'shell',
+        result: { kind: 'diagnostic', code: 'unknown-command', command: 'unknown' },
+      },
+    });
+    expect(result).not.toHaveProperty('output');
+    expect(result).not.toHaveProperty('error');
   });
 
   it('should pass arguments to handler', async () => {
@@ -148,7 +161,7 @@ describe('executeBuiltinCommand', () => {
     expect(result).toEqual({
       handled: true,
       continueExecution: true,
-      output: 'This command is handled by the VSCode extension host.',
+      semantic: { family: 'core', result: { kind: 'host-only' } },
     });
   });
 
@@ -157,8 +170,18 @@ describe('executeBuiltinCommand', () => {
     vi.mocked(handleHelp).mockRejectedValueOnce(new Error('Handler failed'));
 
     const result = await executeBuiltinCommand('help', [], context);
-    expect(result.handled).toBe(true);
-    expect(result.error).toContain('Command failed: Handler failed');
+    expect(result).toMatchObject({
+      handled: true,
+      semantic: {
+        family: 'shell',
+        result: {
+          kind: 'diagnostic',
+          code: 'command-failed',
+          command: 'help',
+          detail: 'Handler failed',
+        },
+      },
+    });
   });
 
   it('should handle non-Error exceptions', async () => {
@@ -166,7 +189,17 @@ describe('executeBuiltinCommand', () => {
     vi.mocked(handleHelp).mockRejectedValueOnce('String error');
 
     const result = await executeBuiltinCommand('help', [], context);
-    expect(result.error).toContain('String error');
+    expect(result).toMatchObject({
+      semantic: {
+        family: 'shell',
+        result: {
+          kind: 'diagnostic',
+          code: 'command-failed',
+          command: 'help',
+          detail: 'String error',
+        },
+      },
+    });
   });
 });
 
@@ -180,8 +213,9 @@ describe('executeSlashCommand', () => {
 
   it('should execute builtin command', async () => {
     const result = await executeSlashCommand('/help', context);
-    expect(result.handled).toBe(true);
-    expect(result.output).toBe('Help text');
+    expect(result).toMatchObject({ handled: true, action: 'showHelp' });
+    expect(result).not.toHaveProperty('output');
+    expect(result).not.toHaveProperty('error');
   });
 
   it('executes command artifacts from the slash command catalog', async () => {
@@ -217,8 +251,14 @@ describe('executeSlashCommand', () => {
     const result = await executeSlashCommand('/custom arg', context, mockSkillService);
     expect(mockSkillService.getSkillByCommand).not.toHaveBeenCalled();
     expect(mockSkillService.apply).toHaveBeenCalledWith(skill, 'arg');
-    expect(result.handled).toBe(true);
-    expect(result.data?.injection).toBe('catalog-test');
+    expect(result).toMatchObject({
+      handled: true,
+      data: { injection: 'catalog-test' },
+      semantic: {
+        family: 'shell',
+        result: { kind: 'skill-activated', command: 'custom' },
+      },
+    });
   });
 
   it('does not execute ordinary skill legacy command fields as slash commands', async () => {
@@ -252,12 +292,13 @@ describe('executeSlashCommand', () => {
     const result = await executeSlashCommand('/custom arg', context, mockSkillService);
     expect(mockSkillService.getSkillByCommand).not.toHaveBeenCalled();
     expect(mockSkillService.apply).not.toHaveBeenCalled();
-    expect(result).toEqual(
-      expect.objectContaining({
-        handled: false,
-        error: expect.stringContaining('Unknown command: /custom'),
-      }),
-    );
+    expect(result).toMatchObject({
+      handled: false,
+      semantic: {
+        family: 'shell',
+        result: { kind: 'diagnostic', code: 'unknown-command', command: 'custom' },
+      },
+    });
   });
 
   it('should return error if user-defined command fails', async () => {
@@ -291,8 +332,18 @@ describe('executeSlashCommand', () => {
 
     const result = await executeSlashCommand('/custom', context, mockSkillService);
     expect(mockSkillService.getSkillByCommand).not.toHaveBeenCalled();
-    expect(result.handled).toBe(true);
-    expect(result.error).toContain('Failed');
+    expect(result).toMatchObject({
+      handled: true,
+      semantic: {
+        family: 'shell',
+        result: {
+          kind: 'diagnostic',
+          code: 'skill-failed',
+          command: 'custom',
+          detail: 'Failed',
+        },
+      },
+    });
   });
 
   it('should return error if command not found anywhere', async () => {
@@ -302,8 +353,13 @@ describe('executeSlashCommand', () => {
     };
 
     const result = await executeSlashCommand('/unknown', context, mockSkillService);
-    expect(result.handled).toBe(false);
-    expect(result.error).toContain('Unknown command: /unknown');
+    expect(result).toMatchObject({
+      handled: false,
+      semantic: {
+        family: 'shell',
+        result: { kind: 'diagnostic', code: 'unknown-command', command: 'unknown' },
+      },
+    });
   });
 
   it('should work without skill service', async () => {

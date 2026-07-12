@@ -6,25 +6,19 @@
 
 import type { CommandHandler } from '../types';
 
-/**
- * Handle /new command (extension only)
- */
+/** Handle /new command (extension only). */
 export const handleNew: CommandHandler = (_args, context) => {
-  if (context.conversations) {
-    context.conversations.create();
-  }
+  context.conversations?.create();
 
   return {
     handled: true,
     continueExecution: true,
-    output: 'New conversation created',
     action: 'newConversation',
+    semantic: { family: 'session', result: { kind: 'new-created' } },
   };
 };
 
-/**
- * Handle /resume command (extension only)
- */
+/** Handle /resume command (extension only). */
 export const handleResume: CommandHandler = (_args, context) => {
   const conversations = context.conversations?.list() ?? [];
 
@@ -33,47 +27,38 @@ export const handleResume: CommandHandler = (_args, context) => {
     continueExecution: true,
     action: 'resumeConversation',
     data: {
-      conversations: conversations.slice(0, 5).map((c) => ({
-        id: c.id,
-        title: c.title,
+      conversations: conversations.slice(0, 5).map((conversation) => ({
+        id: conversation.id,
+        title: conversation.title,
       })),
     },
   };
 };
 
-/**
- * Handle /compact command (extension only)
- */
+/** Handle /compact command (extension only). */
 export const handleCompact: CommandHandler = async (_args, context) => {
-  const activeId = context.conversations?.getActiveId();
-
-  if (activeId && context.contextManager) {
-    await context.contextManager.compress(activeId);
+  const conversationId = context.conversations?.getActiveId();
+  if (conversationId && context.contextManager) {
+    await context.contextManager.compress(conversationId);
   }
 
   return {
     handled: true,
     continueExecution: true,
-    output: 'Context compression initiated',
     action: 'compressContext',
+    semantic: { family: 'session', result: { kind: 'compact-started' } },
   };
 };
 
-/**
- * Handle /plan command (extension only)
- */
+/** Handle /plan command (extension only). */
 export const handlePlan: CommandHandler = (_args, context) => {
-  let planMode = false;
-
-  if (context.planMode) {
-    planMode = context.planMode.toggle();
-  }
+  const enabled = context.planMode?.toggle() ?? false;
 
   return {
     handled: true,
     continueExecution: true,
-    output: `Plan mode ${planMode ? 'enabled' : 'disabled'}`,
     action: 'togglePlanMode',
-    data: { planMode },
+    data: { planMode: enabled },
+    semantic: { family: 'session', result: { kind: 'plan-changed', enabled } },
   };
 };

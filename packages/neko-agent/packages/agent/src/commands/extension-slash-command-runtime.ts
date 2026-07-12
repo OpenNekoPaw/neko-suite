@@ -1,4 +1,5 @@
 import type { Skill, SkillApplicationResult } from '@neko/shared';
+import type { SupportedLocale } from '@neko/shared/i18n';
 import { createSkillExecutionCreationMetadata } from '../session/creation-execution-metadata';
 import {
   buildExtensionCommandConversationSummaries,
@@ -68,6 +69,7 @@ export interface ExtensionSlashCommandContextManager {
 }
 
 export interface ExtensionSlashCommandRuntimeDeps {
+  locale: SupportedLocale;
   conversations: ExtensionSlashCommandConversationSource;
   skills?: ExtensionSlashCommandSkillSource;
   settings?: ExtensionSlashCommandSettingsSource;
@@ -133,6 +135,7 @@ export function runExtensionSlashCommandRuntime(
       conversationId: input.conversationId,
       command,
       status: 'unknown',
+      locale: deps.locale,
     }),
   );
   if (isPromiseLike(posted)) {
@@ -153,13 +156,8 @@ export function buildExtensionSlashStatusPayload(input: {
   return buildExtensionCommandResultPayload({
     conversationId: input.conversationId,
     command: 'status',
-    result: isPromiseLike(result)
-      ? {
-          handled: false,
-          continueExecution: true,
-          error: 'Status command returned an asynchronous result unexpectedly',
-        }
-      : result,
+    locale: input.deps.locale,
+    result: assertSynchronousStatusResult(result),
   });
 }
 
@@ -168,6 +166,7 @@ function createExtensionSlashCommandContext(
   deps: ExtensionSlashCommandRuntimeDeps,
 ): CommandContext {
   return {
+    locale: deps.locale,
     skillService: {
       registry: {
         skillCount: deps.skills?.skillCount() ?? 0,
@@ -255,6 +254,7 @@ function postBuiltinResult(
       conversationId,
       command,
       result,
+      locale: deps.locale,
       resumeConversations:
         result.action === 'resumeConversation'
           ? buildExtensionCommandConversationSummaries(deps.conversations.list(), {
@@ -312,6 +312,7 @@ async function runExtensionSkillSlashCommand(
         conversationId: input.conversationId,
         command,
         status: 'unknown',
+        locale: deps.locale,
       }),
     );
     return { command, handled: false, source: 'unknown' };
@@ -323,6 +324,7 @@ async function runExtensionSkillSlashCommand(
         conversationId: input.conversationId,
         command,
         status: 'failed',
+        locale: deps.locale,
         error: result.error,
       }),
     );
@@ -334,6 +336,7 @@ async function runExtensionSkillSlashCommand(
       conversationId: input.conversationId,
       command,
       status: 'activated',
+      locale: deps.locale,
     }),
   );
 
@@ -361,6 +364,15 @@ function createSkillExecutionOverrides(
       metadata,
     },
   };
+}
+
+function assertSynchronousStatusResult(
+  result: CommandResult | Promise<CommandResult>,
+): CommandResult {
+  if (isPromiseLike(result)) {
+    throw new Error('Status command returned an asynchronous result unexpectedly.');
+  }
+  return result;
 }
 
 function isPromiseLike<T>(value: T | Promise<T>): value is Promise<T> {

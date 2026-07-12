@@ -1,21 +1,14 @@
-/**
- * Config Handlers Tests
- *
- * Tests for configuration command handlers: config, model, settings, permissions, init
- */
-
-import { describe, it, expect, beforeEach } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import {
   handleConfig,
-  handleModel,
-  handleSettings,
-  handlePermissions,
   handleInit,
+  handleModel,
+  handlePermissions,
+  handleSettings,
 } from '../config-handlers';
-import type { CommandContext } from '../../types';
+import type { CommandContext, CommandResult } from '../../types';
 
-// Mock context factory
-function createMockContext(overrides?: Partial<CommandContext>): CommandContext {
+function createContext(overrides: Partial<CommandContext> = {}): CommandContext {
   return {
     config: {
       provider: 'anthropic',
@@ -26,232 +19,135 @@ function createMockContext(overrides?: Partial<CommandContext>): CommandContext 
       outputFormat: 'text',
     },
     ...overrides,
-  } as unknown as CommandContext;
+  };
 }
 
-describe('handleConfig', () => {
+async function run(
+  handler: typeof handleConfig,
+  args: string[],
+  context: CommandContext,
+): Promise<CommandResult> {
+  return handler(args, context);
+}
+
+describe('configuration command handlers', () => {
   let context: CommandContext;
 
   beforeEach(() => {
-    context = createMockContext();
+    context = createContext();
   });
 
-  describe('no arguments', () => {
-    it('should show current configuration', () => {
-      const result = handleConfig([], context);
+  it('returns a semantic configuration snapshot without final prose', async () => {
+    const result = await run(handleConfig, [], context);
 
-      expect(result.handled).toBe(true);
-      expect(result.continueExecution).toBe(true);
-      expect(result.output).toContain('Current Configuration');
-      expect(result.output).toContain('provider:     anthropic');
-      expect(result.output).toContain('model:        claude-sonnet-4-6');
-      expect(result.output).toContain('maxOutputTokens: 4096');
-      expect(result.output).not.toContain('maxTokens:');
+    expect(result).toMatchObject({
+      handled: true,
+      continueExecution: true,
+      semantic: {
+        family: 'config',
+        result: {
+          kind: 'snapshot',
+          config: {
+            provider: 'anthropic',
+            model: 'claude-sonnet-4-6',
+            maxTokens: 4096,
+            temperature: 0.7,
+            verbose: false,
+            outputFormat: 'text',
+          },
+        },
+      },
     });
-
-    it('should show usage hints', () => {
-      const result = handleConfig([], context);
-
-      expect(result.output).toContain('/config set');
-      expect(result.output).toContain('/config providers');
-      expect(result.output).toContain('/config models');
-    });
-
-    it('should handle missing config gracefully', () => {
-      const emptyContext = createMockContext({ config: undefined });
-      const result = handleConfig([], emptyContext);
-
-      expect(result.output).toContain('(not set)');
-    });
+    expect(result).not.toHaveProperty('output');
+    expect(result).not.toHaveProperty('error');
   });
 
-  describe('set subcommand', () => {
-    it('should set configuration value', () => {
-      const result = handleConfig(['set', 'model', 'claude-opus-4-6'], context);
+  it('represents missing optional configuration values semantically', async () => {
+    const result = await run(handleConfig, [], createContext({ config: undefined }));
 
-      expect(result.handled).toBe(true);
-      expect(result.output).toContain('Configuration updated');
-      expect(result.output).toContain('model = claude-opus-4-6');
-      expect(result.data).toEqual({ key: 'model', value: 'claude-opus-4-6' });
-      expect(result.action).toBe('showSettings');
-    });
-
-    it('should handle multi-word values', () => {
-      const result = handleConfig(['set', 'outputFormat', 'json pretty'], context);
-
-      expect(result.data).toEqual({ key: 'outputFormat', value: 'json pretty' });
-    });
-
-    it('should return error if key is missing', () => {
-      const result = handleConfig(['set'], context);
-
-      expect(result.error).toContain('Usage: /config set <key> <value>');
-    });
-
-    it('should return error if value is missing', () => {
-      const result = handleConfig(['set', 'model'], context);
-
-      expect(result.error).toContain('Usage: /config set <key> <value>');
-    });
-
-    it('should validate key names', () => {
-      const result = handleConfig(['set', 'invalidKey', 'value'], context);
-
-      expect(result.error).toContain('Invalid key: invalidKey');
-      expect(result.error).toContain('Valid keys:');
-    });
-
-    it('should accept all valid keys', () => {
-      const validKeys = [
-        'provider',
-        'model',
-        'maxTokens',
-        'temperature',
-        'verbose',
-        'outputFormat',
-      ];
-
-      for (const key of validKeys) {
-        const result = handleConfig(['set', key, 'test-value'], context);
-        expect(result.error).toBeUndefined();
-        expect(result.data?.key).toBe(key);
-      }
-    });
-
-    it('should be case-insensitive for subcommand', () => {
-      const result = handleConfig(['SET', 'model', 'test'], context);
-
-      expect(result.data?.key).toBe('model');
+    expect(result.semantic).toEqual({
+      family: 'config',
+      result: {
+        kind: 'snapshot',
+        config: { verbose: false, outputFormat: 'text' },
+      },
     });
   });
 
-  describe('providers subcommand', () => {
-    it('should list available providers', () => {
-      const result = handleConfig(['providers'], context);
+  it('returns update data and semantics for valid keys', async () => {
+    const result = await run(handleConfig, ['set', 'outputFormat', 'json pretty'], context);
 
-      expect(result.handled).toBe(true);
-      expect(result.output).toContain('anthropic');
-      expect(result.output).toContain('openai');
-      expect(result.output).toContain('google');
-      expect(result.output).toContain('ollama');
-      expect(result.output).toContain('openrouter');
-    });
-
-    it('should be case-insensitive', () => {
-      const result = handleConfig(['PROVIDERS'], context);
-
-      expect(result.output).toContain('Available providers');
+    expect(result).toMatchObject({
+      action: 'showSettings',
+      data: { key: 'outputFormat', value: 'json pretty' },
+      semantic: {
+        family: 'config',
+        result: { kind: 'updated', key: 'outputFormat', value: 'json pretty' },
+      },
     });
   });
 
-  describe('models subcommand', () => {
-    it('should show models command', () => {
-      const result = handleConfig(['models'], context);
-
-      expect(result.handled).toBe(true);
-      expect(result.output).toContain('Models for');
-      expect(result.action).toBe('showModelSelector');
+  it('returns typed diagnostics for invalid set input', async () => {
+    await expect(run(handleConfig, ['set'], context)).resolves.toMatchObject({
+      semantic: {
+        family: 'config',
+        result: { kind: 'diagnostic', code: 'set-usage' },
+      },
     });
 
-    it('should include current provider', () => {
-      const result = handleConfig(['models'], context);
+    await expect(run(handleConfig, ['set', 'invalidKey', 'value'], context)).resolves.toMatchObject(
+      {
+        semantic: {
+          family: 'config',
+          result: {
+            kind: 'diagnostic',
+            code: 'invalid-key',
+            key: 'invalidKey',
+          },
+        },
+      },
+    );
+  });
 
-      expect(result.output).toContain('anthropic');
+  it('returns provider and model semantics with stable external values', async () => {
+    await expect(run(handleConfig, ['PROVIDERS'], context)).resolves.toMatchObject({
+      semantic: {
+        family: 'config',
+        result: {
+          kind: 'providers',
+          providers: ['anthropic', 'openai', 'google', 'ollama', 'openrouter'],
+        },
+      },
     });
 
-    it('should handle missing provider', () => {
-      const emptyContext = createMockContext({ config: undefined });
-      const result = handleConfig(['models'], emptyContext);
-
-      expect(result.output).toContain('current provider');
+    await expect(run(handleConfig, ['models'], context)).resolves.toMatchObject({
+      action: 'showModelSelector',
+      semantic: {
+        family: 'config',
+        result: { kind: 'models', provider: 'anthropic' },
+      },
     });
   });
 
-  describe('unknown subcommand', () => {
-    it('should return error for unknown subcommand', () => {
-      const result = handleConfig(['unknown'], context);
-
-      expect(result.error).toContain('Unknown subcommand: unknown');
-      expect(result.error).toContain('/config set');
+  it('returns a typed unknown-subcommand diagnostic', async () => {
+    await expect(run(handleConfig, ['unknown'], context)).resolves.toMatchObject({
+      semantic: {
+        family: 'config',
+        result: { kind: 'diagnostic', code: 'unknown-subcommand', subcommand: 'unknown' },
+      },
     });
   });
-});
 
-describe('handleModel', () => {
-  it('should trigger model selector', () => {
-    const context = createMockContext();
-    const result = handleModel([], context);
+  it.each([
+    [handleModel, 'showModelSelector'],
+    [handleSettings, 'showSettings'],
+    [handlePermissions, 'showPermissions'],
+    [handleInit, 'initProject'],
+  ] as const)('returns action-only results for extension-owned UI', async (handler, action) => {
+    const result = await handler([], context);
 
-    expect(result.handled).toBe(true);
-    expect(result.continueExecution).toBe(true);
-    expect(result.action).toBe('showModelSelector');
-  });
-
-  it('should work with empty context', () => {
-    const result = handleModel([], {} as CommandContext);
-
-    expect(result.handled).toBe(true);
-  });
-});
-
-describe('handleSettings', () => {
-  it('should trigger settings panel', () => {
-    const context = createMockContext();
-    const result = handleSettings([], context);
-
-    expect(result.handled).toBe(true);
-    expect(result.continueExecution).toBe(true);
-    expect(result.action).toBe('showSettings');
-  });
-
-  it('should work with empty context', () => {
-    const result = handleSettings([], {} as CommandContext);
-
-    expect(result.handled).toBe(true);
-  });
-});
-
-describe('handlePermissions', () => {
-  it('should trigger permissions panel', () => {
-    const context = createMockContext();
-    const result = handlePermissions([], context);
-
-    expect(result.handled).toBe(true);
-    expect(result.continueExecution).toBe(true);
-    expect(result.action).toBe('showPermissions');
-  });
-
-  it('should work with empty context', () => {
-    const result = handlePermissions([], {} as CommandContext);
-
-    expect(result.handled).toBe(true);
-  });
-});
-
-describe('handleInit', () => {
-  it('should show initialization instructions', () => {
-    const context = createMockContext();
-    const result = handleInit([], context);
-
-    expect(result.handled).toBe(true);
-    expect(result.continueExecution).toBe(true);
-    expect(result.action).toBe('initProject');
-    expect(result.output).toContain('Project Initialization');
-  });
-
-  it('should include directory structure', () => {
-    const context = createMockContext();
-    const result = handleInit([], context);
-
-    expect(result.output).toContain('.neko/');
-    expect(result.output).toContain('skills/');
-    expect(result.output).toContain('commands/');
-    expect(result.output).toContain('settings.json');
-  });
-
-  it('should work with empty context', () => {
-    const result = handleInit([], {} as CommandContext);
-
-    expect(result.handled).toBe(true);
+    expect(result).toMatchObject({ handled: true, continueExecution: true, action });
+    expect(result).not.toHaveProperty('output');
+    expect(result).not.toHaveProperty('error');
   });
 });

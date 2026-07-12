@@ -17,16 +17,17 @@ describe('extension command presenter', () => {
     expect(parseBuiltinCommandArgs()).toEqual([]);
   });
 
-  it('builds slashCommandResult payloads with extension-specific command messages', () => {
+  it('projects typed command semantics into localized extension messages', () => {
     expect(
       buildExtensionCommandResultPayload({
         conversationId: 'conv-1',
         command: 'clear',
+        locale: 'en',
         result: {
           handled: true,
           continueExecution: true,
           action: 'clearHistory',
-          output: 'Cleared',
+          semantic: { family: 'core', result: { kind: 'history-cleared' } },
         },
       }),
     ).toEqual({
@@ -37,18 +38,32 @@ describe('extension command presenter', () => {
       action: 'clearHistory',
       message: 'Conversation cleared',
     });
+
+    expect(
+      buildExtensionCommandResultPayload({
+        conversationId: 'conv-1',
+        command: 'clear',
+        locale: 'zh-cn',
+        result: {
+          handled: true,
+          continueExecution: true,
+          semantic: { family: 'core', result: { kind: 'history-cleared' } },
+        },
+      }),
+    ).toMatchObject({ success: true, message: '对话已清空' });
   });
 
-  it('suppresses output for UI-only actions', () => {
+  it('suppresses semantic messages for UI-only actions', () => {
     expect(
       buildExtensionCommandResultPayload({
         conversationId: 'conv-1',
         command: 'tasks',
+        locale: 'en',
         result: {
           handled: true,
           continueExecution: true,
           action: 'showTasks',
-          output: 'Tasks',
+          semantic: { family: 'core', result: { kind: 'host-only' } },
         },
       }),
     ).toEqual({
@@ -60,12 +75,42 @@ describe('extension command presenter', () => {
     });
   });
 
-  it('builds skill command result payloads without mixing skill injection state', () => {
+  it('localizes Neko-owned wrappers while preserving command and external detail', () => {
+    expect(
+      buildExtensionCommandResultPayload({
+        conversationId: 'conv-1',
+        command: 'custom',
+        locale: 'zh-cn',
+        result: {
+          handled: true,
+          continueExecution: true,
+          semantic: {
+            family: 'shell',
+            result: {
+              kind: 'diagnostic',
+              code: 'skill-failed',
+              command: 'custom',
+              detail: 'Provider X: upstream timeout',
+            },
+          },
+        },
+      }),
+    ).toEqual({
+      type: 'slashCommandResult',
+      conversationId: 'conv-1',
+      command: 'custom',
+      success: false,
+      error: '执行 /custom 失败：Provider X: upstream timeout',
+    });
+  });
+
+  it('builds localized Skill command results without mixing injection state', () => {
     expect(
       buildExtensionSkillCommandResultPayload({
         conversationId: 'conv-1',
         command: 'commit',
         status: 'activated',
+        locale: 'en',
       }),
     ).toEqual({
       type: 'slashCommandResult',
@@ -80,14 +125,26 @@ describe('extension command presenter', () => {
         conversationId: 'conv-1',
         command: 'missing',
         status: 'unknown',
+        locale: 'zh-cn',
       }),
     ).toEqual({
       type: 'slashCommandResult',
       conversationId: 'conv-1',
       command: 'missing',
       success: false,
-      error: 'Unknown command: /missing. Type /help for available commands.',
+      error: '未知命令：/missing。输入 /help 查看可用命令。',
     });
+  });
+
+  it('fails visibly when a failed Skill result omits its external detail', () => {
+    expect(() =>
+      buildExtensionSkillCommandResultPayload({
+        conversationId: 'conv-1',
+        command: 'commit',
+        status: 'failed',
+        locale: 'en',
+      }),
+    ).toThrow('requires an explicit error detail');
   });
 
   it('projects resume conversation data from host-provided summaries', () => {
@@ -95,6 +152,7 @@ describe('extension command presenter', () => {
       buildExtensionCommandResultPayload({
         conversationId: 'conv-1',
         command: 'resume',
+        locale: 'en',
         result: {
           handled: true,
           continueExecution: true,

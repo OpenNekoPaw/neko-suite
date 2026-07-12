@@ -20,13 +20,7 @@ export type {
   CommandActionDataMap,
 } from './types';
 
-export {
-  COMMAND_ALIASES,
-  resolveCommandName,
-  // Builder
-  CommandResultBuilder,
-  commandResult,
-} from './types';
+export { COMMAND_ALIASES, resolveCommandName } from './types';
 
 export type {
   SlashCommandSurface,
@@ -65,11 +59,29 @@ export {
   handleTools,
   handleTasks,
   handleMcp,
-  generateCliHelpText,
-  generateExtensionHelpText,
-  generateCliStatusText,
   generateExtensionStatusData,
 } from './handlers';
+
+export {
+  buildAgentTerminalHelpSemantic,
+  executeAgentTerminalSkillsSemantic,
+  executeAgentTerminalCommandsSemantic,
+  executeAgentTerminalToolsSemantic,
+  type AgentTerminalSkillRow,
+  type AgentTerminalToolRow,
+  type AgentTerminalHelpSemanticResult,
+  type AgentTerminalSkillsSemanticResult,
+  type AgentTerminalCommandsSemanticResult,
+  type AgentTerminalToolsSemanticResult,
+  type AgentTerminalResourceCommandSemanticResult,
+  type AgentCommandSessionSemanticResult,
+  type AgentCommandConfigSnapshot,
+  type AgentCommandConfigSemanticResult,
+  type AgentCommandCoreSemanticResult,
+  type AgentCommandShellSemanticResult,
+  type AgentCommandSemanticResult,
+  isAgentCommandSemanticFailure,
+} from './terminal-semantics';
 
 // Executor
 export {
