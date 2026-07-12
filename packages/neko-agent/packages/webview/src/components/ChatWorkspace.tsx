@@ -41,7 +41,11 @@ import type {
 } from '@neko-agent/types';
 import { AgentHostMessages } from '@/messages';
 import { ChatView } from '@/components/ChatView';
-import { InputAreaProvider } from '@/components/ChatView/InputAreaContext';
+import {
+  InputAreaProvider,
+  type MediaModelSelection,
+  type MediaUnderstandingSelection,
+} from '@/components/ChatView/InputAreaContext';
 import type {
   ComposerMenuState,
   EntryPromptMenu,
@@ -270,7 +274,7 @@ export function ChatWorkspace({
     [onModelSelect, updateTabRenderState],
   );
   const setMediaModelSelection = useCallback<
-    React.Dispatch<React.SetStateAction<import('@/hooks/useUIState').MediaModelSelection>>
+    React.Dispatch<React.SetStateAction<MediaModelSelection>>
   >(
     (value) => {
       updateTabRenderState((state) => ({
@@ -324,7 +328,7 @@ export function ChatWorkspace({
     [updateTabRenderState],
   );
   const setMediaUnderstandingSelection = useCallback<
-    React.Dispatch<React.SetStateAction<import('@/hooks/useUIState').MediaUnderstandingSelection>>
+    React.Dispatch<React.SetStateAction<MediaUnderstandingSelection>>
   >(
     (value) => {
       updateTabRenderState((state) => ({
@@ -892,7 +896,7 @@ function isActiveWorkItem(item: AgentWorkItem): boolean {
 }
 
 function buildRuntimeUnderstandingModelSelections(
-  selection: import('@/hooks/useUIState').MediaUnderstandingSelection,
+  selection: MediaUnderstandingSelection,
   options: readonly ChatModelOption[],
 ): MediaUnderstandingModelSelections | undefined {
   const result: MediaUnderstandingModelSelections = {};

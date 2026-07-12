@@ -4,8 +4,6 @@
  * Exports all custom hooks for state management.
  */
 
-export { useUIState, type UIState, type UIStateActions, type UseUIStateReturn } from './useUIState';
-
 export {
   useConversationState,
   type StreamingState,

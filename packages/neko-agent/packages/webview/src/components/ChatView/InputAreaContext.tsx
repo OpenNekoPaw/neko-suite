@@ -23,11 +23,19 @@ import type {
   GenCategory,
   GenerationParams,
 } from '@/components/ChatView/InputArea/types';
-import type { MediaModelSelection, MediaUnderstandingSelection } from '@/hooks/useUIState';
-
-export type { MediaModelSelection };
-export type { MediaUnderstandingSelection };
 export type MediaCategory = 'image' | 'video' | 'audio';
+
+export interface MediaModelSelection {
+  image: string;
+  video: string;
+  audio: string;
+}
+
+export interface MediaUnderstandingSelection {
+  image: string;
+  video: string;
+  audio: string;
+}
 
 export interface InputAreaContextValue {
   /** Current conversation is executing; model and generation config must stay locked. */

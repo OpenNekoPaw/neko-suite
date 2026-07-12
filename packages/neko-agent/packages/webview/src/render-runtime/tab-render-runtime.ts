@@ -21,7 +21,10 @@ import {
   DEFAULT_COMPOSER_MENU_STATE,
   DEFAULT_GENERATION_PARAMS,
 } from '@/components/ChatView/InputArea/types';
-import type { MediaModelSelection, MediaUnderstandingSelection } from '@/hooks/useUIState';
+import type {
+  MediaModelSelection,
+  MediaUnderstandingSelection,
+} from '@/components/ChatView/InputAreaContext';
 import {
   createAgentMarkdownSessionRegistry,
   type AgentMarkdownSessionRegistry,

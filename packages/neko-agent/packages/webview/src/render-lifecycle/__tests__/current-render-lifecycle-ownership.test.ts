@@ -115,6 +115,7 @@ describe('current conversation render lifecycle ownership', () => {
     expect(
       existsSync(join(srcRoot, 'render-lifecycle/legacy-conversation-render-adapter.ts')),
     ).toBe(false);
+    expect(existsSync(join(srcRoot, 'hooks/useUIState.ts'))).toBe(false);
   });
 });
 

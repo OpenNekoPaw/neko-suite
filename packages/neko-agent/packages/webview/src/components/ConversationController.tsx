@@ -46,13 +46,16 @@ import type {
 } from '@/components/ChatView/InputArea/types';
 import { EmptyState, type EmptyStateEntryAction } from '@/components/ChatView/EmptyState';
 import { InputArea } from '@/components/ChatView/InputArea';
-import { InputAreaProvider, type MediaCategory } from '@/components/ChatView/InputAreaContext';
+import {
+  InputAreaProvider,
+  type MediaCategory,
+  type MediaModelSelection,
+} from '@/components/ChatView/InputAreaContext';
 import { useTranslation } from '@/i18n/I18nContext';
 import type { AgentWorkItemStore } from '@/components/AgentWorkItem';
 import { removeConversationWorkItems } from '@/components/AgentWorkItem';
 import type { PluginsAvailable } from '@/components/ChatView/SendToMenu';
 import type { ProjectFileInfo } from '@/hooks/useConfigState';
-import type { MediaModelSelection } from '@/hooks/useUIState';
 import {
   useConversationState,
   useTabManager,
@@ -225,11 +228,9 @@ export function ConversationController({
   const activeOpenTab = activeTabId ? openTabs.find((tab) => tab.id === activeTabId) : undefined;
   const visibleConversationId = activeTabId ? activeTabConversationId : activeConversationId;
 
-  // Model selection state — owned here so the settingsData handler can hydrate
-  // it on reload. Passed down to ChatWorkspace which reads it for send().
-  const [selectedModel, setSelectedModel] = useState('');
-  const selectedModelRef = useRef('');
-  const [mediaModelSelection, setMediaModelSelection] = useState<MediaModelSelection>({
+  // The tabless entry composer owns only defaults for creating the next conversation.
+  const [entrySelectedModel, setEntrySelectedModel] = useState('');
+  const [entryMediaModelSelection, setEntryMediaModelSelection] = useState<MediaModelSelection>({
     image: 'none',
     video: 'none',
     audio: 'none',
@@ -247,10 +248,6 @@ export function ConversationController({
   const [entrySessionMode, setEntrySessionMode] = useState<SessionMode>('agent');
   const [entryGenCategory, setEntryGenCategory] = useState<GenCategory>('image');
   const [entryGenParams, setEntryGenParams] = useState<GenerationParams>(DEFAULT_GENERATION_PARAMS);
-
-  useEffect(() => {
-    selectedModelRef.current = selectedModel;
-  }, [selectedModel]);
 
   // ---- Per-conversation ref Maps ----
   const conversationTokenCountRef = useRef<Map<string, number>>(new Map());
@@ -505,17 +502,17 @@ export function ConversationController({
     () =>
       projectChatWorkspaceModelState({
         chatModelOptions: activeSettings.chatModelOptions,
-        selectedModel,
+        selectedModel: entrySelectedModel,
         defaultMaxOutputTokens: activeSettings.maxTokens,
         sessionMode: entrySessionMode,
-        mediaModelSelection,
+        mediaModelSelection: entryMediaModelSelection,
       }),
     [
       activeSettings.chatModelOptions,
       activeSettings.maxTokens,
       entrySessionMode,
-      mediaModelSelection,
-      selectedModel,
+      entryMediaModelSelection,
+      entrySelectedModel,
     ],
   );
   const handleModelSelectForConversation = useCallback(
@@ -545,7 +542,7 @@ export function ConversationController({
         (option) => option.id === modelId,
       );
       if (!selectedOption?.providerId || !selectedOption.modelId) return;
-      setSelectedModel(modelId);
+      setEntrySelectedModel(modelId);
       updateSettings({
         selectedProviderId: selectedOption.providerId,
         selectedModelId: selectedOption.modelId,
@@ -993,7 +990,7 @@ export function ConversationController({
     (mode: SessionMode) => {
       setEntrySessionMode(mode);
       setEntryAction('start-chat');
-      setMediaModelSelection((prev) => {
+      setEntryMediaModelSelection((prev) => {
         const projection = projectMediaModelSelectionForSessionModeChange({
           sessionMode: mode,
           mediaModelSelection: prev,
@@ -1006,7 +1003,7 @@ export function ConversationController({
   );
 
   const handleEntryMediaModelSelect = useCallback((category: MediaCategory, modelId: string) => {
-    setMediaModelSelection((prev) => ({ ...prev, [category]: modelId }));
+    setEntryMediaModelSelection((prev) => ({ ...prev, [category]: modelId }));
   }, []);
 
   const handleEntryGenParamsChange = useCallback((partial: Partial<GenerationParams>) => {
@@ -1296,10 +1293,10 @@ export function ConversationController({
               isBusy={false}
               sessionMode={entrySessionMode}
               onSessionModeChange={handleEntrySessionModeChange}
-              selectedModel={selectedModel}
+              selectedModel={entrySelectedModel}
               availableModels={entryModelState.availableModels}
               onModelSelect={handleEntryModelSelect}
-              mediaModelSelection={mediaModelSelection}
+              mediaModelSelection={entryMediaModelSelection}
               availableMediaModels={entryModelState.availableMediaModels}
               mediaUnderstandingModels={activeSettings.mediaUnderstandingModels}
               mediaUnderstandingSelection={{ image: 'auto', video: 'auto', audio: 'auto' }}
