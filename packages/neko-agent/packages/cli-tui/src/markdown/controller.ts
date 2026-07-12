@@ -4,7 +4,7 @@ import {
   type MarkdownNodeId,
   type MarkdownStreamingResult,
 } from '@neko/markdown';
-import type { TuiLabels } from '../core/tui-locale';
+import type { TerminalMarkdownMessages } from '../presentation/terminal-label-presentation';
 import { DeterministicLruCache, type DeterministicCacheStats } from './cache';
 import type { TerminalMarkdownDiagnostic } from './contracts';
 import {
@@ -38,7 +38,7 @@ export interface TerminalMarkdownControllerOptions {
   readonly isFinal: boolean;
   readonly viewportWidth: number;
   readonly supportsUnicode: boolean;
-  readonly labels: TuiLabels['markdown'];
+  readonly labels: TerminalMarkdownMessages;
   readonly policy?: MarkdownResourcePolicy;
   readonly targetResolver?: TerminalResourceTargetResolver;
   readonly highlighter?: TerminalCodeHighlighter;
@@ -71,7 +71,7 @@ type Listener = () => void;
 
 export class TerminalMarkdownController {
   readonly #key: string;
-  readonly #labels: TuiLabels['markdown'];
+  readonly #labels: TerminalMarkdownMessages;
   readonly #policy: MarkdownResourcePolicy;
   readonly #targetResolver: TerminalResourceTargetResolver;
   readonly #highlighter: TerminalCodeHighlighter;

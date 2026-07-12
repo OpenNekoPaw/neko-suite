@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { parseNormalizedMarkdown } from '@neko/markdown';
-import { getTuiLabels } from '../../core/tui-locale';
+import { createTestTerminalMarkdownMessages } from '../../presentation/testing';
 import { layoutTerminalMarkdown } from '../layout';
 import { projectTerminalMarkdown } from '../projector';
 import { DEFAULT_MARKDOWN_RESOURCE_POLICY } from '../resource-policy';
@@ -12,7 +12,9 @@ function project(source: string) {
   const parsed = parseNormalizedMarkdown(source);
   if (parsed.status !== 'ready')
     throw new Error(`Parse failed: ${JSON.stringify(parsed.diagnostics)}`);
-  return projectTerminalMarkdown(parsed.document, { labels: getTuiLabels('en').markdown });
+  return projectTerminalMarkdown(parsed.document, {
+    labels: createTestTerminalMarkdownMessages('en'),
+  });
 }
 
 function text(segments: readonly { readonly text: string }[]): string {
@@ -67,7 +69,10 @@ describe('pure terminal Markdown projector', () => {
 
   it('lays out without React, Ink, or ANSI and preserves Unicode width', () => {
     const projection = project('## 你好 👩🏽‍💻\n\n> **quoted** text');
-    const layout = layoutTerminalMarkdown({ projection, viewportWidth: 12, supportsUnicode: true });
+    const layout = layoutTerminalMarkdown(
+      { projection, viewportWidth: 12, supportsUnicode: true },
+      { labels: createTestTerminalMarkdownMessages('en') },
+    );
     expect(layout.lines.every((line) => line.displayWidth <= 12)).toBe(true);
     expect(layout.lines.map((line) => text(line.segments)).join('\n')).toContain('## 你好 👩🏽‍💻');
     expect(layout.lines.map((line) => text(line.segments)).join('\n')).toContain('│ quoted');
@@ -93,7 +98,7 @@ describe('adaptive table layout', () => {
   ).blocks[0] as TerminalTableBlock;
 
   it('profiles columns and selects grid, vertical, and stacked modes deterministically', () => {
-    const labels = getTuiLabels('en').markdown;
+    const labels = createTestTerminalMarkdownMessages('en');
     const wide = layoutTerminalTable(
       table,
       100,
@@ -137,7 +142,7 @@ describe('adaptive table layout', () => {
   });
 
   it('enforces grid budget at limit minus one, limit, and limit plus one with a diagnostic', () => {
-    const labels = getTuiLabels('en').markdown;
+    const labels = createTestTerminalMarkdownMessages('en');
     const policy = { ...DEFAULT_MARKDOWN_RESOURCE_POLICY, tableGridMaxCells: 3 };
     const below = project('| A |\n| - |\n| one |').blocks[0] as TerminalTableBlock;
     const exact = project('| A |\n| - |\n| one |\n| two |').blocks[0] as TerminalTableBlock;
@@ -187,7 +192,7 @@ describe('adaptive table layout', () => {
       100,
       terminalTextMetrics,
       DEFAULT_MARKDOWN_RESOURCE_POLICY,
-      getTuiLabels('en').markdown,
+      createTestTerminalMarkdownMessages('en'),
       true,
     );
     const output = result.lines.map((line) => text(line.segments)).join('\n');
@@ -214,7 +219,7 @@ describe('structured terminal resource targets', () => {
     const parsed = parseNormalizedMarkdown('[workspace](file:///workspace/asset.png)');
     if (parsed.status !== 'ready') throw new Error('parse failed');
     const projection = projectTerminalMarkdown(parsed.document, {
-      labels: getTuiLabels('en').markdown,
+      labels: createTestTerminalMarkdownMessages('en'),
       targetResolver: {
         resolve(request) {
           return {
@@ -248,7 +253,10 @@ describe('structured terminal resource targets', () => {
 describe('code visual wrapping', () => {
   it('expands tabs from the current visual column', () => {
     const projection = project('```text\na\tb\n```');
-    const layout = layoutTerminalMarkdown({ projection, viewportWidth: 8, supportsUnicode: true });
+    const layout = layoutTerminalMarkdown(
+      { projection, viewportWidth: 8, supportsUnicode: true },
+      { labels: createTestTerminalMarkdownMessages('en') },
+    );
     const codeLine = layout.lines.find((line) => line.logicalLine === 1);
     const visualCode = codeLine?.segments
       .filter((segment) => segment.style?.markdownRole !== 'code-border')
@@ -262,7 +270,10 @@ describe('code visual wrapping', () => {
     const projection = project(
       '```ts\nconst longIdentifierWithoutBreaks = "👩🏽‍💻👩🏽‍💻👩🏽‍💻";\nnext();\n```',
     );
-    const layout = layoutTerminalMarkdown({ projection, viewportWidth: 12, supportsUnicode: true });
+    const layout = layoutTerminalMarkdown(
+      { projection, viewportWidth: 12, supportsUnicode: true },
+      { labels: createTestTerminalMarkdownMessages('en') },
+    );
     const codeLines = layout.lines.filter((line) => line.logicalLine !== undefined);
     expect(codeLines.length).toBeGreaterThan(2);
     expect(codeLines.some((line) => line.continuation)).toBe(true);

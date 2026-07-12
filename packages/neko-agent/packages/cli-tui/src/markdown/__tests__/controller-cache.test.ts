@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { MarkdownRevision, MarkdownSessionId } from '@neko/markdown';
-import { getTuiLabels } from '../../core/tui-locale';
+import { createTestTerminalMarkdownMessages } from '../../presentation/testing';
 import { DeterministicLruCache } from '../cache';
 import { TerminalMarkdownController } from '../controller';
 import type {
@@ -15,7 +15,7 @@ import {
 import { DEFAULT_MARKDOWN_RESOURCE_POLICY } from '../resource-policy';
 import type { TerminalResourceTargetResolver } from '../resource-target';
 
-const labels = getTuiLabels('en').markdown;
+const labels = createTestTerminalMarkdownMessages('en');
 
 afterEach(() => vi.useRealTimers());
 

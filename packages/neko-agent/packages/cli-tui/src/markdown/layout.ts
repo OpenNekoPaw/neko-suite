@@ -1,5 +1,5 @@
 import type { MarkdownSourceRange } from '@neko/markdown';
-import { getTuiLabels, type TuiLabels } from '../core/tui-locale';
+import type { TerminalMarkdownMessages } from '../presentation/terminal-label-presentation';
 import type { TerminalMarkdownDiagnostic, TerminalStyledSegment } from './contracts';
 import { presentMarkdownDiagnostic } from './diagnostic-presentation';
 import { DEFAULT_MARKDOWN_RESOURCE_POLICY, type MarkdownResourcePolicy } from './resource-policy';
@@ -16,12 +16,12 @@ import type {
 export interface LayoutTerminalMarkdownOptions {
   readonly metrics?: TerminalTextMetrics;
   readonly policy?: MarkdownResourcePolicy;
-  readonly labels?: TuiLabels['markdown'];
+  readonly labels: TerminalMarkdownMessages;
 }
 
 export function layoutTerminalMarkdown(
   input: TerminalMarkdownLayoutInput,
-  options: LayoutTerminalMarkdownOptions = {},
+  options: LayoutTerminalMarkdownOptions,
 ): TerminalMarkdownLayout {
   if (!Number.isInteger(input.viewportWidth) || input.viewportWidth < 1) {
     throw new RangeError(`viewportWidth must be positive, received ${input.viewportWidth}.`);
@@ -32,7 +32,7 @@ export function layoutTerminalMarkdown(
     supportsUnicode: input.supportsUnicode,
     metrics,
     policy: options.policy ?? DEFAULT_MARKDOWN_RESOURCE_POLICY,
-    labels: options.labels ?? getTuiLabels().markdown,
+    labels: options.labels,
   };
   const lines = layoutBlocks(input.projection.blocks, context);
   for (const diagnostic of input.projection.diagnostics) {
@@ -58,7 +58,7 @@ interface LayoutContext {
   readonly supportsUnicode: boolean;
   readonly metrics: TerminalTextMetrics;
   readonly policy: MarkdownResourcePolicy;
-  readonly labels: TuiLabels['markdown'];
+  readonly labels: TerminalMarkdownMessages;
 }
 
 function layoutBlocks(

@@ -1,5 +1,5 @@
 import type { MarkdownDiagnostic } from '@neko/markdown';
-import { formatTuiTemplate, type TuiLabels } from '../core/tui-locale';
+import type { TerminalMarkdownMessages } from '../presentation/terminal-label-presentation';
 import type { TerminalMarkdownDiagnostic, TerminalStyledSegment } from './contracts';
 
 export interface TerminalDiagnosticPresentation {
@@ -9,7 +9,7 @@ export interface TerminalDiagnosticPresentation {
 
 export function presentMarkdownDiagnostic(
   diagnostic: MarkdownDiagnostic | TerminalMarkdownDiagnostic,
-  labels: TuiLabels['markdown'],
+  labels: TerminalMarkdownMessages,
 ): TerminalDiagnosticPresentation {
   const severity = diagnostic.severity;
   const role =
@@ -30,7 +30,7 @@ export function presentMarkdownDiagnostic(
 
 export function createFatalMarkdownPresentation(
   detail: string,
-  labels: TuiLabels['markdown'],
+  labels: TerminalMarkdownMessages,
 ): TerminalDiagnosticPresentation {
   return {
     severity: 'fatal',
@@ -46,17 +46,15 @@ export function createFatalMarkdownPresentation(
 
 function formatDiagnosticMessage(
   diagnostic: MarkdownDiagnostic | TerminalMarkdownDiagnostic,
-  labels: TuiLabels['markdown'],
+  labels: TerminalMarkdownMessages,
 ): string {
   if (diagnostic.code === 'TUI_MD_UNSAFE_CONTROL') {
-    return formatTuiTemplate(labels.unsafeControl, {
-      control: String(diagnostic.parameters['control'] ?? diagnostic.parameters['count'] ?? '?'),
-    });
+    return labels.unsafeControl(
+      String(diagnostic.parameters['control'] ?? diagnostic.parameters['count'] ?? '?'),
+    );
   }
   if (diagnostic.code === 'MD_TABLE_GRID_BUDGET_EXCEEDED') {
-    return formatTuiTemplate(labels.tableGridBudgetExceeded, {
-      cells: Number(diagnostic.parameters['cells'] ?? 0),
-    });
+    return labels.tableGridBudgetExceeded(Number(diagnostic.parameters['cells'] ?? 0));
   }
   if (diagnostic.code === 'MD_HIGHLIGHT_LIMIT_EXCEEDED') {
     return labels.highlightLimitExceeded;
@@ -65,11 +63,9 @@ function formatDiagnosticMessage(
     diagnostic.code === 'MD_UNSAFE_DESTINATION' ||
     diagnostic.code === 'TUI_MD_UNSAFE_HYPERLINK'
   ) {
-    return formatTuiTemplate(labels.unsupportedDestination, {
-      target: String(
-        diagnostic.parameters['destination'] ?? diagnostic.parameters['target'] ?? '?',
-      ),
-    });
+    return labels.unsupportedDestination(
+      String(diagnostic.parameters['destination'] ?? diagnostic.parameters['target'] ?? '?'),
+    );
   }
   return `${diagnostic.code}`;
 }

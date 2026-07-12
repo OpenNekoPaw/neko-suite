@@ -6,7 +6,7 @@ import type {
   MarkdownTableNode,
   NormalizedMarkdownDocument,
 } from '@neko/markdown';
-import { getTuiLabels, type TuiLabels } from '../core/tui-locale';
+import type { TerminalMarkdownMessages } from '../presentation/terminal-label-presentation';
 import type {
   TerminalMarkdownDiagnostic,
   TerminalStyleRef,
@@ -28,14 +28,14 @@ import type {
 } from './terminal-blocks';
 
 export interface TerminalMarkdownProjectorOptions {
-  readonly labels?: TuiLabels['markdown'];
+  readonly labels: TerminalMarkdownMessages;
   readonly targetResolver?: TerminalResourceTargetResolver;
   readonly codeHighlights?: ReadonlyMap<MarkdownNodeId, readonly TerminalCodeToken[]>;
   readonly presentationDiagnostics?: readonly TerminalMarkdownDiagnostic[];
 }
 
 interface ProjectorContext {
-  readonly labels: TuiLabels['markdown'];
+  readonly labels: TerminalMarkdownMessages;
   readonly targetResolver: TerminalResourceTargetResolver;
   readonly codeHighlights?: ReadonlyMap<MarkdownNodeId, readonly TerminalCodeToken[]>;
   readonly diagnostics: TerminalMarkdownDiagnostic[];
@@ -44,9 +44,9 @@ interface ProjectorContext {
 
 export function projectTerminalMarkdown(
   document: NormalizedMarkdownDocument,
-  options: TerminalMarkdownProjectorOptions = {},
+  options: TerminalMarkdownProjectorOptions,
 ): TerminalMarkdownProjection {
-  const labels = options.labels ?? getTuiLabels().markdown;
+  const labels = options.labels;
   const diagnostics: TerminalMarkdownDiagnostic[] = [];
   const context: ProjectorContext = {
     labels,
@@ -281,7 +281,7 @@ function projectInline(
         },
       ];
     case 'image': {
-      const label = `[${labels.image.replace('{alt}', node.altText || 'image')}]`;
+      const label = `[${labels.image(node.altText || 'image')}]`;
       const target = context.targetResolver.resolve({
         destination: node.destination,
         usage: 'image',
@@ -305,7 +305,7 @@ function projectInline(
     case 'imageReference':
       return [
         {
-          text: `[${labels.image.replace('{alt}', node.altText || 'image')}] [${node.label ?? node.identifier}]`,
+          text: `[${labels.image(node.altText || 'image')}] [${node.label ?? node.identifier}]`,
           style: { markdownRole: 'muted' },
           ...source,
         },
@@ -383,7 +383,7 @@ function rectangularizeRow(
       segments: header
         ? [
             {
-              text: labels.syntheticColumn.replace('{index}', String(index + 1)),
+              text: labels.syntheticColumn(index + 1),
               style: { markdownRole: 'table-header' },
             },
           ]

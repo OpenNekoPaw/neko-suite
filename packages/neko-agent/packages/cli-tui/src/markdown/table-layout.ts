@@ -1,5 +1,5 @@
 import type { MarkdownTableAlignment } from '@neko/markdown';
-import type { TuiLabels } from '../core/tui-locale';
+import type { TerminalMarkdownMessages } from '../presentation/terminal-label-presentation';
 import type { TerminalStyledSegment } from './contracts';
 import type { TerminalTextMetrics } from './text-metrics';
 import type { TerminalLine, TerminalTableBlock, TerminalTableCell } from './terminal-blocks';
@@ -28,7 +28,7 @@ export function layoutTerminalTable(
   viewportWidth: number,
   metrics: TerminalTextMetrics,
   policy: MarkdownResourcePolicy,
-  labels: TuiLabels['markdown'],
+  labels: TerminalMarkdownMessages,
   supportsUnicode: boolean,
 ): TerminalTableLayoutResult {
   const profiles = profileTableColumns(table, metrics);
@@ -211,15 +211,13 @@ function layoutVerticalRecords(
   viewportWidth: number,
   metrics: TerminalTextMetrics,
   borders: BorderChars,
-  labels: TuiLabels['markdown'],
+  labels: TerminalMarkdownMessages,
 ): readonly TerminalLine[] {
   const lines: TerminalLine[] = [];
   table.rows.forEach((row, rowIndex) => {
     if (rowIndex > 0) lines.push(ruleLine(viewportWidth, borders.h, metrics));
     row.forEach((cell, column) => {
-      const header =
-        cellText(table.header[column]) ||
-        labels.syntheticColumn.replace('{index}', String(column + 1));
+      const header = cellText(table.header[column]) || labels.syntheticColumn(column + 1);
       const prefix = `${header}: `;
       const prefixWidth = metrics.displayWidth(prefix);
       const width = Math.max(1, viewportWidth - prefixWidth);
@@ -248,15 +246,13 @@ function layoutStackedRecords(
   table: TerminalTableBlock,
   viewportWidth: number,
   metrics: TerminalTextMetrics,
-  labels: TuiLabels['markdown'],
+  labels: TerminalMarkdownMessages,
 ): readonly TerminalLine[] {
   const lines: TerminalLine[] = [];
   table.rows.forEach((row, rowIndex) => {
     if (rowIndex > 0) lines.push({ kind: 'blank', segments: [], displayWidth: 0 });
     row.forEach((cell, column) => {
-      const header =
-        cellText(table.header[column]) ||
-        labels.syntheticColumn.replace('{index}', String(column + 1));
+      const header = cellText(table.header[column]) || labels.syntheticColumn(column + 1);
       const headerLines = metrics.wrapStyledSegments(
         [{ text: header, style: { markdownRole: 'table-header', attributes: { bold: true } } }],
         viewportWidth,
