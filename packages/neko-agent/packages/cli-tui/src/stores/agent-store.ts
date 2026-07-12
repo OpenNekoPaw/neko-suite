@@ -6,6 +6,7 @@
  */
 
 import { create } from 'zustand';
+import { createStore, type StateCreator, type StoreApi } from 'zustand/vanilla';
 import type {
   AgentStatus,
   ContextTokenState,
@@ -77,107 +78,130 @@ const initialState = {
   activeSkillLifecycleRecords: [] as readonly ActiveSkillLifecycleRecordProjection[],
 };
 
-export const useAgentStore = create<AgentSlice>((set) => ({
-  ...initialState,
+export type AgentStore = StoreApi<AgentSlice>;
 
-  setRunning: () => {
-    set((state) => ({
-      status: 'running',
-      startTime: state.startTime ?? Date.now(),
-      error: null,
-    }));
-  },
+export function createAgentStore(assertMutable: () => void = () => undefined): AgentStore {
+  return createStore<AgentSlice>(createAgentState(assertMutable));
+}
 
-  setIdle: () => {
-    set({ status: 'idle', startTime: null });
-  },
+function createAgentState(assertMutable: () => void): StateCreator<AgentSlice> {
+  return (set) => {
+    const update = (
+      next:
+        | AgentSlice
+        | Partial<AgentSlice>
+        | ((state: AgentSlice) => AgentSlice | Partial<AgentSlice>),
+    ): void => {
+      assertMutable();
+      set(next);
+    };
 
-  setWaitingConfirmation: () => {
-    set({ status: 'waiting_confirmation' });
-  },
+    return {
+      ...initialState,
 
-  setError: (error) => {
-    set({ status: 'error', startTime: null, error });
-  },
-
-  setIteration: (current, max) => {
-    set({ iteration: { current, max } });
-  },
-
-  updateUsage: (usage) => {
-    set({
-      usage: {
-        input: usage.inputTokens,
-        output: usage.outputTokens,
-        total: usage.totalTokens,
+      setRunning: () => {
+        update((state) => ({
+          status: 'running',
+          startTime: state.startTime ?? Date.now(),
+          error: null,
+        }));
       },
-    });
-  },
 
-  setContextTokenCount: (count) => {
-    set({
-      contextTokens: {
-        count,
+      setIdle: () => {
+        update({ status: 'idle', startTime: null });
       },
-    });
-  },
 
-  setMessageQueueSnapshot: (snapshot) => {
-    set((state) => ({
-      messageQueue: {
-        ...state.messageQueue,
-        snapshot,
-        diagnostic: null,
+      setWaitingConfirmation: () => {
+        update({ status: 'waiting_confirmation' });
       },
-    }));
-  },
 
-  setMessageQueueDiagnostic: (diagnostic) => {
-    set((state) => ({
-      messageQueue: {
-        ...state.messageQueue,
-        diagnostic,
+      setError: (error) => {
+        update({ status: 'error', startTime: null, error });
       },
-    }));
-  },
 
-  setMessageQueuePausedAfterCancel: (pausedAfterCancel) => {
-    set((state) => ({
-      messageQueue: {
-        ...state.messageQueue,
-        pausedAfterCancel,
+      setIteration: (current, max) => {
+        update({ iteration: { current, max } });
       },
-    }));
-  },
 
-  setRunningTasks: (tasks) => {
-    set({
-      tasks: {
-        running: [...tasks],
+      updateUsage: (usage) => {
+        update({
+          usage: {
+            input: usage.inputTokens,
+            output: usage.outputTokens,
+            total: usage.totalTokens,
+          },
+        });
       },
-    });
-  },
 
-  setSessionMode: (mode) => {
-    set({ sessionMode: mode });
-  },
+      setContextTokenCount: (count) => {
+        update({
+          contextTokens: {
+            count,
+          },
+        });
+      },
 
-  setExecutionMode: (mode) => {
-    set({ executionMode: mode });
-  },
+      setMessageQueueSnapshot: (snapshot) => {
+        update((state) => ({
+          messageQueue: {
+            ...state.messageQueue,
+            snapshot,
+            diagnostic: null,
+          },
+        }));
+      },
 
-  setActiveSkill: (name) => {
-    set({ activeSkill: name });
-  },
+      setMessageQueueDiagnostic: (diagnostic) => {
+        update((state) => ({
+          messageQueue: {
+            ...state.messageQueue,
+            diagnostic,
+          },
+        }));
+      },
 
-  setActiveSkillLifecycleRecords: (records) => {
-    set({
-      activeSkillLifecycleRecords: [...records],
-      activeSkill: records[0]?.skillName ?? null,
-    });
-  },
+      setMessageQueuePausedAfterCancel: (pausedAfterCancel) => {
+        update((state) => ({
+          messageQueue: {
+            ...state.messageQueue,
+            pausedAfterCancel,
+          },
+        }));
+      },
 
-  reset: () => {
-    set(initialState);
-  },
-}));
+      setRunningTasks: (tasks) => {
+        update({
+          tasks: {
+            running: [...tasks],
+          },
+        });
+      },
+
+      setSessionMode: (mode) => {
+        update({ sessionMode: mode });
+      },
+
+      setExecutionMode: (mode) => {
+        update({ executionMode: mode });
+      },
+
+      setActiveSkill: (name) => {
+        update({ activeSkill: name });
+      },
+
+      setActiveSkillLifecycleRecords: (records) => {
+        update({
+          activeSkillLifecycleRecords: [...records],
+          activeSkill: records[0]?.skillName ?? null,
+        });
+      },
+
+      reset: () => {
+        update(initialState);
+      },
+    };
+  };
+}
+
+/** @deprecated Use the application-owned store exposed by TuiRuntimeProvider. */
+export const useAgentStore = create<AgentSlice>(createAgentState(() => undefined));

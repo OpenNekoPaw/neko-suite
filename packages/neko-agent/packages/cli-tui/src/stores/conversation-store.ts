@@ -6,15 +6,11 @@
  */
 
 import { create } from 'zustand';
+import { createStore, type StateCreator, type StoreApi } from 'zustand/vanilla';
 import type { Message, TerminalTimelineRow, ToolCallState, TodoItem } from '../types/state';
 
 type SystemMessageInput =
   string | Omit<Message, 'id' | 'role' | 'toolCalls' | 'todos' | 'timestamp'>;
-
-let messageCounter = 0;
-function nextId(): string {
-  return `msg-${++messageCounter}-${Date.now()}`;
-}
 
 export interface ConversationSlice {
   // State
@@ -44,198 +40,228 @@ export interface ConversationSlice {
   clearMessages: () => void;
 }
 
-export const useConversationStore = create<ConversationSlice>((set) => ({
-  messages: [],
-  currentDelta: '',
-  isStreaming: false,
-  currentThinking: '',
+export type ConversationStore = StoreApi<ConversationSlice>;
 
-  addUserMessage: (content) => {
-    set((state) => ({
-      messages: [
-        ...state.messages,
-        {
-          id: nextId(),
-          role: 'user' as const,
-          content,
-          toolCalls: [],
-          todos: [],
-          timestamp: Date.now(),
-        },
-      ],
-    }));
-  },
+export function createConversationStore(
+  assertMutable: () => void = () => undefined,
+): ConversationStore {
+  return createStore<ConversationSlice>(createConversationState(assertMutable));
+}
 
-  startAssistantMessage: () => {
-    set((state) => ({
-      messages: [
-        ...state.messages,
-        {
-          id: nextId(),
-          role: 'assistant' as const,
-          content: '',
-          toolCalls: [],
-          todos: [],
-          timestamp: Date.now(),
-        },
-      ],
+function createConversationState(assertMutable: () => void): StateCreator<ConversationSlice> {
+  let messageCounter = 0;
+  const nextId = (): string => `msg-${++messageCounter}-${Date.now()}`;
+
+  return (set) => {
+    const update = (
+      next:
+        | ConversationSlice
+        | Partial<ConversationSlice>
+        | ((state: ConversationSlice) => ConversationSlice | Partial<ConversationSlice>),
+    ): void => {
+      assertMutable();
+      set(next);
+    };
+
+    return {
+      messages: [],
       currentDelta: '',
-      isStreaming: true,
+      isStreaming: false,
       currentThinking: '',
-    }));
-  },
 
-  appendDelta: (delta) => {
-    set((state) => ({
-      currentDelta: state.currentDelta + delta,
-    }));
-  },
+      addUserMessage: (content) => {
+        update((state) => ({
+          messages: [
+            ...state.messages,
+            {
+              id: nextId(),
+              role: 'user' as const,
+              content,
+              toolCalls: [],
+              todos: [],
+              timestamp: Date.now(),
+            },
+          ],
+        }));
+      },
 
-  completeMessage: (content) => {
-    set((state) => {
-      const messages = [...state.messages];
-      const last = messages[messages.length - 1];
-      if (last?.role === 'assistant') {
-        messages[messages.length - 1] = { ...last, content };
-      }
-      return { messages, currentDelta: '', isStreaming: false };
-    });
-  },
+      startAssistantMessage: () => {
+        update((state) => ({
+          messages: [
+            ...state.messages,
+            {
+              id: nextId(),
+              role: 'assistant' as const,
+              content: '',
+              toolCalls: [],
+              todos: [],
+              timestamp: Date.now(),
+            },
+          ],
+          currentDelta: '',
+          isStreaming: true,
+          currentThinking: '',
+        }));
+      },
 
-  setThinking: (thinking) => {
-    set((state) => ({
-      currentThinking: state.currentThinking + thinking,
-    }));
-  },
+      appendDelta: (delta) => {
+        update((state) => ({
+          currentDelta: state.currentDelta + delta,
+        }));
+      },
 
-  addToolCall: (toolCall) => {
-    set((state) => {
-      const messages = [...state.messages];
-      const last = messages[messages.length - 1];
-      if (last?.role === 'assistant') {
-        const tc: ToolCallState = {
-          id: toolCall.id,
-          name: toolCall.name,
-          arguments: toolCall.arguments,
-          status: 'running',
-        };
-        messages[messages.length - 1] = {
-          ...last,
-          toolCalls: [...last.toolCalls, tc],
-        };
-      }
-      return { messages };
-    });
-  },
-
-  updateToolResult: (result) => {
-    set((state) => {
-      const messages = [...state.messages];
-      const last = messages[messages.length - 1];
-      if (last?.role === 'assistant') {
-        const toolCalls = last.toolCalls.map((tc) =>
-          tc.id === result.toolCallId
-            ? {
-                ...tc,
-                status: (result.success ? 'success' : 'error') as ToolCallState['status'],
-                result: result.data,
-                error: result.error,
-              }
-            : tc,
-        );
-        messages[messages.length - 1] = { ...last, toolCalls };
-      }
-      return { messages };
-    });
-  },
-
-  applyTimelineRows: (rows) => {
-    if (rows.length === 0) return;
-    set((state) => {
-      const messages = [...state.messages];
-      const last = messages[messages.length - 1];
-      if (last?.role !== 'assistant') {
-        messages.push({
-          id: nextId(),
-          role: 'assistant' as const,
-          content: '',
-          toolCalls: [],
-          todos: [],
-          timelineRows: normalizeTimelineRows(rows),
-          timestamp: Date.now(),
+      completeMessage: (content) => {
+        update((state) => {
+          const messages = [...state.messages];
+          const last = messages[messages.length - 1];
+          if (last?.role === 'assistant') {
+            messages[messages.length - 1] = { ...last, content };
+          }
+          return { messages, currentDelta: '', isStreaming: false };
         });
-        return { messages, isStreaming: rows.some((row) => row.status === 'streaming') };
-      }
+      },
 
-      const timelineRows = mergeTimelineRows(last.timelineRows ?? [], rows);
-      messages[messages.length - 1] = {
-        ...last,
-        timelineRows,
-      };
-      return { messages, isStreaming: timelineRows.some((row) => row.status === 'streaming') };
-    });
-  },
+      setThinking: (thinking) => {
+        update((state) => ({
+          currentThinking: state.currentThinking + thinking,
+        }));
+      },
 
-  updateTodos: (todos) => {
-    set((state) => {
-      const messages = [...state.messages];
-      const last = messages[messages.length - 1];
-      if (last?.role === 'assistant') {
-        messages[messages.length - 1] = { ...last, todos };
-      }
-      return { messages };
-    });
-  },
+      addToolCall: (toolCall) => {
+        update((state) => {
+          const messages = [...state.messages];
+          const last = messages[messages.length - 1];
+          if (last?.role === 'assistant') {
+            const tc: ToolCallState = {
+              id: toolCall.id,
+              name: toolCall.name,
+              arguments: toolCall.arguments,
+              status: 'running',
+            };
+            messages[messages.length - 1] = {
+              ...last,
+              toolCalls: [...last.toolCalls, tc],
+            };
+          }
+          return { messages };
+        });
+      },
 
-  addError: (error) => {
-    set((state) => ({
-      messages: [
-        ...state.messages,
-        {
-          id: nextId(),
-          role: 'system' as const,
-          content: error.message,
-          toolCalls: [],
-          todos: [],
-          timestamp: Date.now(),
-          isError: true,
-        },
-      ],
-      isStreaming: false,
-    }));
-  },
+      updateToolResult: (result) => {
+        update((state) => {
+          const messages = [...state.messages];
+          const last = messages[messages.length - 1];
+          if (last?.role === 'assistant') {
+            const toolCalls = last.toolCalls.map((tc) =>
+              tc.id === result.toolCallId
+                ? {
+                    ...tc,
+                    status: (result.success ? 'success' : 'error') as ToolCallState['status'],
+                    result: result.data,
+                    error: result.error,
+                  }
+                : tc,
+            );
+            messages[messages.length - 1] = { ...last, toolCalls };
+          }
+          return { messages };
+        });
+      },
 
-  addSystemMessage: (input) => {
-    const messageInput = typeof input === 'string' ? { content: input } : input;
-    set((state) => ({
-      messages: [
-        ...state.messages,
-        {
-          id: nextId(),
-          role: 'system' as const,
-          ...messageInput,
-          toolCalls: [],
-          todos: [],
-          timestamp: Date.now(),
-          isError: messageInput.isError ?? false,
-        },
-      ],
-    }));
-  },
+      applyTimelineRows: (rows) => {
+        if (rows.length === 0) return;
+        update((state) => {
+          const messages = [...state.messages];
+          const last = messages[messages.length - 1];
+          if (last?.role !== 'assistant') {
+            messages.push({
+              id: nextId(),
+              role: 'assistant' as const,
+              content: '',
+              toolCalls: [],
+              todos: [],
+              timelineRows: normalizeTimelineRows(rows),
+              timestamp: Date.now(),
+            });
+            return { messages, isStreaming: rows.some((row) => row.status === 'streaming') };
+          }
 
-  replaceMessages: (messages) => {
-    set({
-      messages: [...messages],
-      currentDelta: '',
-      isStreaming: false,
-      currentThinking: '',
-    });
-  },
+          const timelineRows = mergeTimelineRows(last.timelineRows ?? [], rows);
+          messages[messages.length - 1] = {
+            ...last,
+            timelineRows,
+          };
+          return { messages, isStreaming: timelineRows.some((row) => row.status === 'streaming') };
+        });
+      },
 
-  clearMessages: () => {
-    set({ messages: [], currentDelta: '', isStreaming: false, currentThinking: '' });
-  },
-}));
+      updateTodos: (todos) => {
+        update((state) => {
+          const messages = [...state.messages];
+          const last = messages[messages.length - 1];
+          if (last?.role === 'assistant') {
+            messages[messages.length - 1] = { ...last, todos };
+          }
+          return { messages };
+        });
+      },
+
+      addError: (error) => {
+        update((state) => ({
+          messages: [
+            ...state.messages,
+            {
+              id: nextId(),
+              role: 'system' as const,
+              content: error.message,
+              toolCalls: [],
+              todos: [],
+              timestamp: Date.now(),
+              isError: true,
+            },
+          ],
+          isStreaming: false,
+        }));
+      },
+
+      addSystemMessage: (input) => {
+        const messageInput = typeof input === 'string' ? { content: input } : input;
+        update((state) => ({
+          messages: [
+            ...state.messages,
+            {
+              id: nextId(),
+              role: 'system' as const,
+              ...messageInput,
+              toolCalls: [],
+              todos: [],
+              timestamp: Date.now(),
+              isError: messageInput.isError ?? false,
+            },
+          ],
+        }));
+      },
+
+      replaceMessages: (messages) => {
+        update({
+          messages: [...messages],
+          currentDelta: '',
+          isStreaming: false,
+          currentThinking: '',
+        });
+      },
+
+      clearMessages: () => {
+        update({ messages: [], currentDelta: '', isStreaming: false, currentThinking: '' });
+      },
+    };
+  };
+}
+
+/** @deprecated Use the conversation-owned store exposed by TuiRuntimeProvider. */
+export const useConversationStore = create<ConversationSlice>(
+  createConversationState(() => undefined),
+);
 
 function mergeTimelineRows(
   currentRows: readonly TerminalTimelineRow[],

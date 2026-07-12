@@ -6,6 +6,7 @@
  */
 
 import { create } from 'zustand';
+import { createStore, type StateCreator, type StoreApi } from 'zustand/vanilla';
 import type { TerminalSize } from '../types/state';
 
 /**
@@ -68,90 +69,125 @@ export interface UISlice {
   setTerminalSize: (size: TerminalSize) => void;
 }
 
-export const useUIStore = create<UISlice>((set) => ({
-  pendingApproval: null,
-  pendingSelection: null,
-  pendingPlanReview: false,
-  scrollOffset: 0,
-  scrollLimit: 0,
-  inputFocused: true,
-  slashMenuOpen: false,
-  terminalSize: {
+export type UIStore = StoreApi<UISlice>;
+
+export function createUIStore(
+  initialTerminalSize: TerminalSize = readProcessTerminalSize(),
+  assertMutable: () => void = () => undefined,
+): UIStore {
+  return createStore<UISlice>(createUIState(initialTerminalSize, assertMutable));
+}
+
+function createUIState(
+  initialTerminalSize: TerminalSize,
+  assertMutable: () => void,
+): StateCreator<UISlice> {
+  return (set) => {
+    const update = (
+      next: UISlice | Partial<UISlice> | ((state: UISlice) => UISlice | Partial<UISlice>),
+    ): void => {
+      assertMutable();
+      set(next);
+    };
+
+    return {
+      pendingApproval: null,
+      pendingSelection: null,
+      pendingPlanReview: false,
+      scrollOffset: 0,
+      scrollLimit: 0,
+      inputFocused: true,
+      slashMenuOpen: false,
+      terminalSize: { ...initialTerminalSize },
+
+      showToolApproval: (approval) => {
+        update({ pendingApproval: approval, inputFocused: false });
+      },
+
+      dismissToolApproval: () => {
+        update({ pendingApproval: null, inputFocused: true });
+      },
+
+      showSelection: (selection) => {
+        update({ pendingSelection: selection, inputFocused: false });
+      },
+
+      dismissSelection: () => {
+        update({ pendingSelection: null, inputFocused: true });
+      },
+
+      showPlanReview: () => {
+        update({ pendingPlanReview: true, inputFocused: false });
+      },
+
+      dismissPlanReview: () => {
+        update({ pendingPlanReview: false, inputFocused: true });
+      },
+
+      setScrollOffset: (offset) => {
+        update((state) => ({
+          scrollOffset: Math.min(state.scrollLimit, normalizeScrollRows(offset)),
+        }));
+      },
+
+      setScrollLimit: (limit) => {
+        update((state) => {
+          const scrollLimit = normalizeScrollRows(limit);
+          if (scrollLimit === state.scrollLimit) return state;
+          const growth = Math.max(0, scrollLimit - state.scrollLimit);
+          return {
+            scrollLimit,
+            scrollOffset:
+              state.scrollOffset === 0 ? 0 : Math.min(scrollLimit, state.scrollOffset + growth),
+          };
+        });
+      },
+
+      scrollUp: (lines = 3) => {
+        update((state) => ({
+          scrollOffset: Math.min(
+            state.scrollLimit,
+            state.scrollOffset + normalizeScrollRows(lines),
+          ),
+        }));
+      },
+
+      scrollDown: (lines = 3) => {
+        update((state) => ({
+          scrollOffset: Math.max(0, state.scrollOffset - normalizeScrollRows(lines)),
+        }));
+      },
+
+      scrollToBottom: () => {
+        update({ scrollOffset: 0 });
+      },
+
+      setInputFocused: (focused) => {
+        update({ inputFocused: focused });
+      },
+
+      setSlashMenuOpen: (open) => {
+        update({ slashMenuOpen: open });
+      },
+
+      setTerminalSize: (size) => {
+        update({ terminalSize: { ...size } });
+      },
+    };
+  };
+}
+
+function readProcessTerminalSize(): TerminalSize {
+  return {
     rows: process.stdout.rows ?? 24,
     columns: process.stdout.columns ?? 80,
-  },
+  };
+}
 
-  showToolApproval: (approval) => {
-    set({ pendingApproval: approval, inputFocused: false });
-  },
-
-  dismissToolApproval: () => {
-    set({ pendingApproval: null, inputFocused: true });
-  },
-
-  showSelection: (selection) => {
-    set({ pendingSelection: selection, inputFocused: false });
-  },
-
-  dismissSelection: () => {
-    set({ pendingSelection: null, inputFocused: true });
-  },
-
-  showPlanReview: () => {
-    set({ pendingPlanReview: true, inputFocused: false });
-  },
-
-  dismissPlanReview: () => {
-    set({ pendingPlanReview: false, inputFocused: true });
-  },
-
-  setScrollOffset: (offset) => {
-    set((state) => ({
-      scrollOffset: Math.min(state.scrollLimit, normalizeScrollRows(offset)),
-    }));
-  },
-
-  setScrollLimit: (limit) => {
-    set((state) => {
-      const scrollLimit = normalizeScrollRows(limit);
-      if (scrollLimit === state.scrollLimit) return state;
-      const growth = Math.max(0, scrollLimit - state.scrollLimit);
-      return {
-        scrollLimit,
-        scrollOffset:
-          state.scrollOffset === 0 ? 0 : Math.min(scrollLimit, state.scrollOffset + growth),
-      };
-    });
-  },
-
-  scrollUp: (lines = 3) => {
-    set((state) => ({
-      scrollOffset: Math.min(state.scrollLimit, state.scrollOffset + normalizeScrollRows(lines)),
-    }));
-  },
-
-  scrollDown: (lines = 3) => {
-    set((state) => ({
-      scrollOffset: Math.max(0, state.scrollOffset - normalizeScrollRows(lines)),
-    }));
-  },
-
-  scrollToBottom: () => {
-    set({ scrollOffset: 0 });
-  },
-
-  setInputFocused: (focused) => {
-    set({ inputFocused: focused });
-  },
-
-  setSlashMenuOpen: (open) => {
-    set({ slashMenuOpen: open });
-  },
-
-  setTerminalSize: (size) => {
-    set({ terminalSize: size });
-  },
-}));
+/** @deprecated Use the application-owned store exposed by TuiRuntimeProvider. */
+export const useUIStore = create<UISlice>(
+  createUIState(readProcessTerminalSize(), () => undefined),
+);
 
 function normalizeScrollRows(value: number): number {
   if (!Number.isFinite(value)) {

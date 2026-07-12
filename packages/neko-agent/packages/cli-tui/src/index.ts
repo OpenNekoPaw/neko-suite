@@ -78,6 +78,17 @@ export { useAgentStore } from './stores/agent-store';
 export { useConfigStore } from './stores/config-store';
 export { useUIStore } from './stores/ui-store';
 
+export {
+  createAgentTuiApplicationRuntime,
+  TuiRuntimeError,
+  type AgentTuiApplicationRuntime,
+  type TuiApplicationRuntimeSnapshot,
+  type TuiConversationRuntime,
+  type TuiConversationStores,
+  type TuiRuntimeDiagnosticCode,
+  type TuiRuntimeLifecycle,
+} from './runtime/tui-application-runtime';
+
 // Theme
 export { INK_BRAILLE_SPINNER, INK_TODO_ICONS, INK_TOOL_ICONS, tokens } from './theme';
 

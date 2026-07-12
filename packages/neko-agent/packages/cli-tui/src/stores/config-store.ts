@@ -6,6 +6,7 @@
  */
 
 import { create } from 'zustand';
+import { createStore, type StateCreator, type StoreApi } from 'zustand/vanilla';
 import type { CLIConfig } from '../core/types';
 import { DEFAULT_CLI_CONFIG } from '../core/types';
 
@@ -16,16 +17,47 @@ export interface ConfigSlice {
   replaceConfig: (config: CLIConfig) => void;
 }
 
-export const useConfigStore = create<ConfigSlice>((set) => ({
-  config: DEFAULT_CLI_CONFIG,
+export type ConfigStore = StoreApi<ConfigSlice>;
 
-  setConfig: (updates) => {
-    set((state) => ({
-      config: { ...state.config, ...updates },
-    }));
-  },
+export function createConfigStore(
+  initialConfig: CLIConfig = DEFAULT_CLI_CONFIG,
+  assertMutable: () => void = () => undefined,
+): ConfigStore {
+  return createStore<ConfigSlice>(createConfigState(initialConfig, assertMutable));
+}
 
-  replaceConfig: (config) => {
-    set({ config });
-  },
-}));
+function createConfigState(
+  initialConfig: CLIConfig,
+  assertMutable: () => void,
+): StateCreator<ConfigSlice> {
+  return (set) => {
+    const update = (
+      next:
+        | ConfigSlice
+        | Partial<ConfigSlice>
+        | ((state: ConfigSlice) => ConfigSlice | Partial<ConfigSlice>),
+    ): void => {
+      assertMutable();
+      set(next);
+    };
+
+    return {
+      config: { ...initialConfig },
+
+      setConfig: (updates) => {
+        update((state) => ({
+          config: { ...state.config, ...updates },
+        }));
+      },
+
+      replaceConfig: (config) => {
+        update({ config: { ...config } });
+      },
+    };
+  };
+}
+
+/** @deprecated Use the application-owned store exposed by TuiRuntimeProvider. */
+export const useConfigStore = create<ConfigSlice>(
+  createConfigState(DEFAULT_CLI_CONFIG, () => undefined),
+);
