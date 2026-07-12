@@ -1441,3 +1441,68 @@ git diff --check
 ```
 
 该实现没有新增用户级 Skill、Slash command 或新的通用 workflow runtime；只增加一个稳定状态转换和一个可注入 recovery coordinator，实际 ResourceRef/project revision 校验继续由已有 lifecycle/owning facade adapter 组合，避免在 Agent 中复制 `.nk*` parser 或制造第二套资产真值。
+
+## 28. Revision-bound Pre-export Policy Evaluation（2026-07-12）
+
+任务 8.5 已完成。Media Production workflow 现在持久化显式 `MediaProductionPreExportPlan`，并在 Export 前对 exact project revision、required asset revisions、asset approval Gates 与完整质量策略执行一次不可盲目重放的评估。
+
+### 持久化契约与策略边界
+
+- `MediaProductionPreExportPlan` 绑定：
+  - `projectArtifactId`：必须解析到 `project-authoring` stage 返回的 durable `.nk*` project artifact；
+  - `requiredAssetArtifactIds`：必须非空、唯一，并解析到稳定 `ResourceRef + revision`；
+  - `outputProfileId`：作为 pre-export Gate artifact profile；
+  - 完整 `QualityGatePolicy`：保留 policy identity/version、required profiles/evaluator classes、blocking severities、confidence、manual review/override 与 current-evidence 规则。
+- plan 只能在 `pre-export-gate` 仍为 pending 时设置；Gate 已开始后不得改写 policy 或 target，避免评估中途换 revision。
+- policy contract 对空/重复 profile、未知/重复 evaluator class、未知/重复 severity、非法 confidence 与不完整 identity fail-visible。
+- final-cut、audio、subtitle、framing、project integrity、required assets 与 approval evidence 继续由 `policy.requiredProfiles` 表达；没有新增第二套硬编码 evidence schema 或阶段型 Skill。
+
+### Pre-export canonical path
+
+`MediaProductionPreExportGateOrchestrator` 执行以下路径：
+
+1. 要求 `project-authoring` 已完成且 pre-export plan 已持久化；
+2. 从该 stage 精确解析 `projectArtifactId`，构造绑定 `documentUri + projectRevision + contentDigest` 的 `project-artifact` QualityTarget；
+3. 解析全部 required assets，并要求 `asset-quality-gate` 中存在绑定同一 `resourceRef.id + revision`（以及存在时相同 digest）的 pass approval；
+4. 将 project artifact、required assets、approval Gates、target 与原始 policy 交给注入的 evaluator port；owning `.nk*` 结构、timeline、audio/subtitle/framing 与 export-readiness evidence 仍由既有 ProjectQuality facade/Quality runtime adapter 提供，Agent 不复制格式 parser；
+5. 验证返回的 `QualityGateResult` contract、exact target revision、policy id/version 与 ordered required profiles；不匹配时 stage fail-visible；
+6. 将合法结果持久化为 `pre-export-gate` artifact，并记录 project/asset/approval artifact lineage。
+
+Gate verdict 为 `fail` 或 `manual-review` 仍表示“评估动作已完成”，因此 stage 保持 completed 并保存 verdict；任务 8.6 将依据该 revision-bound Gate、policy 与 manual override 规则阻止或允许 Export。Evaluator 抛出 `AbortError` 时持久化 cancelled；completed Gate 再次运行不会重复评估。
+
+### 入口收敛结论
+
+本任务没有新增用户级 Skill、Slash command、Canvas/Cut/Audio 直接依赖或通用 workflow service。实现仅增加一个 pre-export stage orchestrator 和一个最小 evaluator port，复用现有 `QualityTarget`、`QualityGatePolicy`、`QualityGateResult`、generated-asset approval artifact 与 owning ProjectQuality facade 边界，避免 Skill/命令/service 继续膨胀。
+
+相关提交：
+
+```text
+dd3c29669 feat(media): evaluate revision-bound pre-export gates
+```
+
+验证：
+
+```bash
+pnpm --dir packages/neko-types exec vitest run \
+  src/types/__tests__/media-production-workflow.test.ts \
+  src/project-authoring/__tests__/project-authoring.test.ts
+# 2 files, 17 tests passed
+
+pnpm --dir packages/neko-agent exec vitest run \
+  packages/agent/src/media-production/__tests__/early-stage-orchestrator.test.ts \
+  packages/agent/src/media-production/__tests__/project-authoring-orchestrator.test.ts \
+  packages/agent/src/media-production/__tests__/pre-export-gate-orchestrator.test.ts \
+  packages/agent/src/media-production/__tests__/workflow-recovery-coordinator.test.ts \
+  packages/agent/src/task/__tests__/media-production-workflow-state.test.ts \
+  packages/extension/src/services/__tests__/mediaProductionProjectAuthoringResolver.test.ts
+# 6 files, 27 tests passed
+
+pnpm exec eslint <8.5 changed TypeScript files>
+# passed
+
+pnpm --dir packages/neko-agent run compile:extension
+# passed
+
+git diff --check
+# passed
+```

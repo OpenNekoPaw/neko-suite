@@ -88,7 +88,7 @@
 - [x] 8.2 Implement source-to-Storyboard, Storyboard validation, shot-generation planning, media generation, and asset Gate stages.
 - [x] 8.3 Implement approved asset handoff to Canvas/Cut/Audio owning headless authoring APIs with explicit targets and returned project revisions.
 - [x] 8.4 Implement workflow cancellation and resume from validated stage artifacts without replaying completed mutations or depending on runtime handles.
-- [ ] 8.5 Implement pre-export policy evaluation over the current `.nk*` revision, required assets, final-cut/audio/subtitle/framing evidence, and approval state.
+- [x] 8.5 Implement pre-export policy evaluation over the current `.nk*` revision, required assets, final-cut/audio/subtitle/framing evidence, and approval state.
 - [ ] 8.6 Block export when preflight is missing, failed, stale, or bound to another revision, with explicit manual-override policy handling where allowed.
 - [ ] 8.7 Record exported deliverable lineage to the exact project revision and preflight result used.
 - [ ] 8.8 Implement post-export technical verification for probe/decode, container/codec, duration, dimensions/fps, tracks, truncation, configured black/frozen checks, and audio loudness/peak.
