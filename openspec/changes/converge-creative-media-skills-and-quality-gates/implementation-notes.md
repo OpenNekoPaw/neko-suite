@@ -1030,7 +1030,6 @@ pnpm check:legacy-debt
 
 本批继续完成任务 9.6/9.7 中“删除 legacy Quality schema/fixture/export”和“证明 removed path-only entry point 不再成功”的独立子集。任务暂不整体勾选：generated asset lifecycle、evaluation/locale/command metadata、到期 alias 与剩余 fallback 仍待处理。
 
-
 ## 21. 生成资产 revision、后台回填与 promotion evidence 收敛（2026-07-12）
 
 任务 9.1–9.3 的实现边界收敛为共享生命周期契约与 Agent Media canonical builder，而不是把 Quality mutation、文件缓存或 Canvas/Cut 状态塞入生成资产 DTO：
@@ -1094,3 +1093,55 @@ pnpm exec tsc --noEmit -p packages/neko-agent/packages/platform/tsconfig.json
 ```
 
 任务 9.1、9.2、9.3 已完成。生成资产质量目标现在可以从 background observation 直接取得稳定 revision/digest 和 workflow lineage；不存在从对话文本或 cache path 恢复 durable ownership 的默认成功路径。
+
+## 22. Workspace legacy Skill / Quality identity 清理完成（2026-07-12）
+
+任务 9.5–9.7 已完成。清理遵循“先切断运行时导出和激活能力，再迁移仍有价值的方法论与 fixture”的边界，而不是只从默认列表隐藏旧 Skill：
+
+- 用户级创作入口统一为 `storyboard`、`image`、`video`、`media-production`、`video-editing`、`media-quality-review`；漫画来源通过 `storyboard/from-comic` 与 `media-production/from-comic` profile 表达，不恢复阶段型 Skill。
+- 普通 Agent、Extension、CLI、Dashboard、Search、共享类型测试、Webview locale/catalog fixture 和 Agent evaluation fixture 已改用 canonical identity。
+- expired stage-Skill 的运行时导出、旧 command metadata、重复 tool identity 与普通成功 fixture 已删除；仅保留明确的 negative assertion、到期 alias 测试和 `generated-shot-assembly` 内部 workflow stage。
+- `QualityRepairCheck`、`QualityCheckConsistency` 不再由共享工具目录发布；repair 与 consistency review 统一通过 `QualityCheck` 的 profile/policy。
+- AgentSession 测试不再内置 scene-count/style-drift/path-only 解析 adapter，改为消费 canonical `QualityGateResult` 和 `createQualityReviewValidationAdapter()`。
+- `quality-evidence-normalizer` 与 `video-content-index` 的 path-only public exports、实现和测试已删除；主入口 poison assertion 证明这些 API 不再导出。
+- workspace 级 architecture guard 通过 `git ls-files` 扫描受版本控制的 package/evaluation fixture，拒绝 removed Skill/Quality identity；允许清单只包含 negative rejection tests 和明确内部 stage。
+
+相关代码提交：
+
+```text
+c89689e6e test(skills): purge legacy creative skill fixtures
+995bceebb refactor(quality): remove deprecated quality tool identities
+34e60aea4 refactor(quality): remove obsolete path-only quality indexes
+4df0cd51d test(agent): remove legacy quality feedback fixtures
+18f782b7e test(skills): purge workspace legacy identity fixtures
+```
+
+本轮验证：
+
+```bash
+pnpm --dir packages/neko-agent exec vitest --run   packages/agent/src/session/__tests__/agent-session.test.ts -t 'feedback observation'
+# 9 passed, 81 skipped
+
+pnpm --filter @neko/shared test
+# 155 files, 1419 tests passed
+
+pnpm --dir packages/neko-agent exec vitest --run   packages/agent/src/__tests__/architecture-boundary-guards.test.ts   -t 'keeps removed creative and Quality identities out of workspace runtime fixtures'
+# 1 passed, 45 skipped
+
+pnpm --dir packages/neko-dashboard exec vitest --run   packages/webview/src/components/SkillList.test.tsx   packages/extension/src/skillReader.test.ts   packages/extension/src/dashboardProvider.test.ts   packages/extension/src/protocol.test.ts
+# 4 files, 17 tests passed
+
+pnpm --dir packages/neko-search exec vitest --run   src/__tests__/semanticCoverage.test.ts   src/__tests__/semanticCoverageProvider.test.ts
+# 2 files, 7 tests passed
+
+pnpm --dir packages/neko-types exec vitest --run   src/types/__tests__/project-cache-search.test.ts   src/types/__tests__/skill-sdd-metadata.test.ts
+# 2 files, 55 tests passed
+```
+
+全仓门禁仍不能据此标记 10.1/10.2 完成：
+
+- `pnpm check:legacy-debt` 仍被既有/并行的 76 个 blocking 项阻塞（`migrate-now: 65`、`needs-review: 11`）；
+- `pnpm check:unused` 仍报告 1 个 unused file、5 个 unused dependencies、2 个 unlisted dependencies、25 个 unused exports、2 个 duplicate exports；
+- 上述输出没有恢复本 change 已删除的 path-only Quality API 或 expired creative Skill 成功路径。
+
+正式架构文档中的 IDC 示例已改为 `media-production` + `media-production/from-comic`，避免已接受文档继续把过期阶段 Skill 作为当前入口。历史 `docs/superpowers/` 实施快照保留原始名称，仅作为带日期的历史记录，不作为运行时或 canonical 架构事实来源。

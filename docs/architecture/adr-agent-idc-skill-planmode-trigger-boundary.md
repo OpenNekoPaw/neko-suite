@@ -22,8 +22,8 @@
 
 这些触发面服务不同问题，但都会影响同一 Agent turn 的 system prompt、tool schemas、权限模式、active Skill 状态、artifact contract 和用户审批体验。如果边界不清，典型故障包括：
 
-- 用户说“将漫画生成动画”，Agent 只激活 `comic-to-animation`，但没有进入可审阅的 Draft/Plan。
-- 用户显式 `$comic-to-animation` 后只注入 Skill prompt，却没有把该 turn 标记为 `prompt-chain-skill` IDC run。
+- 用户说“将漫画生成动画”，Agent 只激活 `media-production`，但没有应用 `media-production/from-comic` 来源 profile，也没有进入可审阅的 Draft/Plan。
+- 用户显式 `$media-production` 后只注入 Skill prompt，却没有把该 turn 标记为 `prompt-chain-skill` IDC run，也没有保留来源 profile。
 - Plan Mode 正确禁止 Apply，但没有自动选择漫画/分镜/动画领域 Skill，导致计划缺少领域约束。
 - 阶段 persona Skill 与业务 Skill 共用单 active injection 槽，互相覆盖 prompt 和 tool policy。
 - Agent 在 Auto Mode 中把多步骤、高成本媒体生产误判为单步工具调用，直接进入 Apply。
@@ -76,7 +76,7 @@ Skill 是能力包，不是 workflow engine。创作类 Skill 可以描述“如
 ```text
 Intent
   -> IDC Draft: 理解漫画、叙事、人物、缺失场景、目标风格
-  -> IDC Plan: 选择 comic-to-storyboard / comic-to-animation / animation-plan-to-cut 等能力路径
+  -> IDC Plan: 选择 storyboard/from-comic、media-production 内部 stage 与 video-editing owning capability 路径
   -> Approval: 用户审查 Draft/Plan 或关键生成预算
   -> Apply: 调用 ReadDocument / ReadImage / GenerateImage / GenerateVideo / Canvas / Cut 等工具
   -> Observe/Evaluate: 校验 artifact、生成结果和一致性
@@ -86,7 +86,7 @@ Intent
 
 ```text
 Intent
-  -> ActivateSkill(comic-to-animation)
+  -> ActivateSkill(media-production) + sourceProfile(media-production/from-comic)
   -> GenerateVideo
 ```
 
@@ -96,7 +96,7 @@ Plan Mode 是用户主动审查边界。即使 active Skill 的 portable `allowe
 
 ### 3. Persona Skill 与业务 Skill 应拆分语义槽
 
-IDC 阶段 persona（如 Draft/Plan 的 creation persona、Apply 的 execution persona）负责阶段行为约束；业务 Skill（如 `comic-to-animation`）负责领域策略。二者不应互相覆盖。
+IDC 阶段 persona（如 Draft/Plan 的 creation persona、Apply 的 execution persona）负责阶段行为约束；业务 Skill（如 `media-production`）负责领域策略。二者不应互相覆盖。
 
 当前若运行时仍使用单 active injection 槽，应将其视为已知设计风险。后续应收敛为至少两个可组合槽：
 
@@ -130,7 +130,7 @@ Draft、Plan、Task 是需要用户审阅/审批的可见项目文档，不属�
 涉及本 ADR 的变更至少覆盖：
 
 - 自然语言“将漫画生成动画”类请求应进入多步骤创作路径，不得直接调用生成视频工具。
-- `$comic-to-animation args` 和 Webview `invokeSkill(comic-to-animation)` 应可断言同一 Skill injection path 被命中，并携带创作类 IDC metadata。
+- `$media-production args` 和 Webview `invokeSkill(media-production)` 应可断言同一 Skill injection path 被命中，并携带创作类 IDC metadata。
 - Plan Mode 下即使 active Skill 允许生成工具，也不能执行 Apply-stage 生成、写入、Canvas/Cut 交付或导出。
 - Stage persona 与 domain Skill 不应互相覆盖；若当前实现仍为单槽，应有 characterization test 暴露该风险或阻止误报成功。
 - Apply-stage 高成本或不可逆工具必须经过 permission/approval gate；测试应断言 canonical IDC/approval path 被命中。

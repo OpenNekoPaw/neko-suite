@@ -6,16 +6,16 @@
 
 ## 模块职责
 
-| 参与者                   | 职责                                                    |
-| ------------------------ | ------------------------------------------------------- |
-| `neko-cut`               | Timeline、剪辑、轨道、关键帧、导出编排                  |
-| `neko-preview`           | 视频、音频、文档、全景等预览 provider 和 Webview        |
-| `neko-canvas`            | 已接受的分镜产物、节点、创作结构、预览路线和叙事投影     |
-| `neko-story`             | 剧本解析、场景/角色索引、叙事预览和 story-agent payload |
-| `neko-tools`             | Media LSP、diff、诊断和工具面板                         |
-| `neko-engine`            | 媒体探测、解码、编码、导出、流、质量分析                |
+| 参与者                   | 职责                                                       |
+| ------------------------ | ---------------------------------------------------------- |
+| `neko-cut`               | Timeline、剪辑、轨道、关键帧、导出编排                     |
+| `neko-preview`           | 视频、音频、文档、全景等预览 provider 和 Webview           |
+| `neko-canvas`            | 已接受的分镜产物、节点、创作结构、预览路线和叙事投影       |
+| `neko-story`             | 剧本解析、场景/角色索引、叙事预览和 story-agent payload    |
+| `neko-tools`             | Media LSP、diff、诊断和工具面板                            |
+| `neko-engine`            | 媒体探测、解码、编码、导出、流、质量分析                   |
 | Agent                    | 视频理解、预处理判断、候选分镜生成、自动后期建议、质量审阅 |
-| Assets / Entity / Search | 素材、角色、场景、引用、索引和审阅 grounding            |
+| Assets / Entity / Search | 素材、角色、场景、引用、索引和审阅 grounding               |
 
 ## 稳定边界
 
@@ -87,6 +87,6 @@ Assets / Story / Canvas / Agent
 
 ## 历史 ADR 归并
 
-- comic-to-animation、video understanding、AI video reference：归并到视频创作与 Agent 集成细则或 research。
+- 漫画到动画的 `media-production/from-comic` profile、video understanding、AI video reference：归并到视频创作与 Agent 集成细则或 research。
 - cut timeline assessment、media quality assessment：归入 status gap。
 - viewport stream control、panoramic preview：与 Engine/Preview 交叉，稳定约束提升到 Engine 或本领域。
