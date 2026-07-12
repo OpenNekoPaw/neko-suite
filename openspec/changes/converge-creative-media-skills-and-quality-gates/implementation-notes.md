@@ -1196,3 +1196,58 @@ git diff --check
 ```
 
 独立执行 `pnpm exec tsc -p packages/neko-puppet/packages/extension/tsconfig.json --noEmit` 仍会被该包既有 `moduleResolution` 无法解析 `@neko/shared` exports 的问题及其级联错误阻塞；本批以实际 package build 和聚焦测试作为 facade 路径验证，未将该既有问题误报为新 facade 的成功门禁。
+
+
+## 24. Media Production workflow state 与可恢复任务绑定（2026-07-12）
+
+任务 8.1 已完成。实现遵循本地产品边界，在共享 Layer 0 定义稳定 workflow DTO 与纯状态转换，在 Agent task 层只提供持久化 adapter；没有新增用户 Skill、阶段 Skill、跨功能包 parser 或第二套 task runtime。
+
+五层审计结论：
+
+- **职责**：`@neko/shared` 拥有 media-production workflow run/stage/artifact/diagnostic 契约和确定性转换；Agent `TaskManager` 继续拥有任务持久化、取消和进程重启恢复；generated-asset lifecycle 继续拥有生成媒体 revision/digest/resource identity。
+- **依赖**：workflow contract 只依赖既有 `ResourceRef`、`QualityProjectRef`、`QualityTarget` 与 `GeneratedAssetRevisionRef`；Agent adapter 依赖共享契约和现有 task port，不依赖 Canvas、Cut、Audio、Webview 或 provider runtime handle。
+- **接口**：canonical stages 固定为 source normalization、Storyboard validation、shot planning、media generation、asset Gate、project authoring、pre-export Gate、export 和 deliverable verification；每个完成 stage 必须返回至少一个 typed stable artifact ref。
+- **扩展**：stage artifact 使用 resource/project/quality-gate 三类稳定 identity；后续 8.2–8.10 可在不扩大 Skill taxonomy 的情况下组合 owning authoring facade、Gate、export lineage 和 deliverable verifier。
+- **测试**：覆盖 stage 顺序、依赖阻断、完成 mutation 防重放、cache/render identity 拒绝、generated asset revision 绑定、task output save/reopen、run identity mismatch 与 snapshot-only restart 不调用 executor。
+
+关键实现：
+
+- 新增 `MediaProductionWorkflowRunState`、canonical stage id、stage status、typed artifact ref 与 workflow diagnostic contract。
+- `createGeneratedAssetStageArtifactRef()` 直接把既有 `GeneratedAssetRevisionRef` 投影为 stage artifact，保留 asset id、revision、content digest、stable `ResourceRef` 和 workflow lineage；不从 host/cache path 反推 ownership。
+- artifact profile id 遵循内部 artifact registry 的点号/冒号约束，用户来源 profile 仍可使用 `media-production/from-comic`，两者不混用。
+- `TaskBackedMediaProductionWorkflowStateStore` 从 workflow task 初始 payload 读取状态，并把后续 stage snapshot 写入 task output data；读写时验证 workflow run identity，错误 task kind、非法 state 或 run rebinding 均 fail-visible。
+- media-production workflow task 使用 background、detach-and-continue、snapshot-only lifecycle。`TaskManager.resumePendingTasks()` 已修正 snapshot-only 语义：重启后保留持久 snapshot，由 owning workflow 显式验证 artifact 后恢复，不盲目重放 executor 和已完成 mutation。
+
+相关代码提交：
+
+```text
+80d2dfff1 feat(media): define production workflow state contract
+aae259a81 feat(agent): persist media production stage state
+```
+
+本轮验证：
+
+```bash
+pnpm --dir packages/neko-types exec vitest run \
+  src/types/__tests__/media-production-workflow.test.ts
+# 1 file, 3 tests passed
+
+pnpm --dir packages/neko-agent exec vitest run \
+  packages/agent/src/task/__tests__/media-production-workflow-state.test.ts \
+  packages/agent/src/task/__tests__/task-manager-persistence.test.ts
+# 2 files, 24 tests passed
+
+pnpm exec eslint \
+  packages/neko-types/src/types/media-production-workflow.ts \
+  packages/neko-types/src/types/__tests__/media-production-workflow.test.ts \
+  packages/neko-agent/packages/agent/src/task/media-production-workflow-state.ts \
+  packages/neko-agent/packages/agent/src/task/__tests__/media-production-workflow-state.test.ts \
+  packages/neko-agent/packages/agent/src/task/task-manager.ts \
+  packages/neko-agent/packages/agent/src/task/__tests__/task-manager-persistence.test.ts
+# no errors；task-manager.ts 保留既有 unused TaskOutput warning
+
+git diff --check
+# passed
+```
+
+`pnpm exec tsc --noEmit -p packages/neko-agent/packages/agent/tsconfig.json` 仍被并行工作区中的 perception/session 修改和该包既有测试 fixture 类型债务阻塞；输出中未出现本批 workflow state 文件错误，因此不把全包 tsc 描述为通过。

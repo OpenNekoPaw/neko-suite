@@ -84,7 +84,7 @@
 
 ## 8. Media Production, Preflight, Export, and Deliverable Verification
 
-- [ ] 8.1 Define workflow run/stage state using existing Agent task and generated-asset lifecycle services with stable stage artifact references and diagnostics.
+- [x] 8.1 Define workflow run/stage state using existing Agent task and generated-asset lifecycle services with stable stage artifact references and diagnostics.
 - [ ] 8.2 Implement source-to-Storyboard, Storyboard validation, shot-generation planning, media generation, and asset Gate stages.
 - [ ] 8.3 Implement approved asset handoff to Canvas/Cut/Audio owning headless authoring APIs with explicit targets and returned project revisions.
 - [ ] 8.4 Implement workflow cancellation and resume from validated stage artifacts without replaying completed mutations or depending on runtime handles.
