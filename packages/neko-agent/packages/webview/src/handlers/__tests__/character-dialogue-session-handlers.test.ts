@@ -13,7 +13,7 @@ import { characterDialogueSessionHandlers } from '../character-dialogue-session-
 import type { HandlerRegistration, MessageHandlerContext, StreamingState } from '../types';
 
 describe('Character Dialogue session handlers', () => {
-  it('activates Character Dialogue tabs as current chat projections', () => {
+  it('opens Character Dialogue tabs without rebinding the shared foreground projection', () => {
     const harness = createContextHarness({ activeConversationId: 'conv-a' });
     const session = createCharacterDialogueSessionProjection();
     const tab: OpenTab = {
@@ -30,25 +30,23 @@ describe('Character Dialogue session handlers', () => {
       harness.context,
     );
 
-    expect(harness.activeConversationId()).toBe('npc-session-1');
-    expect(harness.context.activeConversationIdRef.current).toBe('npc-session-1');
-    expect(harness.messages()).toEqual([]);
-    expect(harness.streaming()).toEqual({
-      isThinking: false,
-      streamingMessageId: null,
-      queuedMessageCount: 0,
-    });
-    expect(harness.context.conversationMessagesRef.current.get('conv-a')).toEqual([
+    expect(harness.activeConversationId()).toBe('conv-a');
+    expect(harness.context.activeConversationIdRef.current).toBe('conv-a');
+    expect(harness.messages()).toEqual([
       { id: 'old', role: 'assistant', content: 'old', timestamp: 1 },
     ]);
-    expect(harness.context.conversationStreamingRef.current.get('conv-a')).toEqual({
+    expect(harness.streaming()).toEqual({
       isThinking: true,
       streamingMessageId: 'old-stream',
       queuedMessageCount: 0,
-      queuedMessages: [],
     });
+    expect(harness.context.conversationMessagesRef.current.has('conv-a')).toBe(false);
+    expect(harness.context.conversationStreamingRef.current.has('conv-a')).toBe(false);
     expect(harness.openTabs()).toEqual([tab]);
     expect(harness.activeTabId()).toBe('tab-npc');
+    expect(harness.reconciliations()).toEqual([
+      { bindings: [{ tabId: 'tab-npc', conversationId: 'npc-session-1' }], activeTabId: 'tab-npc' },
+    ]);
   });
 
   it('marks exited Character Dialogue tabs without removing transcript cache', () => {
@@ -125,6 +123,12 @@ interface ContextHarness {
   messages(): Message[];
   openTabs(): OpenTab[];
   streaming(): StreamingState;
+  reconciliations(): readonly TabRuntimeReconciliation[];
+}
+
+interface TabRuntimeReconciliation {
+  readonly bindings: readonly { readonly tabId: string; readonly conversationId: string }[];
+  readonly activeTabId: string | null;
 }
 
 function createContextHarness(options: ContextHarnessOptions): ContextHarness {
@@ -145,6 +149,7 @@ function createContextHarness(options: ContextHarnessOptions): ContextHarness {
   const conversationRenderCoordinator = new ConversationRenderCoordinator();
   let workItems: AgentWorkItemStore = new Map();
   let pluginsAvailable: PluginsAvailable = {};
+  const reconciliations: TabRuntimeReconciliation[] = [];
 
   const context = {
     setMessages: createSetter(
@@ -217,6 +222,9 @@ function createContextHarness(options: ContextHarnessOptions): ContextHarness {
     conversationTokenCountRef: ref(new Map()),
     conversationCompressingRef: ref(new Map()),
     forceUpdate: () => undefined,
+    reconcileTabRenderRuntimes: (bindings, nextActiveTabId) => {
+      reconciliations.push({ bindings, activeTabId: nextActiveTabId });
+    },
     isCurrentConversation: (conversationId?: string) =>
       conversationId === activeConversationIdRef.current,
     updateNonCurrentConversation: () => undefined,
@@ -253,6 +261,7 @@ function createContextHarness(options: ContextHarnessOptions): ContextHarness {
     messages: () => messages,
     openTabs: () => openTabs,
     streaming: () => streaming,
+    reconciliations: () => reconciliations,
   };
 }
 

@@ -7,10 +7,6 @@
 import { defineHandler } from './types';
 import type { MessageHandler, HandlerRegistration } from './types';
 import type { TabStateMessage } from './messages';
-import {
-  activateConversationTabView,
-  persistCurrentVisibleConversation,
-} from './conversation-tab-session-state';
 
 /**
  * Handle 'tabState' message - Restore tab state from extension
@@ -26,12 +22,6 @@ const handleTabState: MessageHandler<'tabState'> = (message: TabStateMessage, co
   revisionRef.current = message.revision;
 
   if (message.tabState) {
-    // Save local UI state, then commit only the previous foreground Timeline partition.
-    persistCurrentVisibleConversation(context);
-    const previousConversationId = context.activeConversationIdRef.current;
-    if (previousConversationId) {
-      context.timelineRenderScheduler?.flushConversation(previousConversationId);
-    }
     const openTabs = message.tabState.openTabs ?? [];
     const { activeTabId } = message.tabState;
     const isEmptyTabState =
@@ -57,11 +47,6 @@ const handleTabState: MessageHandler<'tabState'> = (message: TabStateMessage, co
 
     if (isEmptyTabState) {
       context.isTablessConversationViewRef.current = true;
-      context.setMessages([]);
-      context.setStreamingMessageId(null);
-      context.streamingMessageIdRef.current = null;
-      context.setIsThinking(false);
-      context.setQueuedMessageCount?.(0);
       context.setActiveConversationId(null);
       context.activeConversationIdRef.current = null;
       context.setActiveTab('chat');
@@ -73,7 +58,7 @@ const handleTabState: MessageHandler<'tabState'> = (message: TabStateMessage, co
       context.requestConfigSnapshot?.();
     }
     if (activeTab) {
-      activateConversationTabView(context, activeTab.conversationId, 'extension-tab-state');
+      context.isTablessConversationViewRef.current = false;
       context.setActiveTab('chat');
     }
   }

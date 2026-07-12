@@ -29,15 +29,11 @@ import {
 import { upsertWorkItemsForConversation } from '@/presenters/work-item-state-presenter';
 import { findActiveTab, isCharacterRoleTab } from '@/presenters/character-role-session-presenter';
 import { shouldActivateForegroundConversation } from './foreground-activation';
-import { commitActiveTurnTimelineMarkdownSnapshot } from './conversation-tab-session-state';
 import { projectQueuedMessagesCleared } from '@/presenters/message-queue-presenter';
 import { getActiveTimelineForMessage } from './timeline-handlers';
 import { updateConversation } from './message-updater';
 import {
-  commitConversationRenderActivation,
   commitConversationSnapshotProjection,
-  createConversationMarkdownTimelineResourceOwner,
-  createConversationVisibleStatePort,
   discardConversationSnapshotProjection,
   ingestConversationRenderSnapshot,
 } from '@/render-lifecycle/conversation-render-state-adapter';
@@ -201,15 +197,31 @@ const handleActiveConversation: MessageHandler<'activeConversation'> = (
     conversationId,
     message.activation,
   );
-  const shouldCacheOnly = pendingForegroundActivation !== null && !shouldActivateForeground;
   const activeTab = findActiveTab(context.openTabs, context.activeTabId);
   const isActiveCharacterRoleTab = isCharacterRoleTab(activeTab);
+  const shouldCacheOnly = pendingForegroundActivation !== null && !shouldActivateForeground;
   const isStaleOrdinaryTabConversation =
     conversationId !== undefined &&
     activeTab !== undefined &&
     !isActiveCharacterRoleTab &&
     activeTab.conversationId !== conversationId &&
     !shouldActivateForeground;
+
+  if (conversationId) {
+    releaseReplacedActiveTurn(
+      context,
+      conversationId,
+      getProjectedActiveTurnTimeline(projection.streaming)?.messageId,
+    );
+    cacheConversationProjection(context, conversationId, projection.messages, projection.streaming);
+    context.forceUpdate();
+
+    if (projection.workItems.length > 0) {
+      context.setWorkItemsByConversation((previous) =>
+        upsertWorkItemsForConversation(previous, conversationId, projection.workItems),
+      );
+    }
+  }
 
   if (
     shouldCacheOnly ||
@@ -218,104 +230,24 @@ const handleActiveConversation: MessageHandler<'activeConversation'> = (
       !isActiveCharacterRoleTab &&
       !shouldActivateForeground)
   ) {
-    if (conversationId) {
-      cacheConversationProjection(
-        context,
-        conversationId,
-        projection.messages,
-        projection.streaming,
-      );
-
-      const activeConversationId = projection.activeConversationId;
-      if (activeConversationId && projection.workItems.length > 0) {
-        context.setWorkItemsByConversation((prev) =>
-          upsertWorkItemsForConversation(prev, activeConversationId, projection.workItems),
-        );
-      }
-    }
     return;
   }
 
   if (isActiveCharacterRoleTab && !shouldActivateForeground) {
-    if (conversationId) {
-      cacheConversationProjection(
-        context,
-        conversationId,
-        projection.messages,
-        projection.streaming,
-      );
-    }
     context.setOpenTabs(projection.openTabs);
-
-    const activeConversationId = projection.activeConversationId;
-    if (activeConversationId && projection.workItems.length > 0) {
-      context.setWorkItemsByConversation((prev) =>
-        upsertWorkItemsForConversation(prev, activeConversationId, projection.workItems),
-      );
-    }
     return;
   }
 
-  if (context.activeConversationIdRef.current !== projection.activeConversationId) {
-    // Only the previous foreground partition blocks this view swap. Background delivery remains independent.
-    const previousConversationId = context.activeConversationIdRef.current;
-    if (previousConversationId) {
-      context.timelineRenderScheduler?.flushConversation(previousConversationId);
-    }
-  }
-
-  const nextStreaming = conversationId
-    ? projectForegroundConversationStreaming(
-        projection.streaming,
-        context.conversationStreamingRef.current.get(conversationId),
-      )
-    : undefined;
-  if (conversationId && nextStreaming) {
-    releaseReplacedActiveTurn(context, conversationId, nextStreaming.activeTurnTimeline?.messageId);
-  }
-  if (conversationId && nextStreaming) {
-    const coordinator = context.conversationRenderCoordinator;
-    if (!coordinator) {
-      throw new Error('Active conversation activation requires the canonical render coordinator.');
-    }
-    commitConversationRenderActivation({
-      coordinator,
-      source: 'extension-active-conversation',
-      conversation: {
-        conversationId,
-        messages: projection.messages,
-        streaming: nextStreaming,
-      },
-      visibleState: createConversationVisibleStatePort({
-        activeConversationIdRef: context.activeConversationIdRef,
-        streamingMessageIdRef: context.streamingMessageIdRef,
-        conversationMessagesRef: context.conversationMessagesRef,
-        conversationStreamingRef: context.conversationStreamingRef,
-        setMessages: context.setMessages,
-        setStreamingMessageId: context.setStreamingMessageId,
-        setIsThinking: context.setIsThinking,
-        setQueuedMessageCount: context.setQueuedMessageCount,
-        setQueuedMessages: context.setQueuedMessages,
-        setActiveConversationId: context.setActiveConversationId,
-      }),
-      markdown: createConversationMarkdownTimelineResourceOwner((timeline) =>
-        commitActiveTurnTimelineMarkdownSnapshot(context, timeline),
-      ),
-    });
-  } else {
-    context.setMessages(projection.messages);
-    context.setStreamingMessageId(projection.streaming.streamingMessageId);
-    context.streamingMessageIdRef.current = projection.streaming.streamingMessageId;
-    context.setIsThinking(projection.streaming.isThinking);
-    context.setQueuedMessageCount?.(projection.streaming.queuedMessageCount ?? 0);
-    context.setQueuedMessages?.(projection.streaming.queuedMessages ?? []);
-    context.setActiveConversationId(projection.activeConversationId);
-    context.activeConversationIdRef.current = projection.activeConversationId;
-  }
   context.isTablessConversationViewRef.current = false;
   context.setOpenTabs(projection.openTabs);
   context.setActiveTabId(projection.activeTabId);
   context.setActiveTab(projection.activeTab);
+
+  // This is host activation metadata only. Tab UI ownership comes exclusively from
+  // the immutable TabRenderRuntime binding and its conversation projection cache.
+  context.setActiveConversationId(projection.activeConversationId);
+  context.activeConversationIdRef.current = projection.activeConversationId;
+
   if (conversationId && shouldActivateForeground) {
     if (message.activation && context.tabStateRevisionRef) {
       context.tabStateRevisionRef.current = Math.max(
@@ -324,13 +256,6 @@ const handleActiveConversation: MessageHandler<'activeConversation'> = (
       );
     }
     context.completeForegroundConversationActivation?.(conversationId);
-  }
-
-  const activeConversationId = projection.activeConversationId;
-  if (activeConversationId && projection.workItems.length > 0) {
-    context.setWorkItemsByConversation((prev) =>
-      upsertWorkItemsForConversation(prev, activeConversationId, projection.workItems),
-    );
   }
 };
 
@@ -357,42 +282,6 @@ function cacheConversationProjection(
   });
 }
 
-function projectForegroundConversationStreaming(
-  streaming: StreamingState,
-  cachedStreaming: StreamingState | undefined,
-): StreamingState {
-  const projectedActiveTurnTimeline = getProjectedActiveTurnTimeline(streaming);
-  const activeTurnTimeline =
-    projectedActiveTurnTimeline !== undefined
-      ? releaseUnavailableTimelineOwnership(projectedActiveTurnTimeline)
-      : getRecoverableCachedActiveTurnTimeline(cachedStreaming);
-  return {
-    streamingMessageId: streaming.streamingMessageId,
-    isThinking: streaming.isThinking,
-    queuedMessageCount: streaming.queuedMessageCount ?? 0,
-    queuedMessages: streaming.queuedMessages ?? [],
-    ...(streaming.messageQueueVersion !== undefined
-      ? { messageQueueVersion: streaming.messageQueueVersion }
-      : {}),
-    ...(activeTurnTimeline !== undefined ? { activeTurnTimeline } : {}),
-  };
-}
-
-function getRecoverableCachedActiveTurnTimeline(
-  streaming: StreamingState | undefined,
-): StreamingState['activeTurnTimeline'] {
-  if (!streaming?.isThinking || !streaming.streamingMessageId) {
-    return undefined;
-  }
-  return releaseUnavailableTimelineOwnership(getProjectedActiveTurnTimeline(streaming));
-}
-
-function releaseUnavailableTimelineOwnership(
-  timeline: StreamingState['activeTurnTimeline'],
-): StreamingState['activeTurnTimeline'] {
-  return timeline?.synchronization === 'unavailable' ? null : timeline;
-}
-
 function getProjectedActiveTurnTimeline(streaming: object): StreamingState['activeTurnTimeline'] {
   const value: unknown = Reflect.get(streaming, 'activeTurnTimeline');
   if (value === undefined || value === null) {
@@ -416,9 +305,6 @@ function isActiveTurnTimelineState(
   );
 }
 
-/**
- * All conversation handler registrations
- */
 function releaseReplacedActiveTurn(
   context: MessageHandlerContext,
   conversationId: string,

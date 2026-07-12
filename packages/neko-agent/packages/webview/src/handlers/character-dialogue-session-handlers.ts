@@ -9,32 +9,22 @@ import type {
   CharacterDialogueSessionExitedMessage,
   CharacterDialogueSessionStartedMessage,
 } from './messages';
-import {
-  activateConversationTabView,
-  persistCurrentVisibleConversation,
-} from './conversation-tab-session-state';
+import { openConversationTabBinding } from './conversation-tab-session-state';
 
 const handleCharacterDialogueSessionStarted: MessageHandler<'characterDialogueSessionStarted'> = (
   message: CharacterDialogueSessionStartedMessage,
   context,
 ) => {
-  persistCurrentVisibleConversation(context);
   discardConversationSnapshotProjection({
     conversationId: message.session.sessionId,
     conversationMessagesRef: context.conversationMessagesRef,
     conversationStreamingRef: context.conversationStreamingRef,
   });
-  activateConversationTabView(context, message.session.sessionId, 'extension-active-conversation');
-  context.setOpenTabs((prev) => [
-    ...prev.filter((tab) => tab.id !== message.tab.id),
-    {
-      ...message.tab,
-      kind: 'character-dialogue',
-      characterDialogueSession: message.session,
-    },
-  ]);
-  context.setActiveTabId(message.tab.id);
-  context.setActiveTab('chat');
+  openConversationTabBinding(context, {
+    ...message.tab,
+    kind: 'character-dialogue',
+    characterDialogueSession: message.session,
+  });
 };
 
 const handleCharacterDialogueSessionExited: MessageHandler<'characterDialogueSessionExited'> = (

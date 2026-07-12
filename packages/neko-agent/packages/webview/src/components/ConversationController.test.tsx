@@ -686,7 +686,7 @@ describe('ConversationController entry state', () => {
     expect(screen.getByTestId('workspace-work-items').textContent).toBe('');
   });
 
-  it('routes all foreground activation sources through the render coordinator', () => {
+  it('keeps Tab activation out of the conversation render coordinator', () => {
     vi.clearAllMocks();
     const prepareActivation = vi.spyOn(
       ConversationRenderCoordinator.prototype,
@@ -734,14 +734,7 @@ describe('ConversationController entry state', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Switch Chat B' }));
     fireEvent.click(screen.getByRole('button', { name: 'Switch Role C' }));
 
-    expect(prepareActivation.mock.calls.map(([activation]) => activation.source)).toEqual(
-      expect.arrayContaining([
-        'extension-active-conversation',
-        'extension-tab-state',
-        'ui-tab',
-        'character-role-tab',
-      ]),
-    );
+    expect(prepareActivation).not.toHaveBeenCalled();
     prepareActivation.mockRestore();
   });
 
@@ -1012,7 +1005,7 @@ describe('ConversationController entry state', () => {
     expect(screen.getByTestId('workspace-viewport').textContent).toBe('detached:anchor-tab-a:25');
   });
 
-  it('finalizes orphaned Markdown streaming state when a cached ordinary tab is activated from the UI', () => {
+  it('does not mutate cached Markdown streaming state when an ordinary Tab becomes visible', () => {
     vi.clearAllMocks();
     render(<ConversationController {...createProps()} />);
 
@@ -1048,7 +1041,7 @@ describe('ConversationController entry state', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Switch Chat B' }));
 
     expect(screen.getByTestId('workspace-messages').textContent).toBe('partial B');
-    expect(screen.getByTestId('workspace-streaming-flags').textContent).toBe('false:false');
+    expect(screen.getByTestId('workspace-streaming-flags').textContent).toBe('true:true');
   });
 
   it('updates a background tab status from its canonical render revision', () => {
@@ -1284,7 +1277,7 @@ describe('ConversationController entry state', () => {
     visibility.mockRestore();
   });
 
-  it('rebuilds a disposed Markdown session before a cached Timeline tab is activated from the UI', () => {
+  it('does not rebuild disposed Markdown resources as a Tab visibility side effect', () => {
     vi.clearAllMocks();
     render(<ConversationController {...createProps()} />);
 
@@ -1322,13 +1315,10 @@ describe('ConversationController entry state', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Switch Chat B' }));
 
-    expect(registry.getSnapshot(key)).toMatchObject({
-      source: 'partial **B**',
-      isFinal: false,
-    });
+    expect(registry.getSnapshot(key)).toBeUndefined();
   });
 
-  it('finalizes orphaned Markdown streaming state when a cached character-role tab is activated from the UI', () => {
+  it('does not mutate cached Markdown streaming state when a character-role Tab becomes visible', () => {
     vi.clearAllMocks();
     render(<ConversationController {...createProps()} />);
 
@@ -1369,7 +1359,7 @@ describe('ConversationController entry state', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Switch Role B' }));
 
     expect(screen.getByTestId('workspace-messages').textContent).toBe('partial role');
-    expect(screen.getByTestId('workspace-streaming-flags').textContent).toBe('false:false');
+    expect(screen.getByTestId('workspace-streaming-flags').textContent).toBe('true:true');
   });
 
   it('routes prompt mode and diagnostics to every Tab store for the owning conversation only', () => {
