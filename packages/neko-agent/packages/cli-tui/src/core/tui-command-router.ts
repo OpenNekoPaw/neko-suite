@@ -739,6 +739,10 @@ function isOutputFormat(value: string): value is CLIConfig['outputFormat'] {
   return value === 'text' || value === 'json' || value === 'markdown';
 }
 
+function localized(context: TuiCommandRouterContext, en: string, zh: string): string {
+  return context.presentation.uiLocale === 'zh-cn' ? zh : en;
+}
+
 async function handleResume(
   commandText: string,
   context: TuiCommandRouterContext,

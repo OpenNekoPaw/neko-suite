@@ -33,7 +33,7 @@ const POST_PRODUCTION_GROUP = 'post-production';
 
 const BUILTIN_FORK_ACTIONS: NonNullable<SkillCatalogPolicy['actions']> = [
   'run',
-  { id: 'fork', targetSource: 'project' },
+  { id: 'fork', targetSource: 'personal' },
 ];
 
 const PERSONA_SKILL_NAMES = new Set(['creation-persona', 'execution-persona', 'iteration-persona']);

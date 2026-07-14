@@ -1074,6 +1074,7 @@ describe('AgentRunner', () => {
         {
           metadata: {
             conversationId: 'conv-1',
+            runId: 'run-1',
             parentAgentId: 'agent-conv-1',
           },
         },

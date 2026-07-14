@@ -344,6 +344,10 @@ export {
   type GeneratedAssetIndexStore,
   type ResourceCacheGeneratedAssetIndexBinding,
 } from './media/generated-asset-index';
+export {
+  createGeneratedAssetResourceResolver,
+  type GeneratedAssetResourceResolver,
+} from './media/generated-asset-resource-resolver';
 export type {
   MediaGenerationType,
   MediaTaskStatus,

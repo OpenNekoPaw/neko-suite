@@ -5,6 +5,7 @@ import {
   TOOL_NAMES_PERCEPTION,
   type PerceiveToolInput,
   type ToolParameters,
+  type ToolExecuteOptions,
   type ToolResult,
 } from '@neko/shared';
 import type { IPerceptionPipeline, MediaUnderstandingModelOverrides } from './contracts';
@@ -46,7 +47,8 @@ export class PerceiveTool extends BuiltinTool {
           mimeType: { type: 'string' },
           resourceRef: {
             type: 'object',
-            description: 'Stable unified ResourceRef copied exactly from the producing tool.',
+            description:
+              'Optional stable unified ResourceRef copied exactly from the producing tool. Omit it when only a file path or generated asset id is known.',
           },
           documentResourceRef: {
             type: 'object',
@@ -79,7 +81,7 @@ export class PerceiveTool extends BuiltinTool {
     this.now = config.now ?? (() => Date.now());
   }
 
-  async execute(args: Record<string, unknown>): Promise<ToolResult> {
+  async execute(args: Record<string, unknown>, options?: ToolExecuteOptions): Promise<ToolResult> {
     const validation = this.validateArgs(args);
     if (!validation.valid) {
       return this.error(validation.error ?? 'Invalid arguments');
@@ -90,7 +92,8 @@ export class PerceiveTool extends BuiltinTool {
       return this.error('`assetId` must be a non-empty string and `depth` must be 1 or 2');
     }
 
-    const understandingModels = readUnderstandingModels(input.options);
+    const understandingModels =
+      readUnderstandingModels(input.options) ?? readUnderstandingModels(options?.metadata);
     const result = await this.pipeline.perceive({
       asset: { assetId: input.assetId, ...(input.ref ? { ref: input.ref } : {}) },
       focus: input.focus,
@@ -180,9 +183,6 @@ function readPerceptualAssetRef(value: unknown): PerceiveToolInput['ref'] | unde
   }
   const resourceRefValue = value['resourceRef'];
   const resourceRef = isResourceRef(resourceRefValue) ? resourceRefValue : undefined;
-  if (resourceRefValue !== undefined && !resourceRef) {
-    return undefined;
-  }
   const documentResourceRefValue = value['documentResourceRef'];
   const documentResourceRef = parseDocumentArchiveResourceRef(documentResourceRefValue);
   if (documentResourceRefValue !== undefined && !documentResourceRef) {

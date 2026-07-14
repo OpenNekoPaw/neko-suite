@@ -19,7 +19,6 @@ describe('createCoreTools', () => {
     await fs.mkdir(path.join(workspaceRoot, '.neko', '.cache', 'resources'), { recursive: true });
     await fs.mkdir(path.join(workspaceRoot, '.neko', 'logs'), { recursive: true });
     await fs.mkdir(path.join(workspaceRoot, '.neko', 'tmp'), { recursive: true });
-    await fs.mkdir(path.join(workspaceRoot, '.neko', 'semantic-index'), { recursive: true });
     await fs.mkdir(path.join(workspaceRoot, '.neko', 'entities'), { recursive: true });
     await fs.mkdir(path.join(workspaceRoot, '.neko', 'search'), { recursive: true });
     await fs.mkdir(path.join(workspaceRoot, 'ignored'), { recursive: true });
@@ -33,11 +32,6 @@ describe('createCoreTools', () => {
     );
     await fs.writeFile(path.join(workspaceRoot, '.neko', 'logs', 'events.jsonl'), '{}\n', 'utf-8');
     await fs.writeFile(path.join(workspaceRoot, '.neko', 'tmp', 'scratch.txt'), 'tmp\n', 'utf-8');
-    await fs.writeFile(
-      path.join(workspaceRoot, '.neko', 'semantic-index', 'index.json'),
-      '{}\n',
-      'utf-8',
-    );
     await fs.writeFile(
       path.join(workspaceRoot, '.neko', 'entities', 'store.json'),
       '{}\n',
@@ -205,12 +199,6 @@ describe('createCoreTools', () => {
     });
     await expect(
       getTool(tools, 'Read').execute({ file_path: '.neko/tmp/scratch.txt' }),
-    ).resolves.toMatchObject({
-      success: false,
-      error: expect.stringContaining('managed workspace runtime or cache directory'),
-    });
-    await expect(
-      getTool(tools, 'Read').execute({ file_path: '.neko/semantic-index/index.json' }),
     ).resolves.toMatchObject({
       success: false,
       error: expect.stringContaining('managed workspace runtime or cache directory'),

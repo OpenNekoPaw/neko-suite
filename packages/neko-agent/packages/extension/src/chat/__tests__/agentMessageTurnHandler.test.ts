@@ -745,7 +745,7 @@ describe('AgentMessageTurnHandler', () => {
         expect.objectContaining({
           providerId: 'anthropic',
           modelId: 'claude-3',
-          temperature: 0.25,
+          temperature: undefined,
           maxTokens: 4096,
           thinkingBudget: 1024,
         }),
@@ -879,9 +879,15 @@ describe('AgentMessageTurnHandler', () => {
         systemPrompt: 'mock system prompt',
         maxIterations: 200,
         autoExecuteTools: true,
-        temperature: 0.7,
+        temperature: undefined,
+        topP: undefined,
         maxTokens: 8192,
         thinkingBudget: 2048,
+        providerOptions: {
+          anthropic: {
+            thinking: { type: 'enabled', budgetTokens: 2048 },
+          },
+        },
         providerId: 'anthropic',
         modelId: 'claude-3',
         modelCapabilities: ['chat', 'thinking', 'sampling'],
@@ -1300,6 +1306,42 @@ describe('AgentMessageTurnHandler', () => {
           code: 'conversation-durability-failed',
           severity: 'warning',
         }),
+      );
+      expect(conversations.getMessages()).toEqual(
+        expect.arrayContaining([expect.objectContaining({ role: 'assistant' })]),
+      );
+    });
+
+    it('reports a stale catalog without emitting conversation durability failure', async () => {
+      const webview = createMockWebview();
+      const conversations = createMockConversations();
+      conversations.persistConversationTerminal.mockResolvedValue({
+        kind: 'saved',
+        conversationId: 'conv-1',
+        revision: 2,
+        projectionDiagnostic: {
+          code: 'metadata-stale-projection',
+          operation: 'save',
+          conversationId: 'conv-1',
+          authority: 'journal',
+          rebuild: 'conversation-catalog',
+          cause: new Error('catalog locked'),
+        },
+      });
+      const handler = buildHandler({ conversations });
+
+      await handler.handleUserMessage(webview as any, createChatModelRequest('test message'));
+
+      expect(webview.postMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'sessionDiagnostic',
+          code: 'conversation-catalog-stale',
+          severity: 'warning',
+          conversationId: 'conv-1',
+        }),
+      );
+      expect(webview.postMessage).not.toHaveBeenCalledWith(
+        expect.objectContaining({ code: 'conversation-durability-failed' }),
       );
       expect(conversations.getMessages()).toEqual(
         expect.arrayContaining([expect.objectContaining({ role: 'assistant' })]),

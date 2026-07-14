@@ -271,7 +271,7 @@ describe('createTuiReferenceSuggestions', () => {
     });
   });
 
-  it('projects search index media paths through configured library variables', async () => {
+  it('does not project the retired workspace search index', async () => {
     const mediaRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'neko-index-media-'));
     try {
       await fs.mkdir(path.join(tempRoot, 'neko'), { recursive: true });
@@ -306,16 +306,46 @@ describe('createTuiReferenceSuggestions', () => {
       const suggestions = await createTuiReferenceSuggestions({ workspaceRoot: tempRoot });
       const blame = suggestions.find((suggestion) => suggestion.name.includes('BLAME'));
 
-      expect(blame).toMatchObject({
-        kind: 'file',
-        description: expect.stringContaining('media-library · document · 素材'),
-        insertText: '@${A}/epub/animation/Blame/[Kmoe][BLAME！(新裝版)]卷01.epub ',
-      });
-      expect(blame?.description).not.toContain(mediaRoot);
-      expect(blame?.matchText).not.toContain(mediaRoot);
+      expect(blame).toBeUndefined();
     } finally {
       await fs.rm(mediaRoot, { recursive: true, force: true });
     }
+  });
+
+  it('projects shared SQLite search documents without reading a workspace cache index', async () => {
+    const suggestions = await createTuiReferenceSuggestions({
+      workspaceRoot: tempRoot,
+      searchDocuments: async () => [
+        {
+          documentId: 'media:blame',
+          partition: 'media-library',
+          kind: 'media',
+          label: 'BLAME volume 01.epub',
+          description: 'Reference Books',
+          source: {
+            partition: 'media-library',
+            sourceId: '${BOOKS}/BLAME/volume-01.epub',
+            filePath: '${BOOKS}/BLAME/volume-01.epub',
+          },
+          fileKey: '${BOOKS}/BLAME/volume-01.epub',
+          searchText: 'BLAME volume 01 Reference Books document',
+          freshness: 'fresh',
+          metadata: { mediaType: 'document', libraryName: 'Reference Books' },
+          updatedAt: '2026-07-13T05:00:00.000Z',
+        },
+      ],
+    });
+
+    expect(suggestions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: 'BLAME volume 01.epub',
+          kind: 'file',
+          description: expect.stringContaining('media-library · document · Reference Books'),
+          insertText: '@${BOOKS}/BLAME/volume-01.epub ',
+        }),
+      ]),
+    );
   });
 
   it('accepts host-provided mention candidates without inserting unsafe durable paths', async () => {

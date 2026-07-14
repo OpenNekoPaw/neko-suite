@@ -216,6 +216,10 @@ describe('BackfillCoordinator', () => {
       diagnostics: [],
       errors: [error],
     });
-    expect(JSON.parse(history[0]!.content as string)).toEqual({ status: 'completed' });
+    expect(JSON.parse(history[0]!.content as string)).toEqual({
+      schema: 'neko.tool-result.v1',
+      success: true,
+      data: { status: 'completed' },
+    });
   });
 });

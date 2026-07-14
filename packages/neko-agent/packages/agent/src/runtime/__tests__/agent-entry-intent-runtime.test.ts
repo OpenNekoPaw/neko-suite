@@ -251,4 +251,22 @@ describe('agent entry intent runtime', () => {
       ]),
     });
   });
+
+  it('rejects action intents outside the provider capability projection', () => {
+    expect(
+      decideCanvasStoryboardActionIntent({
+        intent: {
+          version: 1,
+          actionId: 'generate-video',
+          target: { nodeId: 'shot-1' },
+        },
+        supportedActionIntentIds: ['generate-image'],
+      }),
+    ).toMatchObject({
+      status: 'blocked',
+      diagnostics: expect.arrayContaining([
+        expect.objectContaining({ code: 'unsupported-storyboard-action-intent' }),
+      ]),
+    });
+  });
 });

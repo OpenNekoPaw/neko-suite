@@ -10,11 +10,15 @@ import {
   ToolRegistry,
 } from '@neko/agent';
 import {
+  createGeneratedAssetRevisionRef,
   TOOL_NAMES_ASSETS,
   TOOL_NAMES_ENTITY,
   TOOL_NAMES_SEARCH,
   TOOL_NAMES_SYSTEM,
+  type GeneratedAsset,
 } from '@neko/shared';
+import type { ResourceCacheManifestStore } from '@neko/shared/content-access';
+import { GeneratedAssetIndex } from '@neko/platform';
 import { createTuiCapabilityLoader } from '../../core/tui-capability-loader';
 import { withTuiDefaultCapabilityProviders } from '../tui-default-capabilities';
 
@@ -38,7 +42,11 @@ describe('withTuiDefaultCapabilityProviders', () => {
     });
 
     const result = capabilityLoader.registerProviders(
-      withTuiDefaultCapabilityProviders({ workDir }),
+      withTuiDefaultCapabilityProviders({
+        workDir,
+        resourceCacheManifestStore: createMemoryManifestStore(),
+        generatedAssetIndex: createMemoryGeneratedAssetIndex(),
+      }),
     );
 
     expect(result.providers).toEqual(
@@ -96,6 +104,67 @@ describe('withTuiDefaultCapabilityProviders', () => {
     );
   });
 
+  it('reads generated output resources through the SQLite-backed content capability', async () => {
+    const workDir = createTempDir();
+    const outputPath = path.join(workDir, 'neko', 'generated', 'image', 'generated-1.png');
+    fs.mkdirSync(path.dirname(outputPath), { recursive: true });
+    fs.writeFileSync(
+      outputPath,
+      Buffer.from(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+        'base64',
+      ),
+    );
+    const lifecycle = createGeneratedAssetRevisionRef({
+      assetId: 'generated-1',
+      contentDigest: 'sha256:generated-1',
+      mediaKind: 'image',
+      mimeType: 'image/png',
+      generation: { taskId: 'task-1' },
+    });
+    const generatedAssetIndex = createMemoryGeneratedAssetIndex();
+    await generatedAssetIndex.add({
+      type: 'generated-image',
+      id: 'generated-1',
+      path: outputPath,
+      lifecycle,
+      mimeType: 'image/png',
+      generatedAt: '2026-07-14T00:00:00.000Z',
+      width: 1,
+      height: 1,
+      ratio: '1:1',
+    });
+    const toolRegistry = new ToolRegistry();
+    createTuiCapabilityLoader({
+      toolRegistry,
+      toolGroupRegistry: new ToolGroupRegistry(),
+      providerCardRegistry: new ProviderCardRegistry(),
+    }).registerProviders(
+      withTuiDefaultCapabilityProviders({
+        workDir,
+        resourceCacheManifestStore: createMemoryManifestStore(),
+        generatedAssetIndex,
+      }),
+    );
+    const resourceRef = lifecycle.resourceRef;
+
+    expect(resourceRef.source).not.toHaveProperty('filePath');
+    expect(resourceRef.source.metadata).not.toHaveProperty('path');
+
+    const result = await toolRegistry.execute(TOOL_NAMES_SYSTEM.READ_IMAGE, {
+      mode: 'metadata',
+      images: [{ resourceRef }],
+    });
+
+    expect(result).toMatchObject({
+      success: true,
+      data: {
+        imageCount: 1,
+        images: [expect.objectContaining({ resourceRef })],
+      },
+    });
+  });
+
   it('loads asset summaries through the asset-owned runtime without exposing .neko files', async () => {
     const workDir = createTempDir();
     const assetLibraryPath = path.join(workDir, 'neko', 'assets', 'library.json');
@@ -145,7 +214,13 @@ describe('withTuiDefaultCapabilityProviders', () => {
       toolRegistry,
       toolGroupRegistry: new ToolGroupRegistry(),
       providerCardRegistry: new ProviderCardRegistry(),
-    }).registerProviders(withTuiDefaultCapabilityProviders({ workDir }));
+    }).registerProviders(
+      withTuiDefaultCapabilityProviders({
+        workDir,
+        resourceCacheManifestStore: createMemoryManifestStore(),
+        generatedAssetIndex: createMemoryGeneratedAssetIndex(),
+      }),
+    );
 
     const result = await toolRegistry.execute(TOOL_NAMES_ASSETS.LIST_ASSETS, {
       query: 'Hero',
@@ -196,7 +271,13 @@ describe('withTuiDefaultCapabilityProviders', () => {
       toolRegistry,
       toolGroupRegistry: new ToolGroupRegistry(),
       providerCardRegistry: new ProviderCardRegistry(),
-    }).registerProviders(withTuiDefaultCapabilityProviders({ workDir }));
+    }).registerProviders(
+      withTuiDefaultCapabilityProviders({
+        workDir,
+        resourceCacheManifestStore: createMemoryManifestStore(),
+        generatedAssetIndex: createMemoryGeneratedAssetIndex(),
+      }),
+    );
 
     const entities = await toolRegistry.execute(TOOL_NAMES_ENTITY.LIST_CREATIVE_ENTITIES, {
       query: '小橘',
@@ -256,4 +337,35 @@ function createTempDir(): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'neko-tui-capabilities-'));
   createdPaths.push(dir);
   return dir;
+}
+
+function createMemoryManifestStore(): ResourceCacheManifestStore {
+  let manifest = {
+    version: 1 as const,
+    createdAt: '2026-07-14T00:00:00.000Z',
+    updatedAt: '2026-07-14T00:00:00.000Z',
+    entries: {},
+  };
+  return {
+    load: async () => manifest,
+    save: async (next) => {
+      manifest = next;
+    },
+    update: async (operation) => {
+      manifest = await operation(manifest);
+      return manifest;
+    },
+    invalidateCache: () => undefined,
+  };
+}
+
+function createMemoryGeneratedAssetIndex(): GeneratedAssetIndex {
+  let assets: readonly GeneratedAsset[] = [];
+  return new GeneratedAssetIndex({
+    load: async () => assets,
+    update: async (operation) => {
+      assets = operation(assets);
+      return assets;
+    },
+  });
 }

@@ -84,7 +84,7 @@ function resolveSkillActionRequest(
   if (request.action === 'create' || request.action === 'rescan') {
     const skillName = request.skillName?.trim() ?? '';
     return {
-      source: request.targetSource ?? 'project',
+      source: request.targetSource ?? 'personal',
       skillName,
     };
   }
@@ -179,7 +179,7 @@ async function forkSkill(
   if (!builtin) {
     throw new Error(`Only built-in skills can be forked: ${resolution.skillName}`);
   }
-  const targetSource = request.targetSource ?? 'project';
+  const targetSource = request.targetSource ?? 'personal';
   assertEditableTargetSource(targetSource);
   const result = await options.skillFileService.createSkill({
     target: targetSource,
@@ -199,7 +199,7 @@ async function createSkill(
   request: SkillCatalogActionRequest,
   options: Omit<SkillCatalogActionHostOptions, 'context'>,
 ): Promise<void> {
-  const targetSource = request.targetSource ?? 'project';
+  const targetSource = request.targetSource ?? 'personal';
   assertEditableTargetSource(targetSource);
   const skillName = request.skillName?.trim();
   if (!skillName || !SKILL_NAME_RE.test(skillName)) {

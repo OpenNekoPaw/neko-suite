@@ -223,7 +223,7 @@ Agent Chat 可以展示外部 run 的摘要、进度、结果卡、诊断、重�
 - Resource tests：`dataUrl`、Webview URI、blob URL、cache path、系统 temp path 不能进入 durable payload。
 - Apply tests：revision match、stale target、deleted target、same-target lock、candidate apply、per-target batch failure。
 - Runtime tests：run/workItem cancel、retry、timeout、cost/approval gate、provider capability mismatch。
-- VS Code Webview runtime smoke：只在触及 Webview 投影、CSP、resource reveal、apply controls 或 package UI 时需要。
+- VS Code Webview 功能场景：只在触及 Webview 投影、CSP、resource reveal、apply controls 或 package UI 时需要，并通过真实 Extension Development Host 验证 UI、canonical path、产物和运行错误。
 
 ## 后果
 
@@ -250,4 +250,3 @@ Agent Chat 可以展示外部 run 的摘要、进度、结果卡、诊断、重�
 - Agent conversation 只作为可选投影和显式继续创作入口。
 - 最近 source/document association 可以用于 UI 提示、资源引用和 optional projection，但不能作为执行路由的默认成功路径。
 - 第一条迁移路径仍应优先选择 Canvas 生成/编辑按钮，目标是从 `dataUrl` 写回转向 `ResourceRef` + package-owned apply。
-

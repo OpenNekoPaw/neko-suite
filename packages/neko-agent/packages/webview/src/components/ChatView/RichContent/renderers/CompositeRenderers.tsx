@@ -16,6 +16,7 @@ import { SendToMenu } from '@/components/ChatView/SendToMenu';
 import { useTranslation } from '@/i18n/I18nContext';
 import {
   projectStoryboardTableAssetBatch,
+  projectStoryboardTableCanvasAuthoringHandoff,
   projectStoryboardTableCutTimelinePayload,
 } from '@/presenters/storyboard-transfer-presenter';
 
@@ -34,9 +35,11 @@ function isAssetGalleryRichData(data: unknown): data is AssetGalleryRichData {
 function StoryboardTableRendererComponent({
   data,
   className,
+  conversationId,
 }: RichContentProps<StoryboardTableRichData>) {
   const cutPayload = projectStoryboardTableCutTimelinePayload(data);
   const assetBatchPayload = projectStoryboardTableAssetBatch(data);
+  const canvasAuthoringHandoff = projectStoryboardTableCanvasAuthoringHandoff(data);
   const plugins = data.plugins;
   const storyboardRows = data.storyboardTable ? projectSemanticStoryboardRows(data) : [];
   const rowCount = storyboardRows.length > 0 ? storyboardRows.length : data.sections.length;
@@ -52,7 +55,7 @@ function StoryboardTableRendererComponent({
             : t('chat.storyboardTable.count.rows', { count: rowCount })
         }
         actions={
-          plugins && (cutPayload || assetBatchPayload) ? (
+          plugins && (cutPayload || assetBatchPayload || canvasAuthoringHandoff) ? (
             <div className="flex min-w-0 flex-wrap items-center justify-end gap-1">
               {cutPayload && (
                 <SendToMenu
@@ -60,6 +63,16 @@ function StoryboardTableRendererComponent({
                   mediaType="image"
                   plugins={plugins}
                   allowedTargets={['cut']}
+                  hidePrefixLabel
+                />
+              )}
+              {canvasAuthoringHandoff && conversationId && (
+                <SendToMenu
+                  canvasAuthoringHandoff={canvasAuthoringHandoff}
+                  conversationId={conversationId}
+                  mediaType="image"
+                  plugins={plugins}
+                  allowedTargets={['canvas']}
                   hidePrefixLabel
                 />
               )}

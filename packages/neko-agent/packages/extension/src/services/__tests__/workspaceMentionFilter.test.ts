@@ -207,7 +207,7 @@ tmp/*.json
     );
   });
 
-  it('parses document path variables so the message runtime can route them to ReadDocument', async () => {
+  it('keeps durable path variables out of the legacy workspace-file mention parser', async () => {
     vi.mocked(vscode.workspace.fs.readFile).mockImplementation(async (uri: { fsPath: string }) => {
       if (uri.fsPath.endsWith('/.gitignore')) {
         return Buffer.from('');
@@ -228,11 +228,6 @@ tmp/*.json
     const refs = processor.parseReferences('分析 @${A}/epub/story.epub 前10页');
 
     expect(vscode.workspace.fs.readFile).not.toHaveBeenCalled();
-    expect(refs).toEqual([
-      expect.objectContaining({
-        original: '@${A}/epub/story.epub',
-        path: '${A}/epub/story.epub',
-      }),
-    ]);
+    expect(refs).toEqual([]);
   });
 });

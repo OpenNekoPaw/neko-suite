@@ -77,6 +77,10 @@ export interface LlmParameterProjectionInput {
     | 'supportsBeta'
   >;
   readonly llmConfig?: AgentLlmConfig;
+  readonly runtimeDefaults?: Pick<
+    AgentPresetIntent,
+    'temperature' | 'topP' | 'maxOutputTokens' | 'thinkingBudget'
+  >;
 }
 
 export interface LlmParameterProjection {
@@ -243,8 +247,19 @@ export function projectLlmParameters(input: LlmParameterProjectionInput): LlmPar
     model: input.model,
     provider,
   });
-  const presetIntent = projectAgentPresetIntent(input.llmConfig);
-  const hasExplicitThinkingBudget = input.llmConfig?.advanced?.thinkingBudget !== undefined;
+  const projectedIntent = removeUndefinedValues({
+    ...input.runtimeDefaults,
+    ...projectAgentPresetIntent(input.llmConfig),
+  });
+  const presetIntent =
+    providerFamily === 'anthropic' &&
+    input.runtimeDefaults?.thinkingBudget !== undefined &&
+    !hasExplicitSamplingConfig(input.llmConfig)
+      ? removeAnthropicSamplingDefaults(projectedIntent)
+      : projectedIntent;
+  const hasExplicitThinkingBudget =
+    input.llmConfig?.advanced?.thinkingBudget !== undefined ||
+    input.runtimeDefaults?.thinkingBudget !== undefined;
   const diagnostics: LlmParameterDiagnostic[] = [];
   const chatOptions: Pick<ChatOptions, 'temperature' | 'topP' | 'maxTokens' | 'thinkingBudget'> =
     {};
@@ -305,6 +320,19 @@ export function projectLlmParameters(input: LlmParameterProjectionInput): LlmPar
     providerOptions,
     diagnostics,
   };
+}
+
+function hasExplicitSamplingConfig(config: AgentLlmConfig | undefined): boolean {
+  return (
+    config?.creativityPreset !== undefined ||
+    config?.advanced?.temperature !== undefined ||
+    config?.advanced?.topP !== undefined
+  );
+}
+
+function removeAnthropicSamplingDefaults(intent: AgentPresetIntent): AgentPresetIntent {
+  const { temperature: _temperature, topP: _topP, ...rest } = intent;
+  return rest;
 }
 
 export function resolveLlmProviderFamily(

@@ -39,7 +39,6 @@ import {
   toMediaBackgroundTaskType,
 } from '@neko/platform/media/media-task-view';
 import { GeneratedAssetIndex, generateAssetId } from '@neko/platform/media/generated-asset-index';
-import { createWorkspaceGeneratedAssetIndex } from './generatedAssetOpenResolver';
 import { getLogger } from '../base';
 import type { AgentLocalResourceAccess } from './localResourceAccess';
 
@@ -58,18 +57,9 @@ export interface MediaTaskDeliveryHostDeps {
 
 export class MediaTaskDeliveryHost {
   private readonly assetIndex: GeneratedAssetIndex | undefined;
-  private readonly ownsAssetIndex: boolean;
 
   constructor(private readonly deps: MediaTaskDeliveryHostDeps) {
-    const createdAssetIndex = deps.assetIndex ?? createWorkspaceGeneratedAssetIndex({ logger });
-    this.assetIndex = createdAssetIndex;
-    this.ownsAssetIndex = deps.assetIndex === undefined && createdAssetIndex !== undefined;
-  }
-
-  dispose(): void {
-    if (this.ownsAssetIndex) {
-      this.assetIndex?.dispose();
-    }
+    this.assetIndex = deps.assetIndex;
   }
 
   async createTaskView(webview: vscode.Webview, task: MediaTask): Promise<MediaTaskView> {

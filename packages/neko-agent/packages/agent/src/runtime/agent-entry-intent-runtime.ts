@@ -1,7 +1,6 @@
 import type {
   AgentContextPayload,
   AgentContextType,
-  CanvasAuthoringCatalog,
   CanvasAuthoringDiagnostic,
   CanvasStoryboardActionIntent,
   CanvasStoryboardActionIntentId,
@@ -53,7 +52,7 @@ export type CanvasStoryboardActionDecisionStatus = 'ready' | 'requires-approval'
 
 export interface CanvasStoryboardActionDecisionInput {
   readonly intent: CanvasStoryboardActionIntent;
-  readonly catalog?: Pick<CanvasAuthoringCatalog, 'semanticPrompts'>;
+  readonly supportedActionIntentIds?: readonly CanvasStoryboardActionIntentId[];
   readonly modelCapability?: CanvasStoryboardModelCapabilityProjection;
   readonly approvalGranted?: boolean;
 }
@@ -189,8 +188,8 @@ export function decideCanvasStoryboardActionIntent(
   const diagnostics: CanvasAuthoringDiagnostic[] = [];
 
   if (
-    input.catalog?.semanticPrompts?.actionIntentIds &&
-    !input.catalog.semanticPrompts.actionIntentIds.includes(input.intent.actionId)
+    input.supportedActionIntentIds &&
+    !input.supportedActionIntentIds.includes(input.intent.actionId)
   ) {
     diagnostics.push({
       severity: 'error',

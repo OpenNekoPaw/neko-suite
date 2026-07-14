@@ -1,12 +1,13 @@
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
-import { constants as fsConstants, type Dirent } from 'node:fs';
+import type { Dirent } from 'node:fs';
 import { isMentionExcludedPath } from '@neko/agent';
 import type {
   AgentReferenceCandidate,
   AgentReferenceContributor,
   AssetEntity,
   ResolvedMediaLibrary,
+  SearchDocumentRecord,
 } from '@neko/shared';
 import type { InputSuggestionOption } from './input-suggestions';
 import type { AgentTerminalPresentationContext } from '../../presentation/context';
@@ -30,6 +31,10 @@ export interface TuiReferenceSuggestionOptions {
   readonly excludedDirectories?: readonly string[];
   readonly extraReferences?: readonly TuiMentionReferenceCandidate[];
   readonly referenceContributors?: readonly AgentReferenceContributor[];
+  readonly searchDocuments?: (
+    query: string,
+    limit: number,
+  ) => Promise<readonly SearchDocumentRecord[]>;
   readonly presentation: AgentTerminalPresentationContext<AgentTerminalMessageKey>;
 }
 
@@ -85,24 +90,12 @@ interface AssetLibraryFile {
   readonly entities: readonly AssetEntity[];
 }
 
-interface SearchIndexEntry {
-  readonly filePath?: string;
-  readonly fileName?: string;
-  readonly libraryName?: string;
-  readonly mediaType?: string;
-}
-
-interface SearchIndexFile {
-  readonly entries: readonly SearchIndexEntry[];
-}
-
 type AssetLibraryEntityFile = AssetEntity['variants'][number]['files'][number];
 
 const DEFAULT_REFERENCE_LIMIT = 80;
 const DEFAULT_REFERENCE_MAX_DEPTH = 4;
 const LOCAL_LIBRARY_MAX_DEPTH = 5;
 const ASSET_LIBRARY_FILE = path.join('neko', 'assets', 'library.json');
-const SEARCH_INDEX_CACHE_FILE = path.join('.neko', '.cache', 'search-index.json');
 const DEFAULT_LOCAL_LIBRARY_ROOTS: readonly LocalLibraryRoot[] = [
   { relativeDir: 'assets', kind: 'asset', source: 'asset-library', label: 'asset-library' },
   { relativeDir: 'neko/assets', kind: 'asset', source: 'asset-library', label: 'asset-library' },
@@ -193,8 +186,8 @@ export async function createTuiReferenceSuggestions(
   });
   const searchIndexCandidates = await listSearchIndexReferenceCandidates(root, {
     limit,
-    resolvedMediaLibraries,
     query,
+    searchDocuments: options.searchDocuments,
   });
   const contributedReferenceSuggestions = await listContributedReferenceSuggestions({
     contributors: options.referenceContributors ?? [],
@@ -488,49 +481,41 @@ async function listAssetLibraryReferenceCandidates(
 }
 
 async function listSearchIndexReferenceCandidates(
-  workspaceRoot: string,
+  _workspaceRoot: string,
   options: {
     readonly limit: number;
-    readonly resolvedMediaLibraries: readonly ResolvedMediaLibrary[];
     readonly query?: string;
+    readonly searchDocuments?: TuiReferenceSuggestionOptions['searchDocuments'];
   },
 ): Promise<readonly TuiMentionReferenceCandidate[]> {
-  const index = await readSearchIndexFile(path.join(workspaceRoot, SEARCH_INDEX_CACHE_FILE));
-  if (!index) {
-    return [];
+  if (options.searchDocuments) {
+    const documents = await options.searchDocuments(options.query ?? '', options.limit);
+    return documents.flatMap((document) => {
+      if (
+        document.partition !== 'media-library' ||
+        !document.fileKey ||
+        !isTerminalSafeReferencePath(document.fileKey)
+      ) {
+        return [];
+      }
+      const durableRef = normalizeTerminalPath(document.fileKey);
+      const mediaType =
+        toTuiMentionMediaType(document.metadata?.['mediaType']) ??
+        detectMentionMediaType(durableRef);
+      const candidate: TuiMentionReferenceCandidate = {
+        kind: toSearchIndexMentionKind(mediaType),
+        label: document.label,
+        source: 'media-library',
+        ...(mediaType ? { mediaType } : {}),
+        filePath: durableRef,
+        ...(document.description ? { description: document.description } : {}),
+        searchText: document.searchText,
+        insertText: `${formatMentionInsertText(durableRef)} `,
+      };
+      return [candidate];
+    });
   }
-
-  const candidates: TuiMentionReferenceCandidate[] = [];
-  const seen = new Set<string>();
-  for (const entry of index.entries) {
-    if (candidates.length >= options.limit) {
-      break;
-    }
-    const durableRef = resolveSearchIndexDurableReference(entry, options.resolvedMediaLibraries);
-    if (!durableRef || seen.has(durableRef)) {
-      continue;
-    }
-    seen.add(durableRef);
-
-    const mediaType = toTuiMentionMediaType(entry.mediaType) ?? detectMentionMediaType(durableRef);
-    const label = entry.fileName ?? path.basename(durableRef);
-    const candidate: TuiMentionReferenceCandidate = {
-      kind: toSearchIndexMentionKind(mediaType),
-      label,
-      source: 'media-library',
-      ...(mediaType ? { mediaType } : {}),
-      filePath: durableRef,
-      ...(entry.libraryName ? { description: entry.libraryName } : {}),
-      searchText: [label, durableRef, entry.libraryName, entry.mediaType]
-        .filter((value): value is string => typeof value === 'string' && value.length > 0)
-        .join(' '),
-      insertText: `${formatMentionInsertText(durableRef)} `,
-    };
-    if (!options.query || matchesMentionCandidateQuery(candidate, options.query)) {
-      candidates.push(candidate);
-    }
-  }
-  return candidates;
+  return [];
 }
 
 async function readResolvedMediaLibraries(
@@ -639,83 +624,6 @@ function isAssetEntity(value: unknown): value is AssetEntity {
     typeof value['createdAt'] === 'number' &&
     typeof value['updatedAt'] === 'number'
   );
-}
-
-async function readSearchIndexFile(filePath: string): Promise<SearchIndexFile | undefined> {
-  const value = await readOptionalJsonFile(filePath);
-  if (value === undefined) {
-    return undefined;
-  }
-  if (!isRecord(value)) {
-    throw new TuiReferenceSuggestionError({
-      code: 'expected-object',
-      source: SEARCH_INDEX_CACHE_FILE,
-    });
-  }
-  const entries = value['entries'];
-  if (entries === undefined) {
-    return { entries: [] };
-  }
-  if (!Array.isArray(entries)) {
-    throw new TuiReferenceSuggestionError({
-      code: 'expected-array',
-      source: `${SEARCH_INDEX_CACHE_FILE}.entries`,
-    });
-  }
-  return {
-    entries: entries.map((entry, index) => readSearchIndexEntry(entry, index)),
-  };
-}
-
-function readSearchIndexEntry(value: unknown, index: number): SearchIndexEntry {
-  if (!isRecord(value)) {
-    throw new TuiReferenceSuggestionError({
-      code: 'expected-entry-object',
-      source: `${SEARCH_INDEX_CACHE_FILE}.entries`,
-      index,
-    });
-  }
-  return {
-    ...readOptionalStringProperty(
-      value,
-      'filePath',
-      `${SEARCH_INDEX_CACHE_FILE}.entries[${index}]`,
-    ),
-    ...readOptionalStringProperty(
-      value,
-      'fileName',
-      `${SEARCH_INDEX_CACHE_FILE}.entries[${index}]`,
-    ),
-    ...readOptionalStringProperty(
-      value,
-      'libraryName',
-      `${SEARCH_INDEX_CACHE_FILE}.entries[${index}]`,
-    ),
-    ...readOptionalStringProperty(
-      value,
-      'mediaType',
-      `${SEARCH_INDEX_CACHE_FILE}.entries[${index}]`,
-    ),
-  };
-}
-
-function readOptionalStringProperty(
-  value: Record<string, unknown>,
-  key: keyof SearchIndexEntry,
-  sourceLabel: string,
-): Partial<SearchIndexEntry> {
-  const property = value[key];
-  if (property === undefined) {
-    return {};
-  }
-  if (typeof property !== 'string') {
-    throw new TuiReferenceSuggestionError({
-      code: 'expected-string-field',
-      source: sourceLabel,
-      field: key,
-    });
-  }
-  return property.length > 0 ? { [key]: property } : {};
 }
 
 async function listLibraryRootFiles(input: {
@@ -985,46 +893,6 @@ function toSearchIndexMentionKind(mediaType: TuiMentionMediaType | null | undefi
   return mediaType === 'document' || mediaType === 'text' ? 'file' : 'media';
 }
 
-function resolveSearchIndexDurableReference(
-  entry: SearchIndexEntry,
-  libraries: readonly ResolvedMediaLibrary[],
-): string | undefined {
-  if (!entry.filePath) {
-    return undefined;
-  }
-  if (isTerminalSafeReferencePath(entry.filePath)) {
-    return normalizeTerminalPath(entry.filePath);
-  }
-  return contractMediaLibraryPath(entry.filePath, libraries);
-}
-
-function contractMediaLibraryPath(
-  filePath: string,
-  libraries: readonly ResolvedMediaLibrary[],
-): string | undefined {
-  const absolutePath = path.resolve(filePath);
-  const roots = libraries
-    .filter((library) => library.enabled)
-    .flatMap((library) => [
-      { variable: library.variable, root: library.resolvedPath },
-      { variable: library.variable, root: library.originalPath },
-    ])
-    .filter((entry) => path.isAbsolute(entry.root))
-    .map((entry) => ({ ...entry, root: path.resolve(entry.root) }))
-    .sort((left, right) => right.root.length - left.root.length);
-
-  for (const entry of roots) {
-    const relative = path.relative(entry.root, absolutePath);
-    if (relative === '') {
-      return formatPathVariableReference(entry.variable);
-    }
-    if (!relative.startsWith('..') && !path.isAbsolute(relative)) {
-      return `${formatPathVariableReference(entry.variable)}/${toPosixPath(relative)}`;
-    }
-  }
-  return undefined;
-}
-
 function uniqueSuggestion(): (suggestion: InputSuggestionOption) => boolean {
   const seen = new Set<string>();
   return (suggestion) => {
@@ -1103,19 +971,6 @@ function isLocalLibraryExcludedName(name: string): boolean {
 
 function formatPathVariableReference(variable: string): string {
   return '${' + variable + '}';
-}
-
-async function isReadableDirectory(dirPath: string): Promise<boolean> {
-  try {
-    const stat = await fs.stat(dirPath);
-    if (!stat.isDirectory()) {
-      return false;
-    }
-    await fs.access(dirPath, fsConstants.R_OK);
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 async function directoryExists(dirPath: string): Promise<boolean> {

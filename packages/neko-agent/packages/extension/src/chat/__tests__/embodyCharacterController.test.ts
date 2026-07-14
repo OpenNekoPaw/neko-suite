@@ -210,12 +210,16 @@ describe('EmbodyCharacterController', () => {
           toolPolicy: { kind: 'none' },
           capabilityPolicy: { kind: 'character-feedback-readonly' },
         }),
+        locale: 'zh-cn',
         evidenceSnapshot: expect.objectContaining({
           relationships: [relationship],
           occurrences: [occurrence],
           scriptContextFacts: expect.arrayContaining([scriptFact, profile.facts[0]]),
         }),
-        systemPrompt: expect.stringContaining('Do not activate skills'),
+        turnEvidence: expect.objectContaining({
+          mode: 'embody-character',
+          chunks: [],
+        }),
       }),
     );
     expect(webview.postMessage).toHaveBeenCalledWith(
@@ -252,8 +256,8 @@ describe('EmbodyCharacterController', () => {
         ]),
       ),
     };
-    const responder = vi.fn(async ({ systemPrompt, userMessage, config }) => ({
-      content: systemPrompt.includes(evidenceText)
+    const responder = vi.fn(async ({ turnEvidence, userMessage, config }) => ({
+      content: turnEvidence.chunks.some((chunk) => chunk.text === evidenceText)
         ? `Feedback:evidence:${userMessage.content}`
         : 'Feedback:no-evidence',
       classifications: ['confirmed' as const],
@@ -285,10 +289,10 @@ describe('EmbodyCharacterController', () => {
           toolPolicy: { kind: 'none' },
           capabilityPolicy: { kind: 'character-feedback-readonly' },
         }),
+        locale: 'zh-cn',
         turnEvidence: expect.objectContaining({
           chunks: [expect.objectContaining({ text: evidenceText })],
         }),
-        systemPrompt: expect.stringContaining(evidenceText),
       }),
     );
     expect(result?.artifact.transcript.map((message) => message.content)).toEqual([
@@ -339,13 +343,25 @@ describe('EmbodyCharacterController', () => {
 
     expect(responder).toHaveBeenCalledWith(
       expect.objectContaining({
+        config: expect.objectContaining({
+          toolPolicy: { kind: 'none' },
+          capabilityPolicy: { kind: 'character-feedback-readonly' },
+        }),
+        locale: 'zh-cn',
+        profileSnapshot: expect.objectContaining({
+          facts: [],
+          sparsity: 'thin',
+        }),
         evidenceSnapshot: {
           relationships: [],
           occurrences: [],
           representationHints: [],
           scriptContextFacts: [],
         },
-        systemPrompt: expect.stringContaining('Confirmed facts:\n- none'),
+        turnEvidence: expect.objectContaining({
+          mode: 'embody-character',
+          chunks: [],
+        }),
       }),
     );
     expect(webview.postMessage).toHaveBeenCalledWith(

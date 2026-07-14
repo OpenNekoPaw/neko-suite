@@ -17,6 +17,7 @@ import {
   createWorkspaceResourceCacheOptions,
   type ContentAccessFileExists,
   type ContentAccessService,
+  type GeneratedAssetDerivativeResourceCacheProviderOptions,
   type LocalResourceAccessService,
   type ResourceCacheService,
   type ResourceCacheManifestStore,
@@ -28,9 +29,14 @@ import {
 import type { IEngineClientProvider } from './engineClientProvider';
 import { createExtensionAgentContentAccessRuntimeAdapter } from './agentContentAccessRuntimeAdapter';
 import { getLogger } from '../base';
+import { createSharpGeneratedImageVariantGenerator } from './visionImageProcessor';
 
 const logger = getLogger('AgentContentAccessRuntime');
 const DEFAULT_PROVIDER_ASSET_RANGE_BYTES = 20 * 1024 * 1024;
+
+type GeneratedAssetResourceResolver = NonNullable<
+  GeneratedAssetDerivativeResourceCacheProviderOptions['resolveAsset']
+>;
 
 export interface AgentContentAccessRuntimeServices {
   readonly contentAccess: ContentAccessService;
@@ -50,6 +56,7 @@ export interface CreateExtensionAgentContentAccessRuntimeOptions {
   readonly fileExists?: ContentAccessFileExists;
   readonly maxProviderAssetBytes?: number;
   readonly resourceCacheManifestStore?: ResourceCacheManifestStore;
+  readonly resolveGeneratedAsset?: GeneratedAssetResourceResolver;
 }
 
 export interface CreateExtensionAgentContentAccessRuntimeResult extends AgentContentAccessRuntimeServices {
@@ -87,6 +94,10 @@ export function createExtensionAgentContentAccessRuntime(
               new GeneratedAssetDerivativeResourceCacheProvider({
                 pathResolver: options.pathResolver,
                 ...(workspaceRoot ? { projectRoot: workspaceRoot } : {}),
+                ...(options.resolveGeneratedAsset
+                  ? { resolveAsset: options.resolveGeneratedAsset }
+                  : {}),
+                generator: createSharpGeneratedImageVariantGenerator(),
               }),
               new DocumentResourceCacheProvider({
                 pathResolver: options.pathResolver,
@@ -102,6 +113,13 @@ export function createExtensionAgentContentAccessRuntime(
             ],
           }
         : undefined,
+    ...(options.resolveGeneratedAsset
+      ? {
+          generatedAssetSourceProvider: {
+            resolveAsset: options.resolveGeneratedAsset,
+          },
+        }
+      : {}),
     sourceFileProvider: {
       enabled: Boolean(workspaceRoot),
       engineSourceResolver: ({ request, path: filePath }) =>

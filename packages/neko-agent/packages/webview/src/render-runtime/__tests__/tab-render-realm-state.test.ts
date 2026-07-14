@@ -138,6 +138,49 @@ describe('Tab render realm state', () => {
       }),
     ).toThrow('generationCategory has an unsupported value');
   });
+
+  it('migrates the retired timeline recovery projection to the canonical v1 state', () => {
+    const host = createHost({
+      agentTurnTimelineRecoveries: [
+        {
+          connectionEpoch: 'epoch-1',
+          conversationId: 'conv-a',
+          turnId: 'turn-a',
+          messageId: 'message-a',
+          lastAppliedDeliveryRevision: 1,
+        },
+      ],
+    } as never);
+    const registry = createTabRenderRuntimeRegistry();
+
+    const coordinator = createTabRenderRealmStateCoordinator(host.adapter, registry);
+
+    expect(host.setState).toHaveBeenCalledWith({
+      schemaVersion: TAB_RENDER_REALM_STATE_VERSION,
+      drafts: [],
+    });
+    coordinator.dispose();
+    registry.dispose();
+  });
+
+  it('does not treat arbitrary schema-less state as a legacy migration', () => {
+    expect(() => parseTabRenderRealmState({ openTabs: [] })).toThrow(
+      'Unsupported Agent Tab render realm state schema',
+    );
+    expect(() =>
+      parseTabRenderRealmState({
+        agentTurnTimelineRecoveries: [
+          {
+            connectionEpoch: 'epoch-1',
+            conversationId: 'conv-a',
+            turnId: 'turn-a',
+            messageId: 'message-a',
+            lastAppliedDeliveryRevision: 0,
+          },
+        ],
+      }),
+    ).toThrow('Unsupported Agent Tab render realm state schema');
+  });
 });
 
 function createHost(state: TabRenderRealmState | undefined): {

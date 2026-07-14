@@ -1,8 +1,11 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { createAgentMarkdownSessionRegistry } from '@/markdown/agent-markdown-session-registry';
 import { createIdleConversationStreamingSnapshot } from './conversation-render-contract';
 import { ConversationRenderCoordinator } from './conversation-render-coordinator';
-import { createConversationRenderRuntimeLifecycle } from './conversation-render-runtime-lifecycle';
+import {
+  bindConversationRenderRuntimeLifecycle,
+  createConversationRenderRuntimeLifecycle,
+} from './conversation-render-runtime-lifecycle';
 
 describe('conversation render runtime lifecycle', () => {
   it('separates component detach, hide/reveal, and realm teardown without delivery scheduling', () => {
@@ -45,6 +48,36 @@ describe('conversation render runtime lifecycle', () => {
     expect(coordinator.isDisposed('conv-a')).toBe(true);
     expect(coordinator.read('conv-b')).toBeDefined();
     expect(markdown.metrics().activeSessions).toBe(1);
+  });
+
+  it('stops projecting document visibility after the Webview realm is torn down', () => {
+    const markdown = createAgentMarkdownSessionRegistry();
+    const coordinator = new ConversationRenderCoordinator();
+    const runtime = createConversationRenderRuntimeLifecycle({ coordinator, markdown });
+    const setVisibility = vi.spyOn(runtime, 'setVisibility');
+    const unbind = bindConversationRenderRuntimeLifecycle(runtime);
+
+    window.dispatchEvent(new PageTransitionEvent('pagehide', { persisted: false }));
+    document.dispatchEvent(new Event('visibilitychange'));
+
+    expect(runtime.metrics().realmDisposed).toBe(true);
+    expect(setVisibility).not.toHaveBeenCalled();
+    unbind();
+  });
+
+  it('keeps the realm recoverable when pagehide enters the back-forward cache', () => {
+    const markdown = createAgentMarkdownSessionRegistry();
+    const coordinator = new ConversationRenderCoordinator();
+    const runtime = createConversationRenderRuntimeLifecycle({ coordinator, markdown });
+    const unbind = bindConversationRenderRuntimeLifecycle(runtime);
+
+    window.dispatchEvent(new PageTransitionEvent('pagehide', { persisted: true }));
+
+    expect(runtime.metrics()).toMatchObject({
+      realmDisposed: false,
+      visibility: 'hidden',
+    });
+    unbind();
   });
 });
 

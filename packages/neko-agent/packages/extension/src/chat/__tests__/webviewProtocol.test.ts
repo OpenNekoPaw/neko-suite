@@ -473,11 +473,13 @@ describe('parseWebviewToExtensionMessage', () => {
     expect(
       parseWebviewToExtensionMessage({
         type: 'updateTabState',
+        expectedTabStateRevision: 3,
         openTabs: [{ id: 'tab-1', title: 'Chat', conversationId: 'conv-1' }],
         activeTabId: 'tab-1',
       }),
     ).toEqual({
       type: 'updateTabState',
+      expectedTabStateRevision: 3,
       openTabs: [{ id: 'tab-1', title: 'Chat', conversationId: 'conv-1' }],
       activeTabId: 'tab-1',
     });

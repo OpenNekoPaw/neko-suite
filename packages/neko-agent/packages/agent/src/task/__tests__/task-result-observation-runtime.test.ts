@@ -69,6 +69,43 @@ describe('AgentTaskResultObservationRuntime', () => {
     runtime.dispose();
   });
 
+  it('preserves task-result identity when auto-resume is queued behind a running turn', async () => {
+    const task = createTaskWithAutoResumePolicy();
+    const tasks: AgentTaskResultObservationRuntimeTaskPort = {
+      onTerminalTask: () => () => undefined,
+      list: vi.fn(async () => [task]),
+    };
+    const recordTaskResultObservation = vi.fn(async (input) => createAutoResumeRecord(input));
+    const enqueuePendingMessage = vi.fn(() => ({ accepted: true }));
+    const dispatchIdleAgentTurn = vi.fn(async () => undefined);
+    const runtime = createAgentTaskResultObservationRuntime({
+      tasks,
+      agents: {
+        get: () => ({ recordTaskResultObservation, enqueuePendingMessage }),
+        isRunning: () => true,
+      },
+      continuation: { dispatchIdleAgentTurn },
+    });
+
+    await runtime.handleTerminalTask(task);
+
+    expect(enqueuePendingMessage).toHaveBeenCalledWith({
+      conversationId: 'conv-1',
+      content: 'Continue',
+      source: 'task-result-continuation',
+      displayKind: 'task-continuation',
+      metadata: {
+        observationId: expect.stringMatching(/^task-result-observation:/),
+        taskId: 'task-1',
+        runId: 'run-1',
+        status: 'queued',
+        policy: 'auto-resume-agent',
+      },
+    });
+    expect(dispatchIdleAgentTurn).not.toHaveBeenCalled();
+    runtime.dispose();
+  });
+
   it('lets the host skip TaskManager terminal observations during subscription and reconciliation', async () => {
     const terminalListeners: Array<
       (event: { readonly task: Task; readonly scope: TaskRunScope }) => void

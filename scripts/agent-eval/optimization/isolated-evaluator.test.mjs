@@ -163,9 +163,9 @@ function buildTarget(sourceRevision, sourceFingerprint, recipeFingerprint) {
     sourceFingerprint,
     buildRecipeFingerprint: recipeFingerprint,
     buildCommands: [
-      { command: 'pnpm', args: ['--filter', '@neko/cli', 'build'], timeoutMs: 600_000 },
+      { command: 'pnpm', args: ['--filter', '@neko/app-tui', 'build'], timeoutMs: 600_000 },
     ],
-    executablePath: 'packages/neko-agent/packages/cli-tui/dist/cli.js',
+    executablePath: 'apps/neko-tui/dist/main.js',
     launchCommand: { command: 'node', args: ['{executable}'] },
   };
 }

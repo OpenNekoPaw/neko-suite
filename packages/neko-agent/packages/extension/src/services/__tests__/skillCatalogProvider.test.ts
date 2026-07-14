@@ -40,6 +40,7 @@ describe('skillCatalogProvider', () => {
       visibility: 'primary',
       groupId: 'media-production',
       editable: false,
+      actions: expect.arrayContaining([{ id: 'fork', targetSource: 'personal' }]),
     });
     for (const skillName of ['storyboard', 'image', 'video']) {
       expect(findSkill(skills, skillName).catalog).toMatchObject({

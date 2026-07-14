@@ -61,11 +61,11 @@
           },
           {
             "command": "pnpm",
-            "args": ["--filter", "@neko/cli", "run", "build:bundle"],
+            "args": ["--filter", "@neko/app-tui", "run", "build:bundle"],
             "timeoutMs": 600000
           }
         ],
-        "executablePath": "packages/neko-agent/packages/cli-tui/dist/cli.js",
+        "executablePath": "apps/neko-tui/dist/main.js",
         "launchCommand": { "command": "node", "args": ["{executable}"] }
       },
       "expectedPath": [
@@ -113,11 +113,11 @@
           },
           {
             "command": "pnpm",
-            "args": ["--filter", "@neko/cli", "run", "build:bundle"],
+            "args": ["--filter", "@neko/app-tui", "run", "build:bundle"],
             "timeoutMs": 600000
           }
         ],
-        "executablePath": "packages/neko-agent/packages/cli-tui/dist/cli.js",
+        "executablePath": "apps/neko-tui/dist/main.js",
         "launchCommand": { "command": "node", "args": ["{executable}"] },
         "patchFile": "scripts/agent-eval/ablation/patches/creation-persona-without-rationale.patch",
         "patchFingerprint": "sha256:53a009f0b23c0b61e2eacfc102fd89985982975cdc75562bfd7d836aa8e37f9c"

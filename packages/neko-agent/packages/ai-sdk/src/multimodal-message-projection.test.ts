@@ -202,6 +202,46 @@ describe('multimodal-message-projection', () => {
     ]);
   });
 
+  it('uses provider-loadable duplicate cards when older cards lack perceptual refs', async () => {
+    const loadCalls: string[] = [];
+    const result = await projectMultimodalPacketToChatMessageAsync(emptyPacket(), {
+      provider: { providerId: 'openai' },
+      perceptionCards: [
+        {
+          ...imageCard(),
+          createdAt: 1,
+          perceptual: undefined,
+          cacheKey: 'generated-media:asset-1:layer0-only',
+        },
+        {
+          ...imageCard(),
+          createdAt: 2,
+          perceptual: {
+            thumbnailRef: {
+              assetId: 'asset-1',
+              uri: 'generated-assets/asset-1.png',
+              mimeType: 'image/png',
+            },
+          },
+          cacheKey: 'generated-media:asset-1:provider-ref',
+        },
+      ],
+      assetLoader: {
+        load: async (ref) => {
+          loadCalls.push(ref.uri);
+          return { kind: 'image' as const, url: `data:${ref.mimeType};base64,image` };
+        },
+      },
+    });
+
+    expect(loadCalls).toEqual(['generated-assets/asset-1.png']);
+    expect(result.diagnostics).toEqual([]);
+    expect(result.message.content).toEqual([
+      expect.objectContaining({ type: 'text', text: expect.stringContaining('asset-1') }),
+      { type: 'image', imageUrl: 'data:image/png;base64,image', detail: 'auto' },
+    ]);
+  });
+
   it('localizes perception-card wrapper text for Chinese prompt projection', async () => {
     const result = await projectMultimodalPacketToChatMessageAsync(emptyPacket(), {
       provider: { providerId: 'openai' },

@@ -155,6 +155,37 @@ describe('PerceptionPipeline', () => {
     expect(result.card).not.toHaveProperty('confidence');
   });
 
+  it('preserves perception client method receiver context', async () => {
+    class ReceiverBoundClient implements PerceptionClientPort {
+      private readonly label = 'receiver-bound visual evidence';
+
+      async describe(): Promise<PerceptionEvidenceEntry> {
+        return {
+          kind: 'description',
+          confidence: 0.9,
+          value: this.label,
+        };
+      }
+    }
+
+    const pipeline = new PerceptionPipeline(
+      createPorts({
+        modality: 'image',
+        perceptionClient: new ReceiverBoundClient(),
+      }),
+      { now: () => 12 },
+    );
+
+    const result = await pipeline.perceive({
+      asset: { assetId: 'image-1' },
+      policy: { timing: 'on-demand', layers: [0, 1], reason: 'test' },
+    });
+
+    expect(result.card.semantic?.evidences).toEqual([
+      expect.objectContaining({ value: 'receiver-bound visual evidence' }),
+    ]);
+  });
+
   it('adds Layer 2 perceptual refs and emits backfill through sink', async () => {
     const applyBackfill = vi.fn();
     const pipeline = new PerceptionPipeline(
@@ -468,6 +499,48 @@ describe('PerceiveTool', () => {
     );
   });
 
+  it('passes runtime metadata understanding models to the perception pipeline', async () => {
+    const pipeline = {
+      perceive: vi.fn(async () => ({
+        card: {
+          version: 1 as const,
+          assetId: 'asset-1',
+          modality: 'image' as const,
+          createdAt: 1,
+          layerStatus: {
+            layer0: 'complete' as const,
+            layer1: 'complete' as const,
+            layer2: 'skipped' as const,
+          },
+          structural: { format: 'png', mimeType: 'image/png', byteSize: 10 },
+        },
+      })),
+    };
+    const tool = new PerceiveTool({ pipeline, now: () => 20 });
+
+    await tool.execute(
+      {
+        assetId: 'asset-1',
+        depth: 1,
+      },
+      {
+        metadata: {
+          understandingModels: {
+            image: { providerId: 'google', modelId: 'gemini-image-understand' },
+          },
+        },
+      },
+    );
+
+    expect(pipeline.perceive).toHaveBeenCalledWith(
+      expect.objectContaining({
+        understandingModels: {
+          image: { providerId: 'google', modelId: 'gemini-image-understand' },
+        },
+      }),
+    );
+  });
+
   it('preserves unified ResourceRef identity in explicit perception refs', async () => {
     const pipeline = {
       perceive: vi.fn(async () => ({
@@ -520,6 +593,55 @@ describe('PerceiveTool', () => {
         asset: {
           assetId: 'asset-1',
           ref: expect.objectContaining({ resourceRef }),
+        },
+      }),
+    );
+  });
+
+  it('accepts explicit refs when a model includes an incomplete resourceRef hint', async () => {
+    const pipeline = {
+      perceive: vi.fn(async () => ({
+        card: {
+          version: 1 as const,
+          assetId: 'generated-1',
+          modality: 'image' as const,
+          createdAt: 1,
+          layerStatus: {
+            layer0: 'complete' as const,
+            layer1: 'complete' as const,
+            layer2: 'skipped' as const,
+          },
+          structural: { format: 'png', mimeType: 'image/png', byteSize: 10 },
+        },
+      })),
+    };
+    const tool = new PerceiveTool({ pipeline, now: () => 20 });
+
+    const result = await tool.execute({
+      assetId: 'generated-1',
+      depth: 1,
+      ref: {
+        assetId: 'generated-1',
+        uri: 'neko/generated/image/task_1_0.png',
+        mimeType: 'image/png',
+        resourceRef: {
+          kind: 'generated',
+          source: { kind: 'generated-asset', generatedAssetId: 'generated-1' },
+          locator: { kind: 'generated-asset', assetId: 'generated-1' },
+        },
+      },
+    });
+
+    expect(result.success).toBe(true);
+    expect(pipeline.perceive).toHaveBeenCalledWith(
+      expect.objectContaining({
+        asset: {
+          assetId: 'generated-1',
+          ref: {
+            assetId: 'generated-1',
+            uri: 'neko/generated/image/task_1_0.png',
+            mimeType: 'image/png',
+          },
         },
       }),
     );

@@ -101,21 +101,17 @@ export class PerceptionPipeline {
     };
     const tasks: Array<Promise<PerceptionEvidenceEntry | undefined>> = [];
 
-    const describe = client.describe;
-    if (describe) {
-      tasks.push(this.runEvidenceWithRetry(() => describe(request)));
+    if (client.describe) {
+      tasks.push(this.runEvidenceWithRetry(() => client.describe?.(request)));
     }
-    const transcribe = client.transcribe;
-    if ((asset.modality === 'audio' || asset.modality === 'video') && transcribe) {
-      tasks.push(this.runEvidenceWithRetry(() => transcribe(request)));
+    if ((asset.modality === 'audio' || asset.modality === 'video') && client.transcribe) {
+      tasks.push(this.runEvidenceWithRetry(() => client.transcribe?.(request)));
     }
-    const classify = client.classify;
-    if (asset.modality === 'image' && classify) {
-      tasks.push(this.runEvidenceWithRetry(() => classify(request)));
+    if (asset.modality === 'image' && client.classify) {
+      tasks.push(this.runEvidenceWithRetry(() => client.classify?.(request)));
     }
-    const detectShots = client.detectShots;
-    if (asset.modality === 'video' && detectShots) {
-      tasks.push(this.runEvidenceWithRetry(() => detectShots(request)));
+    if (asset.modality === 'video' && client.detectShots) {
+      tasks.push(this.runEvidenceWithRetry(() => client.detectShots?.(request)));
     }
 
     const results = await Promise.allSettled(tasks);

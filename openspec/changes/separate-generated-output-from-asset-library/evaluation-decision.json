@@ -1,0 +1,55 @@
+{
+  "schema": "neko.agent-eval.authoring-decision.v2",
+  "behaviorId": "task-recovery",
+  "decision": "update",
+  "suiteId": "agent-runtime.workflow-controller",
+  "target": {
+    "kind": "workflow",
+    "id": "tui-workflow-controller",
+    "contractHash": "sha256:1d6cce3ecd3f19858161359cc356db50c10fc269698f34d4e9d2e9727d279960"
+  },
+  "userBehavior": "Continue an asynchronous image task with the generated-output resource without treating the generated id as an AssetLibrary entity.",
+  "evidenceContract": {
+    "userBehavior": "Continue an asynchronous image task with the generated-output resource without treating the generated id as an AssetLibrary entity.",
+    "canonicalPath": [
+      "TUI input queue",
+      "AgentSession",
+      "image_generation task",
+      "task-result observation",
+      "task-result-continuation",
+      "generated-output ResourceRef",
+      "ReadImage"
+    ],
+    "forbiddenFallback": [
+      "GetAsset for generated-output id",
+      "implicit AssetLibrary membership",
+      "prompt-only image summary",
+      "direct Agent runner"
+    ],
+    "observables": [
+      {
+        "ref": "continuation-facts",
+        "kind": "runtime-fact",
+        "description": "Terminal task, continuation, Tool calls, stable generated artifact, validator, runtime error, and idle facts from the canonical TUI owner.",
+        "required": true
+      }
+    ],
+    "expectedResult": "The task completes, a generated resource artifact validates, ReadImage succeeds, GetAsset remains absent, and the session reaches terminal idle.",
+    "expectedFailure": "Missing or invalid resource evidence, wrong Tool routing, unobserved task result, runtime error, or incomplete terminal state fails visibly."
+  },
+  "coverageDelta": {
+    "schema": "neko.agent-eval.coverage-delta.v2",
+    "behaviorId": "task-recovery",
+    "groups": [
+      { "group": "canonical", "disposition": "not-applicable", "reason": "The changed behavior is an asynchronous task workflow and is exercised by the existing workflow case." },
+      { "group": "paraphrase", "disposition": "not-applicable", "reason": "No Prompt or Skill trigger content changes in this contract fix." },
+      { "group": "boundary", "disposition": "not-applicable", "reason": "Pre-promotion GetAsset rejection is deterministic and the real workflow includes a forbidden Tool gate." },
+      { "group": "failure", "disposition": "not-applicable", "reason": "Provider failure behavior and task failure recovery are unchanged." },
+      { "group": "workflow", "disposition": "required" },
+      { "group": "artifact", "disposition": "not-applicable", "reason": "The change does not author a new artifact format; stable generated artifact evidence is a hard gate in the workflow case." },
+      { "group": "quality", "disposition": "not-applicable", "reason": "The defect concerns identity and routing correctness rather than subjective media quality." },
+      { "group": "regression", "disposition": "not-applicable", "reason": "The exact dual-reference regression is locked by deterministic Agent, Platform, Extension, and Assets tests within this change." },
+      { "group": "holdout", "disposition": "not-applicable", "reason": "No Prompt or Skill optimization candidate is being tuned against public examples." }
+    ]
+  }
+}

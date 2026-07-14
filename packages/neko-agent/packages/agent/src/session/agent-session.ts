@@ -41,6 +41,7 @@ import type {
   SubagentReviewResult,
   ToolName,
   Tool,
+  IToolRegistry,
 } from '@neko/shared';
 import {
   createAgentCapabilityActivationIntent,
@@ -235,6 +236,7 @@ export class AgentSession implements IAgentSession {
   // Registries (used by _rebuildExecutor on configure())
   private _toolGroupRegistry: ToolGroupRegistry;
   private _toolInjectionManager: ToolInjectionManager;
+  private _executionToolRegistry: IToolRegistry;
 
   // Prompt composition
   private _promptComposer: SystemPromptComposer;
@@ -417,6 +419,7 @@ export class AgentSession implements IAgentSession {
     this._compressor = components.compressor;
     this._toolGroupRegistry = components.toolGroupRegistry;
     this._toolInjectionManager = components.toolInjectionManager;
+    this._executionToolRegistry = components.executionToolRegistry;
     this._promptComposer = components.promptComposer;
     this._executor = components.executor;
     this._permissionHooks = components.permissionHooks;
@@ -2329,6 +2332,7 @@ export class AgentSession implements IAgentSession {
 
     const { executor, permissionHooks } = createConfiguredExecutor({
       config: this._config,
+      toolRegistry: this._executionToolRegistry,
       permissionMode,
       compressor: this._compressor,
       toolGroupRegistry: this._toolGroupRegistry,

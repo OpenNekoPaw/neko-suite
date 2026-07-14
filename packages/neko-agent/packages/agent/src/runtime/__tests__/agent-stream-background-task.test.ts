@@ -20,6 +20,7 @@ describe('agent stream background task runtime', () => {
           data: {
             backgroundMode: true,
             taskId: 'task-1',
+            taskScope: taskScope(),
             type: 'video',
             message: 'Generate a city flythrough',
             routedTo: { provider: 'runway' },
@@ -108,6 +109,7 @@ describe('agent stream background task runtime', () => {
           data: {
             backgroundMode: true,
             taskId: 'task-1',
+            taskScope: taskScope(),
             type: 'image',
             message: 'Generate a cat',
           },
@@ -239,3 +241,13 @@ describe('agent stream background task runtime', () => {
     expect(updateMessages).not.toHaveBeenCalled();
   });
 });
+
+function taskScope() {
+  return {
+    conversationId: 'conv-1',
+    runId: 'run-1',
+    parentRunId: 'run-1',
+    childRunId: 'task-1',
+    childKind: 'task' as const,
+  };
+}

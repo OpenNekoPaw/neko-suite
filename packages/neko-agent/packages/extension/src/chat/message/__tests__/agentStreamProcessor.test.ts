@@ -5,7 +5,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { AgentStreamProcessor, type AgentStreamProcessorDeps } from '../agentStreamProcessor';
 import type { AgentTurnTimelineItem } from '@neko-agent/types';
-import type { EntityMemoryContribution } from '@neko/shared';
+import { createGeneratedAssetRevisionRef, type EntityMemoryContribution } from '@neko/shared';
 import { evaluateAgentTaskResultDelivery, normalizeAgentTaskResultObservation } from '@neko/agent';
 import { createConversationProjectionStore } from '@neko/agent/runtime';
 
@@ -1588,6 +1588,18 @@ describe('AgentStreamProcessor', () => {
                   uri: 'generated-assets/asset-1.png',
                   mimeType: 'image/png',
                 },
+                lifecycle: createGeneratedAssetRevisionRef({
+                  assetId: 'asset-1',
+                  contentDigest: 'sha256:image',
+                  mediaKind: 'image',
+                  mimeType: 'image/png',
+                  generation: {
+                    taskId: 'task-media',
+                    runId: 'run-media',
+                    providerId: 'openai',
+                    modelId: 'gpt-image-1',
+                  },
+                }),
                 mimeType: 'image/png',
                 generatedAt: '2026-01-01T00:00:01.000Z',
                 width: 1024,
@@ -1687,13 +1699,14 @@ describe('AgentStreamProcessor', () => {
           source: {
             kind: 'generated-asset',
             generatedAssetId: 'asset-1',
-            filePath: generatedPath,
           },
         },
+        localPath: generatedPath,
       });
       expect(followUpPrompts[0]).toContain('Generated image inputs for ReadImage:');
       expect(followUpPrompts[0]).toContain('"resourceRef"');
       expect(followUpPrompts[0]).toContain('Do not use the task id');
+      expect(followUpPrompts[0]).not.toContain('- asset: asset-1');
     });
 
     it('should backfill completed media assets with stable refs and trigger perception', async () => {
@@ -1840,7 +1853,7 @@ describe('AgentStreamProcessor', () => {
           understandingModels: {
             image: { providerId: 'google', modelId: 'gemini-flash' },
           },
-          policy: expect.objectContaining({ timing: 'on-completion', layers: [0] }),
+          policy: expect.objectContaining({ timing: 'on-completion', layers: [0, 2] }),
         }),
       );
     });

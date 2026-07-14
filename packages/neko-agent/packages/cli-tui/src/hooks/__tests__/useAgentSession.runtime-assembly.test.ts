@@ -530,6 +530,14 @@ describe('useAgentSession runtime assembly', () => {
       conversationId: queue.conversationId,
       content: 'Continue from task result',
       source: 'task-result-continuation',
+      displayKind: 'task-continuation',
+      metadata: {
+        observationId: 'observation-1',
+        taskId: 'task-1',
+        runId: 'run-1',
+        status: 'queued',
+        policy: 'auto-resume-agent',
+      },
     });
 
     expect(queued).toEqual(
@@ -537,14 +545,30 @@ describe('useAgentSession runtime assembly', () => {
         content: 'Continue from task result',
         source: 'task-result-continuation',
         displayKind: 'task-continuation',
+        metadata: expect.objectContaining({
+          observationId: 'observation-1',
+          taskId: 'task-1',
+          runId: 'run-1',
+        }),
       }),
     );
     expect(runtimeMocks.queueEnqueue).toHaveBeenCalledWith({
       content: 'Continue from task result',
       source: 'task-result-continuation',
+      displayKind: 'task-continuation',
+      metadata: {
+        observationId: 'observation-1',
+        taskId: 'task-1',
+        runId: 'run-1',
+        status: 'queued',
+        policy: 'auto-resume-agent',
+      },
     });
     expect(sessionHandle!.getMessageQueueSnapshot()?.items).toEqual([
-      expect.objectContaining({ source: 'task-result-continuation' }),
+      expect.objectContaining({
+        source: 'task-result-continuation',
+        metadata: expect.objectContaining({ taskId: 'task-1', observationId: 'observation-1' }),
+      }),
     ]);
     expect(
       currentRuntime()

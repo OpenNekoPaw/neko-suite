@@ -604,7 +604,7 @@ describe('handleChatWebviewMessage', () => {
         type: 'slashCommandResult',
         command: '$missing',
         success: false,
-        error: 'Unknown skill: $missing',
+        error: expect.stringContaining('Unknown skill: $missing'),
       }),
     );
   });

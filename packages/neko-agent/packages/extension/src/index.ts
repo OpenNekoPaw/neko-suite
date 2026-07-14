@@ -37,7 +37,7 @@ import {
 import { builtinSkillLocales, getBuiltinSkills, registerBuiltinToolGroups } from '@neko/skills';
 import { bootstrapCoreServices, logServicesStatus } from './bootstrap';
 import { ITaskManager } from './bootstrap';
-import { setPlatformRootLogger } from '@neko/platform';
+import { createGeneratedAssetResourceResolver, setPlatformRootLogger } from '@neko/platform';
 import { setRootLogger as setAgentRootLogger } from '@neko/agent';
 import { ChatViewProvider } from './chat';
 import {
@@ -239,6 +239,15 @@ export async function activate(context: vscode.ExtensionContext): Promise<ISkill
   // without depending on @neko/platform directly.
   const capabilityRegistries = createAgentCapabilityRuntimeRegistries();
   registerBuiltinToolGroups(capabilityRegistries.toolGroupRegistry);
+  const generatedAssetIndex =
+    conversationResume && workspaceRoot
+      ? await createWorkspaceGeneratedAssetIndex({
+          manifestStore: conversationResume.workspaceResourceCacheManifestStore,
+          workspaceRoot,
+          homedir: nodeOs.homedir(),
+          logger,
+        })
+      : undefined;
   const engineClientProvider = getEngineClientProvider();
   await engineClientProvider.setAuthorizedReadRoots?.(
     await getHostContentAuthorizedReadRoots({
@@ -253,6 +262,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<ISkill
     workspaceRoot,
     ...(conversationResume
       ? { resourceCacheManifestStore: conversationResume.workspaceResourceCacheManifestStore }
+      : {}),
+    ...(generatedAssetIndex
+      ? { resolveGeneratedAsset: createGeneratedAssetResourceResolver(generatedAssetIndex) }
       : {}),
     mediaPathContext: await createHostContentMediaPathContext({
       workspaceRoot,
@@ -335,16 +347,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<ISkill
   const streamLifecycleAcceptance =
     context.extensionMode === vscode.ExtensionMode.Development
       ? new StreamLifecycleAcceptanceController()
-      : undefined;
-
-  const generatedAssetIndex =
-    conversationResume && workspaceRoot
-      ? await createWorkspaceGeneratedAssetIndex({
-          manifestStore: conversationResume.workspaceResourceCacheManifestStore,
-          workspaceRoot,
-          homedir: nodeOs.homedir(),
-          logger,
-        })
       : undefined;
 
   // Create chat view provider

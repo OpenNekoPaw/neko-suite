@@ -3,10 +3,15 @@ import { describe, expect, it, vi } from 'vitest';
 import type { SettingsState } from '@neko-agent/types';
 import { AppShell } from './AppShell';
 
-vi.mock('@/messages', () => ({
-  vscode: {
-    postMessage: vi.fn(),
-  },
+vi.mock('@/host-runtime-context', () => ({
+  useAgentHostRuntimeAdapter: () => ({
+    hostKind: 'vscode',
+    runtimeId: 'app-shell-test',
+    send: vi.fn(),
+    subscribe: vi.fn(),
+    getState: vi.fn(),
+    setState: vi.fn(),
+  }),
 }));
 
 vi.mock('@/hooks', async () => {

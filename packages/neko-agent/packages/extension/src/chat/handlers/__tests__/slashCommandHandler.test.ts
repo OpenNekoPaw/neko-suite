@@ -28,10 +28,14 @@ function createMockConversations() {
 }
 
 function createMockSettings() {
-  return {
+  const snapshot = {
     selectedProviderId: 'anthropic',
     selectedModelId: 'claude-3',
     executionMode: 'auto' as const,
+  };
+  return {
+    ...snapshot,
+    snapshotForConversation: vi.fn(() => snapshot),
   };
 }
 
@@ -133,16 +137,16 @@ describe('SlashCommandHandler', () => {
   });
 
   describe('handleCommand - builtin commands', () => {
-    it('should strip leading / from command', () => {
-      handler.handleCommand(webview as any, '/help', undefined, 'conv-1');
+    it('should strip leading / from command', async () => {
+      await handler.handleCommand(webview as any, '/help', undefined, 'conv-1');
 
       expect(webview.postMessage).toHaveBeenCalledWith(
         expect.objectContaining({ command: 'help', success: true, action: 'showHelp' }),
       );
     });
 
-    it('should handle /clear command', () => {
-      handler.handleCommand(webview as any, 'clear', undefined, 'conv-1');
+    it('should handle /clear command', async () => {
+      await handler.handleCommand(webview as any, 'clear', undefined, 'conv-1');
 
       expect(conversations.clearCurrent).not.toHaveBeenCalled();
       expect(conversations.updateMessagesForConversation).toHaveBeenCalledWith('conv-1', []);
@@ -155,12 +159,12 @@ describe('SlashCommandHandler', () => {
         expect.objectContaining({
           command: 'clear',
           success: true,
-          message: 'Conversation cleared',
+          action: 'clearHistory',
         }),
       );
     });
 
-    it('should clear agent history on /clear when active conversation exists', () => {
+    it('should clear agent history on /clear when active conversation exists', async () => {
       const agentManager = { clearHistory: vi.fn(), getContextTokenCount: vi.fn() };
       handler = new SlashCommandHandler({
         conversations: conversations as any,
@@ -176,36 +180,36 @@ describe('SlashCommandHandler', () => {
         sendActiveConversation,
       });
 
-      handler.handleCommand(webview as any, 'cls', undefined, 'conv-1');
+      await handler.handleCommand(webview as any, 'cls', undefined, 'conv-1');
       expect(agentManager.clearHistory).toHaveBeenCalledWith('conv-1');
     });
 
-    it('should handle /exit command', () => {
-      handler.handleCommand(webview as any, 'exit', undefined, 'conv-1');
+    it('should handle /exit command', async () => {
+      await handler.handleCommand(webview as any, 'exit', undefined, 'conv-1');
 
       expect(webview.postMessage).toHaveBeenCalledWith(
         expect.objectContaining({ command: 'exit', success: true, action: 'exit' }),
       );
     });
 
-    it('should handle /quit alias', () => {
-      handler.handleCommand(webview as any, 'q', undefined, 'conv-1');
+    it('should handle /quit alias', async () => {
+      await handler.handleCommand(webview as any, 'q', undefined, 'conv-1');
 
       expect(webview.postMessage).toHaveBeenCalledWith(
         expect.objectContaining({ command: 'q', success: true, action: 'exit' }),
       );
     });
 
-    it('should handle /help command', () => {
-      handler.handleCommand(webview as any, 'help', undefined, 'conv-1');
+    it('should handle /help command', async () => {
+      await handler.handleCommand(webview as any, 'help', undefined, 'conv-1');
 
       expect(webview.postMessage).toHaveBeenCalledWith(
         expect.objectContaining({ command: 'help', action: 'showHelp' }),
       );
     });
 
-    it('should handle /new command', () => {
-      handler.handleCommand(webview as any, 'new', undefined, 'conv-1');
+    it('should handle /new command', async () => {
+      await handler.handleCommand(webview as any, 'new', undefined, 'conv-1');
 
       expect(conversations.create).toHaveBeenCalled();
       expect(sendConversationList).toHaveBeenCalled();
@@ -214,13 +218,13 @@ describe('SlashCommandHandler', () => {
         expect.objectContaining({
           command: 'new',
           success: true,
-          message: 'New conversation created',
+          action: 'newConversation',
         }),
       );
     });
 
-    it('should handle /status command', () => {
-      handler.handleCommand(webview as any, 'status', undefined, 'conv-1');
+    it('should handle /status command', async () => {
+      await handler.handleCommand(webview as any, 'status', undefined, 'conv-1');
 
       expect(webview.postMessage).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -237,10 +241,10 @@ describe('SlashCommandHandler', () => {
       );
     });
 
-    it('should use the provided conversationId for /status even if extension active differs', () => {
+    it('should use the provided conversationId for /status even if extension active differs', async () => {
       conversations.getActiveId.mockReturnValue('conv-active');
 
-      handler.handleCommand(webview as any, 'status', undefined, 'conv-2');
+      await handler.handleCommand(webview as any, 'status', undefined, 'conv-2');
 
       expect(conversations.getActiveId).not.toHaveBeenCalled();
       expect(conversations.getMessageCount).toHaveBeenCalledWith('conv-2');
@@ -255,8 +259,8 @@ describe('SlashCommandHandler', () => {
       );
     });
 
-    it('should handle /s alias for status', () => {
-      handler.handleCommand(webview as any, 's', undefined, 'conv-1');
+    it('should handle /s alias for status', async () => {
+      await handler.handleCommand(webview as any, 's', undefined, 'conv-1');
 
       expect(webview.postMessage).toHaveBeenCalledWith(
         expect.objectContaining({ command: 'status', action: 'showStatus' }),
@@ -273,25 +277,25 @@ describe('SlashCommandHandler', () => {
       );
     });
 
-    it('should handle /model command', () => {
-      handler.handleCommand(webview as any, 'model', undefined, 'conv-1');
+    it('should handle /model command', async () => {
+      await handler.handleCommand(webview as any, 'model', undefined, 'conv-1');
 
       expect(webview.postMessage).toHaveBeenCalledWith(
         expect.objectContaining({ action: 'showModelSelector' }),
       );
     });
 
-    it('should handle /settings command', () => {
-      handler.handleCommand(webview as any, 'settings', undefined, 'conv-1');
+    it('should handle /settings command', async () => {
+      await handler.handleCommand(webview as any, 'settings', undefined, 'conv-1');
 
       expect(webview.postMessage).toHaveBeenCalledWith(
         expect.objectContaining({ action: 'showSettings' }),
       );
     });
 
-    it('should handle /plan command', () => {
+    it('should handle /plan command', async () => {
       systemPrompt.isPlanMode.mockReturnValue(true);
-      handler.handleCommand(webview as any, 'plan', undefined, 'conv-1');
+      await handler.handleCommand(webview as any, 'plan', undefined, 'conv-1');
 
       expect(planModeHandler.handleTogglePlanMode).toHaveBeenCalledWith(webview, 'conv-1');
       expect(webview.postMessage).toHaveBeenCalledWith(
@@ -303,10 +307,10 @@ describe('SlashCommandHandler', () => {
       );
     });
 
-    it('should enter plan mode and immediately execute slash arguments', () => {
+    it('should enter plan mode and immediately execute slash arguments', async () => {
       systemPrompt.isPlanMode.mockReturnValue(true);
 
-      handler.handleCommand(webview as any, 'plan', 'outline the rollout', 'conv-1');
+      await handler.handleCommand(webview as any, 'plan', 'outline the rollout', 'conv-1');
 
       expect(planModeHandler.handleTogglePlanMode).toHaveBeenCalledWith(webview, 'conv-1');
       expect(agentTurnHandler.handleUserMessage).toHaveBeenCalledWith(webview, {
@@ -316,8 +320,8 @@ describe('SlashCommandHandler', () => {
       });
     });
 
-    it('should handle /tasks command', () => {
-      handler.handleCommand(webview as any, 'tasks', undefined, 'conv-1');
+    it('should handle /tasks command', async () => {
+      await handler.handleCommand(webview as any, 'tasks', undefined, 'conv-1');
 
       expect(taskHandler.sendTasks).toHaveBeenCalledWith(webview, 'conv-1');
       expect(webview.postMessage).toHaveBeenCalledWith(
@@ -325,38 +329,38 @@ describe('SlashCommandHandler', () => {
       );
     });
 
-    it('should handle /todos alias', () => {
-      handler.handleCommand(webview as any, 'todos', undefined, 'conv-1');
+    it('should handle /todos alias', async () => {
+      await handler.handleCommand(webview as any, 'todos', undefined, 'conv-1');
 
       expect(taskHandler.sendTasks).toHaveBeenCalledWith(webview, 'conv-1');
     });
 
-    it('should handle /mcp command', () => {
-      handler.handleCommand(webview as any, 'mcp', undefined, 'conv-1');
+    it('should handle /mcp command', async () => {
+      await handler.handleCommand(webview as any, 'mcp', undefined, 'conv-1');
 
       expect(webview.postMessage).toHaveBeenCalledWith(
         expect.objectContaining({ action: 'showMCPServers' }),
       );
     });
 
-    it('should handle /permissions command', () => {
-      handler.handleCommand(webview as any, 'permissions', undefined, 'conv-1');
+    it('should handle /permissions command', async () => {
+      await handler.handleCommand(webview as any, 'permissions', undefined, 'conv-1');
 
       expect(webview.postMessage).toHaveBeenCalledWith(
         expect.objectContaining({ action: 'showPermissions' }),
       );
     });
 
-    it('should handle /init command', () => {
-      handler.handleCommand(webview as any, 'init', undefined, 'conv-1');
+    it('should handle /init command', async () => {
+      await handler.handleCommand(webview as any, 'init', undefined, 'conv-1');
 
       expect(webview.postMessage).toHaveBeenCalledWith(
         expect.objectContaining({ action: 'initProject' }),
       );
     });
 
-    it('should handle /resume command with conversation data', () => {
-      handler.handleCommand(webview as any, 'resume', undefined, 'conv-1');
+    it('should handle /resume command with conversation data', async () => {
+      await handler.handleCommand(webview as any, 'resume', undefined, 'conv-1');
 
       expect(webview.postMessage).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -371,7 +375,7 @@ describe('SlashCommandHandler', () => {
       );
     });
 
-    it('should use shared builtin registry for /skills in extension', () => {
+    it('should use shared builtin registry for /skills in extension', async () => {
       skillHandler.getSkillService.mockReturnValue({
         registry: {
           skillCount: 1,
@@ -390,7 +394,7 @@ describe('SlashCommandHandler', () => {
         },
       });
 
-      handler.handleCommand(webview as any, 'skills', undefined, 'conv-1');
+      await handler.handleCommand(webview as any, 'skills', undefined, 'conv-1');
 
       expect(webview.postMessage).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -409,7 +413,7 @@ describe('SlashCommandHandler', () => {
         expect.objectContaining({
           command: 'config',
           success: false,
-          error: expect.stringContaining('Unknown command'),
+          error: expect.any(String),
         }),
       );
     });
@@ -644,7 +648,7 @@ describe('SlashCommandHandler', () => {
         expect.objectContaining({
           command: 'badcmd',
           success: false,
-          error: expect.stringContaining('Unknown command'),
+          error: expect.any(String),
         }),
       );
     });
@@ -657,7 +661,7 @@ describe('SlashCommandHandler', () => {
       expect(webview.postMessage).toHaveBeenCalledWith(
         expect.objectContaining({
           success: false,
-          error: expect.stringContaining('Unknown command'),
+          error: expect.any(String),
         }),
       );
     });

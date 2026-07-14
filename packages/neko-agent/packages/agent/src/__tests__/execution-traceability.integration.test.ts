@@ -137,8 +137,9 @@ describe('agent execution traceability', () => {
         turnId: expect.stringContaining('turn-conv-trace-1-'),
       }),
     );
-    expect(dataOf(sessionStart).trace).not.toHaveProperty('runId');
-    expect(dataOf(executorStart).trace).not.toHaveProperty('runId');
+    const turnRunId = dataOf(executorStart).trace.turnId;
+    expect(dataOf(sessionStart).trace).toEqual(expect.objectContaining({ runId: turnRunId }));
+    expect(dataOf(executorStart).trace).toEqual(expect.objectContaining({ runId: turnRunId }));
     expect(dataOf(llmRequest).trace).toEqual(
       expect.objectContaining({
         phase: 'llm',
@@ -146,7 +147,7 @@ describe('agent execution traceability', () => {
         llmRequestId: 'llm-1',
       }),
     );
-    expect(dataOf(llmRequest).trace).not.toHaveProperty('runId');
+    expect(dataOf(llmRequest).trace).toEqual(expect.objectContaining({ runId: turnRunId }));
     expect(dataOf(toolRequest).trace).toEqual(
       expect.objectContaining({
         phase: 'tool',

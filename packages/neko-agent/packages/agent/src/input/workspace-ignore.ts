@@ -66,7 +66,6 @@ const DEFAULT_WORKSPACE_MANAGED_DIRECTORY_SEGMENTS = [
   '.neko/.runtime',
   '.neko/logs',
   '.neko/tmp',
-  '.neko/semantic-index',
   '.neko/drafts',
   '.neko/plans',
   '.neko/tasks',

@@ -51,7 +51,7 @@ packages/
 │   ├── context/      分层上下文管理 + token 预算 + 对话压缩
 │   ├── permission/   工具权限（plan/ask/auto 三模式）
 │   ├── hooks/        可组合中间件（ExecutorHooks + factory）
-│   ├── hook-loader/  Settings hooks + .neko/hooks Markdown hook catalog
+│   ├── hook-loader/  Settings-based hooks（.neko/hooks 仅用于弃用诊断）
 │   ├── prompt/       SystemPromptComposer + Builder（多语言）
 │   ├── runtime/      统一 runtime bootstrap 契约 + helper
 │   ├── plan/         Plan 管理器
@@ -96,7 +96,7 @@ packages/
 
 Webview/Extension 与 Terminal TUI/headless 是不同本地宿主，功能差异需要保留：Webview 可以拥有 VS Code API、`postMessage`、Webview URI、watcher、memento/recovery 和 Extension command；TUI/headless 可以拥有 Ink 终端交互、进程生命周期、stdout/stderr 报告和真实 API 验证 lane。
 
-共享的是同一工作区的业务逻辑和数据面，而不是 UI 表现。Webview 和 TUI 必须通过共享 runtime/config/catalog/task/cache contract 使用以下输入：`~/.neko/config.toml`、`.neko/config.toml`、workspace-scoped canonical conversation id、`~/.agents/skills`、`~/.neko/commands`、`.agents/skills`、`.neko/commands`、workspace-visible task record、project memory、AGENTS overlays、context settings、授权读根，以及 `.neko/.cache/resources` 下的 project resource-cache manifest/quota/GC 策略。运行时模型/参数选择只影响当前 session，不自动重写 TOML；`skillsDir` 之类非标准 Skill 来源不能让 TUI/headless 单独看到不同 catalog。
+共享的是同一工作区的业务逻辑和数据面，而不是 UI 表现。Webview 和 TUI 必须通过共享 runtime/config/catalog/task/cache contract 使用以下输入：`~/.neko/config.toml`、`.neko/config.toml`、workspace-scoped canonical conversation id、`~/.agents/skills`、`~/.neko/commands`、`.agents/skills`、`.neko/commands`、`~/.neko/neko.db` 中按 `workspaceId` 分区的 Task/Run、conversation/catalog 和 ResourceCache metadata、project memory、AGENTS overlays、context settings、授权读根，以及 `.neko/.cache/resources` 下的 project cache artifact bytes。运行时模型/参数选择只影响当前 session，不自动重写 TOML；`skillsDir` 之类非标准 Skill 来源不能让 TUI/headless 单独看到不同 catalog。
 
 Host-private 能力不互通，也不能伪装为共享成功结果。VS Code handle、Webview URI、Extension-private cache、memento/recovery、TUI process handle、终端键盘状态和 headless 报告路径跨宿主请求时必须返回 host-private 或 unavailable diagnostic，不允许 no-op、转成普通 prompt、读取另一端私有缓存或回退旧实现。旧 `cli-*` conversation id 不作为 TUI resume 兼容输入；共享 command catalog 的 surface scope 使用 `tui` / `extension`。
 
@@ -169,11 +169,11 @@ model_id = "neko-gateway-tts"
 
 从 `.agents/skills/<name>/SKILL.md` 或 `~/.agents/skills/<name>/SKILL.md` 加载技能（YAML frontmatter + Markdown body），3-track 原子注入/移除：
 
-| Track | 注入内容                                                     |
-| ----- | ------------------------------------------------------------ |
-| A     | Skill prompt content section（SystemPromptComposer）          |
-| B     | 权限允许规则（PermissionHooks）                              |
-| C     | 机器可读 tool policy（ToolGuard，运行时 `isToolAllowed`）     |
+| Track | 注入内容                                                  |
+| ----- | --------------------------------------------------------- |
+| A     | Skill prompt content section（SystemPromptComposer）      |
+| B     | 权限允许规则（PermissionHooks）                           |
+| C     | 机器可读 tool policy（ToolGuard，运行时 `isToolAllowed`） |
 
 显式输入触发被拆成独立命名空间：
 
@@ -204,12 +204,12 @@ Skill Markdown 正文只描述领域方法、创作语义、输出标准和示�
 
 Agent/plugin transfer 只选择能力和投影诊断，不直接调用领域 Webview 私有命令。生成媒体、分镜、模型或素材要写入 `.nk*` 项目时，planner 输出 canonical package authoring command，并通过 host-neutral transfer adapter 执行：
 
-| 目标 | Canonical command |
-| --- | --- |
-| Cut generated clip | `neko.cut.authoring.importGeneratedClip` |
+| 目标                          | Canonical command                                                              |
+| ----------------------------- | ------------------------------------------------------------------------------ |
+| Cut generated clip            | `neko.cut.authoring.importGeneratedClip`                                       |
 | Cut storyboard / Canvas draft | `neko.cut.authoring.importStoryboard` / `neko.cut.authoring.importCanvasDraft` |
-| Sketch image source | `neko.sketch.authoring.importImageSource` |
-| Model asset | `neko.model.authoring.importAsset` |
+| Sketch image source           | `neko.sketch.authoring.importImageSource`                                      |
+| Model asset                   | `neko.model.authoring.importAsset`                                             |
 
 Transfer payload 必须携带结构化 `target`、`reveal`、stable source/ref 和 provenance。命令返回 `ok: false` 时，Agent/Extension/TUI/Electron adapter 展示 diagnostic，不允许 fallback 到旧 `neko.cut.importGeneratedClip`、`neko.sketch.importAsset`、`neko.model.importAsset`、打开隐藏 Webview 或声称发送成功。
 

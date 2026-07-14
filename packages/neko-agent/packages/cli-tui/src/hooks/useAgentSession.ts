@@ -776,6 +776,8 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
         const capabilityLoadResult = capabilityLoader.registerProviders([
           ...withTuiDefaultCapabilityProviders({
             workDir: config.workDir,
+            resourceCacheManifestStore: conversationStorageBinding.resourceCacheManifestStore,
+            generatedAssetIndex,
             capabilityProviders,
           }),
           createExternalResearchCapabilityProviderFromMcpConfig({
@@ -948,6 +950,8 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
                       const item = queue.enqueue({
                         content: input.content,
                         source: input.source,
+                        displayKind: input.displayKind,
+                        metadata: input.metadata,
                       });
                       const snapshot = queue.snapshot();
                       stores.agent.getState().setMessageQueueSnapshot(snapshot);

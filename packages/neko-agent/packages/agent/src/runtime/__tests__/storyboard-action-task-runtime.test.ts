@@ -16,9 +16,20 @@ import {
   CANVAS_STORYBOARD_PROMPT_STATE_VERSION,
 } from '@neko/shared';
 
+function storyboardTaskScope(childRunId = 'storyboard-generate-video-shot-1-req-generate-video') {
+  return {
+    conversationId: 'conv-storyboard',
+    runId: 'run-storyboard',
+    parentRunId: 'run-storyboard',
+    childRunId,
+    childKind: 'task' as const,
+  };
+}
+
 describe('storyboard action task runtime', () => {
   it('creates Agent-owned async task records and Canvas task refs for storyboard media work', () => {
     const projection = createCanvasStoryboardAgentTaskProjection({
+      scope: storyboardTaskScope(),
       intent: createGenerateVideoIntent(),
       conversationId: 'conv-storyboard',
       status: 'processing',
@@ -64,6 +75,7 @@ describe('storyboard action task runtime', () => {
   it('rejects review-only actions when callers try to create async task records', () => {
     expect(() =>
       createCanvasStoryboardAgentTaskProjection({
+        scope: storyboardTaskScope('review-only-task'),
         intent: {
           version: CANVAS_STORYBOARD_PROMPT_STATE_VERSION,
           actionId: 'review-result',
@@ -78,6 +90,7 @@ describe('storyboard action task runtime', () => {
   it('builds structured storyboardPrompt writeback with task refs, result refs and next state', () => {
     const intent = createGenerateVideoIntent();
     const taskProjection = createCanvasStoryboardAgentTaskProjection({
+      scope: storyboardTaskScope(),
       intent,
       conversationId: 'conv-storyboard',
       now: () => 1_777_000_000_000,

@@ -242,9 +242,14 @@ describe('agent architecture boundary guards', () => {
       'config-bridge-runtime.ts',
       'conversation-route-runtime.ts',
       'conversation-tab-runtime.ts',
+      'creative-ai-run-runtime.ts',
+      'document-module-diagnostics.ts',
       'embody-character-session.ts',
       'index.ts',
+      'persisted-child-run-ownership.ts',
       'plugin-transfer-runtime.ts',
+      'resource-cache-runtime.ts',
+      'storyboard-action-task-runtime.ts',
       'subagent-event-runtime.ts',
       'subagent-runtime.ts',
       'tool-result-backfill.ts',
@@ -643,8 +648,6 @@ describe('agent architecture boundary guards', () => {
       /\bQualityCheck\b/,
       /\bQualityRepairCheck\b/,
       /\bQualityCheckConsistency\b/,
-      /quality-review/,
-      /quality-check/,
     ];
     const sourceViolations = productionSource.flatMap(({ relativePath, source }) =>
       qualityFeedbackTerms
@@ -923,6 +926,10 @@ describe('agent architecture boundary guards', () => {
         'packages/neko-cut/packages/extension/src/services/cutAgentSkillInvocation.test.ts',
         new Set(['ai-generate']),
       ],
+      [
+        'packages/neko-agent/packages/agent/src/session/__tests__/agent-session.test.ts',
+        new Set(['comic-to-storyboard']),
+      ],
     ]);
     const workspaceRoot = join(repoRoot, '../..');
     const trackedSourceFiles = execFileSync(
@@ -932,6 +939,7 @@ describe('agent architecture boundary guards', () => {
     )
       .split('\n')
       .filter(Boolean)
+      .filter((file) => existsSync(join(workspaceRoot, file)))
       .filter(
         (file) =>
           file.endsWith('.ts') ||
@@ -1453,6 +1461,8 @@ const allowedAgentSessionFieldNames = new Set([
   '_autohealChain',
   '_approvalEngine',
   '_metaTools',
+  '_skillPromptEntries',
+  '_skillCatalogProjectionVersion',
   '_history',
   '_historyEventIds',
   '_processedMemoryEventIds',

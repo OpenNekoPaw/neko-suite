@@ -106,6 +106,19 @@ export class SkillLifecycleRuntime {
       lifetime: input.lifetime,
     });
     if (existing) {
+      const conflict = this._resolveActivationConflict(
+        input,
+        this._store.list(input.conversationId).filter((record) => record.id !== existing.id),
+      );
+      if (!conflict.ok) {
+        return {
+          ok: false,
+          diagnostics: conflict.diagnostics,
+        };
+      }
+      if (conflict.replacedRecordIds.length > 0) {
+        this._store.remove(conflict.replacedRecordIds);
+      }
       const renewed = this._store.renew({
         recordId: existing.id,
         injection: input.injection,
@@ -113,7 +126,14 @@ export class SkillLifecycleRuntime {
         lifetime: input.lifetime,
         turnCount,
       });
-      return { ok: true, record: renewed, diagnostics: [] };
+      return {
+        ok: true,
+        record: renewed,
+        ...(conflict.replacedRecordIds.length > 0
+          ? { replacedRecordIds: conflict.replacedRecordIds }
+          : {}),
+        diagnostics: conflict.diagnostics,
+      };
     }
 
     const conflict = this._resolveActivationConflict(input);
@@ -280,7 +300,10 @@ export class SkillLifecycleRuntime {
     return { ok: true, skill: loaded };
   }
 
-  private _resolveActivationConflict(input: SkillLifecyclePreparedActivationInput): {
+  private _resolveActivationConflict(
+    input: SkillLifecyclePreparedActivationInput,
+    activeRecords: readonly SkillLifecycleRecord[] = this._store.list(input.conversationId),
+  ): {
     readonly ok: boolean;
     readonly replacedRecordIds: readonly string[];
     readonly diagnostics: readonly SkillLifecycleDiagnostic[];
@@ -290,7 +313,7 @@ export class SkillLifecycleRuntime {
       requestedSkill: input.skill,
       requestedInjection: input.injection,
       requestedSlot: input.slot,
-      activeRecords: this._store.list(input.conversationId),
+      activeRecords,
       ...(this._getConflictConfig ? { getConflictConfig: this._getConflictConfig } : {}),
     });
   }

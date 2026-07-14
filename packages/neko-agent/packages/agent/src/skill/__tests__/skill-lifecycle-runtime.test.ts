@@ -504,6 +504,143 @@ describe('SkillLifecycleRuntime', () => {
     });
   });
 
+  it('rejects an incompatible tool policy before creating the requested record', () => {
+    const runtime = createRuntime([]);
+    const stage = runtime.activatePrepared({
+      conversationId: 'conv-1',
+      skill: createSkill('creation-persona'),
+      injection: createInjection('creation-persona', { allowedTools: ['ReadDocument'] }),
+      slot: 'stagePersona',
+      owner: 'creation-profile',
+      lifetime: { kind: 'creation-stage', runId: 'run-1', stage: 'plan' },
+      source: 'creation-stage',
+      now: 1,
+      turnCount: 1,
+    });
+
+    const domain = runtime.activatePrepared({
+      conversationId: 'conv-1',
+      skill: createSkill('image'),
+      injection: createInjection('image', { allowedTools: ['GenerateImage'] }),
+      slot: 'domainSkill',
+      owner: 'agent',
+      lifetime: { kind: 'conversation', untilCleared: true },
+      source: 'explicit-agent',
+      now: 2,
+      turnCount: 2,
+    });
+
+    expect(stage.ok).toBe(true);
+    expect(domain).toEqual(
+      expect.objectContaining({
+        ok: false,
+        diagnostics: [
+          expect.objectContaining({
+            code: 'tool-policy-conflict',
+            details: expect.objectContaining({
+              reason: 'tool-policy-conflict',
+              conflictingRecordIds: [stage.record?.id],
+            }),
+          }),
+        ],
+      }),
+    );
+    expect(runtime.list('conv-1').map((record) => record.skillName)).toEqual(['creation-persona']);
+    expect(runtime.project('conv-1').toolPolicy).toEqual(
+      expect.objectContaining({ mode: 'allowlist', allowedTools: ['ReadDocument'] }),
+    );
+  });
+
+  it('uses the domain allow-list when the Apply persona adds no Skill-level restriction', () => {
+    const runtime = createRuntime([]);
+    const stage = runtime.activatePrepared({
+      conversationId: 'conv-1',
+      skill: createSkill('execution-persona'),
+      injection: createInjection('execution-persona'),
+      slot: 'stagePersona',
+      owner: 'creation-profile',
+      lifetime: { kind: 'creation-stage', runId: 'run-1', stage: 'apply' },
+      source: 'creation-stage',
+      now: 1,
+      turnCount: 1,
+    });
+    const domain = runtime.activatePrepared({
+      conversationId: 'conv-1',
+      skill: createSkill('image'),
+      injection: createInjection('image', {
+        allowedTools: ['GenerateImage', 'TransformImage', 'ReadImage'],
+      }),
+      slot: 'domainSkill',
+      owner: 'agent',
+      lifetime: { kind: 'conversation', untilCleared: true },
+      source: 'explicit-agent',
+      now: 2,
+      turnCount: 2,
+    });
+
+    expect(stage.ok).toBe(true);
+    expect(domain.ok).toBe(true);
+    expect(runtime.project('conv-1')).toEqual(
+      expect.objectContaining({
+        toolPolicy: expect.objectContaining({
+          mode: 'allowlist',
+          allowedTools: ['GenerateImage', 'ReadImage', 'TransformImage'],
+          diagnostics: [],
+        }),
+        diagnostics: [],
+      }),
+    );
+  });
+
+  it('rejects a renewal that would make the existing projection incompatible', () => {
+    const runtime = createRuntime([]);
+    const domain = runtime.activatePrepared({
+      conversationId: 'conv-1',
+      skill: createSkill('review'),
+      injection: createInjection('review', { allowedTools: ['ReadDocument'] }),
+      slot: 'domainSkill',
+      owner: 'agent',
+      lifetime: { kind: 'conversation', untilCleared: true },
+      source: 'explicit-agent',
+      now: 1,
+      turnCount: 1,
+    });
+    runtime.activatePrepared({
+      conversationId: 'conv-1',
+      skill: createSkill('creation-persona'),
+      injection: createInjection('creation-persona', { allowedTools: ['ReadDocument'] }),
+      slot: 'stagePersona',
+      owner: 'creation-profile',
+      lifetime: { kind: 'creation-stage', runId: 'run-1', stage: 'plan' },
+      source: 'creation-stage',
+      now: 2,
+      turnCount: 2,
+    });
+
+    const renewal = runtime.activatePrepared({
+      conversationId: 'conv-1',
+      skill: createSkill('review'),
+      injection: createInjection('review', { allowedTools: ['GenerateImage'] }),
+      slot: 'domainSkill',
+      owner: 'agent',
+      lifetime: { kind: 'conversation', untilCleared: true },
+      source: 'explicit-agent',
+      now: 3,
+      turnCount: 3,
+    });
+
+    expect(renewal).toEqual(
+      expect.objectContaining({
+        ok: false,
+        diagnostics: [expect.objectContaining({ code: 'tool-policy-conflict' })],
+      }),
+    );
+    expect(
+      runtime.list('conv-1').find((record) => record.id === domain.record?.id)?.injection,
+    ).toEqual(expect.objectContaining({ allowedTools: ['ReadDocument'] }));
+    expect(runtime.project('conv-1').diagnostics).toEqual([]);
+  });
+
   it('expires turn, prompt-chain, and inactivity scoped records only when their event matches', () => {
     const store = new SkillLifecycleStore();
     const runtime = createRuntime([], store);

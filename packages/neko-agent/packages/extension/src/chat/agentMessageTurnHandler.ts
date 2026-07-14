@@ -367,6 +367,7 @@ export class AgentMessageTurnHandler {
       llmConfig: resolvedRequest.llmConfig,
       llmRuntimeOptions: resolvedRequest.llmRuntimeOptions,
       mediaModels: resolvedRequest.mediaModels,
+      understandingModels: resolvedRequest.understandingModels,
       executionOverrides: resolvedRequest.executionOverrides,
       locale: resolvedRequest.locale,
       settings: turnSettings,
@@ -694,7 +695,6 @@ export class AgentMessageTurnHandler {
     }
     this._subAgentEventSubscriptions.clear();
     this._streamProcessor.dispose();
-    this._mediaDeliveryHost.dispose();
     for (const disposable of this._disposables) {
       disposable.dispose();
     }

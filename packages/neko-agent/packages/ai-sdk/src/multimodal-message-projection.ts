@@ -149,7 +149,8 @@ export async function projectMultimodalPacketToChatMessageAsync(
   const providerModalities = resolveProviderInputModalities(options.provider);
   diagnostics.push(...findUnsupportedPacketInputModalities(packet, providerModalities));
 
-  for (const card of options.perceptionCards ?? []) {
+  const perceptionCards = selectProviderLoadablePerceptionCards(options.perceptionCards ?? []);
+  for (const card of perceptionCards) {
     const projected = await projectPerceptionCardToContentParts(card, {
       providerModalities,
       assetLoader: options.assetLoader,
@@ -165,6 +166,36 @@ export async function projectMultimodalPacketToChatMessageAsync(
     message: { role: 'user', content: baseParts },
     diagnostics,
   };
+}
+
+function selectProviderLoadablePerceptionCards(
+  cards: readonly PerceptionCard[],
+): readonly PerceptionCard[] {
+  const hasProviderLoadableCard = new Set(
+    cards
+      .filter((card) => hasProviderLoadablePerceptualRef(card))
+      .map((card) => `${card.assetId}:${card.modality}`),
+  );
+
+  return cards.filter((card) => {
+    if (hasProviderLoadablePerceptualRef(card)) {
+      return true;
+    }
+    return !hasProviderLoadableCard.has(`${card.assetId}:${card.modality}`);
+  });
+}
+
+function hasProviderLoadablePerceptualRef(card: PerceptionCard): boolean {
+  if (card.modality === 'image') {
+    return selectImagePerceptualRef(card) !== undefined;
+  }
+  if (card.modality === 'video') {
+    return selectVideoPerceptualRef(card) !== undefined;
+  }
+  if (card.modality === 'audio') {
+    return card.perceptual?.waveformRef !== undefined;
+  }
+  return true;
 }
 
 function projectBaseMessageParts(

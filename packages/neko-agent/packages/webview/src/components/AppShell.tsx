@@ -9,7 +9,7 @@
  * Extracted from the former 589-line AIAssistant component (ADR P0.1).
  */
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Header } from '@/components/Header';
 import { OnboardingFlow } from '@/components/OnboardingFlow';
 import {
@@ -18,13 +18,19 @@ import {
   useWebviewKeyboardEditableReporting,
   useWebviewKeyboardFocusReporting,
 } from '@/hooks';
-import { vscode } from '@/messages';
+import { createAgentWebviewKeyboardReporter } from '@/hooks/useWebviewKeyboardReporting';
+import { useAgentHostRuntimeAdapter } from '@/host-runtime-context';
 import { ConversationController } from './ConversationController';
 
 export function AppShell() {
   const rootRef = useRef<HTMLDivElement>(null);
-  useWebviewKeyboardFocusReporting(rootRef, vscode);
-  useWebviewKeyboardEditableReporting(vscode);
+  const hostRuntimeAdapter = useAgentHostRuntimeAdapter();
+  const keyboardReporter = useMemo(
+    () => createAgentWebviewKeyboardReporter(hostRuntimeAdapter),
+    [hostRuntimeAdapter],
+  );
+  useWebviewKeyboardFocusReporting(rootRef, keyboardReporter);
+  useWebviewKeyboardEditableReporting(keyboardReporter);
 
   const config = useConfigState();
   const resource = useResourceState();

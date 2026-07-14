@@ -129,6 +129,10 @@ export {
 } from './media-task-delivery-settings';
 export { GeneratedAssetIndex, generateAssetId, type AssetFilter } from './generated-asset-index';
 export {
+  createGeneratedAssetResourceResolver,
+  type GeneratedAssetResourceResolver,
+} from './generated-asset-resource-resolver';
+export {
   DEFAULT_VISION_PREPROCESS_POLICY,
   VISION_IMAGE_OUTPUT_MEDIA_TYPE,
   calculateVisionVideoFrameSize,

@@ -20,7 +20,7 @@ describe('task result observation', () => {
       output: {
         data: {
           resultUrls: ['https://cdn.example.test/image.png'],
-          assets: [{ id: 'asset-1', mimeType: 'image/png' }],
+          assetIds: ['asset-1'],
         },
       },
     });
@@ -46,7 +46,7 @@ describe('task result observation', () => {
     });
     expect(observation.resultRefs).toEqual([
       { kind: 'url', id: 'https://cdn.example.test/image.png' },
-      { kind: 'asset', id: 'asset-1', mimeType: 'image/png' },
+      { kind: 'asset', id: 'asset-1' },
     ]);
     expect(records.observation.evidenceIds).toEqual([records.evidence.id]);
     expect(records.evidence.data).toMatchObject({
@@ -84,12 +84,6 @@ describe('task result observation', () => {
 
     expect(observation.resultRefs).toEqual([
       {
-        kind: 'asset',
-        id: 'asset-1',
-        mimeType: 'image/png',
-        label: 'generated-assets/asset-1.png',
-      },
-      {
         kind: 'resource',
         id: resourceRef.id,
         mimeType: 'image/png',
@@ -109,6 +103,30 @@ describe('task result observation', () => {
     expect(decision.followUpRequest.prompt).toContain('"resourceRef"');
     expect(decision.followUpRequest.prompt).toContain(resourceRef.id);
     expect(decision.followUpRequest.prompt).toContain('Do not use the task id');
+    expect(decision.followUpRequest.prompt).not.toContain('- asset: asset-1');
+  });
+
+  it('keeps explicitly declared AssetLibrary result identities', () => {
+    const task = createTask({
+      output: {
+        data: {
+          resultRefs: [{ kind: 'asset', id: 'asset-explicit', label: 'Hero' }],
+          assetId: 'asset-single',
+          assetIds: ['asset-list'],
+        },
+      },
+    });
+
+    const observation = normalizeAgentTaskResultObservation({
+      task,
+      source: 'task-manager',
+    });
+
+    expect(observation.resultRefs).toEqual([
+      { kind: 'asset', id: 'asset-explicit', label: 'Hero' },
+      { kind: 'asset', id: 'asset-single' },
+      { kind: 'asset', id: 'asset-list' },
+    ]);
   });
 
   it('uses the task scope as authority when lifecycle owner metadata is absent', () => {

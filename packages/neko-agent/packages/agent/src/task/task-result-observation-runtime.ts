@@ -1,4 +1,5 @@
 import { formatChildRunScope } from '@neko/shared';
+import type { AgentContinuationMetadata, AgentQueuedMessageDisplayKind } from '@neko-agent/types';
 import type {
   AgentTaskResultDeliveryPolicy,
   AgentTaskResultFollowUpRequest,
@@ -36,6 +37,8 @@ export interface AgentTaskResultObservationRuntimeAgentPort {
     readonly conversationId: string;
     readonly content: string;
     readonly source: 'task-result-continuation';
+    readonly displayKind: AgentQueuedMessageDisplayKind;
+    readonly metadata: AgentContinuationMetadata;
   }): unknown;
 }
 
@@ -257,6 +260,14 @@ export class AgentTaskResultObservationRuntime {
         conversationId: request.conversationId,
         content: request.prompt,
         source: 'task-result-continuation',
+        displayKind: 'task-continuation',
+        metadata: {
+          observationId: request.observationId,
+          taskId: request.taskId,
+          runId: request.runId,
+          status: 'queued',
+          policy: request.policy.kind,
+        },
       });
       if (!queued) {
         throw new Error('Agent was running but did not accept task-result follow-up queue item');

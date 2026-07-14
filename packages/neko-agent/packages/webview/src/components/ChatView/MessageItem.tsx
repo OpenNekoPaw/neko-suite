@@ -577,7 +577,7 @@ export const MessageItem = memo(function MessageItem({
               <BatchTaskCard
                 tasks={relatedTasks}
                 onCancel={onCancelTask}
-                onCancelAll={() => relatedTasks.forEach((t) => onCancelTask?.(t.id))}
+                onCancelAll={() => relatedTasks.forEach((task) => onCancelTask?.(task.scope))}
                 onViewResult={onViewTaskResult}
               />
             </div>

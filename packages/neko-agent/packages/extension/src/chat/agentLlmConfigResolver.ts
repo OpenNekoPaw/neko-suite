@@ -356,7 +356,7 @@ function projectResolvedLlmRuntimeOptions(
   readonly runtimeOptions?: AgentLlmRuntimeOptions;
   readonly blockingDiagnostics: readonly AgentLlmConfigDiagnostic[];
 } {
-  if (!input.llmConfig || !input.platform) {
+  if (!input.platform) {
     return { blockingDiagnostics: [] };
   }
 
@@ -370,6 +370,11 @@ function projectResolvedLlmRuntimeOptions(
     provider,
     model,
     llmConfig: input.llmConfig,
+    runtimeDefaults: {
+      temperature: input.settings.temperature,
+      maxOutputTokens: input.settings.maxTokens,
+      thinkingBudget: input.settings.thinkingBudget,
+    },
   });
   const blockingDiagnostics = projection.diagnostics
     .filter(isBlockingLlmParameterDiagnostic)

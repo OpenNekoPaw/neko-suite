@@ -32,6 +32,10 @@ describe('agent runtime summary trace logs', () => {
         recordStageTransition: vi.fn(),
         close: vi.fn(),
       },
+      getRunContext: () => ({
+        runId: 'run-runtime-summary',
+        creationKind: 'idc.default',
+      }),
       getMode: () => 'ask',
       now: () => 100,
     });
@@ -135,12 +139,12 @@ describe('agent runtime summary trace logs', () => {
           phase: 'subagent',
         }),
         parentAgentId: 'agent-parent',
-        subAgentId: 'subagent-1',
+        subAgentId: expect.stringMatching(/^subagent-/),
       }),
     );
     expect(transport.findByMessage('neko.agent.subagent.completed')?.data).toEqual(
       expect.objectContaining({
-        subAgentId: 'subagent-1',
+        subAgentId: expect.stringMatching(/^subagent-/),
         status: 'completed',
         duration: 12,
         iterations: 2,

@@ -1965,6 +1965,64 @@ describe('AgentSession', () => {
       expect(session.isToolAllowed('Bash')).toBe(false);
     });
 
+    it('keeps Meta Tool Skill providers isolated across sessions sharing one Host registry', async () => {
+      const toolRegistry = new ToolRegistry();
+      const serviceA = createMockService();
+      const serviceB = createMockService();
+      const sessionA = new AgentSession(
+        createConfig({
+          service: serviceA,
+          toolRegistry,
+          conversationId: 'conversation-a',
+          maxIterations: 2,
+        }),
+      );
+      const sessionB = new AgentSession(
+        createConfig({
+          service: serviceB,
+          toolRegistry,
+          conversationId: 'conversation-b',
+          maxIterations: 2,
+        }),
+      );
+      const activateSkillA = vi.fn(async () => ({ success: true as const, skillName: 'image' }));
+      const activateSkillB = vi.fn(async () => ({ success: true as const, skillName: 'image' }));
+      const createProvider = (activateSkill: typeof activateSkillA) => ({
+        listSkills: vi.fn(() => [{ name: 'image', description: 'Generate images.' }]),
+        getActiveSkill: vi.fn(() => null),
+        activateSkill,
+        deactivateSkill: vi.fn(),
+      });
+      sessionA.setSkillProvider(createProvider(activateSkillA));
+      sessionB.setSkillProvider(createProvider(activateSkillB));
+
+      const permissionHooksB = (sessionB as unknown as Record<string, unknown>)[
+        '_permissionHooks'
+      ] as { addAllowRule: (tool: string) => void } | undefined;
+      permissionHooksB?.addAllowRule('ActivateSkill');
+      let callCount = 0;
+      vi.mocked(serviceB.chatStream).mockImplementation(async function* () {
+        callCount += 1;
+        if (callCount === 1) {
+          yield* responseToStream(
+            toolCallResponse('ActivateSkill', {
+              skillName: 'image',
+              reason: 'The current conversation needs image generation.',
+            }),
+          );
+          return;
+        }
+        yield* responseToStream(textResponse('Image Skill active.'));
+      });
+
+      await collectEvents(sessionB.execute('Generate an image.'));
+
+      expect(activateSkillA).not.toHaveBeenCalled();
+      expect(activateSkillB).toHaveBeenCalledOnce();
+      sessionA.dispose();
+      sessionB.dispose();
+    });
+
     it('refreshes executor context with a lifecycle skill prompt activated during the same turn', async () => {
       const service = createMockService();
       const toolRegistry = new ToolRegistry();

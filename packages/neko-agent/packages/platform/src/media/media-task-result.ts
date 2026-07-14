@@ -12,7 +12,7 @@ export function getMediaTaskPrimaryOutputUrl(
 }
 
 export interface GeneratedAssetSink {
-  add(asset: GeneratedAsset): void;
+  add(asset: GeneratedAsset): void | Promise<void>;
 }
 
 export interface FinalizeCompletedMediaTaskOutputsInput {
@@ -86,7 +86,7 @@ export async function finalizeCompletedMediaTaskOutputs(
 
     if (input.assetIndex && generatedAssets.length > 0) {
       for (const asset of generatedAssets) {
-        input.assetIndex.add(asset);
+        await input.assetIndex.add(asset);
       }
       input.logger?.info?.(`Registered ${generatedAssets.length} generated asset(s) in index`);
     }

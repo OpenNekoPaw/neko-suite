@@ -97,6 +97,7 @@ Ownership remains specific:
 | Stream                 | `stream/agent-event-stream-runtime.ts`, `stream/agent-stream-background-task.ts`, `stream/agent-stream-state.ts`, `stream/agent-stream-task-observer.ts`                                                                                                                                                                                                                                                                             |
 | Projection             | `projection/conversation-projection-store.ts` with shared contracts/projector in `@neko-agent/types`                                                                                                                                                                                                                                                                                                                                 |
 | Existing owner moves   | `artifact/artifact-service.ts`, `artifact/node-artifact-store.ts`, `input/attachment-projection.ts`, `input/message-resource-projector.ts`, `session/context-host-message.ts`, `session/conversation-host-message.ts`                                                                                                                                                                                                                |
+| Root collaborators     | `creative-ai-run-runtime.ts`, `document-module-diagnostics.ts`, `persisted-child-run-ownership.ts`, `resource-cache-runtime.ts`, `storyboard-action-task-runtime.ts`                                                                                                                                                                                                                                                                 |
 
 `runtime/index.ts` intentionally preserves the package public export surface.
 Internal imports should prefer canonical owner paths. Any future transitional
@@ -135,11 +136,11 @@ real `runId`.
 - Per-conversation journals are the transcript authority. Recovery and
   projection must request the target `conversationId` explicitly and must not
   infer ownership from the current active tab or active conversation.
-- Shared JSON indexes/caches are local whole-file writers. Authoritative guarded
-  files such as `conversations-index.json`, file task storage, and file task
-  recovery storage use owner/revision metadata and reject stale writes. Rebuildable
-  caches such as the generated asset index merge existing on-disk entries before
-  flushing.
-- VS Code `workspaceState`/`globalState` tab and task state remains host-owned
-  local state. It records writer/revision diagnostics where compare-and-swap is
-  unavailable, but it must not be treated as a runtime session authority.
+- Extension and TUI share one user-level `~/.neko/neko.db`. Serializable
+  Task/Run recovery uses state-owned tables; conversation/catalog and other
+  rebuildable metadata use cache-owned tables. Workspace rows always carry an
+  explicit `workspaceId`; normal runtime cannot construct the retired JSON or
+  Memento stores.
+- VS Code `workspaceState` remains limited to Host view projection such as tabs,
+  active selection, scroll, and panel state. It is not a conversation, Task, or
+  runtime session authority.

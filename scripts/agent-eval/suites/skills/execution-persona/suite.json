@@ -2,7 +2,7 @@
   "schema": "neko.agent-eval.suite.v2",
   "id": "skill.execution-persona",
   "owner": { "kind": "skill", "id": "execution-persona" },
-  "target": { "kind": "skill", "identity": { "name": "execution-persona", "source": "builtin", "provenance": "builtin", "rootId": "builtin-skills", "relativePath": "execution-persona", "fingerprint": "sha256:abfae4ee8a711fb9e796d7288fb0688ba2b34a9d6f80d12ddedcbbeea35e7c65" } },
+  "target": { "kind": "skill", "identity": { "name": "execution-persona", "source": "builtin", "provenance": "builtin", "rootId": "builtin-skills", "relativePath": "execution-persona", "fingerprint": "sha256:35993b6dc8183ff11bbc60415788b4093c9379e690045585685f7a8cb714c6f0" } },
   "repositoryRevision": "working-tree",
   "runtimeProfiles": [{ "id": "markdown", "settings": { "outputFormat": "markdown" }, "configurationHash": "sha256:f949e317ef6531bd9fa4f15b04f4cc038036365bc0a8a8f97dcb229049f0baac" }],
   "modelProfiles": [{ "id": "configured-default", "selection": "configured-default", "configurationHash": "sha256:e183fac48c090594694dc19a3e356145a40821960e6f06ad1a4b67e8dfc6f915" }],

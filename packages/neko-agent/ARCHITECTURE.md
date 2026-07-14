@@ -128,12 +128,25 @@ Neko Agent 的 VS Code Extension/Webview 与 Terminal TUI/headless 是两个本�
 | Conversation identity     | 交互式会话使用 workspace-scoped canonical conversation id。旧 `cli-*` 记录不作为 TUI resume 兼容输入，不读取、不迁移、不重写、不删除；旧 runtime state source 不能作为共享状态成功读入。                                                         |
 | Skill/catalog             | 标准来源是 `~/.agents/skills`、`~/.neko/commands`、`.agents/skills`、`.neko/commands`，由共享 Skill file runtime 与 command catalog 解析；`.codex/skills` 或 `skillsDir` 之类非标准来源只能通过显式 source provider 进入，并必须带 diagnostics。 |
 | Command effects           | `/command` 工件、内置命令和 `$skill` 激活使用共享 catalog。TUI-only 或 Extension-only 行为必须注册为 `tui` / `extension` surface scope 的 effect，另一端请求时返回 unavailable diagnostic。                                                      |
-| Async tasks               | 工作区可见任务事实进入 workspace-visible task record；VS Code terminal handle、process handle、recovery token、no-workspace state 等 live lease 是 host-private。                                                                                |
+| Async tasks               | 可序列化 Task/Run 与最小 checkpoint 进入用户级 `neko.db` state tables，并按显式 `workspaceId` 分区；terminal/process handle、cancel object、runtime token 等 live lease 是 host-private。                                                            |
 | Context                   | 项目记忆、AGENTS overlays、context settings、授权读根、capability fragments 通过共享 runtime assembly 进入会话；Webview/TUI 只负责展示或输入采集。                                                                                               |
-| Content access / cache    | 工作区资源使用同一个 project resource-cache root、manifest、quota 和 GC 策略；Extension-private cache 只服务 no-workspace 或 Extension 私有资源，TUI 不反向读取。                                                                                |
+| Content access / cache    | 工作区资源共用 project cache artifact root；metadata ledger、quota、touch 和 GC eligibility 进入用户级 `neko.db` cache tables。Extension-private artifact 只服务 no-workspace 或 VS Code 私有资源。                                                 |
 | Dependency injection      | 文档、图片和可选解析依赖通过 host content-access runtime 注入；缺失依赖要返回一致 diagnostic，不能在某个宿主静默 fallback 成空内容。                                                                                                             |
 
 Host-private 数据不能伪装成共享业务结果。Webview URI、blob URL、Extension memento、VS Code handle、Extension-private cache、TUI 进程 handle、终端尺寸、键盘状态和 headless 报告路径都不是 durable workspace identity。跨宿主请求遇到这些能力时，应返回 host-private/unavailable diagnostic，而不是 no-op、当作普通 prompt、读另一端私有缓存，或回退旧实现。
+
+### Generated output 与 AssetLibrary 身份
+
+媒体生成完成后，生成文件及 generated-output index 记录服务于预览、`ReadImage`、perception、异步 continuation、重载以及 revision/digest/generation lineage；它们不是 AssetLibrary `AssetEntity`。Agent task-result observation 对未显式加入资产库的生成结果只投影 `ResourceRef`，不得根据 presentation `assets[]` 字段名推断 `kind: asset`。
+
+```text
+GeneratedOutput / ResourceRef
+  -> preview / ReadImage / perception / async recovery
+  -> explicit Import or Promote
+  -> AssetLibrary AssetEntity
+```
+
+`ListAssets` 和 `GetAsset` 只查询 AssetLibrary。它们不得 fallback 到 generated-output index；用户或 Agent 显式 Import/Promote 成功后，使用该操作返回的新 AssetEntity id 访问资产库。真实 AssetLibrary task result 必须通过 typed `asset` result ref、`assetId` 或 `assetIds` 声明身份，不能依赖通用集合名。
 
 新增 Agent 业务能力时，默认接入顺序是：先定义共享 contract 和 path-level 测试，再实现 Extension/TUI adapter，最后做 Webview 或终端展示。测试应能证明 canonical runtime、catalog、task/cache path 被命中，并能 poison legacy path 证明旧 readline interactive、TUI-local raw config、TUI-local Skill loader 或结果型 fallback 没有参与成功路径。
 
@@ -157,7 +170,7 @@ Agent 的核心执行引擎，零 VSCode 依赖，Terminal TUI/headless 与 Exte
 | `context/`     | ContextManager + TokenBudgetManager + ConversationCompressor                                                                       |
 | `permission/`  | IPermissionManager 接口 + 规则匹配（plan/ask/auto 三模式）                                                                         |
 | `hooks/`       | ExecutorHooks + composeHooks + factory                                                                                             |
-| `hook-loader/` | SettingsHookLoader + Markdown hook catalog（`.neko/settings.json` 执行 hooks，`.neko/hooks/*.md` 配置展示）                        |
+| `hook-loader/` | SettingsHookLoader（settings-based hooks；`.neko/hooks` 仅作为弃用诊断路径，不再加载）                                             |
 | `prompt/`      | SystemPromptComposer（分层合成）+ SystemPromptBuilder（多语言 + AGENTS.md）                                                        |
 | `runtime/`     | 统一 runtime bootstrap 契约（workflow/artifact/capability/feedback）+ `createAgentSessionWithRuntime()`                            |
 | `plan/`        | Plan 管理器 + Markdown 解析                                                                                                        |
@@ -301,14 +314,14 @@ conversation snapshots
 
 #### 实例复用边界
 
-| 实例                                    | 复用范围                                                             | 禁止范围                            |
-| --------------------------------------- | -------------------------------------------------------------------- | ----------------------------------- |
+| 实例                                    | 复用范围                                                                  | 禁止范围                             |
+| --------------------------------------- | ------------------------------------------------------------------------- | ------------------------------------ |
 | semantic accumulator / projection store | accumulator 限定同一 turn；projection store 属于一个 conversation runtime | 不跨 conversation 共享 mutable state |
-| projection attachment queue             | 一个 Tab attachment 与 endpoint epoch                              | 不跨 Tab 共享序列或 ACK 状态          |
-| Tab render runtime                       | 一个打开 Tab；可有界保留 store/replica                              | 不通过 active 标记模拟多个 Tab         |
-| Markdown streaming session              | 同一 message/item/source generation                                  | replace 后不得继续复用旧 generation |
-| persistence coordinator                 | 同一本地 storage authority 生命周期                                  | 不跨独立 storage authority 共享     |
-| Webview frame scheduler                 | 一个 Webview runtime                                                 | dispose 后不得接收新 delivery       |
+| projection attachment queue             | 一个 Tab attachment 与 endpoint epoch                                     | 不跨 Tab 共享序列或 ACK 状态         |
+| Tab render runtime                      | 一个打开 Tab；可有界保留 store/replica                                    | 不通过 active 标记模拟多个 Tab       |
+| Markdown streaming session              | 同一 message/item/source generation                                       | replace 后不得继续复用旧 generation  |
+| persistence coordinator                 | 同一本地 storage authority 生命周期                                       | 不跨独立 storage authority 共享      |
+| Webview frame scheduler                 | 一个 Webview runtime                                                      | dispose 后不得接收新 delivery        |
 
 这些 coordinator 都留在 owning package：它们分别拥有 Agent 语义、VS Code `postMessage`、Webview frame/DOM 和 conversation storage 生命周期。当前不存在可同时满足这些契约的共享调度器；只有第二个子包出现相同运行环境与生命周期语义时才提取中立抽象。
 

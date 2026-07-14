@@ -38,6 +38,7 @@ import type { ActivationProgressTimeline } from '@/presenters/activation-progres
 import type { ConversationRenderCoordinator } from '@/render-lifecycle/conversation-render-coordinator';
 import type { ExtensionToWebviewMessage } from './messages';
 import {
+  bindConversationRenderRuntimeLifecycle,
   createConversationRenderRuntimeLifecycle,
   type ConversationRenderRuntimeLifecycle,
 } from '@/render-lifecycle/conversation-render-runtime-lifecycle';
@@ -51,6 +52,13 @@ const FOREIGN_FEATURE_HOST_MESSAGE_TYPES = new Set([
   'enginePort',
   'featureFlags:update',
   'project:init',
+]);
+const PROJECTION_HOST_MESSAGE_TYPES = new Set([
+  'projectionEndpointReady',
+  'projectionSnapshot',
+  'projectionPatch',
+  'projectionDetach',
+  'projectionProtocolDiagnostic',
 ]);
 
 /**
@@ -163,20 +171,7 @@ export function useMessageHandler(props: UseMessageHandlerProps): UseMessageHand
     markdown: markdownSessionRegistry,
   });
   const renderRuntime = renderRuntimeRef.current;
-  useEffect(() => {
-    renderRuntime.attachComponent();
-    const handleVisibilityChange = (): void => {
-      renderRuntime.setVisibility(document.visibilityState === 'hidden' ? 'hidden' : 'visible');
-    };
-    const handlePageHide = (): void => renderRuntime.disposeRealm();
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    window.addEventListener('pagehide', handlePageHide);
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-      window.removeEventListener('pagehide', handlePageHide);
-      renderRuntime.detachComponent();
-    };
-  }, [renderRuntime]);
+  useEffect(() => bindConversationRenderRuntimeLifecycle(renderRuntime), [renderRuntime]);
 
   const {
     messages,
@@ -370,7 +365,7 @@ export function useMessageHandler(props: UseMessageHandlerProps): UseMessageHand
     (event: MessageEvent<ExtensionToWebviewMessage>): void => {
       const message = event.data;
       if (!message || !message.type) return;
-      if (isForeignFeatureHostMessage(message)) return;
+      if (isForeignFeatureHostMessage(message) || isProjectionHostMessage(message)) return;
 
       const handled = registry.handle(message, context);
       if (!handled) {
@@ -384,6 +379,12 @@ export function useMessageHandler(props: UseMessageHandlerProps): UseMessageHand
     handleMessage,
     disposeConversationRendering: renderRuntime.disposeConversation,
   };
+}
+
+export function isProjectionHostMessage(message: unknown): boolean {
+  if (!isRecord(message)) return false;
+  const type = message['type'];
+  return typeof type === 'string' && PROJECTION_HOST_MESSAGE_TYPES.has(type);
 }
 
 function isForeignFeatureHostMessage(message: unknown): boolean {

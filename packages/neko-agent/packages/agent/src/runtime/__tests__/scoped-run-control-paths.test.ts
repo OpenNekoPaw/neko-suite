@@ -1,8 +1,9 @@
 import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
-const packageRoot = process.cwd();
+const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../../../../..');
 
 function read(relativePath: string): string {
   return readFileSync(join(packageRoot, relativePath), 'utf8');

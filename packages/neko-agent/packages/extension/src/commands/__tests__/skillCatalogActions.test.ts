@@ -194,6 +194,38 @@ describe('skillCatalogActions', () => {
     );
   });
 
+  it('defaults new personal skills to the user directory unless project is explicit', async () => {
+    const deps = createDeps({
+      catalog: [makeSkillDef('storyboard', 'builtin', ['run', 'fork'])],
+      builtins: [makeSkill('storyboard')],
+    });
+
+    await executeSkillCatalogAction({ action: 'create', skillName: 'user-review' }, deps);
+    await executeSkillCatalogAction(
+      {
+        action: 'fork',
+        skillRef: {
+          extensionId: 'neko.neko-agent',
+          id: 'storyboard',
+          source: 'builtin',
+        },
+      },
+      deps,
+    );
+
+    expect(deps.skillFileService.createSkill).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ target: 'personal' }),
+    );
+    expect(deps.skillFileService.createSkill).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ target: 'personal' }),
+    );
+    expect(vscode.workspace.openTextDocument).toHaveBeenLastCalledWith(
+      '/home/.agents/skills/storyboard/SKILL.md',
+    );
+  });
+
   it('rejects unknown ids, cross-extension refs and path-like payloads', async () => {
     const deps = createDeps({
       catalog: [makeSkillDef('review', 'project', ['run', 'edit'])],

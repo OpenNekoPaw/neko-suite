@@ -18,6 +18,7 @@ import type {
   AgentRuntimeSessionController,
   AgentRuntimeSessionControllerTarget,
   SubAgentRuntimeCoordinator,
+  EnqueuePendingMessageInput,
 } from '@neko/agent/runtime';
 import type { AgentEvent, SubAgentEvent } from '@neko/agent';
 import {
@@ -142,12 +143,7 @@ export class AgentRunner implements IAgentRunner {
     return this.port.isRunning();
   }
 
-  enqueuePendingMessage(input: {
-    readonly conversationId: string;
-    readonly content: string;
-    readonly now?: number;
-    readonly source?: AgentPendingMessageItem['source'];
-  }): AgentPendingMessageItem | null {
+  enqueuePendingMessage(input: EnqueuePendingMessageInput): AgentPendingMessageItem | null {
     return this.port.enqueuePendingMessage(input);
   }
 

@@ -62,15 +62,55 @@ describe('StagePersonaBinding lifecycle mode', () => {
     expect(skillService.apply).toHaveBeenCalledWith(executionPersona);
     binding.dispose();
   });
+
+  it('does not advance the bound stage when lifecycle activation is rejected', async () => {
+    const executionPersona = createSkill('execution-persona', ['Write']);
+    const skillService = createSkillService([executionPersona]);
+    const lifecycleRuntime = new SkillLifecycleRuntime({
+      skillService: skillService as unknown as SkillService,
+      now: () => 100,
+    });
+    lifecycleRuntime.activatePrepared({
+      conversationId: 'conv-1',
+      skill: createSkill('image', ['GenerateImage']),
+      injection: {
+        name: 'image',
+        systemPrompt: 'image prompt',
+        type: 'skill',
+        allowedTools: ['GenerateImage'],
+      },
+      slot: 'domainSkill',
+      owner: 'agent',
+      lifetime: { kind: 'conversation', untilCleared: true },
+      source: 'explicit-agent',
+    });
+    const tracker = createStageTracker();
+    const binding = createStagePersonaBinding({
+      stageTracker: tracker,
+      skillRegistry: skillService.registry as SkillService['registry'],
+      skillService: skillService as unknown as SkillService,
+      lifecycleRuntime,
+      getRunId: () => 'run-1',
+      getConversationId: () => 'conv-1',
+    });
+
+    tracker.enter('apply');
+    await Promise.resolve();
+
+    expect(binding.getActiveStage()).toBeNull();
+    expect(lifecycleRuntime.list('conv-1').map((record) => record.skillName)).toEqual(['image']);
+    binding.dispose();
+  });
 });
 
-function createSkill(name: string): Skill {
+function createSkill(name: string, allowedTools?: string[]): Skill {
   return {
     name,
     description: `${name} skill`,
     content: `${name} prompt`,
     source: 'builtin',
     enabled: true,
+    ...(allowedTools ? { allowedTools } : {}),
   };
 }
 

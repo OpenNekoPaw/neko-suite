@@ -5,6 +5,7 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  createAgentWebviewKeyboardReporter,
   useWebviewKeyboardEditableReporting,
   useWebviewKeyboardFocusReporting,
 } from '../useWebviewKeyboardReporting';
@@ -19,6 +20,23 @@ describe('Agent Webview keyboard reporting wrapper', () => {
     host = document.createElement('div');
     document.body.appendChild(host);
     root = createRoot(host);
+  });
+
+  it('routes shared keyboard messages through the injected Agent host adapter', () => {
+    const host = { send: vi.fn() };
+    const reporter = createAgentWebviewKeyboardReporter(host);
+
+    reporter.postMessage({ type: 'webviewKeyboardFocus', focused: true });
+    reporter.postMessage({ type: 'webviewKeyboardEditable', editable: true });
+
+    expect(host.send).toHaveBeenNthCalledWith(1, {
+      type: 'webviewKeyboardFocus',
+      focused: true,
+    });
+    expect(host.send).toHaveBeenNthCalledWith(2, {
+      type: 'webviewKeyboardEditable',
+      editable: true,
+    });
   });
 
   afterEach(() => {

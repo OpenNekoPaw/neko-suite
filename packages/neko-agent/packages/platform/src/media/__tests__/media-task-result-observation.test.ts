@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { normalizeAgentTaskResultObservation } from '@neko/agent';
 import { createGeneratedAssetRevisionRef, type GeneratedAsset } from '@neko/shared';
 import type { MediaTask } from '../types';
 import { toMediaTaskResultObservationTask } from '../media-task-result-observation';
@@ -96,6 +97,24 @@ describe('media task result observation projection', () => {
         },
       },
     });
+
+    const observation = normalizeAgentTaskResultObservation({
+      task,
+      source: 'media-task',
+    });
+    expect(observation.resultRefs).toEqual([
+      expect.objectContaining({
+        kind: 'resource',
+        id: expect.any(String),
+        resourceRef: expect.objectContaining({
+          provider: 'generated-asset',
+          kind: 'generated',
+        }),
+      }),
+    ]);
+    expect(observation.resultRefs).not.toContainEqual(
+      expect.objectContaining({ kind: 'asset', id: 'asset-1' }),
+    );
   });
 
   it('rejects path-only generated assets instead of rebuilding durable identity from a host path', () => {

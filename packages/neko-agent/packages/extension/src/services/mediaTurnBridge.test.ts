@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import * as vscode from 'vscode';
 import { MediaTurnBridge } from './mediaTurnBridge';
 import type { MediaTask } from '@neko/platform';
-import type { GeneratedAsset, Task } from '@neko/shared';
+import { createGeneratedAssetRevisionRef, type GeneratedAsset, type Task } from '@neko/shared';
 
 vi.mock('vscode', async () => await import('../__mocks__/vscode'));
 
@@ -173,7 +173,7 @@ describe('MediaTurnBridge', () => {
         source: {
           kind: 'generated-asset',
           generatedAssetId: 'asset-1',
-          filePath: localPath,
+          metadata: { contentDigest: 'sha256:image', mimeType: 'image/png' },
         },
       },
     });
@@ -195,6 +195,7 @@ function createMediaTask(input: {
 }): MediaTask {
   const now = new Date('2026-01-01T00:00:00.000Z');
   return {
+    scope: taskScope('task-1'),
     id: 'task-1',
     type: 'text-to-image',
     status: input.status,
@@ -211,6 +212,16 @@ function createMediaTask(input: {
       input.status === 'completed'
         ? [{ type: 'image', url: 'https://example.test/image.png', mimeType: 'image/png' }]
         : [],
+  };
+}
+
+function taskScope(childRunId: string) {
+  return {
+    conversationId: 'conv-1',
+    runId: 'run-1',
+    parentRunId: 'run-1',
+    childRunId,
+    childKind: 'task' as const,
   };
 }
 
@@ -231,5 +242,17 @@ function createGeneratedImageAsset(localPath: string): GeneratedAsset {
       uri: 'generated-assets/asset-1.png',
       mimeType: 'image/png',
     },
+    lifecycle: createGeneratedAssetRevisionRef({
+      assetId: 'asset-1',
+      contentDigest: 'sha256:image',
+      mediaKind: 'image',
+      mimeType: 'image/png',
+      generation: {
+        taskId: 'task-1',
+        runId: 'run-1',
+        providerId: 'openai',
+        modelId: 'gpt-image-1',
+      },
+    }),
   };
 }

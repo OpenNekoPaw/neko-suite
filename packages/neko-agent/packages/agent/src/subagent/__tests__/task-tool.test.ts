@@ -247,7 +247,7 @@ describe('createTaskTool', () => {
       );
 
       expect(result.success).toBe(false);
-      expect(result.error).toContain('Missing conversationId');
+      expect(result.error).toBe('Tool execution requires conversationId ownership.');
       expect(manager.spawn).not.toHaveBeenCalled();
     });
 
@@ -356,7 +356,7 @@ describe('createTaskTool', () => {
         { metadata: { conversationId: 'conv-1', runId: 'run-1' } },
       );
 
-      expect(missingRun.error).toContain('Missing runId');
+      expect(missingRun.error).toBe('Tool execution requires runId ownership.');
       expect(missingParent.error).toContain('Missing parentAgentId');
       expect(manager.spawn).not.toHaveBeenCalled();
     });

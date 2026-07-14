@@ -3,13 +3,18 @@ import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
-import { PathResolver, createResourceFingerprint, createResourceRef } from '@neko/shared';
 import {
-  createGeneratedAssetResourceRef,
-  type ResourceCacheManifestStore,
-} from '@neko/shared/vscode/extension';
+  PathResolver,
+  createGeneratedAssetRevisionRef,
+  createResourceFingerprint,
+  createResourceRef,
+} from '@neko/shared';
+import { type ResourceCacheManifestStore } from '@neko/shared/vscode/extension';
+import { createGeneratedAssetResourceResolver } from '@neko/platform';
 import type { IEngineClientProvider } from '../engineClientProvider';
 import { createExtensionAgentContentAccessRuntime } from '../agentContentAccessRuntime';
+import { createLocalPerceptionAssetLoader } from '../perceptionAssetLoader';
+import { createReadImageTool } from '../../tools/readImageTool';
 
 vi.mock('vscode', async () => await import('../../__mocks__/vscode'));
 
@@ -155,7 +160,7 @@ describe('createExtensionAgentContentAccessRuntime', () => {
     );
   });
 
-  it('loads generated asset ResourceRefs as image bytes for ReadImage', async () => {
+  it('loads pathless generated ResourceRefs for ReadImage and perception', async () => {
     const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'neko-agent-generated-access-'));
     tempDirs.push(tempDir);
     const workspaceRoot = path.join(tempDir, 'workspace');
@@ -169,28 +174,57 @@ describe('createExtensionAgentContentAccessRuntime', () => {
       extensionUri: { fsPath: path.join(tempDir, 'extension') },
       globalStorageUri: { fsPath: path.join(tempDir, 'global') },
     } as vscode.ExtensionContext;
+    const lifecycle = createGeneratedAssetRevisionRef({
+      assetId: 'asset-1',
+      contentDigest: 'sha256:asset-1',
+      mediaKind: 'image',
+      mimeType: 'image/png',
+      generation: { taskId: 'task-1' },
+    });
+    const getGeneratedAsset = vi.fn(() => ({
+      type: 'generated-image' as const,
+      id: 'asset-1',
+      path: generatedPath,
+      lifecycle,
+      mimeType: 'image/png',
+      generatedAt: '2026-07-14T00:00:00.000Z',
+      width: 1,
+      height: 1,
+      ratio: '1:1',
+    }));
+    const resolveGeneratedAsset = createGeneratedAssetResourceResolver({
+      get: getGeneratedAsset,
+    });
     const { runtime } = createExtensionAgentContentAccessRuntime({
       context,
       engineClientProvider: createEngineClientProvider(createEngine(PNG_1X1)),
       workspaceRoot,
       pathResolver: new PathResolver(new Map([['WORKSPACE', workspaceRoot]])),
       resourceCacheManifestStore: createMemoryManifestStore(),
+      resolveGeneratedAsset,
     });
-    const ref = createGeneratedAssetResourceRef({
-      assetId: 'asset-1',
-      path: '${WORKSPACE}/neko/generated/image/asset-1.png',
+    const ref = lifecycle.resourceRef;
+
+    expect(ref.source).not.toHaveProperty('filePath');
+    expect(ref.source.metadata).not.toHaveProperty('path');
+
+    const readImageResult = await createReadImageTool({ contentAccessRuntime: runtime }).execute({
+      images: [{ resourceRef: ref }],
+    });
+
+    expect(readImageResult.success).toBe(true);
+    expect(readImageResult.data).toMatchObject({
+      images: [{ portableForTransfer: true, resourceRef: ref }],
+    });
+    const perceptualRef = readImageResult.perceptionCards?.[0]?.perceptual.thumbnailRef;
+    if (!perceptualRef) throw new Error('ReadImage did not return a perceptual resource ref.');
+
+    await expect(createLocalPerceptionAssetLoader(runtime).load(perceptualRef)).resolves.toEqual({
+      kind: 'image',
+      url: `data:image/png;base64,${Buffer.from(PNG_1X1).toString('base64')}`,
       mimeType: 'image/png',
     });
-
-    const result = await runtime.loadProviderAsset({
-      caller: 'read-image',
-      source: ref,
-      preferredTarget: 'bytes',
-    });
-
-    expect(result.status).toBe('ready');
-    expect(Array.from(result.bytes ?? [])).toEqual(Array.from(PNG_1X1));
-    expect(result.mimeType).toBe('image/png');
+    expect(getGeneratedAsset).toHaveBeenCalledWith('asset-1');
   });
 
   it('loads document entry assets through resolved host paths for ReadImage', async () => {

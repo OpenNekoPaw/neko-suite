@@ -526,6 +526,9 @@ describe('message runtime helpers', () => {
             topP: 0.95,
             thinkingBudget: 4096,
           },
+          understandingModels: {
+            image: { providerId: 'google', modelId: 'gemini-2.5-flash', category: 'llm' },
+          },
         },
         inputProcessor: {
           process: async () => ({
@@ -566,6 +569,9 @@ describe('message runtime helpers', () => {
           temperature: 0.7,
           topP: 0.95,
           thinkingBudget: 4096,
+        },
+        understandingModels: {
+          image: { providerId: 'google', modelId: 'gemini-2.5-flash', category: 'llm' },
         },
         imageAttachments: [{ type: 'base64', media_type: 'image/png', data: 'image-1' }],
       }),

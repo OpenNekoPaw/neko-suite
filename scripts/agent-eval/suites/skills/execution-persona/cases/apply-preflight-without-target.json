@@ -21,7 +21,7 @@
   ],
   "assertions": [
     { "id": "runtime", "kind": "runtime-errors-empty", "evidenceRef": "persona-facts" },
-    { "id": "skill", "kind": "skill", "identity": { "name": "execution-persona", "source": "builtin", "provenance": "builtin", "rootId": "builtin-skills", "relativePath": "execution-persona", "fingerprint": "sha256:abfae4ee8a711fb9e796d7288fb0688ba2b34a9d6f80d12ddedcbbeea35e7c65" }, "status": "injected", "evidenceRef": "persona-facts" },
+    { "id": "skill", "kind": "skill", "identity": { "name": "execution-persona", "source": "builtin", "provenance": "builtin", "rootId": "builtin-skills", "relativePath": "execution-persona", "fingerprint": "sha256:35993b6dc8183ff11bbc60415788b4093c9379e690045585685f7a8cb714c6f0" }, "status": "injected", "evidenceRef": "persona-facts" },
     { "id": "output", "kind": "structured-output", "format": "markdown", "requiredFields": ["preflight", "阻塞", "目标", "capability", "成功判据"], "forbiddenFields": ["已写入", "执行成功"], "locale": "zh-cn", "evidenceRef": "persona-facts" },
     { "id": "fallback", "kind": "no-fallback", "forbiddenRefs": ["creation-persona"], "evidenceRef": "persona-facts" }
   ],

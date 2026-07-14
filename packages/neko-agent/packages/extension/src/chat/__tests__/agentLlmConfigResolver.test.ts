@@ -30,6 +30,13 @@ function createProviders() {
           modelIds: ['gpt-primary'],
         };
       }
+      if (providerId === 'anthropic') {
+        return {
+          id: 'anthropic',
+          isConfigured: true,
+          modelIds: ['claude-primary'],
+        };
+      }
       if (providerId === 'runway') {
         return {
           id: 'runway',
@@ -59,6 +66,15 @@ function createProviders() {
           capabilities: ['chat'],
         };
       }
+      if (modelId === 'claude-primary') {
+        return {
+          id: 'claude-primary',
+          providerId: 'anthropic',
+          type: 'llm',
+          enabled: true,
+          capabilities: ['chat', 'thinking_budget', 'max_output_tokens'],
+        };
+      }
       if (modelId === 'gen-3') {
         return {
           id: 'gen-3',
@@ -81,6 +97,73 @@ const videoAttachment: MessageAttachment = {
 };
 
 describe('resolveAgentLlmConfigForTurn media understanding routing', () => {
+  it('projects session output limits while omitting unsupported thinking fields', () => {
+    const providers = createProviders();
+    vi.mocked(providers.getProviderConfig).mockReturnValue({
+      id: 'openai',
+      type: 'openai',
+      enabled: true,
+    } as never);
+
+    const resolved = resolveAgentLlmConfigForTurn({
+      sessionMode: 'agent',
+      chatModel: { providerId: 'openai', modelId: 'gpt-primary', category: 'llm' },
+      llmConfig: { creativityPreset: 'creative' },
+      settings: {
+        temperature: 0.3,
+        maxTokens: 8192,
+        thinkingBudget: 10000,
+      } as never,
+      providers: providers as never,
+      platform: createPlatform(undefined),
+    });
+
+    expect(resolved).toMatchObject({
+      ok: true,
+      llmRuntimeOptions: {
+        projected: true,
+        temperature: 0.7,
+        topP: 0.95,
+        maxTokens: 8192,
+      },
+    });
+  });
+
+  it('projects a supported session thinking budget through model capabilities', () => {
+    const providers = createProviders();
+    vi.mocked(providers.getProviderConfig).mockReturnValue({
+      id: 'anthropic',
+      type: 'anthropic',
+      enabled: true,
+      supportsBeta: true,
+    } as never);
+
+    const resolved = resolveAgentLlmConfigForTurn({
+      sessionMode: 'agent',
+      chatModel: { providerId: 'anthropic', modelId: 'claude-primary', category: 'llm' },
+      settings: {
+        maxTokens: 8192,
+        thinkingBudget: 10000,
+      } as never,
+      providers: providers as never,
+      platform: createPlatform(undefined),
+    });
+
+    expect(resolved).toMatchObject({
+      ok: true,
+      llmRuntimeOptions: {
+        projected: true,
+        maxTokens: 8192,
+        thinkingBudget: 10000,
+        providerOptions: {
+          anthropic: {
+            thinking: { type: 'enabled', budgetTokens: 10000 },
+          },
+        },
+      },
+    });
+  });
+
   it('keeps the chat model and exposes video.understand for tool context when models differ', () => {
     const platform = createPlatform({ providerId: 'google', modelId: 'gemini-video-understand' });
     const providers = createProviders();

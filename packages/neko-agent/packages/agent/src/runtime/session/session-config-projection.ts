@@ -38,7 +38,6 @@ export function buildAgentSessionConfigWithRuntime(
   const promptFragments = base.promptFragments ?? capability?.promptFragments;
   const toolGroupRegistry = base.toolGroupRegistry ?? capability?.toolGroupRegistry;
   const toolCategoryRegistry = capability?.toolCategoryRegistry ?? base.toolCategoryRegistry;
-  const skillService = base.skillService ?? capability?.skillService;
   const providerCardRegistry = base.providerCardRegistry ?? capability?.providerCardRegistry;
   const artifactProfileRegistry =
     base.artifactProfileRegistry ?? capability?.artifactProfileRegistry;
@@ -72,7 +71,6 @@ export function buildAgentSessionConfigWithRuntime(
     ...(promptFragments ? { promptFragments } : {}),
     ...(toolGroupRegistry ? { toolGroupRegistry } : {}),
     ...(toolCategoryRegistry ? { toolCategoryRegistry } : {}),
-    ...(skillService ? { skillService } : {}),
     ...(providerCardRegistry ? { providerCardRegistry } : {}),
     ...(artifactProfileRegistry ? { artifactProfileRegistry } : {}),
     ...(creationProfileRegistry ? { creationProfileRegistry } : {}),

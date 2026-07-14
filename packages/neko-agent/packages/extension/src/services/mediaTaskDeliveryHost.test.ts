@@ -36,7 +36,7 @@ describe('MediaTaskDeliveryHost', () => {
     await host.createProgressViewDelivery(createWebview(), createCompletedVideoTask(), 'video');
 
     expect(saveOutputs).toHaveBeenCalledWith(
-      'task-1',
+      taskScope('task-1'),
       '/workspace/demo/neko/generated/video',
       expect.any(Object),
     );
@@ -73,7 +73,7 @@ describe('MediaTaskDeliveryHost', () => {
     await host.createProgressViewDelivery(createWebview(), createCompletedImageTask(), 'image');
 
     expect(saveOutputs).toHaveBeenCalledWith(
-      'task-1',
+      taskScope('task-1'),
       '/workspace/demo/neko/generated/image',
       expect.any(Object),
     );
@@ -89,6 +89,7 @@ function createWebview(): vscode.Webview {
 function createCompletedVideoTask(): MediaTask {
   const now = new Date('2026-01-01T00:00:00.000Z');
   return {
+    scope: taskScope('task-1'),
     id: 'task-1',
     type: 'text-to-video',
     status: 'completed',
@@ -97,7 +98,7 @@ function createCompletedVideoTask(): MediaTask {
     modelId: 'gen-4',
     createdAt: now,
     updatedAt: now,
-    request: { prompt: 'city flythrough' },
+    request: { prompt: 'city flythrough', metadata: { conversationId: 'conv-1', runId: 'run-1' } },
     outputs: [{ type: 'video', url: 'https://example.test/video.mp4', mimeType: 'video/mp4' }],
   };
 }
@@ -105,6 +106,7 @@ function createCompletedVideoTask(): MediaTask {
 function createCompletedImageTask(): MediaTask {
   const now = new Date('2026-01-01T00:00:00.000Z');
   return {
+    scope: taskScope('task-1'),
     id: 'task-1',
     type: 'text-to-image',
     status: 'completed',
@@ -113,7 +115,17 @@ function createCompletedImageTask(): MediaTask {
     modelId: 'gpt-image',
     createdAt: now,
     updatedAt: now,
-    request: { prompt: 'cat' },
+    request: { prompt: 'cat', metadata: { conversationId: 'conv-1', runId: 'run-1' } },
     outputs: [{ type: 'image', url: 'https://example.test/image.png', mimeType: 'image/png' }],
+  };
+}
+
+function taskScope(childRunId: string) {
+  return {
+    conversationId: 'conv-1',
+    runId: 'run-1',
+    parentRunId: 'run-1',
+    childRunId,
+    childKind: 'task' as const,
   };
 }

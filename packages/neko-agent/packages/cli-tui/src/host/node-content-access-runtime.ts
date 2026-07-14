@@ -11,15 +11,16 @@ import { PathResolver, type WorkspaceMediaPathContext } from '@neko/shared';
 import {
   DocumentEntryContentAccessProvider,
   DocumentResourceCacheProvider,
-  GeneratedAssetDerivativeResourceCacheProvider,
+  GeneratedAssetSourceContentAccessProvider,
   HostContentAccessService,
   HostResourceCacheService,
   ResourceCacheContentAccessProvider,
+  resolveGeneratedAssetResourceRef,
   SourceFileContentAccessProvider,
   type ContentAccessFileOps,
   type ContentAccessService,
   type DocumentResourceCacheFsOps,
-  type ResourceCacheFileOps,
+  type GeneratedAssetDerivativeResourceCacheProviderOptions,
   type ResourceCacheFsOps,
   type ResourceCacheManifestStore,
   type ResourceCacheService,
@@ -41,10 +42,15 @@ import {
 
 const DEFAULT_PROVIDER_ASSET_RANGE_BYTES = 20 * 1024 * 1024;
 
+type GeneratedAssetResourceResolver = NonNullable<
+  GeneratedAssetDerivativeResourceCacheProviderOptions['resolveAsset']
+>;
+
 export interface CreateNodeContentAccessRuntimeOptions {
   readonly host: NekoHostPorts;
   readonly maxProviderAssetBytes?: number;
   readonly resourceCacheManifestStore?: ResourceCacheManifestStore;
+  readonly resolveGeneratedAsset?: GeneratedAssetResourceResolver;
 }
 
 export interface NodeContentAccessRuntimeServices {
@@ -130,30 +136,35 @@ class NodeContentAccessRuntimeBuilder {
       readFile: (filePath) => this.readBytes(filePath),
     };
     const resourceCacheFsOps = this.createResourceCacheFsOps();
-    const resourceCacheProviderFsOps = this.createResourceCacheProviderFsOps();
     const documentResourceCacheFsOps = this.createDocumentResourceCacheFsOps();
     const resourceCacheManifestStore = this.options.resourceCacheManifestStore;
-    if (workspace.storageLayout && !resourceCacheManifestStore) {
-      throw new Error('TUI ResourceCache requires a LocalMetadata manifest store.');
+    let resourceCache: ResourceCacheService | undefined;
+    if (workspace.storageLayout) {
+      if (!resourceCacheManifestStore) {
+        throw new Error('TUI ResourceCache requires a LocalMetadata manifest store.');
+      }
+      resourceCache = this.createResourceCache({
+        workspaceRoot,
+        pathResolver,
+        fileOps,
+        resourceCacheFsOps,
+        documentResourceCacheFsOps,
+        cacheRoot: workspace.storageLayout.project.local.cache.resources,
+        manifestStore: resourceCacheManifestStore,
+        ...(this.options.resolveGeneratedAsset
+          ? { resolveGeneratedAsset: this.options.resolveGeneratedAsset }
+          : {}),
+      });
     }
-    const resourceCache = workspace.storageLayout
-      ? this.createResourceCache({
-          workspaceRoot,
-          pathResolver,
-          fileOps,
-          resourceCacheFsOps,
-          resourceCacheProviderFsOps,
-          documentResourceCacheFsOps,
-          cacheRoot: workspace.storageLayout.project.local.cache.resources,
-          manifestStore: resourceCacheManifestStore,
-        })
-      : undefined;
     const contentAccess = this.createContentAccess({
       workspaceRoot,
       pathResolver,
       mediaPathContext,
       fileOps,
       resourceCache,
+      resolveGeneratedAsset: async (ref) =>
+        (await this.options.resolveGeneratedAsset?.(ref)) ??
+        resolveGeneratedAssetResourceRef(ref, pathResolver, workspaceRoot),
     });
     const documentAccess = this.createDocumentAccess();
     const runtime = createHostAgentContentAccessRuntime({
@@ -176,8 +187,17 @@ class NodeContentAccessRuntimeBuilder {
     readonly mediaPathContext: WorkspaceMediaPathContext;
     readonly fileOps: Pick<ContentAccessFileOps, 'readFile'>;
     readonly resourceCache?: ResourceCacheService;
+    readonly resolveGeneratedAsset?: GeneratedAssetResourceResolver;
   }): ContentAccessService {
     const contentAccess = new HostContentAccessService();
+    if (input.resolveGeneratedAsset) {
+      contentAccess.registerProvider(
+        new GeneratedAssetSourceContentAccessProvider({
+          resolveAsset: input.resolveGeneratedAsset,
+          fileOps: input.fileOps,
+        }),
+      );
+    }
     if (input.resourceCache) {
       contentAccess.registerProvider(
         new ResourceCacheContentAccessProvider({
@@ -225,10 +245,10 @@ class NodeContentAccessRuntimeBuilder {
     readonly pathResolver: PathResolver;
     readonly fileOps: Pick<ContentAccessFileOps, 'readFile'>;
     readonly resourceCacheFsOps: ResourceCacheFsOps;
-    readonly resourceCacheProviderFsOps: ResourceCacheFileOps;
     readonly documentResourceCacheFsOps: DocumentResourceCacheFsOps;
     readonly cacheRoot: string;
     readonly manifestStore: ResourceCacheManifestStore;
+    readonly resolveGeneratedAsset?: GeneratedAssetResourceResolver;
   }): ResourceCacheService {
     return new HostResourceCacheService({
       cacheRoot: input.cacheRoot,
@@ -236,11 +256,6 @@ class NodeContentAccessRuntimeBuilder {
       projectRoot: input.workspaceRoot,
       fsOps: input.resourceCacheFsOps,
       providers: [
-        new GeneratedAssetDerivativeResourceCacheProvider({
-          pathResolver: input.pathResolver,
-          projectRoot: input.workspaceRoot,
-          fsOps: input.resourceCacheProviderFsOps,
-        }),
         new DocumentResourceCacheProvider({
           pathResolver: input.pathResolver,
           projectRoot: input.workspaceRoot,
@@ -289,21 +304,6 @@ class NodeContentAccessRuntimeBuilder {
       },
       rm: (filePath, options) =>
         this.options.host.files.delete(filePath, { idempotent: options.force }),
-    };
-  }
-
-  private createResourceCacheProviderFsOps(): ResourceCacheFileOps {
-    return {
-      copyFile: async (source, target) => {
-        await this.options.host.files.writeBytes(target, await this.readBytes(source));
-      },
-      mkdir: async (dirPath) => {
-        await this.options.host.files.createDirectory(dirPath);
-      },
-      stat: async (filePath) => {
-        const stat = await this.options.host.files.stat(filePath);
-        return { size: stat.sizeBytes ?? 0 };
-      },
     };
   }
 

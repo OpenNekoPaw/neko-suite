@@ -16,6 +16,7 @@ interface RichContentRendererProps {
   kind: string;
   /** Raw data payload — will be validated by the renderer entry */
   data: unknown;
+  conversationId?: string | null;
   className?: string;
   /** Compact mode for inline embedding (e.g. inside TaskCard) */
   inline?: boolean;
@@ -26,6 +27,7 @@ interface RichContentRendererProps {
 function RichContentRendererComponent({
   kind,
   data,
+  conversationId,
   className,
   inline,
   openOnClick,
@@ -43,7 +45,15 @@ function RichContentRendererComponent({
   }
 
   const Renderer = entry.component;
-  return <Renderer data={data} className={className} inline={inline} openOnClick={openOnClick} />;
+  return (
+    <Renderer
+      data={data}
+      conversationId={conversationId}
+      className={className}
+      inline={inline}
+      openOnClick={openOnClick}
+    />
+  );
 }
 
 export const RichContentRenderer = memo(RichContentRendererComponent);

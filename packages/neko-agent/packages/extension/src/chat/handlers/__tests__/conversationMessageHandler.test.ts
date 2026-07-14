@@ -274,7 +274,7 @@ describe('ConversationMessageHandler', () => {
   it('separates host active snapshots from explicit conversation snapshots', async () => {
     await handler.sendActiveConversation();
 
-    expect(conversations.sendActiveConversation).toHaveBeenCalledWith(webview);
+    expect(conversations.sendActiveConversation).toHaveBeenCalledWith(webview, undefined);
     expect(conversations.sendConversationSnapshot).not.toHaveBeenCalled();
 
     await expect(handler.sendConversationSnapshot('conv-b')).resolves.toBe(true);
@@ -299,7 +299,7 @@ describe('ConversationMessageHandler', () => {
     expect(promptModeCleanup.clearPromptMode).toHaveBeenCalledWith('conv-a');
     expect(conversations.delete).toHaveBeenCalledWith('conv-a', { activateNext: true });
     expect(conversations.sendConversationList).toHaveBeenCalledWith(webview);
-    expect(conversations.sendActiveConversation).toHaveBeenCalledWith(webview);
+    expect(conversations.sendActiveConversation).toHaveBeenCalledWith(webview, undefined);
   });
 
   it('deletes the final closed tab without activating another conversation', async () => {

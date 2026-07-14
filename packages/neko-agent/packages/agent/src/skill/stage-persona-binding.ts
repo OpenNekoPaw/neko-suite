@@ -203,7 +203,7 @@ class StagePersonaBinding implements IStagePersonaBinding {
   private _applyViaCoordinator(injection: SkillInjection, skill: Skill, stage: IdcStage): void {
     const lifecycleRuntime = this._deps.lifecycleRuntime;
     if (lifecycleRuntime) {
-      lifecycleRuntime.activatePrepared({
+      const result = lifecycleRuntime.activatePrepared({
         conversationId: this._conversationId(),
         skill,
         injection,
@@ -216,6 +216,12 @@ class StagePersonaBinding implements IStagePersonaBinding {
         },
         source: 'creation-stage',
       });
+      if (!result.ok) {
+        throw new Error(
+          result.diagnostics[0]?.message ??
+            `Failed to activate stage persona "${skill.name}" for stage "${stage}"`,
+        );
+      }
       return;
     }
 

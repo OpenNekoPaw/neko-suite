@@ -414,7 +414,7 @@ function extractAgentTaskResultRefs(value: unknown): readonly AgentTaskResultRef
   refs.push(...readIdRefs('artifact', value['artifactIds']));
   refs.push(...readIdRefs('asset', value['assetId']));
   refs.push(...readIdRefs('asset', value['assetIds']));
-  refs.push(...readAssetRefs(value['assets']));
+  refs.push(...readPresentationResourceRefs(value['assets']));
   refs.push(...readIdRefs('resource', value['resourceId']));
   refs.push(...readIdRefs('resource', value['resourceIds']));
   refs.push(...readIdRefs('resource', value['contentId']));
@@ -452,31 +452,22 @@ function readIdRefs(kind: AgentTaskResultRefKind, value: unknown): AgentTaskResu
   return readStringList(value).map((id) => ({ kind, id }));
 }
 
-function readAssetRefs(value: unknown): AgentTaskResultRef[] {
+function readPresentationResourceRefs(value: unknown): AgentTaskResultRef[] {
   if (!Array.isArray(value)) {
     return [];
   }
   const refs: AgentTaskResultRef[] = [];
-  for (const asset of value) {
-    if (!isRecord(asset)) {
+  for (const entry of value) {
+    if (!isRecord(entry)) {
       continue;
     }
-    const id = asset['id'];
-    if (typeof id === 'string') {
-      refs.push({
-        kind: 'asset',
-        id,
-        ...(typeof asset['mimeType'] === 'string' ? { mimeType: asset['mimeType'] } : {}),
-        ...(typeof asset['label'] === 'string' ? { label: asset['label'] } : {}),
-      });
-    }
-    if (isResourceRef(asset['resourceRef'])) {
+    if (isResourceRef(entry['resourceRef'])) {
       refs.push({
         kind: 'resource',
-        id: asset['resourceRef'].id,
-        ...(typeof asset['mimeType'] === 'string' ? { mimeType: asset['mimeType'] } : {}),
-        ...(typeof asset['label'] === 'string' ? { label: asset['label'] } : {}),
-        resourceRef: asset['resourceRef'],
+        id: entry['resourceRef'].id,
+        ...(typeof entry['mimeType'] === 'string' ? { mimeType: entry['mimeType'] } : {}),
+        ...(typeof entry['label'] === 'string' ? { label: entry['label'] } : {}),
+        resourceRef: entry['resourceRef'],
       });
     }
   }

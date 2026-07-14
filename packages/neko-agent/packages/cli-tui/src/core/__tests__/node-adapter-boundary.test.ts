@@ -43,10 +43,7 @@ describe('TUI Node adapter boundary', () => {
   });
 
   it('keeps config, tasks, skills, content access, and artifacts on Node/runtime services', () => {
-    const platformBootstrap = readFileSync(
-      join(srcRoot, 'core', 'platform-bootstrap.ts'),
-      'utf8',
-    );
+    const platformBootstrap = readFileSync(join(srcRoot, 'core', 'platform-bootstrap.ts'), 'utf8');
     const runtimeBootstrap = readFileSync(join(srcRoot, 'core', 'runtime-bootstrap.ts'), 'utf8');
     const defaultCapabilities = readFileSync(
       join(srcRoot, 'host', 'tui-default-capabilities.ts'),
@@ -55,7 +52,8 @@ describe('TUI Node adapter boundary', () => {
     const nodeHostAdapter = readFileSync(join(srcRoot, 'host', 'node-host-adapter.ts'), 'utf8');
 
     expect(platformBootstrap).toContain('FileUserConfigManager');
-    expect(platformBootstrap).toContain('createFileWorkspaceVisibleAgentTaskStorage');
+    expect(platformBootstrap).toContain('taskRecoveryStorage');
+    expect(platformBootstrap).not.toContain('tasks.json');
     expect(platformBootstrap).toContain('createNodeWorkspaceContentHostAdapter');
     expect(platformBootstrap).toContain('createNodeContentAccessRuntime');
     expect(runtimeBootstrap).toContain('createNodeArtifactStore');

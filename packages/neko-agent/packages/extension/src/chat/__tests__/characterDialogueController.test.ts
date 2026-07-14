@@ -322,8 +322,8 @@ describe('CharacterDialogueController', () => {
         ]),
       ),
     };
-    const responder = vi.fn(async ({ systemPrompt, userMessage }) => ({
-      content: systemPrompt.includes(evidenceText)
+    const responder = vi.fn(async ({ turnEvidence, userMessage }) => ({
+      content: turnEvidence.chunks.some((chunk) => chunk.text === evidenceText)
         ? `NPC:evidence:${userMessage.content}`
         : 'NPC:no-evidence',
     }));
@@ -349,10 +349,10 @@ describe('CharacterDialogueController', () => {
     expect(responder).toHaveBeenCalledWith(
       expect.objectContaining({
         config: expect.objectContaining({ toolPolicy: { kind: 'none' } }),
+        locale: 'zh-cn',
         turnEvidence: expect.objectContaining({
           chunks: [expect.objectContaining({ text: evidenceText })],
         }),
-        systemPrompt: expect.stringContaining(evidenceText),
       }),
     );
     expect(result?.artifact.transcript.map((message) => message.content)).toEqual([

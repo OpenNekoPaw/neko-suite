@@ -8,6 +8,10 @@ import type {
   SkillLifecycleSlot,
   SkillLifecycleToolPolicyProjection,
 } from '@neko/shared';
+import {
+  contributesExecutableToolRestriction,
+  intersectAllowedToolPolicies,
+} from './skill-lifecycle-tool-policy';
 
 const SLOT_PRIORITY: Record<SkillLifecycleSlot, number> = {
   stagePersona: 10,
@@ -136,10 +140,7 @@ function projectToolPolicy(
   records: readonly SkillLifecycleRecord[],
 ): SkillLifecycleToolPolicyProjection {
   const activationTools = collectActivationTools(records);
-  const restrictedRecords = records.filter(
-    (record) =>
-      record.slot !== 'referenceSkill' && (record.injection.allowedTools?.length ?? 0) > 0,
-  );
+  const restrictedRecords = records.filter(contributesExecutableToolRestriction);
   if (restrictedRecords.length === 0) {
     return {
       mode: 'unrestricted',
@@ -149,13 +150,9 @@ function projectToolPolicy(
     };
   }
 
-  let allowed = new Set(restrictedRecords[0]?.injection.allowedTools ?? []);
-  for (const record of restrictedRecords.slice(1)) {
-    const next = new Set(record.injection.allowedTools ?? []);
-    allowed = new Set([...allowed].filter((tool) => next.has(tool)));
-  }
+  const allowed = intersectAllowedToolPolicies(restrictedRecords);
 
-  if (allowed.size === 0 && restrictedRecords.length > 1) {
+  if (allowed.length === 0 && restrictedRecords.length > 1) {
     return {
       mode: 'conflict',
       contributingRecordIds: restrictedRecords.map((record) => record.id),
@@ -174,7 +171,7 @@ function projectToolPolicy(
 
   return {
     mode: restrictedRecords.length === 1 ? 'allowlist' : 'intersection',
-    allowedTools: [...allowed].sort(),
+    allowedTools: allowed,
     ...(activationTools.length > 0 ? { activationTools } : {}),
     contributingRecordIds: restrictedRecords.map((record) => record.id),
     diagnostics: [],

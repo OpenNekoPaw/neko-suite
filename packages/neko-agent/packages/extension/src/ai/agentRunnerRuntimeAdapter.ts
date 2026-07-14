@@ -12,6 +12,7 @@ import {
   type AgentPendingMessageItem,
   type AgentRunnerPort,
   type AgentRunnerPortEvent,
+  type EnqueuePendingMessageInput,
   type AgentRuntimeSessionAssemblyInput,
   type AgentRuntimeSessionController,
   type AgentRuntimeSessionControllerTarget,
@@ -151,12 +152,7 @@ export class AgentRunnerRuntimeAdapter implements AgentRunnerPort<IAgentConfig, 
     return this.sessionRunner.isRunning();
   }
 
-  enqueuePendingMessage(input: {
-    readonly conversationId: string;
-    readonly content: string;
-    readonly now?: number;
-    readonly source?: AgentPendingMessageItem['source'];
-  }): AgentPendingMessageItem | null {
+  enqueuePendingMessage(input: EnqueuePendingMessageInput): AgentPendingMessageItem | null {
     return this.sessionRunner.enqueuePendingMessage(input);
   }
 
@@ -334,7 +330,7 @@ export class AgentRunnerRuntimeAdapter implements AgentRunnerPort<IAgentConfig, 
         config.operationToolAdapterRegistry ??
         capabilityRuntime.operationToolAdapterRegistry ??
         createDefaultOperationToolAdapterRegistry(),
-      locale: config.locale,
+      promptLocale: config.locale === 'zh' ? 'zh-cn' : 'en',
       providerExpressionTargets: config.providerExpressionTargets,
       creationGuidance: {
         autohealChainFactory: createAutohealChain,

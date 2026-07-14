@@ -144,7 +144,6 @@ function createProps(
     setActiveSkill: vi.fn(),
     ambientNodes: [],
     agentState: null,
-    handleMessage: vi.fn(),
     setAmbientNodes: vi.fn(),
     onNewChat: vi.fn(),
     queuedEditDraftConflictMessage: 'conflict',

@@ -49,6 +49,8 @@ const baseProvider: Provider = {
   enabled: true,
 };
 
+const OWNER_METADATA = { conversationId: 'conv-1', runId: 'run-1' } as const;
+
 describe('MediaGenerationService capability negotiation', () => {
   it('rejects unsupported keyframe controls before submitting a provider task', async () => {
     const provider: Provider = {
@@ -95,6 +97,7 @@ describe('MediaGenerationService capability negotiation', () => {
         aspectRatio: '16:9',
         providerId: provider.id,
         modelId: `${provider.id}-video-model`,
+        metadata: OWNER_METADATA,
       }),
     ).resolves.toMatchObject({ type: 'image-to-video' });
     expect(submit).toHaveBeenCalledOnce();
@@ -103,6 +106,7 @@ describe('MediaGenerationService capability negotiation', () => {
         operation: 'generate-from-keyframes',
         startFrameRef,
         endFrameRef,
+        metadata: OWNER_METADATA,
       },
     });
   });

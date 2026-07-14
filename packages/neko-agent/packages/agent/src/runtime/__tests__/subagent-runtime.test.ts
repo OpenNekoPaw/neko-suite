@@ -158,7 +158,7 @@ describe('SubAgentRuntimeCoordinator', () => {
 
     expect(result).toEqual({
       success: false,
-      error: 'Missing conversationId for SubAgent task',
+      error: 'Tool execution requires conversationId ownership.',
     });
   });
 });

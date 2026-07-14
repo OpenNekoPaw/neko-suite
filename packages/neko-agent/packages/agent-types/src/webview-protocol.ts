@@ -759,6 +759,7 @@ export type AgentSessionDiagnosticCode =
   | 'active-tab-mismatch'
   | 'terminal-webview-delivery-unavailable'
   | 'conversation-durability-failed'
+  | 'conversation-catalog-stale'
   | 'stale-tab-state-revision'
   | 'invalid-conversation-activation'
   | 'queued-edit-draft-conflict'

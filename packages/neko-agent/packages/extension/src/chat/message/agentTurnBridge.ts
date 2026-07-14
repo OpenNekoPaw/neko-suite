@@ -250,7 +250,22 @@ export class AgentTurnBridge {
         ? { status: 'durable', result: conversationDurability }
         : { status: 'failed', result: conversationDurability },
     };
-    if (!isDurableConversationResult(conversationDurability)) {
+    if (
+      isDurableConversationResult(conversationDurability) &&
+      conversationDurability.projectionDiagnostic
+    ) {
+      await postLifecycleDiagnostic(
+        input.webview,
+        buildAgentSessionDiagnosticMessage({
+          code: 'conversation-catalog-stale',
+          severity: 'warning',
+          action: 'rebuildConversationCatalog',
+          conversationId: input.conversationId,
+          message:
+            'The conversation is saved in Journal, but the conversation list is stale and needs rebuild.',
+        }),
+      );
+    } else if (!isDurableConversationResult(conversationDurability)) {
       await postLifecycleDiagnostic(
         input.webview,
         buildAgentSessionDiagnosticMessage({
@@ -354,7 +369,9 @@ function isPositiveInteger(value: unknown): value is number {
   return typeof value === 'number' && Number.isInteger(value) && value > 0;
 }
 
-function isDurableConversationResult(result: ConversationTerminalPersistenceResult): boolean {
+function isDurableConversationResult(
+  result: ConversationTerminalPersistenceResult,
+): result is Extract<ConversationTerminalPersistenceResult, { kind: 'saved' | 'deleted' }> {
   return result.kind === 'saved' || result.kind === 'deleted';
 }
 

@@ -30,12 +30,7 @@ export type BuiltinSlashCommandName =
   | 'mcp';
 
 export type BuiltinSlashCommandCategory =
-  | 'core'
-  | 'session'
-  | 'configuration'
-  | 'context'
-  | 'mode'
-  | 'resources';
+  'core' | 'session' | 'configuration' | 'context' | 'mode' | 'resources';
 
 export type BuiltinSlashCommandSurface = 'cli' | 'extension';
 

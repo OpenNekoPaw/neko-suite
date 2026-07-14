@@ -12,6 +12,7 @@ import type {
 } from './tab-render-runtime';
 
 export const TAB_RENDER_REALM_STATE_VERSION = 'neko.agent.tab-render-realm-state.v1' as const;
+const LEGACY_TIMELINE_RECOVERY_STATE_KEY = 'agentTurnTimelineRecoveries';
 
 export interface TabRenderDraftSnapshot extends TabRenderBinding {
   readonly inputValue: string;
@@ -51,6 +52,9 @@ export function createTabRenderRealmStateCoordinator(
 
 export function parseTabRenderRealmState(value: unknown): TabRenderRealmState {
   if (value === undefined) return { schemaVersion: TAB_RENDER_REALM_STATE_VERSION, drafts: [] };
+  if (isLegacyTimelineRecoveryState(value)) {
+    return { schemaVersion: TAB_RENDER_REALM_STATE_VERSION, drafts: [] };
+  }
   if (!isRecord(value) || value.schemaVersion !== TAB_RENDER_REALM_STATE_VERSION) {
     throw new Error('Unsupported Agent Tab render realm state schema.');
   }
@@ -80,7 +84,12 @@ class DefaultTabRenderRealmStateCoordinator implements TabRenderRealmStateCoordi
     private readonly host: TabRenderRealmStateHost,
     private readonly registry: TabRenderRuntimeRegistry,
   ) {
-    for (const draft of parseTabRenderRealmState(host.getState()).drafts) {
+    const persistedState = host.getState();
+    const state = parseTabRenderRealmState(persistedState);
+    if (isLegacyTimelineRecoveryState(persistedState)) {
+      host.setState(state);
+    }
+    for (const draft of state.drafts) {
       this.drafts.set(draft.tabId, draft);
     }
   }
@@ -415,4 +424,39 @@ function stringValue(value: unknown, path: string): string {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isLegacyTimelineRecoveryState(value: unknown): boolean {
+  if (!isRecord(value)) return false;
+  const keys = Object.keys(value);
+  return (
+    keys.length === 1 &&
+    keys[0] === LEGACY_TIMELINE_RECOVERY_STATE_KEY &&
+    Array.isArray(value[LEGACY_TIMELINE_RECOVERY_STATE_KEY]) &&
+    value[LEGACY_TIMELINE_RECOVERY_STATE_KEY].every(isLegacyTimelineRecoveryDescriptor)
+  );
+}
+
+function isLegacyTimelineRecoveryDescriptor(value: unknown): boolean {
+  if (!isRecord(value)) return false;
+  const keys = Object.keys(value);
+  return (
+    keys.length === 5 &&
+    keys.includes('connectionEpoch') &&
+    keys.includes('conversationId') &&
+    keys.includes('turnId') &&
+    keys.includes('messageId') &&
+    keys.includes('lastAppliedDeliveryRevision') &&
+    isNonEmptyString(value.connectionEpoch) &&
+    isNonEmptyString(value.conversationId) &&
+    isNonEmptyString(value.turnId) &&
+    isNonEmptyString(value.messageId) &&
+    typeof value.lastAppliedDeliveryRevision === 'number' &&
+    Number.isInteger(value.lastAppliedDeliveryRevision) &&
+    value.lastAppliedDeliveryRevision > 0
+  );
+}
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.trim().length > 0;
 }

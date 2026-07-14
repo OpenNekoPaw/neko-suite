@@ -21,6 +21,33 @@ export interface ConversationRenderRuntimeLifecycle {
   metrics(): ConversationRenderRuntimeMetrics;
 }
 
+export function bindConversationRenderRuntimeLifecycle(
+  runtime: ConversationRenderRuntimeLifecycle,
+): () => void {
+  runtime.attachComponent();
+  const handleVisibilityChange = (): void => {
+    runtime.setVisibility(document.visibilityState === 'hidden' ? 'hidden' : 'visible');
+  };
+  const unbindNativeListeners = (): void => {
+    document.removeEventListener('visibilitychange', handleVisibilityChange);
+    window.removeEventListener('pagehide', handlePageHide);
+  };
+  const handlePageHide = (event: PageTransitionEvent): void => {
+    if (event.persisted) {
+      runtime.setVisibility('hidden');
+      return;
+    }
+    unbindNativeListeners();
+    runtime.disposeRealm();
+  };
+  document.addEventListener('visibilitychange', handleVisibilityChange);
+  window.addEventListener('pagehide', handlePageHide);
+  return () => {
+    unbindNativeListeners();
+    runtime.detachComponent();
+  };
+}
+
 export function createConversationRenderRuntimeLifecycle(input: {
   readonly coordinator: ConversationRenderCoordinator;
   readonly markdown: AgentMarkdownSessionRegistry;

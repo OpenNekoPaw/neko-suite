@@ -42,6 +42,7 @@ import { ModuleOrchestrator } from '../prompt/composer/module-orchestrator';
 import { PromptModuleRegistry } from '../prompt/registry/module-registry';
 import { PromptSectionCache } from '../prompt/registry/section-cache';
 import { freezePromptContext, type PromptContext } from '../prompt/context';
+import { createSessionToolRegistryView } from './session-tool-registry-view';
 
 // =============================================================================
 // Constants (re-exported for Session's _rebuildExecutor)
@@ -66,6 +67,7 @@ export interface SessionComponents {
   toolGroupRegistry: ToolGroupRegistry;
   toolCategoryRegistry: ToolCategoryRegistry;
   toolInjectionManager: ToolInjectionManager;
+  executionToolRegistry: IToolRegistry;
   promptComposer: SystemPromptComposer;
   executor: AgentExecutor;
   permissionHooks: IPermissionManager;
@@ -205,6 +207,7 @@ export function initializeSession(
     }
     toolCategoryRegistry.categorizeTool(tool.name, 'system', 'always');
   }
+  const executionToolRegistry = createSessionToolRegistryView(config.toolRegistry, metaTools);
 
   for (const tool of createPerceptionTools({
     ...(config.perceptionClients?.transcribe && {
@@ -232,6 +235,7 @@ export function initializeSession(
 
   const { executor, permissionHooks } = createConfiguredExecutor({
     config,
+    toolRegistry: executionToolRegistry,
     permissionMode,
     compressor,
     toolGroupRegistry,
@@ -314,6 +318,7 @@ export function initializeSession(
     toolGroupRegistry,
     toolCategoryRegistry,
     toolInjectionManager,
+    executionToolRegistry,
     promptComposer,
     executor,
     permissionHooks,
@@ -358,6 +363,7 @@ function buildInitializerPromptContext(
  */
 export interface CreateExecutorDeps {
   config: AgentSessionConfig;
+  toolRegistry: IToolRegistry;
   permissionMode: PermissionMode;
   compressor: ConversationCompressor;
   toolGroupRegistry: ToolGroupRegistry;
@@ -376,6 +382,7 @@ export function createConfiguredExecutor(deps: CreateExecutorDeps): {
 } {
   const {
     config,
+    toolRegistry,
     permissionMode,
     compressor,
     toolGroupRegistry,
@@ -392,16 +399,16 @@ export function createConfiguredExecutor(deps: CreateExecutorDeps): {
     onValidationWarning: config.onValidationWarning,
     onValidationError: config.onValidationError,
     traitsRegistry: config.traitsRegistry,
-    readOnlyTools: collectRegisteredReadOnlyToolNames(config.toolRegistry),
+    readOnlyTools: collectRegisteredReadOnlyToolNames(toolRegistry),
   });
 
   const executor = new AgentExecutor({
     service: config.service,
-    toolRegistry: config.toolRegistry,
+    toolRegistry,
     config: {
       name: 'agent-session',
       systemPrompt: config.systemPrompt,
-      tools: config.toolRegistry.toToolDefinitions(),
+      tools: toolRegistry.toToolDefinitions(),
       maxIterations: config.maxIterations ?? DEFAULT_MAX_ITERATIONS,
       primaryModel: config.modelId,
       serviceOptions: {

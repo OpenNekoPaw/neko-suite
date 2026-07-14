@@ -115,7 +115,7 @@ describe('buildAgentSessionConfigWithRuntime', () => {
     expect(config.toolGroupRegistry).toBe(toolGroupRegistry);
     expect(config.toolCategoryRegistry).toBe(toolCategoryRegistry);
     expect(config.providerCardRegistry).toBe(providerCardRegistry);
-    expect(config.skillService).toBe(skillService);
+    expect(config.stageTracking?.skillService).toBe(skillService);
     expect(config.stageTracking?.skillLifecycleRuntime).toBe(skillLifecycleRuntime);
     expect(config.projectMemoryManager).toBe(projectMemoryManager);
     expect(config.validationCoordinator).toBe(validationCoordinator);

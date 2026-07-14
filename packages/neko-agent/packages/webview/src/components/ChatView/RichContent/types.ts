@@ -30,6 +30,7 @@ export type RichContentKind = BuiltinContentKind | (string & {});
 export interface RichContentProps<T = unknown> {
   /** Typed data payload validated by the renderer entry */
   data: T;
+  conversationId?: string | null;
   className?: string;
   /** Compact mode — no header/chrome, used inside TaskCard inline results */
   inline?: boolean;

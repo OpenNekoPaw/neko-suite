@@ -94,6 +94,7 @@ export interface AgentMessageRuntimeRequest {
   readonly llmConfig?: AgentLlmConfig;
   readonly llmRuntimeOptions?: AgentLlmRuntimeOptions;
   readonly modelTokenMetadata?: AgentModelTokenMetadata;
+  readonly understandingModels?: MediaUnderstandingModelSelections;
   readonly mediaModel?: ModelRef<MediaModelCategory>;
   readonly mediaModels?: AgentMediaModelSelections;
   readonly attachments?: MessageAttachment[];
@@ -254,6 +255,7 @@ export interface AgentMessageTurnAgentExecutionInput {
   readonly llmConfig?: AgentLlmConfig;
   readonly llmRuntimeOptions?: AgentLlmRuntimeOptions;
   readonly modelTokenMetadata?: AgentModelTokenMetadata;
+  readonly understandingModels?: MediaUnderstandingModelSelections;
   readonly imageAttachments?: readonly AgentBase64ImageAttachment[];
   readonly mediaModel?: ModelRef<MediaModelCategory>;
   readonly mediaModels?: AgentMediaModelSelections;
@@ -1008,6 +1010,7 @@ export async function runAgentMessageTurnRuntime(
       agentModels: input.request.agentModels,
       llmConfig: input.request.llmConfig,
       llmRuntimeOptions: input.request.llmRuntimeOptions,
+      understandingModels: input.request.understandingModels,
       imageAttachments: prepared.mediaImages,
       mediaModel: input.request.mediaModel,
       mediaModels: input.request.mediaModels,

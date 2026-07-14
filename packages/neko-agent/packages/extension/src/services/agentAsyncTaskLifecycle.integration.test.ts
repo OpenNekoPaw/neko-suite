@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { MemoryTaskRecoveryStorage, MemoryTaskStorage, TaskManager } from '@neko/agent';
+import type { TaskRunScope } from '@neko/shared';
 import type { DashboardTask } from '@neko/shared/types/dashboard-task';
 import type { ConfigManager } from '@neko/platform';
 import type { ProviderRegistry } from '@neko/platform';
@@ -16,11 +17,13 @@ describe('agent async task lifecycle integration', () => {
     const adapter = createAdapter();
 
     const firstManager = createManager(storage, recoveryStorage, adapter);
-    const taskId = await firstManager.submit(
+    const taskScope = await firstManager.submit(
       createMediaTaskInput('text-to-video', 'provider-1', 'model-1', { prompt: 'cat' }),
+      { conversationId: 'conv-1', runId: 'run-1', parentRunId: 'run-1' },
     );
+    const taskId = taskScope.childRunId;
 
-    await waitForRecoveryInfo(recoveryStorage, taskId);
+    await waitForRecoveryInfo(recoveryStorage, taskScope);
     await firstManager.dispose();
 
     const secondManager = createManager(storage, recoveryStorage, adapter);
@@ -35,7 +38,7 @@ describe('agent async task lifecycle integration', () => {
       expect.objectContaining({ id: 'provider-1' }),
     );
 
-    const recoveredTask = await secondManager.get(taskId);
+    const recoveredTask = await secondManager.get(taskScope);
     expect(recoveredTask?.status).toBe('completed');
 
     const dashboardTask = toDashboardTask(recoveredTask!);
@@ -132,12 +135,10 @@ function createAdapter(): MediaAdapter {
     getSupportedTypes: () => ['text-to-video'],
     supportsType: () => true,
     generateImage: async () => ({ status: 'failed' }),
-    generateVideo: vi.fn(
-      async (): Promise<MediaAdapterResult> => ({
-        externalTaskId: 'external-resume',
-        status: 'processing',
-      }),
-    ),
+    generateVideo: vi.fn(async (): Promise<MediaAdapterResult> => ({
+      externalTaskId: 'external-resume',
+      status: 'processing',
+    })),
     generateAudio: async () => ({ status: 'failed' }),
     getTaskStatus: vi.fn(async () => statusResults.shift() ?? { status: 'processing' }),
     cancelTask: vi.fn(async () => undefined),
@@ -146,10 +147,10 @@ function createAdapter(): MediaAdapter {
 
 async function waitForRecoveryInfo(
   recoveryStorage: MemoryTaskRecoveryStorage,
-  taskId: string,
+  scope: TaskRunScope,
 ): Promise<void> {
   for (let attempt = 0; attempt < 20; attempt++) {
-    const info = await recoveryStorage.load(taskId);
+    const info = await recoveryStorage.load(scope);
     if (info) {
       return;
     }

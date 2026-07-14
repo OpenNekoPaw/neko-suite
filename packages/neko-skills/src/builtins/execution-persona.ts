@@ -13,7 +13,6 @@
  */
 
 import type { Skill } from '@neko/shared';
-import { TOOL_NAMES_SYSTEM, TOOL_NAMES_TIMELINE } from '@neko/shared';
 import { localizeBuiltinSkill } from './builtin-skill-content';
 
 const executionPersonaContent = `# Execution Persona — System Operator
@@ -300,29 +299,6 @@ export const executionPersonaSkill: Skill = {
     'NOT during creative discussion. Owns the 5-level auto-heal chain (retry → degrade → ' +
     'substitute → subagent → escalate).',
   content: executionPersonaContent,
-  allowedTools: [
-    // Full system ops
-    TOOL_NAMES_SYSTEM.READ,
-    TOOL_NAMES_SYSTEM.READ_DOCUMENT,
-    TOOL_NAMES_SYSTEM.WRITE,
-    TOOL_NAMES_SYSTEM.LIST_DIRECTORY,
-    TOOL_NAMES_SYSTEM.GLOB,
-    // Full timeline mutation — the atomic primitives this persona composes
-    // into Apply-stage effects. No pipeline DSL, no intermediate engine.
-    TOOL_NAMES_TIMELINE.GET_TIMELINE_INFO,
-    TOOL_NAMES_TIMELINE.LIST_TIMELINE_ELEMENTS,
-    TOOL_NAMES_TIMELINE.GET_ELEMENT_INFO,
-    TOOL_NAMES_TIMELINE.ADD_TIMELINE_ELEMENT,
-    TOOL_NAMES_TIMELINE.UPDATE_TIMELINE_ELEMENT,
-    TOOL_NAMES_TIMELINE.DELETE_TIMELINE_ELEMENT,
-    TOOL_NAMES_TIMELINE.ADD_TRACK,
-    TOOL_NAMES_TIMELINE.DELETE_TRACK,
-    TOOL_NAMES_TIMELINE.TRIM_ELEMENT,
-    TOOL_NAMES_TIMELINE.SPLIT_ELEMENT,
-    TOOL_NAMES_TIMELINE.ADD_EFFECT,
-    TOOL_NAMES_TIMELINE.UPDATE_EFFECT,
-    TOOL_NAMES_TIMELINE.REMOVE_EFFECT,
-  ],
   icon: '⚙️',
   source: 'builtin',
   enabled: true,

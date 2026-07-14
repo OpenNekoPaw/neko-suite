@@ -5,7 +5,7 @@
  * - All three persona skills (creation-persona / execution-persona /
  *   iteration-persona) are registered in builtinSkills
  * - Each skill has a stable name, non-empty description, non-empty
- *   content, allowedTools list
+ *   content and explicit stage policy shape
  * - allowedTools only references registered TOOL_NAMES constants
  * - iteration-persona is distinct from creation-persona (narrower scope)
  */
@@ -35,10 +35,18 @@ describe('Creation stage persona skills', () => {
     expect(skill.name).toBe(expectedName);
     expect(skill.description.length).toBeGreaterThan(10);
     expect(skill.content.length).toBeGreaterThan(100);
-    expect(skill.allowedTools).toBeDefined();
-    expect(Array.isArray(skill.allowedTools)).toBe(true);
+    if (expectedName === 'execution-persona') {
+      expect(skill.allowedTools).toBeUndefined();
+    } else {
+      expect(skill.allowedTools).toBeDefined();
+      expect(Array.isArray(skill.allowedTools)).toBe(true);
+    }
     expect(skill.source).toBe('builtin');
     expect(skill.enabled).toBe(true);
+  });
+
+  it('leaves Apply domain Tool selection to the active domain Skill', () => {
+    expect(executionPersonaSkill.allowedTools).toBeUndefined();
   });
 
   it.each([

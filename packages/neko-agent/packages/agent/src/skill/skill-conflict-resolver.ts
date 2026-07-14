@@ -20,6 +20,10 @@ import type {
   SkillLifecycleSlot,
 } from '@neko/shared';
 import { DEFAULT_SKILL_CONFLICT_CONFIG } from '@neko/shared';
+import {
+  contributesExecutableToolRestriction,
+  intersectAllowedToolPolicies,
+} from './skill-lifecycle-tool-policy';
 
 export interface SkillLifecycleActivationConflictInput {
   readonly conversationId: string;
@@ -478,6 +482,30 @@ export function resolveSkillLifecycleActivationConflict(
     };
   }
 
+  const toolPolicyConflicts = findLifecycleToolPolicyConflicts(
+    input,
+    slotConflicts.replacedRecordIds,
+  );
+  if (toolPolicyConflicts.length > 0) {
+    return {
+      ok: false,
+      replacedRecordIds: [],
+      diagnostics: [
+        {
+          code: 'tool-policy-conflict',
+          message: `Cannot activate "${input.requestedSkill.name}" because its tool policy is incompatible with active Skill lifecycle records`,
+          conversationId: input.conversationId,
+          skillName: input.requestedSkill.name,
+          slot: input.requestedSlot,
+          details: {
+            reason: 'tool-policy-conflict',
+            conflictingRecordIds: toolPolicyConflicts.map((record) => record.id),
+          },
+        },
+      ],
+    };
+  }
+
   return {
     ok: true,
     replacedRecordIds: slotConflicts.replacedRecordIds,
@@ -562,4 +590,29 @@ function findLifecycleModelConflict(
   return input.activeRecords.find(
     (record) => record.injection.model !== undefined && record.injection.model !== requestedModel,
   );
+}
+
+function findLifecycleToolPolicyConflicts(
+  input: SkillLifecycleActivationConflictInput,
+  replacedRecordIds: readonly string[],
+): readonly SkillLifecycleRecord[] {
+  const requestedPolicy = {
+    slot: input.requestedSlot,
+    injection: input.requestedInjection,
+  };
+  if (!contributesExecutableToolRestriction(requestedPolicy)) {
+    return [];
+  }
+
+  const replaced = new Set(replacedRecordIds);
+  const activeRestrictions = input.activeRecords.filter(
+    (record) => !replaced.has(record.id) && contributesExecutableToolRestriction(record),
+  );
+  if (activeRestrictions.length === 0) {
+    return [];
+  }
+
+  return intersectAllowedToolPolicies([...activeRestrictions, requestedPolicy]).length === 0
+    ? activeRestrictions
+    : [];
 }

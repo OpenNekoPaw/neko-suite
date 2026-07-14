@@ -79,6 +79,14 @@ describe('TaskResultObservationCoordinator', () => {
       conversationId: 'conv-1',
       content: 'Continue',
       source: 'task-result-continuation',
+      displayKind: 'task-continuation',
+      metadata: {
+        observationId: expect.stringMatching(/^task-result-observation:/),
+        taskId: 'task-1',
+        runId: 'run-1',
+        status: 'queued',
+        policy: 'auto-resume-agent',
+      },
     });
     coordinator.dispose();
   });

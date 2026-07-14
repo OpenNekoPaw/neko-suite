@@ -862,7 +862,7 @@ async function executeCanvasMediaGeneration(
     const completed =
       mediaTask.status === 'completed'
         ? mediaTask
-        : await input.platform.media.waitForTask(mediaTask.id);
+        : await input.platform.media.waitForTask(mediaTask.scope);
     if (completed.status !== 'completed' || !completed.outputs || completed.outputs.length === 0) {
       return {
         ok: false,

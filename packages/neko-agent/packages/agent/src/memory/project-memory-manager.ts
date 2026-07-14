@@ -4,7 +4,7 @@
  * File-backed implementation of IProjectMemoryManager.
  * Stores agent-learned facts in `.neko/memory.md` using H2 sections.
  *
- * Pattern mirrors FileTaskStorage: injected fs ops + debounced writes.
+ * Uses injected fs operations and debounced writes.
  */
 
 import * as nodePath from 'node:path';
