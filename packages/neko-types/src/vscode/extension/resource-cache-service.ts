@@ -6,11 +6,11 @@ import {
   DEFAULT_RESOURCE_CACHE_PROJECT_MAX_BYTES,
   createResourceVariantKey,
   getResourcePathCategory,
-  isResourceCacheManifest,
   isManagedCachePathCategory,
   type ResourceCacheEntry,
   type ResourceCacheLifecycleMetadata,
   type ResourceCacheManifest,
+  type ResourceCacheManifestStore,
   type ResourceCacheQuotaPolicy,
   type ResourceCacheSettings,
   type ResourceCacheStats,
@@ -42,20 +42,10 @@ export interface ResourceCacheFsOps {
   rm(filePath: string, options: { force: boolean }): Promise<void>;
 }
 
-export interface ResourceCacheManifestStore {
-  load(options?: ResourceCacheManifestLoadOptions): Promise<ResourceCacheManifest>;
-  save(manifest: ResourceCacheManifest): Promise<void>;
-  update(
-    operation: (
-      manifest: ResourceCacheManifest,
-    ) => ResourceCacheManifest | Promise<ResourceCacheManifest>,
-  ): Promise<ResourceCacheManifest>;
-  invalidateCache(): void;
-}
-
-export interface ResourceCacheManifestLoadOptions {
-  readonly refresh?: boolean;
-}
+export type {
+  ResourceCacheManifestLoadOptions,
+  ResourceCacheManifestStore,
+} from '../../types/resource-cache';
 
 export interface ResourceEnsureInput {
   readonly ref: ResourceRef;
@@ -192,16 +182,10 @@ export interface ResourceCacheGcResult {
   readonly skippedReasons: Record<string, number>;
 }
 
-export interface JsonResourceCacheManifestStoreOptions {
-  readonly manifestPath: string;
-  readonly projectRoot?: string;
-  readonly fsOps?: ResourceCacheFsOps;
-  readonly now?: () => string;
-}
-
 export interface VSCodeResourceCacheServiceOptions {
   readonly cacheRoot: string;
-  readonly manifestPath: string;
+  readonly manifestPath?: string;
+  readonly manifestStore?: ResourceCacheManifestStore;
   readonly projectRoot?: string;
   readonly globalRoot?: string;
   readonly extensionPrivateRoot?: string;
@@ -217,113 +201,6 @@ export interface VSCodeResourceCacheServiceOptions {
 
 const DEFAULT_MAX_CONCURRENT_ENSURES = 4;
 const DEFAULT_TOUCH_FLUSH_INTERVAL_MS = 60_000;
-
-export class JsonResourceCacheManifestStore implements ResourceCacheManifestStore {
-  private readonly manifestPath: string;
-  private readonly projectRoot?: string;
-  private readonly fsOps: ResourceCacheFsOps;
-  private readonly now: () => string;
-  private writeChain: Promise<void> = Promise.resolve();
-  private cachedManifest: ResourceCacheManifest | undefined;
-  private cachedManifestMtimeMs: number | undefined;
-
-  constructor(options: JsonResourceCacheManifestStoreOptions) {
-    this.manifestPath = options.manifestPath;
-    this.projectRoot = options.projectRoot;
-    this.fsOps = options.fsOps ?? nodeFsOps;
-    this.now = options.now ?? (() => new Date().toISOString());
-  }
-
-  async load(options: ResourceCacheManifestLoadOptions = {}): Promise<ResourceCacheManifest> {
-    if (options.refresh) {
-      this.invalidateCache();
-    }
-
-    if (this.cachedManifest && (await this.isCachedManifestCurrent())) {
-      return this.cachedManifest;
-    }
-
-    try {
-      const raw = await this.fsOps.readFile(this.manifestPath, 'utf-8');
-      const parsed: unknown = JSON.parse(raw);
-      if (isResourceCacheManifest(parsed)) {
-        this.cachedManifest = parsed;
-        this.cachedManifestMtimeMs = await this.readManifestMtimeMs();
-        return parsed;
-      }
-    } catch {
-      // Missing or invalid manifests are rebuildable cache misses.
-    }
-
-    const manifest = createEmptyManifest(this.now(), this.projectRoot);
-    this.cachedManifest = manifest;
-    return manifest;
-  }
-
-  async save(manifest: ResourceCacheManifest): Promise<void> {
-    const next = this.writeChain.catch(() => undefined).then(() => this.saveUnlocked(manifest));
-    this.writeChain = next.then(
-      () => undefined,
-      () => undefined,
-    );
-    await next;
-  }
-
-  async update(
-    operation: (
-      manifest: ResourceCacheManifest,
-    ) => ResourceCacheManifest | Promise<ResourceCacheManifest>,
-  ): Promise<ResourceCacheManifest> {
-    let updated: ResourceCacheManifest | undefined;
-    const updateOperation = async () => {
-      const current = await this.load();
-      const next = await operation(current);
-      if (next === current) {
-        updated = current;
-        return;
-      }
-      await this.saveUnlocked(next);
-      updated = next;
-    };
-
-    const next = this.writeChain.catch(() => undefined).then(updateOperation);
-    this.writeChain = next.then(
-      () => undefined,
-      () => undefined,
-    );
-    await next;
-    return updated ?? this.load();
-  }
-
-  invalidateCache(): void {
-    this.cachedManifest = undefined;
-    this.cachedManifestMtimeMs = undefined;
-  }
-
-  private async saveUnlocked(manifest: ResourceCacheManifest): Promise<void> {
-    await this.fsOps.mkdir(path.dirname(this.manifestPath), { recursive: true });
-    const tmpPath = `${this.manifestPath}.tmp`;
-    await this.fsOps.writeFile(tmpPath, `${JSON.stringify(manifest, null, 2)}\n`, 'utf-8');
-    await this.fsOps.rename(tmpPath, this.manifestPath);
-    this.cachedManifest = manifest;
-    this.cachedManifestMtimeMs = await this.readManifestMtimeMs();
-  }
-
-  private async isCachedManifestCurrent(): Promise<boolean> {
-    if (this.cachedManifestMtimeMs === undefined) {
-      return false;
-    }
-    return (await this.readManifestMtimeMs()) === this.cachedManifestMtimeMs;
-  }
-
-  private async readManifestMtimeMs(): Promise<number | undefined> {
-    try {
-      return (await this.fsOps.stat(this.manifestPath)).mtimeMs;
-    } catch {
-      return undefined;
-    }
-  }
-}
 
 export class VSCodeResourceCacheService implements ResourceCacheService {
   private readonly cacheRoot: string;
@@ -362,12 +239,15 @@ export class VSCodeResourceCacheService implements ResourceCacheService {
     this.touchFlushIntervalMs = options.touchFlushIntervalMs ?? DEFAULT_TOUCH_FLUSH_INTERVAL_MS;
     this.clockMs = options.clockMs ?? (() => Date.now());
     this.lastTouchFlushMs = this.clockMs();
-    this.store = new JsonResourceCacheManifestStore({
-      manifestPath: options.manifestPath,
-      projectRoot: options.projectRoot,
-      fsOps: this.fsOps,
-      now: this.now,
-    });
+    if (options.manifestPath) {
+      throw new Error(
+        'Legacy ResourceCache manifest paths are retired; provide a LocalMetadata manifestStore.',
+      );
+    }
+    if (!options.manifestStore) {
+      throw new Error('ResourceCacheService requires a metadata store.');
+    }
+    this.store = options.manifestStore;
 
     for (const provider of options.providers ?? []) {
       this.registerProvider(provider);
@@ -1212,16 +1092,6 @@ export function resolveResourceCacheQuotaPolicy(
     preserveDebug: settings.preserveDebug ?? true,
     preservePromoted: settings.preservePromoted ?? true,
     ...(activeVariantKeys.length > 0 ? { activeVariantKeys } : {}),
-  };
-}
-
-function createEmptyManifest(now: string, projectRoot: string | undefined): ResourceCacheManifest {
-  return {
-    version: 1,
-    ...(projectRoot ? { projectRoot } : {}),
-    createdAt: now,
-    updatedAt: now,
-    entries: {},
   };
 }
 

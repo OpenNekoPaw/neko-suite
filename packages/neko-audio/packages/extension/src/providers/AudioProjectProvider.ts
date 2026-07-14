@@ -79,6 +79,7 @@ import {
   createAudioStreamRequiredError,
   diagnosticsFromAudioRuntimeError,
 } from '../services/audioRuntimeDiagnostics';
+import { promoteDurableAudioRecording } from '../services/recordingPromotion';
 import { getWebviewHtml } from '../utils/html';
 import { getLogger } from '../utils/logger';
 import {
@@ -795,6 +796,12 @@ export class AudioProjectProvider
             vscode.Uri.file(outputPath),
             Buffer.from(request.data, 'base64'),
           );
+          const warnings = await promoteDurableAudioRecording({
+            filePath: outputPath,
+            workspaceRoot:
+              vscode.workspace.getWorkspaceFolder(document.uri)?.uri.fsPath ??
+              vscode.workspace.workspaceFolders?.[0]?.uri.fsPath,
+          });
           await webviewPanel.webview.postMessage({
             type: 'audio:recordingResult',
             requestId: request.requestId,
@@ -802,6 +809,7 @@ export class AudioProjectProvider
             success: true,
             action: request.action,
             outputPath,
+            warnings,
           });
           return;
         }
@@ -842,6 +850,14 @@ export class AudioProjectProvider
           throw new Error('streamId is required to stop recording');
         }
         const result = await this._audioService?.recordStop(request.streamId);
+        const warnings = result?.path
+          ? await promoteDurableAudioRecording({
+              filePath: result.path,
+              workspaceRoot:
+                vscode.workspace.getWorkspaceFolder(document.uri)?.uri.fsPath ??
+                vscode.workspace.workspaceFolders?.[0]?.uri.fsPath,
+            })
+          : [];
         await webviewPanel.webview.postMessage({
           type: 'audio:recordingResult',
           requestId: request.requestId,
@@ -850,6 +866,7 @@ export class AudioProjectProvider
           action: request.action,
           outputPath: result?.path,
           durationSeconds: result?.durationSeconds,
+          warnings,
         });
       } catch (error) {
         await webviewPanel.webview.postMessage({

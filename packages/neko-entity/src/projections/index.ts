@@ -14,6 +14,10 @@ export {
   type EntityBindingAvailabilityProjection,
   type EntityBindingAvailabilityProjectionInput,
 } from './bindingAvailabilityProjection';
+export {
+  EntityAssetMetadataProjector,
+  type EntityAssetMetadataProjectorOptions,
+} from './entityAssetMetadataProjection';
 
 export {
   NpcProfileAssembler,

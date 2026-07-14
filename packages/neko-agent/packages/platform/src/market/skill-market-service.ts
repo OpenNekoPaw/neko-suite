@@ -5,18 +5,7 @@
  * contains no VS Code APIs; hosts only inject callbacks such as skill refresh.
  */
 
-import { homedir } from 'node:os';
-import { join } from 'node:path';
-import {
-  CacheManager,
-  InstallManager,
-  InstalledRegistry,
-  InstallTargetRegistry,
-  LicenseManager,
-  MarketClient,
-  SkillInstallTarget,
-  VersionResolver,
-} from '@neko/market-core';
+import { MarketClient } from '@neko/market-core';
 import type {
   IInstallManager,
   IMarketClient,
@@ -38,20 +27,12 @@ export interface SkillMarketSearchQuery {
 }
 
 export interface SkillMarketServiceOptions {
-  marketHome?: string;
-  cacheDir?: string;
-  installedFile?: string;
-  skillsBaseDir?: string;
-  nekoSuiteVersion?: string;
+  installManager: IInstallManager;
   refreshSkills?: () => Promise<void>;
   client?: IMarketClient;
-  installManager?: IInstallManager;
 }
 
 const logger = getLogger('SkillMarketService');
-
-const DEFAULT_NEKO_HOME = join(homedir(), '.neko');
-const DEFAULT_NEKO_SUITE_VERSION = '0.0.1';
 
 export class SkillMarketService {
   private readonly client: IMarketClient;
@@ -59,45 +40,16 @@ export class SkillMarketService {
   private readonly ready: Promise<void>;
   private readonly refreshSkills?: () => Promise<void>;
 
-  constructor(options: SkillMarketServiceOptions = {}) {
+  constructor(options: SkillMarketServiceOptions) {
+    if (!options.installManager) {
+      throw new Error(
+        'Skill Market requires a Host-injected InstallManager backed by LocalMetadataInstalledRegistry.',
+      );
+    }
     this.client = options.client ?? new MarketClient();
     this.refreshSkills = options.refreshSkills;
-
-    if (options.installManager) {
-      this.installManager = options.installManager;
-      this.ready = Promise.resolve();
-      return;
-    }
-
-    const marketHome = options.marketHome ?? DEFAULT_NEKO_HOME;
-    const cacheDir = options.cacheDir ?? join(marketHome, 'market-cache');
-    const installedFile = options.installedFile ?? join(marketHome, 'market-installed.json');
-    const installedRegistry = new InstalledRegistry(installedFile);
-
-    const targets = new InstallTargetRegistry();
-    targets.register(
-      new SkillInstallTarget({
-        skillsBaseDir: options.skillsBaseDir ?? join(marketHome, 'skills'),
-        refreshSkills: options.refreshSkills,
-      }),
-    );
-
-    this.installManager = new InstallManager(
-      this.client,
-      new CacheManager(cacheDir),
-      new LicenseManager(),
-      new VersionResolver(),
-      targets,
-      installedRegistry,
-      {
-        nekoSuiteVersion: options.nekoSuiteVersion ?? DEFAULT_NEKO_SUITE_VERSION,
-        downloadTempDir: join(cacheDir, '.downloads'),
-      },
-    );
-
-    this.ready = installedRegistry.load().catch((error) => {
-      logger.error('Failed to load installed skill marketplace registry', error);
-    });
+    this.installManager = options.installManager;
+    this.ready = Promise.resolve();
   }
 
   async search(query: SkillMarketSearchQuery): Promise<MarketSearchResult> {

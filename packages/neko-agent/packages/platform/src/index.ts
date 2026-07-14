@@ -335,8 +335,14 @@ export {
 } from './media/media-task-delivery-settings';
 export {
   GeneratedAssetIndex,
+  ResourceCacheGeneratedAssetIndexStore,
+  createResourceCacheGeneratedAssetIndex,
   generateAssetId,
+  migrateLegacyGeneratedAssetIndex,
   type AssetFilter,
+  type GeneratedAssetIndexMigrationReport,
+  type GeneratedAssetIndexStore,
+  type ResourceCacheGeneratedAssetIndexBinding,
 } from './media/generated-asset-index';
 export type {
   MediaGenerationType,

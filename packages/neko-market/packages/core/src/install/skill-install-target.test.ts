@@ -1,5 +1,5 @@
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { AssetManifest } from '@neko/shared';
@@ -17,6 +17,14 @@ describe('SkillInstallTarget', () => {
     const target = new SkillInstallTarget({ skillsBaseDir: '/tmp/neko-skills' });
 
     expect(target.getInstallPath(createSkillManifest())).toBe('/tmp/neko-skills/pub/camera-shot');
+  });
+
+  it('installs personal marketplace Skills under the portable user Skill root by default', () => {
+    const target = new SkillInstallTarget();
+
+    expect(target.getInstallPath(createSkillManifest())).toBe(
+      join(homedir(), '.agents', 'skills', 'pub', 'camera-shot'),
+    );
   });
 
   it('injects and updates market metadata in existing frontmatter', () => {

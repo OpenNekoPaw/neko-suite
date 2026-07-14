@@ -43,7 +43,7 @@ export type ImportPlan =
       readonly projectRef: string;
     }
   | {
-      readonly action: 'copy';
+      readonly action: 'promote';
       readonly sourcePath: string;
       readonly targetPath: string;
       readonly targetDir: string;
@@ -56,7 +56,7 @@ export type ImportPlan =
       readonly projectRef: string;
     }
   | {
-      readonly action: 'extract';
+      readonly action: 'extract-promote';
       readonly sourcePath: string;
       readonly targetDir: string;
       readonly projectRef: string;

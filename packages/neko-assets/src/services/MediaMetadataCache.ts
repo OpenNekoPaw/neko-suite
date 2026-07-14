@@ -1,176 +1,107 @@
 /**
- * Media Metadata Cache
- *
- * Persists media file metadata to disk so that engine probe is not
- * required on every VSCode restart. Uses PathResolver for portable
- * cache keys that survive project relocation and machine changes.
- *
- * Cache key strategy:
- * - External library files: ${FOOTAGE}/scene01/clip.mp4 (variable path)
- * - Project files: relative path from workspace root
- *
- * Invalidation: mtime-based — if fs.stat().mtimeMs differs, entry is stale.
+ * Workspace media probe metadata projected through the shared local metadata repository.
+ * Artifact bytes and media-library facts remain files; this cache only stores rebuildable probes.
  */
 
-import * as vscode from 'vscode';
-import * as fs from 'fs/promises';
-import * as path from 'path';
+import * as fs from 'node:fs/promises';
+import type * as vscode from 'vscode';
 import { PathResolver, type MediaFileMetadata } from '@neko/shared';
+import type {
+  LocalMetadataPartition,
+  MediaMetadataRecord,
+  MediaMetadataRepository,
+} from '@neko/shared/local-metadata';
 import { getLogger } from '../utils/logger';
 
 const logger = getLogger('MediaMetadataCache');
 
-const FLUSH_DEBOUNCE_MS = 2000;
-
-// =============================================================================
-// Types
-// =============================================================================
-
-interface CacheEntry {
-  metadata: MediaFileMetadata;
-  /** File modification time in ms (for invalidation) */
-  mtime: number;
+export interface MediaMetadataCacheOptions {
+  readonly repository: MediaMetadataRepository;
+  readonly partition: LocalMetadataPartition;
+  readonly pathResolver: PathResolver;
+  readonly now?: () => string;
 }
-
-interface CacheData {
-  version: 1;
-  entries: Record<string, CacheEntry>;
-}
-
-// =============================================================================
-// Implementation
-// =============================================================================
 
 export class MediaMetadataCache implements vscode.Disposable {
-  private entries = new Map<string, CacheEntry>();
-  private dirty = false;
-  private flushTimer: ReturnType<typeof setTimeout> | null = null;
+  private readonly entries = new Map<string, MediaMetadataRecord>();
+  private readonly now: () => string;
 
-  constructor(
-    private readonly cachePath: string,
-    private readonly pathResolver: PathResolver,
-  ) {}
+  constructor(private readonly options: MediaMetadataCacheOptions) {
+    this.now = options.now ?? (() => new Date().toISOString());
+  }
 
-  /**
-   * Load cache data from disk.
-   */
   async load(): Promise<void> {
-    try {
-      const content = await fs.readFile(this.cachePath, 'utf-8');
-      const data: unknown = JSON.parse(content);
-      if (this.isValidCacheData(data)) {
-        for (const [key, entry] of Object.entries(data.entries)) {
-          this.entries.set(key, entry);
-        }
-        logger.info(`Loaded ${this.entries.size} cached metadata entries`);
-      }
-    } catch {
-      // File doesn't exist or is invalid — start fresh
-      logger.debug('No existing metadata cache, starting fresh');
+    const records = await this.options.repository.list(this.options.partition);
+    this.entries.clear();
+    for (const record of records) {
+      this.entries.set(record.sourceKey, record);
     }
+    logger.info(`Loaded ${this.entries.size} cached metadata entries`);
   }
 
-  /**
-   * Get cached metadata for a file.
-   *
-   * Returns null if:
-   * - No cache entry exists
-   * - File mtime has changed (stale)
-   * - File is not accessible
-   */
   async get(filePath: string): Promise<MediaFileMetadata | null> {
-    const key = this.toKey(filePath);
-    const entry = this.entries.get(key);
-    if (!entry) return null;
+    const sourceKey = this.toKey(filePath);
+    const record = await this.options.repository.get(this.options.partition, sourceKey);
+    if (!record) {
+      this.entries.delete(sourceKey);
+      return null;
+    }
+    this.entries.set(sourceKey, record);
 
     try {
       const stat = await fs.stat(filePath);
-      if (Math.abs(stat.mtimeMs - entry.mtime) < 1) {
-        return entry.metadata;
+      if (Math.abs(stat.mtimeMs - record.sourceMtimeMs) < 1) {
+        return record.metadata;
       }
-      // mtime changed — stale
-      this.entries.delete(key);
-      this.markDirty();
+      await this.options.repository.delete(this.options.partition, sourceKey);
+      this.entries.delete(sourceKey);
       return null;
     } catch {
-      // File not accessible — don't delete entry (may come back online)
+      // Offline media-library roots may become available again without invalidating metadata.
       return null;
     }
   }
 
-  /**
-   * Store metadata for a file.
-   */
   async set(filePath: string, metadata: MediaFileMetadata): Promise<void> {
-    const key = this.toKey(filePath);
-
+    const sourceKey = this.toKey(filePath);
     try {
       const stat = await fs.stat(filePath);
-      this.entries.set(key, { metadata, mtime: stat.mtimeMs });
-      this.markDirty();
-    } catch {
-      // Can't stat — don't cache
-    }
-  }
-
-  /**
-   * Flush pending changes to disk.
-   */
-  async flush(): Promise<void> {
-    if (!this.dirty) return;
-
-    try {
-      const dir = path.dirname(this.cachePath);
-      await fs.mkdir(dir, { recursive: true });
-
-      const data: CacheData = {
-        version: 1,
-        entries: Object.fromEntries(this.entries),
+      const record: MediaMetadataRecord = {
+        sourceKey,
+        sourceMtimeMs: stat.mtimeMs,
+        metadata,
+        updatedAt: this.now(),
       };
-      await fs.writeFile(this.cachePath, JSON.stringify(data), 'utf-8');
-      this.dirty = false;
-      logger.debug(`Flushed ${this.entries.size} metadata entries to disk`);
+      await this.options.repository.upsert({ partition: this.options.partition, record });
+      this.entries.set(sourceKey, record);
     } catch (error) {
-      logger.error('Failed to flush metadata cache:', error);
+      if (hasFileSystemCode(error, 'ENOENT') || hasFileSystemCode(error, 'EACCES')) {
+        return;
+      }
+      throw error;
     }
   }
 
   dispose(): void {
-    if (this.flushTimer) {
-      clearTimeout(this.flushTimer);
-      this.flushTimer = null;
-    }
-    // Synchronous best-effort flush — fire and forget
-    if (this.dirty) {
-      void this.flush();
-    }
+    this.entries.clear();
   }
 
-  // =========================================================================
-  // Private
-  // =========================================================================
-
-  /**
-   * Convert absolute file path to portable cache key.
-   * Uses PathResolver.contract() to replace absolute prefixes with ${VAR}.
-   */
   private toKey(filePath: string): string {
-    return this.pathResolver.contract(filePath);
-  }
-
-  private markDirty(): void {
-    this.dirty = true;
-    if (this.flushTimer) {
-      clearTimeout(this.flushTimer);
+    const sourceKey = this.options.pathResolver.contract(filePath).replace(/\\/gu, '/');
+    if (
+      !sourceKey.trim() ||
+      sourceKey.startsWith('/') ||
+      /^[A-Za-z]:\//u.test(sourceKey) ||
+      sourceKey === '..' ||
+      sourceKey.startsWith('../') ||
+      sourceKey.includes('/../')
+    ) {
+      throw new Error(`Media metadata source path is not portable: ${filePath}`);
     }
-    this.flushTimer = setTimeout(() => {
-      void this.flush();
-    }, FLUSH_DEBOUNCE_MS);
+    return sourceKey;
   }
+}
 
-  private isValidCacheData(data: unknown): data is CacheData {
-    if (typeof data !== 'object' || data === null) return false;
-    const d = data as Record<string, unknown>;
-    return d['version'] === 1 && typeof d['entries'] === 'object' && d['entries'] !== null;
-  }
+function hasFileSystemCode(error: unknown, code: string): boolean {
+  return typeof error === 'object' && error !== null && Reflect.get(error, 'code') === code;
 }

@@ -9,7 +9,6 @@ import type {
 } from '@neko/shared/types/dashboard-creative-entity';
 import { DASHBOARD_CREATIVE_ENTITY_STATE_COMMAND } from '@neko/shared/types/dashboard-creative-entity';
 import { vscodeCommandState, vscodeWindowState } from './vscode-test-double';
-import type { ActivityStore } from './activityStore';
 import type { CreativeEntitySourceAggregator } from './creativeEntitySourceAggregator';
 import { DashboardProvider } from './dashboardProvider';
 import type { ProjectScanner } from './projectScanner';
@@ -49,7 +48,6 @@ describe('DashboardProvider', () => {
       skillReader,
       taskAggregator,
       creativeEntityAggregator: createCreativeEntityAggregator(),
-      activityStore: createActivityStore(),
     });
 
     const firstShow = provider.show();
@@ -77,7 +75,6 @@ describe('DashboardProvider', () => {
       skillReader: createSkillReader(),
       taskAggregator: createTaskAggregator(),
       creativeEntityAggregator: createCreativeEntityAggregator(),
-      activityStore: createActivityStore(),
     });
     await provider.show();
 
@@ -123,7 +120,6 @@ describe('DashboardProvider', () => {
       skillReader: createSkillReader(),
       taskAggregator: createTaskAggregator(),
       creativeEntityAggregator: createCreativeEntityAggregator(),
-      activityStore: createActivityStore(),
     });
     await provider.show();
 
@@ -165,7 +161,6 @@ describe('DashboardProvider', () => {
       skillReader: createSkillReader(),
       taskAggregator: createTaskAggregator(),
       creativeEntityAggregator,
-      activityStore: createActivityStore(),
     });
     await provider.show();
 
@@ -224,7 +219,6 @@ describe('DashboardProvider', () => {
       creativeEntityAggregator: createCreativeEntityAggregator({
         state: { statuses: [], rows: [entityRow] },
       }),
-      activityStore: createActivityStore(),
     });
     await provider.show();
 
@@ -251,7 +245,6 @@ describe('DashboardProvider', () => {
       skillReader: createSkillReader(),
       taskAggregator: createTaskAggregator(),
       creativeEntityAggregator,
-      activityStore: createActivityStore(),
     });
 
     const state = await vscodeCommandState.commandHandlers.get(
@@ -356,13 +349,6 @@ function createSkillReader(): SkillReader {
   return {
     read: vi.fn(async () => []),
   } as unknown as SkillReader;
-}
-
-function createActivityStore(): ActivityStore {
-  return {
-    append: vi.fn(async () => {}),
-    list: vi.fn(async () => []),
-  } as unknown as ActivityStore;
 }
 
 function createPanel(postMessage: ReturnType<typeof vi.fn>) {

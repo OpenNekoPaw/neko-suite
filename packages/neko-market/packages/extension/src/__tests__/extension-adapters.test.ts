@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ConsoleLogger, LogLevel } from '@neko/shared';
 import type { IAuthSession } from '@neko/shared';
+import { InstalledRegistry } from '@neko/market-core';
 import type { MarketplaceServiceHostAdapters, NekoAuthAPI } from '../MarketplaceService';
 import { MarketplaceService } from '../MarketplaceService';
 import { MarketplaceHandler } from '../MarketplaceHandler';
@@ -229,6 +230,20 @@ describe('MarketplaceService host adapters', () => {
     expect(cancelLocalInstallDraft).toHaveBeenCalledWith('draft-1');
     service.dispose();
   });
+
+  it('fails visibly when workspace trust promotion has no Host adapter', async () => {
+    const service = await createService();
+
+    expect(service.getGovernanceState().workspaceTrust).toEqual({
+      level: 'restricted',
+      canPromote: false,
+      blockedReason: 'workspace-trust-adapter-unavailable',
+    });
+    await expect(service.promoteWorkspaceTrust()).rejects.toThrow(
+      'Workspace trust promotion is unavailable in this Host',
+    );
+    service.dispose();
+  });
 });
 
 describe('MarketplaceHandler typed message validation', () => {
@@ -445,11 +460,13 @@ async function createService(
   } = {},
 ): Promise<MarketplaceService> {
   const root = await mkdtemp(join(tmpdir(), 'neko-market-extension-test-'));
+  const installedRegistry = new InstalledRegistry(join(root, 'market-installed.json'));
+  await installedRegistry.load();
   return new MarketplaceService(new ConsoleLogger('test', LogLevel.Off), {
     storage: {
       cacheDir: join(root, 'market-cache'),
-      installedFile: join(root, 'market-installed.json'),
     },
+    installedRegistry,
     host: {
       getRegistryUrl: () => overrides.registryUrl ?? 'https://registry.test/api/v1',
       onDidChangeRegistryUrl:

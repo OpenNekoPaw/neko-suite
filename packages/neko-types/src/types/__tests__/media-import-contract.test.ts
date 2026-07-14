@@ -15,7 +15,7 @@ describe('media import contracts', () => {
         projectRef: 'hero.glb',
       },
       {
-        action: 'copy',
+        action: 'promote',
         sourcePath: '/external/hero.glb',
         targetPath: '/workspace/assets/hero.glb',
         targetDir: '/workspace/assets',
@@ -28,18 +28,18 @@ describe('media import contracts', () => {
         projectRef: 'imports/sakura.zip#avatars/sakura/model3.json',
       },
       {
-        action: 'extract',
+        action: 'extract-promote',
         sourcePath: '/external/model.zip',
-        targetDir: '/workspace/.neko/imports/models/model',
-        projectRef: '.neko/imports/models/model/scene.gltf',
+        targetDir: '/workspace/media/imports/models/model',
+        projectRef: 'media/imports/models/model/scene.gltf',
       },
     ];
 
     expect(plans.map((plan) => plan.action)).toEqual([
       'useSource',
-      'copy',
+      'promote',
       'bundle-memory',
-      'extract',
+      'extract-promote',
     ]);
   });
 

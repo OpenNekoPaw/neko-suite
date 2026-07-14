@@ -6,6 +6,7 @@ import {
 } from '@neko/shared';
 import { createAgentProjectResourceCacheTarget } from '@neko/agent/runtime';
 import type { ResourceCacheService } from '@neko/shared/vscode/extension';
+import type { ResourceCacheManifest, ResourceCacheManifestStore } from '@neko/shared';
 import {
   createStartupGcTargets,
   runResourceCacheStartupGc,
@@ -85,7 +86,51 @@ describe('resource cache startup GC service', () => {
       }),
     ]);
   });
+
+  it('runs the default GC path against injected metadata stores', async () => {
+    const workspaceStore = createManifestStore();
+    const globalStore = createManifestStore();
+
+    const results = await runResourceCacheStartupGc({
+      context: createExtensionContext(),
+      manifestStores: { workspace: workspaceStore.store, global: globalStore.store },
+    });
+
+    expect(results).toEqual([
+      expect.objectContaining({ result: expect.objectContaining({ removedCount: 0 }) }),
+      expect.objectContaining({ result: expect.objectContaining({ removedCount: 0 }) }),
+    ]);
+    expect(workspaceStore.load).toHaveBeenCalled();
+    expect(globalStore.load).toHaveBeenCalled();
+  });
 });
+
+function createManifestStore(): {
+  readonly store: ResourceCacheManifestStore;
+  readonly load: ReturnType<typeof vi.fn>;
+} {
+  let manifest: ResourceCacheManifest = {
+    version: 1,
+    createdAt: '2026-07-13T00:00:00.000Z',
+    updatedAt: '2026-07-13T00:00:00.000Z',
+    entries: {},
+  };
+  const load = vi.fn(async () => manifest);
+  return {
+    load,
+    store: {
+      load,
+      save: async (next) => {
+        manifest = next;
+      },
+      update: async (operation) => {
+        manifest = await operation(manifest);
+        return manifest;
+      },
+      invalidateCache() {},
+    },
+  };
+}
 
 function createResourceCache(error?: Error): ResourceCacheService {
   return {

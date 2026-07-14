@@ -6,6 +6,7 @@
 
 import type {
   AssetEntity,
+  AssetSource,
   EntityCategory,
   OwnershipScope,
   ViewAngle,
@@ -46,7 +47,7 @@ export interface AssetQuery {
   /** Filter by any of these tags (OR logic) */
   anyTags?: string[];
   /** Filter by source type */
-  sourceTypes?: Array<'manual' | 'ai-generated' | 'imported' | 'stock'>;
+  sourceTypes?: Array<AssetSource['type']>;
   /** Filter by creation date range */
   createdAfter?: number;
   createdBefore?: number;

@@ -26,7 +26,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<NekoMa
 
   logger.info('Neko Marketplace activating');
 
-  const service = new MarketplaceService(logger, createVSCodeMarketplaceServiceOptions(context));
+  const service = new MarketplaceService(
+    logger,
+    await createVSCodeMarketplaceServiceOptions(context),
+  );
   const provider = new MarketplaceProvider(context.extensionUri, service, logger);
   const api = new NekoMarketAPIImpl(service);
 

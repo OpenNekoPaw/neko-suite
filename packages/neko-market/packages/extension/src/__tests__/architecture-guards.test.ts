@@ -1,9 +1,10 @@
 import { readFileSync, readdirSync, statSync } from 'node:fs';
-import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { dirname, join, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-const extensionSrc = join(process.cwd(), 'packages/neko-market/packages/extension/src');
-const webviewSrc = join(process.cwd(), 'packages/neko-market/packages/webview/src');
+const extensionSrc = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const webviewSrc = resolve(extensionSrc, '../../webview/src');
 
 describe('market architecture guards', () => {
   it('keeps market extension decoupled from creative domain packages and React', () => {
@@ -23,6 +24,13 @@ describe('market architecture guards', () => {
 
     expect(source).not.toMatch(/from\s+['"]vscode['"]/);
     expect(source).not.toMatch(/require\(['"]vscode['"]\)/);
+  });
+
+  it('does not use an extension-private JSON file as the installed package authority', () => {
+    const source = readSourceFiles(extensionSrc, (file) => !file.endsWith('.test.ts'));
+
+    expect(source).not.toMatch(/market-installed\.json/);
+    expect(source).not.toMatch(/installedFile/);
   });
 });
 

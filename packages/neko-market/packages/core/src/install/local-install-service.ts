@@ -2,11 +2,11 @@ import { cp, mkdir, rm, stat } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 import type { AssetManifest, InstalledPackage, LocalAssetStorageMode } from '@neko/shared';
 import { parseAssetManifest } from '@neko/shared';
-import type { InstalledRegistry } from '../registry/installed-registry';
+import type { InstalledPackageRegistry } from '../registry/installed-package-registry';
 
 export interface LocalInstallServiceOptions {
   nekoHome: string;
-  registry: InstalledRegistry;
+  registry: InstalledPackageRegistry;
   now?: () => number;
 }
 

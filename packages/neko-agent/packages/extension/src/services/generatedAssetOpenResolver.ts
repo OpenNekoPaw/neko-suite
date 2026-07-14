@@ -1,7 +1,9 @@
 import * as path from 'node:path';
-import * as vscode from 'vscode';
-import { WORKSPACE_GENERATED_ASSET_ROOT, type GeneratedAsset } from '@neko/shared';
-import { GeneratedAssetIndex } from '@neko/platform/media/generated-asset-index';
+import type { GeneratedAsset, ResourceCacheManifestStore } from '@neko/shared';
+import {
+  createResourceCacheGeneratedAssetIndex,
+  type GeneratedAssetIndex,
+} from '@neko/platform/media/generated-asset-index';
 
 export interface GeneratedAssetLookup {
   get(id: string): GeneratedAsset | undefined;
@@ -21,30 +23,22 @@ export function resolveGeneratedAssetOpenPath(
   return lookup.get(assetId)?.path;
 }
 
-export function createWorkspaceGeneratedAssetIndex(
-  options: {
-    readonly logger?: {
-      warn(message: string, details?: unknown): void;
-    };
-  } = {},
-): GeneratedAssetIndex | undefined {
-  const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
-  if (!workspaceFolder) {
-    return undefined;
-  }
-
-  try {
-    const generatedDir = vscode.Uri.joinPath(
-      workspaceFolder.uri,
-      WORKSPACE_GENERATED_ASSET_ROOT,
-    ).fsPath;
-    const assetIndex = new GeneratedAssetIndex(generatedDir);
-    void assetIndex.load();
-    return assetIndex;
-  } catch (error) {
-    options.logger?.warn('Failed to initialize GeneratedAssetIndex — asset tracking disabled', {
-      error,
+export async function createWorkspaceGeneratedAssetIndex(options: {
+  readonly manifestStore: ResourceCacheManifestStore;
+  readonly workspaceRoot: string;
+  readonly homedir: string;
+  readonly logger?: {
+    warn(message: string, details?: unknown): void;
+  };
+}): Promise<GeneratedAssetIndex> {
+  const binding = await createResourceCacheGeneratedAssetIndex(options);
+  if (
+    binding.migrationReport.sourceStatus === 'quarantined' ||
+    binding.migrationReport.verifiedEntryCount !== binding.migrationReport.importedEntryCount
+  ) {
+    options.logger?.warn('Generated asset index migration requires attention', {
+      report: binding.migrationReport,
     });
-    return undefined;
   }
+  return binding.index;
 }

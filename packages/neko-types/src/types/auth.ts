@@ -4,7 +4,7 @@
  * Consumed by:
  *   @neko/auth-core   — OAuth + token management logic (Layer 0)
  *   neko-auth         — VSCode extension (VscodeTokenStorage)
- *   neko-agent cli    — CLI (FileTokenStorage)
+ *   neko-agent cli    — runtime environment or Host system-keychain adapter
  */
 
 // ---------------------------------------------------------------------------
@@ -45,7 +45,7 @@ export interface IAuthSession {
  *
  * Implementations:
  *   VscodeTokenStorage — backed by vscode.SecretStorage
- *   FileTokenStorage   — backed by ~/.neko/auth.json (CLI)
+ *   Host keychain storage — supplied by a CLI Host when persistent login exists
  */
 export interface ITokenStorage {
   get(key: string): Promise<string | null>;

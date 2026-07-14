@@ -1,3 +1,5 @@
+import * as os from 'node:os';
+import * as path from 'node:path';
 import * as vscode from 'vscode';
 import {
   VSCodeEntityRuntimeRegistry,
@@ -5,6 +7,7 @@ import {
   registerEntityFacadeCommands,
 } from '@neko/entity/host-vscode';
 import { ENTITY_FACADE_COMMANDS } from '@neko/shared';
+import { createNodeWorkspaceEntityAssetMetadataBinding } from '@neko/shared/local-metadata/node';
 import {
   createVSCodeLogger,
   resolveLogLevelSetting,
@@ -13,7 +16,7 @@ import {
 import { DashboardProvider } from './dashboardProvider';
 import { EntityInspectorProvider } from './entityInspectorProvider';
 
-export function activate(context: vscode.ExtensionContext): void {
+export async function activate(context: vscode.ExtensionContext): Promise<void> {
   const logger = createVSCodeLogger(
     'Neko Dashboard',
     'NekoDashboard',
@@ -27,7 +30,43 @@ export function activate(context: vscode.ExtensionContext): void {
     logger,
     creativeEntityAggregator: provider.getCreativeEntityAggregator(),
   });
-  const entityRuntimeRegistry = new VSCodeEntityRuntimeRegistry({ logger });
+  const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+  const entityMetadata = workspaceRoot
+    ? await createNodeWorkspaceEntityAssetMetadataBinding({
+        homedir: os.homedir(),
+        workDir: workspaceRoot,
+      })
+    : undefined;
+  if (entityMetadata) {
+    context.subscriptions.push({
+      dispose: () => {
+        void entityMetadata
+          .dispose()
+          .catch((error) =>
+            logger.warn('Failed to dispose Entity/Asset metadata store', { error }),
+          );
+      },
+    });
+    if (
+      entityMetadata.migrationReport.sourceStatus === 'quarantined' ||
+      entityMetadata.migrationReport.unrecoverable.length > 0
+    ) {
+      logger.warn('Entity/Asset projection migration requires attention', {
+        report: entityMetadata.migrationReport,
+      });
+    }
+  }
+  const entityRuntimeRegistry = new VSCodeEntityRuntimeRegistry({
+    logger,
+    resolveProjection: (projectRoot) =>
+      entityMetadata && workspaceRoot && path.resolve(projectRoot) === path.resolve(workspaceRoot)
+        ? {
+            repository: entityMetadata.repository,
+            partition: entityMetadata.partition,
+            markStale: (diagnostic, updatedAt) => entityMetadata.markStale(diagnostic, updatedAt),
+          }
+        : undefined,
+  });
 
   context.subscriptions.push(provider);
   context.subscriptions.push(inspectorProvider);

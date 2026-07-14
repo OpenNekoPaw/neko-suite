@@ -1,5 +1,3 @@
-import * as os from 'node:os';
-import * as path from 'node:path';
 import * as vscode from 'vscode';
 import {
   NEKO_AGENT_REFRESH_EXTERNAL_PROCESSORS_COMMAND,
@@ -47,7 +45,6 @@ export async function registerMarketInstallTargets(
     context.subscriptions.push(
       market.registerInstallTarget(
         new SkillInstallTarget({
-          skillsBaseDir: path.join(os.homedir(), '.neko', 'skills'),
           refreshSkills: () => getSkillFileService().triggerRescan(),
           logger: {
             info: (message) => logger.info(message),

@@ -15,7 +15,7 @@ describe('projectMentionSearch', () => {
   });
 
   it('queries the project search service and maps shared items to mention candidates', async () => {
-    vi.mocked(vscode.commands.executeCommand).mockImplementation(async (command: string) => {
+    vi.mocked(vscode.commands.executeCommand).mockImplementation(async (_command: string) => {
       return {
         items: [
           {
@@ -251,42 +251,40 @@ describe('projectMentionSearch', () => {
         pathVariables: [['EPUBS', '/Users/feng/Assets/epub']],
       }),
     );
-    vi.mocked(vscode.commands.executeCommand).mockImplementation(
-      async (command: string) => {
-        if (command === PROJECT_SEARCH_QUERY_COMMAND) {
-          return {
-            items: [
-              {
-                id: 'media:/Users/feng/Assets/epub/Blame/book.epub',
-                kind: 'document',
-                label: 'book.epub',
-                description: 'Media: EPUBS',
-                source: {
-                  partition: 'media-library',
-                  sourceId: '/Users/feng/Assets/epub/Blame/book.epub',
-                  sourceKind: 'document',
-                  filePath: '/Users/feng/Assets/epub/Blame/book.epub',
-                },
-                projectRoot: '/workspace',
+    vi.mocked(vscode.commands.executeCommand).mockImplementation(async (command: string) => {
+      if (command === PROJECT_SEARCH_QUERY_COMMAND) {
+        return {
+          items: [
+            {
+              id: 'media:/Users/feng/Assets/epub/Blame/book.epub',
+              kind: 'document',
+              label: 'book.epub',
+              description: 'Media: EPUBS',
+              source: {
+                partition: 'media-library',
+                sourceId: '/Users/feng/Assets/epub/Blame/book.epub',
+                sourceKind: 'document',
                 filePath: '/Users/feng/Assets/epub/Blame/book.epub',
-                searchText: 'book.epub EPUBS document',
-                freshness: 'fresh',
-                metadata: { mediaType: 'document' },
-                navigationData: {
-                  filePath: '/Users/feng/Assets/epub/Blame/book.epub',
-                  libraryName: 'EPUBS',
-                },
               },
-            ],
-            partitions: [],
-            freshness: 'fresh',
-            context: { projectRoot: '/workspace' },
-            query: { text: 'book' },
-          };
-        }
-        return undefined;
-      },
-    );
+              projectRoot: '/workspace',
+              filePath: '/Users/feng/Assets/epub/Blame/book.epub',
+              searchText: 'book.epub EPUBS document',
+              freshness: 'fresh',
+              metadata: { mediaType: 'document' },
+              navigationData: {
+                filePath: '/Users/feng/Assets/epub/Blame/book.epub',
+                libraryName: 'EPUBS',
+              },
+            },
+          ],
+          partitions: [],
+          freshness: 'fresh',
+          context: { projectRoot: '/workspace' },
+          query: { text: 'book' },
+        };
+      }
+      return undefined;
+    });
 
     const candidates = await searchProjectMentionCandidates(
       {
@@ -311,7 +309,7 @@ describe('projectMentionSearch', () => {
           resolvedPath: '/Users/feng/Assets/epub/Blame/book.epub',
           sourceId: '${EPUBS}/Blame/book.epub',
           variable: 'EPUBS',
-          }),
+        }),
       }),
     ]);
     expect(vscode.commands.executeCommand).not.toHaveBeenCalledWith(
@@ -322,6 +320,12 @@ describe('projectMentionSearch', () => {
   });
 
   it('uses media library portable paths emitted by project search without re-contracting', async () => {
+    vi.mocked(vscode.extensions.getExtension).mockReturnValue(
+      createAssetsExtension({
+        mediaLibraryRoots: ['/Users/feng/Assets'],
+        pathVariables: [['A', '/Users/feng/Assets']],
+      }),
+    );
     vi.mocked(vscode.commands.executeCommand).mockImplementation(async (command: string) => {
       if (command === PROJECT_SEARCH_QUERY_COMMAND) {
         return {
@@ -387,39 +391,127 @@ describe('projectMentionSearch', () => {
     ]);
   });
 
-  it('does not expose unmanaged absolute paths as successful file mention paths', async () => {
-    vi.mocked(vscode.commands.executeCommand).mockImplementation(
-      async (command: string) => {
-        if (command === PROJECT_SEARCH_QUERY_COMMAND) {
-          return {
-            items: [
-              {
-                id: 'media:/tmp/random.png',
-                kind: 'media',
-                label: 'random.png',
-                source: {
-                  partition: 'media-library',
-                  sourceId: '/tmp/random.png',
-                  sourceKind: 'image',
-                  filePath: '/tmp/random.png',
-                },
-                projectRoot: '/workspace',
-                filePath: '/tmp/random.png',
-                searchText: 'random.png',
-                freshness: 'fresh',
-                metadata: { mediaType: 'image' },
-                navigationData: { filePath: '/tmp/random.png' },
-              },
-            ],
-            partitions: [],
-            freshness: 'fresh',
-            context: { projectRoot: '/workspace' },
-            query: { text: 'random' },
-          };
-        }
-        return undefined;
+  it('filters media library portable paths whose variable is unavailable', async () => {
+    vi.mocked(vscode.commands.executeCommand).mockResolvedValue({
+      items: [
+        {
+          id: 'media:${A}/epub/book.epub',
+          kind: 'document',
+          label: 'book.epub',
+          description: 'Media: missing variable',
+          source: {
+            partition: 'media-library',
+            sourceId: '${A}/epub/book.epub',
+            sourceKind: 'document',
+            filePath: '${A}/epub/book.epub',
+          },
+          projectRoot: '/workspace',
+          filePath: '${A}/epub/book.epub',
+          searchText: 'book.epub ${A}/epub/book.epub',
+          freshness: 'fresh',
+          metadata: { mediaType: 'document' },
+        },
+      ],
+      partitions: [],
+      freshness: 'fresh',
+      context: { projectRoot: '/workspace' },
+      query: { text: 'book' },
+    });
+
+    const candidates = await searchProjectMentionCandidates(
+      {
+        includePattern: '**/*book*',
+        excludePattern: '**/node_modules/**',
+        limit: 30,
       },
+      { projectRoot: '/workspace' },
     );
+
+    expect(candidates).toEqual([]);
+    expect(vscode.window.showErrorMessage).toHaveBeenCalledOnce();
+  });
+
+  it('does not rewrite media-library absolute paths to host built-in variables', async () => {
+    const homeMediaPath = '/Users/feng/Assets/epub/Blame/book.epub';
+
+    vi.mocked(vscode.commands.executeCommand).mockImplementation(async (command: string) => {
+      if (command === PROJECT_SEARCH_QUERY_COMMAND) {
+        return {
+          items: [
+            {
+              id: `media:${homeMediaPath}`,
+              kind: 'document',
+              label: 'book.epub',
+              source: {
+                partition: 'media-library',
+                sourceId: homeMediaPath,
+                sourceKind: 'document',
+                filePath: homeMediaPath,
+              },
+              projectRoot: '/workspace',
+              filePath: homeMediaPath,
+              searchText: 'book.epub',
+              freshness: 'fresh',
+              metadata: { mediaType: 'document' },
+              navigationData: { filePath: homeMediaPath, libraryName: 'EPUBS' },
+            },
+          ],
+          partitions: [],
+          freshness: 'fresh',
+          context: { projectRoot: '/workspace' },
+          query: { text: 'book' },
+        };
+      }
+      return undefined;
+    });
+
+    const candidates = await searchProjectMentionCandidates(
+      {
+        includePattern: '**/*book*',
+        excludePattern: '**/node_modules/**',
+        limit: 30,
+      },
+      { projectRoot: '/workspace' },
+    );
+
+    expect(candidates).toEqual([]);
+    expect(vscode.window.showErrorMessage).toHaveBeenCalledOnce();
+    expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
+      expect.stringContaining('Filtered 1 media item(s)'),
+    );
+  });
+
+  it('does not expose unmanaged absolute paths as successful file mention paths', async () => {
+    vi.mocked(vscode.commands.executeCommand).mockImplementation(async (command: string) => {
+      if (command === PROJECT_SEARCH_QUERY_COMMAND) {
+        return {
+          items: [
+            {
+              id: 'media:/tmp/random.png',
+              kind: 'media',
+              label: 'random.png',
+              source: {
+                partition: 'media-library',
+                sourceId: '/tmp/random.png',
+                sourceKind: 'image',
+                filePath: '/tmp/random.png',
+              },
+              projectRoot: '/workspace',
+              filePath: '/tmp/random.png',
+              searchText: 'random.png',
+              freshness: 'fresh',
+              metadata: { mediaType: 'image' },
+              navigationData: { filePath: '/tmp/random.png' },
+            },
+          ],
+          partitions: [],
+          freshness: 'fresh',
+          context: { projectRoot: '/workspace' },
+          query: { text: 'random' },
+        };
+      }
+      return undefined;
+    });
 
     const candidates = await searchProjectMentionCandidates(
       {
@@ -430,20 +522,8 @@ describe('projectMentionSearch', () => {
       { projectRoot: '/workspace' },
     );
 
-    expect(candidates).toEqual([
-      expect.objectContaining({
-        type: 'media',
-        label: 'random.png',
-        mediaType: 'image',
-        navigationData: expect.objectContaining({
-          partition: 'media-library',
-        }),
-      }),
-    ]);
-    expect(candidates[0]).not.toHaveProperty('filePath');
-    expect(candidates[0]?.navigationData).not.toHaveProperty('filePath');
-    expect(candidates[0]?.navigationData).not.toHaveProperty('resolvedPath');
-    expect(candidates[0]?.navigationData).not.toHaveProperty('sourceId');
+    expect(candidates).toEqual([]);
+    expect(vscode.window.showErrorMessage).toHaveBeenCalledOnce();
     expect(vscode.commands.executeCommand).not.toHaveBeenCalledWith(
       'neko.assets.contractPath',
       expect.anything(),

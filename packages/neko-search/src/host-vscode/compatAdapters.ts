@@ -7,6 +7,8 @@ import {
   isMediaFile,
   resolveStorageLayout,
   type AssetMediaType,
+  type EntityAssetProjectionRecord,
+  type EntityAssetProjectionRepository,
   type GeneratedAsset,
   type NekoStoryAPI,
   type ProjectIndexFreshness,
@@ -18,6 +20,9 @@ import {
   type ProjectSearchPartitionStatusSnapshot,
   type ProjectSearchQuery,
   type ProjectSearchQueryContext,
+  type LocalMetadataPartition,
+  type LocalMetadataPartitionRevision,
+  type SearchDocumentRepository,
 } from '@neko/shared';
 import { buildProjectSearchText, matchesProjectSearchItem } from '../core/normalization';
 import type { ProjectSearchLogger } from '../core/ports';
@@ -75,24 +80,10 @@ interface CharacterAssetRecord {
   readonly sourceHash?: string;
 }
 
-interface MediaSearchIndexData {
-  readonly entries?: readonly MediaSearchIndexEntry[];
-}
-
-interface MediaSearchIndexEntry {
-  readonly filePath?: unknown;
-  readonly fileName?: unknown;
-  readonly libraryName?: unknown;
-  readonly mediaType?: unknown;
-}
-
-interface MediaMetadataCacheData {
-  readonly entries?: Record<string, unknown>;
-}
-
 interface MediaLibraryCacheQueryResult {
   readonly loaded: boolean;
   readonly items: readonly ProjectSearchItem[];
+  readonly freshness?: ProjectIndexFreshness;
 }
 
 interface CreativeGraphData {
@@ -132,20 +123,6 @@ interface EntityAssetRequirementRecord {
   readonly status?: unknown;
 }
 
-interface GeneratedAssetIndexData {
-  readonly assets?: readonly GeneratedAssetRecord[];
-}
-
-type GeneratedAssetRecord = Partial<GeneratedAsset> & {
-  readonly id?: unknown;
-  readonly type?: unknown;
-  readonly path?: unknown;
-  readonly mimeType?: unknown;
-  readonly prompt?: unknown;
-  readonly model?: unknown;
-  readonly generatedAt?: unknown;
-};
-
 export interface CompatibilityProjectSearchAdaptersOptions {
   readonly jsonReader?: JsonReader;
   readonly workspaceFileFinder?: WorkspaceFileFinder;
@@ -157,6 +134,19 @@ export interface CompatibilityProjectSearchAdaptersOptions {
   readonly queryMediaLibrary?: (
     query: MediaLibraryRuntimeQuery,
   ) => Promise<readonly MediaLibraryRuntimeResult[]>;
+  readonly queryGeneratedAssets?: () =>
+    readonly GeneratedAsset[] | Promise<readonly GeneratedAsset[]>;
+  readonly searchProjection?: {
+    readonly repository: SearchDocumentRepository;
+    readonly partition: LocalMetadataPartition;
+    readonly hasProjection: () => Promise<boolean>;
+    readonly resolveFileKey: (fileKey: string) => string | Promise<string>;
+  };
+  readonly entityAssetProjection?: {
+    readonly repository: EntityAssetProjectionRepository;
+    readonly partition: LocalMetadataPartition;
+    readonly readRevision: () => Promise<LocalMetadataPartitionRevision | null>;
+  };
   readonly logger?: ProjectSearchLogger;
 }
 
@@ -183,13 +173,17 @@ export function createCompatibilityProjectSearchAdapters(
       options.workspaceFileFinder ?? new VscodeWorkspaceFileFinder(),
     ),
     new AssetLibraryProjectSearchAdapter(jsonReader, options.resolveThumbnailUri),
-    new MediaLibraryProjectSearchAdapter(jsonReader, {
+    new MediaLibraryProjectSearchAdapter({
       contractPath: options.contractPath ?? contractPathWithAssetsCommand,
       queryMediaLibrary: options.queryMediaLibrary ?? queryMediaLibraryWithAssetsCommand,
+      searchProjection: options.searchProjection,
       logger: options.logger,
     }),
-    new CreativeEntityProjectSearchAdapter(jsonReader),
-    new GeneratedAssetProjectSearchAdapter(jsonReader, options.resolveThumbnailUri),
+    new CreativeEntityProjectSearchAdapter(jsonReader, options.entityAssetProjection),
+    new GeneratedAssetProjectSearchAdapter({
+      queryGeneratedAssets: options.queryGeneratedAssets,
+      resolveThumbnailUri: options.resolveThumbnailUri,
+    }),
   ];
 }
 
@@ -482,7 +476,6 @@ class AssetLibraryProjectSearchAdapter extends BaseProjectSearchAdapter {
 
 class MediaLibraryProjectSearchAdapter extends BaseProjectSearchAdapter {
   constructor(
-    private readonly jsonReader: JsonReader,
     private readonly options: {
       readonly contractPath: (
         filePath: string,
@@ -491,6 +484,7 @@ class MediaLibraryProjectSearchAdapter extends BaseProjectSearchAdapter {
       readonly queryMediaLibrary: (
         query: MediaLibraryRuntimeQuery,
       ) => Promise<readonly MediaLibraryRuntimeResult[]>;
+      readonly searchProjection?: CompatibilityProjectSearchAdaptersOptions['searchProjection'];
       readonly logger?: ProjectSearchLogger;
     },
   ) {
@@ -503,26 +497,16 @@ class MediaLibraryProjectSearchAdapter extends BaseProjectSearchAdapter {
   ): Promise<readonly ProjectSearchItem[]> {
     const projectRoot = context.projectRoot;
     if (!projectRoot) return [];
-    const layout = resolveStorageLayout(projectRoot, os.homedir());
-    const fromIndex = await this.readMediaSearchIndex(
-      projectRoot,
-      layout.project.local.cache.searchIndex,
-      query,
-    );
-    if (fromIndex.loaded) {
-      this.setStatus(projectRoot, 'ready', 'fresh', fromIndex.items.length);
-      return fromIndex.items;
+    const fromProjection = await this.readMediaSearchProjection(projectRoot, query);
+    if (fromProjection.loaded) {
+      this.setStatus(
+        projectRoot,
+        'ready',
+        fromProjection.freshness ?? 'fresh',
+        fromProjection.items.length,
+      );
+      return fromProjection.items;
     }
-    const fromMetadata = await this.readMediaMetadata(
-      projectRoot,
-      layout.project.local.cache.mediaMetadata,
-      query,
-    );
-    if (fromMetadata.loaded) {
-      this.setStatus(projectRoot, 'ready', 'stale', fromMetadata.items.length);
-      return fromMetadata.items;
-    }
-
     let fromRuntime: readonly ProjectSearchItem[];
     try {
       fromRuntime = await this.queryMediaLibraryRuntime(projectRoot, query);
@@ -543,70 +527,48 @@ class MediaLibraryProjectSearchAdapter extends BaseProjectSearchAdapter {
     return fromRuntime;
   }
 
-  private async readMediaSearchIndex(
+  private async readMediaSearchProjection(
     projectRoot: string,
-    searchIndexPath: string,
     query: ProjectSearchQuery,
   ): Promise<MediaLibraryCacheQueryResult> {
-    const data = await this.jsonReader.read<MediaSearchIndexData>(searchIndexPath);
-    if (!data) return { loaded: false, items: [] };
-    const entries = Array.isArray(data.entries) ? data.entries : [];
+    const projection = this.options.searchProjection;
+    if (!projection || !(await projection.hasProjection())) {
+      return { loaded: false, items: [] };
+    }
+    const documents = await projection.repository.query({
+      partition: projection.partition,
+      text: query.text,
+      limit: query.limit ?? 200,
+    });
     const items: ProjectSearchItem[] = [];
-
-    for (const entry of entries) {
-      const filePath = optionalString(entry.filePath);
-      const fileName =
-        optionalString(entry.fileName) ?? (filePath ? path.basename(filePath) : undefined);
-      if (!filePath || !fileName) continue;
-      const mediaType = readAssetMediaType(entry.mediaType) ?? detectMediaTypeSafe(filePath);
+    for (const document of documents) {
+      if (document.partition !== 'media-library' || !document.fileKey) continue;
+      const filePath = await projection.resolveFileKey(document.fileKey);
+      if (!path.isAbsolute(filePath)) continue;
+      const mediaType = readAssetMediaType(document.metadata?.['mediaType']);
+      const libraryName = optionalString(document.metadata?.['libraryName']);
       if (
-        !matchesMediaLibraryRawItem(projectRoot, filePath, fileName, query, {
-          libraryName: optionalString(entry.libraryName),
+        !matchesMediaLibraryRawItem(projectRoot, filePath, document.label, query, {
+          libraryName,
           mediaType,
         })
       ) {
         continue;
       }
-      const item = await this.createMediaItem(projectRoot, filePath, fileName, 'fresh', {
-        libraryName: optionalString(entry.libraryName),
-        mediaType,
-      });
-      if (matchesProjectSearchItem(item, query)) {
-        items.push(item);
-        if (reachedQueryLimit(items, query)) break;
-      }
+      const item = await this.createMediaItem(
+        projectRoot,
+        filePath,
+        document.label,
+        document.freshness,
+        { libraryName, mediaType },
+      );
+      if (matchesProjectSearchItem(item, query)) items.push(item);
     }
-
-    return { loaded: true, items };
-  }
-
-  private async readMediaMetadata(
-    projectRoot: string,
-    metadataCachePath: string,
-    query: ProjectSearchQuery,
-  ): Promise<MediaLibraryCacheQueryResult> {
-    const data = await this.jsonReader.read<MediaMetadataCacheData>(metadataCachePath);
-    if (!data) return { loaded: false, items: [] };
-    const filePaths =
-      data?.entries && typeof data.entries === 'object' ? Object.keys(data.entries) : [];
-    const items: ProjectSearchItem[] = [];
-
-    for (const filePath of filePaths) {
-      const fileName = path.basename(filePath);
-      const mediaType = detectMediaTypeSafe(filePath);
-      if (!matchesMediaLibraryRawItem(projectRoot, filePath, fileName, query, { mediaType })) {
-        continue;
-      }
-      const item = await this.createMediaItem(projectRoot, filePath, fileName, 'stale', {
-        mediaType,
-      });
-      if (matchesProjectSearchItem(item, query)) {
-        items.push(item);
-        if (reachedQueryLimit(items, query)) break;
-      }
-    }
-
-    return { loaded: true, items };
+    return {
+      loaded: true,
+      items,
+      freshness: documents.every((document) => document.freshness === 'fresh') ? 'fresh' : 'stale',
+    };
   }
 
   private async queryMediaLibraryRuntime(
@@ -685,7 +647,11 @@ class MediaLibraryProjectSearchAdapter extends BaseProjectSearchAdapter {
 }
 
 class CreativeEntityProjectSearchAdapter extends BaseProjectSearchAdapter {
-  constructor(private readonly jsonReader: JsonReader) {
+  constructor(
+    private readonly jsonReader: JsonReader,
+    private readonly projection:
+      CompatibilityProjectSearchAdaptersOptions['entityAssetProjection'] | undefined,
+  ) {
     super('creative-entities');
   }
 
@@ -696,20 +662,89 @@ class CreativeEntityProjectSearchAdapter extends BaseProjectSearchAdapter {
     const projectRoot = context.projectRoot;
     if (!projectRoot) return [];
     const layout = resolveStorageLayout(projectRoot, os.homedir());
-    const [graph, registry, requirements] = await Promise.all([
-      this.jsonReader.read<CreativeGraphData>(layout.project.local.cache.assetGraph),
+    const projection = await this.loadProjectionRecords();
+    const [registry, requirements] = await Promise.all([
       this.jsonReader.read<CharacterRegistryData>(path.join(projectRoot, 'characters.json')),
       this.jsonReader.read<EntityAssetRequirementData>(
         layout.project.facts.entityAssetRequirements,
       ),
     ]);
     const items = [
-      ...this.graphItems(projectRoot, graph),
+      ...(projection ? this.projectionItems(projectRoot, projection.records) : []),
       ...this.registryItems(projectRoot, registry),
       ...this.requirementItems(projectRoot, requirements),
     ].filter((item) => matchesProjectSearchItem(item, query));
-    this.setStatus(projectRoot, 'ready', 'fresh', items.length);
+    this.setStatus(
+      projectRoot,
+      'ready',
+      projection ? toProjectSearchFreshness(projection.revision.freshness) : 'fresh',
+      items.length,
+    );
     return dedupeById(items);
+  }
+
+  private async loadProjectionRecords(): Promise<{
+    readonly records: readonly EntityAssetProjectionRecord[];
+    readonly revision: LocalMetadataPartitionRevision;
+  } | null> {
+    if (!this.projection) return null;
+    const revision = await this.projection.readRevision();
+    if (!revision) return null;
+    return {
+      records: await this.projection.repository.list({ partition: this.projection.partition }),
+      revision,
+    };
+  }
+
+  private projectionItems(
+    projectRoot: string,
+    records: readonly EntityAssetProjectionRecord[],
+  ): ProjectSearchItem[] {
+    return records.flatMap((record) => {
+      if (record.kind === 'asset-graph-node') {
+        return this.graphItems(projectRoot, { nodes: [record.value] });
+      }
+      if (record.kind === 'entity-candidate') {
+        const candidate = record.value;
+        return [
+          {
+            id: `entity-projection:${record.projectionId}`,
+            kind: 'entity-candidate',
+            label: candidate.name,
+            description: `${candidate.kind} candidate`,
+            icon: iconForGraphKind(candidate.kind),
+            source: {
+              partition: 'creative-entities',
+              sourceId: record.sourceId,
+              sourceKind: 'candidate',
+              refId: candidate.id,
+            },
+            projectRoot,
+            canonicalName: candidate.name,
+            aliases: candidate.aliases,
+            searchText: buildProjectSearchText([
+              candidate.name,
+              candidate.aliases,
+              candidate.kind,
+              candidate.status,
+              candidate.sourceRefs,
+            ]),
+            navigationData: {
+              candidateId: candidate.id,
+              kind: candidate.kind,
+              source: record.sourceId,
+            },
+            freshness: record.freshness === 'rebuilding' ? 'building' : record.freshness,
+            metadata: {
+              entityType: candidate.kind,
+              status: candidate.status,
+              identityBasis: candidate.identityBasis,
+            },
+          } satisfies ProjectSearchItem,
+        ];
+      }
+      return [];
+    });
   }
 
   private graphItems(projectRoot: string, data: CreativeGraphData | null): ProjectSearchItem[] {
@@ -833,10 +868,18 @@ class CreativeEntityProjectSearchAdapter extends BaseProjectSearchAdapter {
   }
 }
 
+function toProjectSearchFreshness(
+  freshness: LocalMetadataPartitionRevision['freshness'],
+): ProjectIndexFreshness {
+  return freshness === 'rebuilding' ? 'building' : freshness;
+}
+
 class GeneratedAssetProjectSearchAdapter extends BaseProjectSearchAdapter {
   constructor(
-    private readonly jsonReader: JsonReader,
-    private readonly resolveThumbnailUri: ((filePath: string) => string | undefined) | undefined,
+    private readonly options: {
+      readonly queryGeneratedAssets?: CompatibilityProjectSearchAdaptersOptions['queryGeneratedAssets'];
+      readonly resolveThumbnailUri?: (filePath: string) => string | undefined;
+    },
   ) {
     super('generated-assets');
   }
@@ -847,67 +890,67 @@ class GeneratedAssetProjectSearchAdapter extends BaseProjectSearchAdapter {
   ): Promise<readonly ProjectSearchItem[]> {
     const projectRoot = context.projectRoot;
     if (!projectRoot) return [];
-    const indexPath = path.join(projectRoot, '.neko', '.cache', 'generated', 'index.json');
-    const data = await this.jsonReader.read<GeneratedAssetIndexData>(indexPath);
-    const assets = Array.isArray(data?.assets) ? data.assets : [];
+    if (!this.options.queryGeneratedAssets) {
+      this.setStatus(projectRoot, 'stale', 'stale', 0, 'generated-assets-projection-unavailable');
+      return [];
+    }
+    const assets = await this.options.queryGeneratedAssets();
     const items = assets
-      .flatMap((asset) => this.toItem(projectRoot, indexPath, asset))
-      .filter((item) => matchesProjectSearchItem(item, query));
+      .map((asset) => this.toItem(projectRoot, asset))
+      .filter((item) => matchesProjectSearchItem(item, query))
+      .slice(0, query.limit ?? 200);
     this.setStatus(projectRoot, 'ready', 'fresh', items.length);
     return items;
   }
 
-  private toItem(
-    projectRoot: string,
-    indexPath: string,
-    asset: GeneratedAssetRecord,
-  ): readonly ProjectSearchItem[] {
-    const id = optionalString(asset.id);
-    const type = optionalString(asset.type);
-    const filePath = optionalString(asset.path);
-    if (!id || !type || !filePath) return [];
-
-    const prompt = optionalString(asset.prompt);
-    const model = optionalString(asset.model);
-    const mimeType = optionalString(asset.mimeType);
-    const generatedAt = optionalString(asset.generatedAt);
+  private toItem(projectRoot: string, asset: GeneratedAsset): ProjectSearchItem {
+    const filePath = asset.path;
     const fileName = path.basename(filePath);
-    const mediaType = generatedAssetMediaType(type, mimeType, filePath);
-    const thumbnailUri = mediaType === 'image' ? this.resolveThumbnailUri?.(filePath) : undefined;
+    const extension = path.extname(fileName);
+    const stableRef = `generated-assets/${asset.id}${extension}`;
+    const mediaType = generatedAssetMediaType(asset.type, asset.mimeType, filePath);
+    const thumbnailUri =
+      mediaType === 'image' ? this.options.resolveThumbnailUri?.(filePath) : undefined;
 
-    return [
-      {
-        id: `generated-asset:${id}`,
-        kind: 'generated-asset',
-        label: prompt ? `${fileName} · ${prompt}` : fileName,
-        description: model ? `Generated asset: ${model}` : 'Generated asset',
-        icon: iconForGraphKind('generated-asset'),
-        source: {
-          partition: 'generated-assets',
-          sourceId: id,
-          sourceKind: type,
-          filePath: indexPath,
-          refId: filePath,
-        },
-        projectRoot,
+    return {
+      id: `generated-asset:${asset.id}`,
+      kind: 'generated-asset',
+      label: asset.prompt ? `${fileName} · ${asset.prompt}` : fileName,
+      description: asset.model ? `Generated asset: ${asset.model}` : 'Generated asset',
+      icon: iconForGraphKind('generated-asset'),
+      source: {
+        partition: 'generated-assets',
+        sourceId: asset.id,
+        sourceKind: asset.type,
+        assetId: asset.id,
+        refId: stableRef,
+      },
+      projectRoot,
+      filePath,
+      canonicalName: fileName,
+      searchText: buildProjectSearchText([
+        asset.id,
+        fileName,
+        asset.prompt,
+        asset.model,
+        asset.mimeType,
+        asset.type,
+      ]),
+      navigationData: {
+        assetId: asset.id,
         filePath,
-        canonicalName: fileName,
-        searchText: buildProjectSearchText([id, fileName, prompt, model, mimeType, type]),
-        navigationData: {
-          assetId: id,
-          filePath,
-          type,
-        },
-        ...(thumbnailUri ? { thumbnailUri } : {}),
-        freshness: 'fresh',
-        metadata: {
-          mediaType,
-          fileType: path.extname(filePath).replace(/^\./, ''),
-          ...(generatedAt ? { generatedAt } : {}),
-          ...(model ? { model } : {}),
-        },
-      } satisfies ProjectSearchItem,
-    ];
+        ref: stableRef,
+        type: asset.type,
+      },
+      ...(thumbnailUri ? { thumbnailUri } : {}),
+      freshness: 'fresh',
+      metadata: {
+        ...(mediaType ? { mediaType } : {}),
+        fileType: extension.replace(/^\./, ''),
+        generatedAt: asset.generatedAt,
+        ...(asset.model ? { model: asset.model } : {}),
+      },
+    };
   }
 }
 
@@ -1119,13 +1162,6 @@ function matchesMediaLibraryRawItem(
   );
 }
 
-function reachedQueryLimit(
-  items: readonly ProjectSearchItem[],
-  query: ProjectSearchQuery,
-): boolean {
-  return query.limit !== undefined && items.length >= query.limit;
-}
-
 function getStoryApi(): NekoStoryAPI | undefined {
   try {
     const extension = vscode.extensions.getExtension<NekoStoryAPI>('neko.neko-story');
@@ -1210,13 +1246,13 @@ function detectMediaTypeSafe(filePath: string | undefined): AssetMediaType | und
 }
 
 function generatedAssetMediaType(
-  type: string,
-  mimeType: string | undefined,
+  type: GeneratedAsset['type'],
+  mimeType: string,
   filePath: string,
 ): AssetMediaType | undefined {
-  if (type === 'generated-image' || mimeType?.startsWith('image/')) return 'image';
-  if (type === 'generated-video' || mimeType?.startsWith('video/')) return 'video';
-  if (type === 'generated-audio' || mimeType?.startsWith('audio/')) return 'audio';
+  if (type === 'generated-image' || mimeType.startsWith('image/')) return 'image';
+  if (type === 'generated-video' || mimeType.startsWith('video/')) return 'video';
+  if (type === 'generated-audio' || mimeType.startsWith('audio/')) return 'audio';
   return detectMediaTypeSafe(filePath);
 }
 

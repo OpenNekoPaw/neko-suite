@@ -4,7 +4,10 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { PathResolver, createResourceFingerprint, createResourceRef } from '@neko/shared';
-import { createGeneratedAssetResourceRef } from '@neko/shared/vscode/extension';
+import {
+  createGeneratedAssetResourceRef,
+  type ResourceCacheManifestStore,
+} from '@neko/shared/vscode/extension';
 import type { IEngineClientProvider } from '../engineClientProvider';
 import { createExtensionAgentContentAccessRuntime } from '../agentContentAccessRuntime';
 
@@ -171,6 +174,7 @@ describe('createExtensionAgentContentAccessRuntime', () => {
       engineClientProvider: createEngineClientProvider(createEngine(PNG_1X1)),
       workspaceRoot,
       pathResolver: new PathResolver(new Map([['WORKSPACE', workspaceRoot]])),
+      resourceCacheManifestStore: createMemoryManifestStore(),
     });
     const ref = createGeneratedAssetResourceRef({
       assetId: 'asset-1',
@@ -261,6 +265,26 @@ describe('createExtensionAgentContentAccessRuntime', () => {
     ]);
   });
 });
+
+function createMemoryManifestStore(): ResourceCacheManifestStore {
+  let manifest = {
+    version: 1 as const,
+    createdAt: '2026-07-13T00:00:00.000Z',
+    updatedAt: '2026-07-13T00:00:00.000Z',
+    entries: {},
+  };
+  return {
+    load: async () => manifest,
+    save: async (next) => {
+      manifest = next;
+    },
+    update: async (operation) => {
+      manifest = await operation(manifest);
+      return manifest;
+    },
+    invalidateCache: () => undefined,
+  };
+}
 
 function createEngine(bytes: Uint8Array) {
   const engine = {

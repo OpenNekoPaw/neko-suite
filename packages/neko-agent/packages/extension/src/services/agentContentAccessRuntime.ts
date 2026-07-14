@@ -14,10 +14,12 @@ import {
   DocumentResourceCacheProvider,
   GeneratedAssetDerivativeResourceCacheProvider,
   createHostContentAccessRuntime,
+  createWorkspaceResourceCacheOptions,
   type ContentAccessFileExists,
   type ContentAccessService,
   type LocalResourceAccessService,
   type ResourceCacheService,
+  type ResourceCacheManifestStore,
 } from '@neko/shared/vscode/extension';
 import {
   createAgentDocumentReaderModuleUnavailableError,
@@ -47,6 +49,7 @@ export interface CreateExtensionAgentContentAccessRuntimeOptions {
   readonly mediaPathContext?: WorkspaceMediaPathContext;
   readonly fileExists?: ContentAccessFileExists;
   readonly maxProviderAssetBytes?: number;
+  readonly resourceCacheManifestStore?: ResourceCacheManifestStore;
 }
 
 export interface CreateExtensionAgentContentAccessRuntimeResult extends AgentContentAccessRuntimeServices {
@@ -73,27 +76,32 @@ export function createExtensionAgentContentAccessRuntime(
     mediaPathContext: options.mediaPathContext,
     fileExists: options.fileExists,
     webviewResolver: options.webviewResolver,
-    resourceCacheOptions: options.context
-      ? {
-          providers: [
-            new GeneratedAssetDerivativeResourceCacheProvider({
-              pathResolver: options.pathResolver,
-              ...(workspaceRoot ? { projectRoot: workspaceRoot } : {}),
-            }),
-            new DocumentResourceCacheProvider({
-              pathResolver: options.pathResolver,
-              ...(workspaceRoot ? { projectRoot: workspaceRoot } : {}),
-              entryReader: {
-                readEntry: (source, entryPath) =>
-                  engineContentAccess.readDocumentEntry({
-                    sourcePath: source.filePath,
-                    entryPath,
-                  }),
-              },
-            }),
-          ],
-        }
-      : undefined,
+    resourceCacheOptions:
+      workspaceRoot && options.resourceCacheManifestStore
+        ? {
+            ...createWorkspaceResourceCacheOptions(
+              workspaceRoot,
+              options.resourceCacheManifestStore,
+            ),
+            providers: [
+              new GeneratedAssetDerivativeResourceCacheProvider({
+                pathResolver: options.pathResolver,
+                ...(workspaceRoot ? { projectRoot: workspaceRoot } : {}),
+              }),
+              new DocumentResourceCacheProvider({
+                pathResolver: options.pathResolver,
+                ...(workspaceRoot ? { projectRoot: workspaceRoot } : {}),
+                entryReader: {
+                  readEntry: (source, entryPath) =>
+                    engineContentAccess.readDocumentEntry({
+                      sourcePath: source.filePath,
+                      entryPath,
+                    }),
+                },
+              }),
+            ],
+          }
+        : undefined,
     sourceFileProvider: {
       enabled: Boolean(workspaceRoot),
       engineSourceResolver: ({ request, path: filePath }) =>

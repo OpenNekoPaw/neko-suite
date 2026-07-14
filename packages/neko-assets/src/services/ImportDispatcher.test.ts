@@ -41,10 +41,10 @@ describe('MediaImportDispatcher', () => {
       importedAssets: [{ mediaKind: 'puppet-model', storageMode: 'bundle-memory' }],
     });
     expect(commands.executeCommand).toHaveBeenCalledWith('neko.puppet.importLive2dBundle', {
-      path: '/repo/.neko/imports/puppets/sakura.zip',
+      path: '/repo/media/imports/puppets/sakura.zip',
       workspaceFolderPath: '/repo',
     });
-    expect(fs.files.get('/repo/.neko/imports/puppets/sakura.zip')).toEqual(
+    expect(fs.files.get('/repo/media/imports/puppets/sakura.zip')).toEqual(
       new Uint8Array([1, 2, 3]),
     );
   });
@@ -63,9 +63,9 @@ describe('MediaImportDispatcher', () => {
     ).resolves.toMatchObject({
       importedAssets: [{ mediaKind: 'model-3d', storageMode: 'disk' }],
     });
-    expect(fs.files.get('/repo/.neko/imports/models/hero.glb')).toEqual(new Uint8Array([1, 2, 3]));
+    expect(fs.files.get('/repo/media/imports/models/hero.glb')).toEqual(new Uint8Array([1, 2, 3]));
     expect(commands.executeCommand).toHaveBeenCalledWith('neko.model.authoring.importAsset', {
-      path: '/repo/.neko/imports/models/hero.glb',
+      path: '/repo/media/imports/models/hero.glb',
       target: {
         kind: 'file',
         documentUri: 'file:///repo/scenes/shot.nkm',
@@ -108,9 +108,9 @@ describe('MediaImportDispatcher', () => {
         workspaceFolderPaths: ['/repo-a', '/repo-b'],
       }),
     ).toMatchObject({
-      action: 'copy',
-      targetPath: '/repo-b/.neko/imports/models/hero.glb',
-      projectRef: '.neko/imports/models/hero.glb',
+      action: 'promote',
+      targetPath: '/repo-b/media/imports/models/hero.glb',
+      projectRef: 'media/imports/models/hero.glb',
     });
   });
 
@@ -135,7 +135,7 @@ describe('MediaImportDispatcher', () => {
     });
   });
 
-  it('extracts glTF ZIPs under .neko/imports/models with zip-slip protection', async () => {
+  it('extracts and promotes glTF ZIPs under durable project media with zip-slip protection', async () => {
     const commands = createCommandBus();
     const fs = createFs({ '/downloads/hero.zip': new Uint8Array([9]) });
     const dispatcher = new MediaImportDispatcher({
@@ -155,17 +155,17 @@ describe('MediaImportDispatcher', () => {
         workspaceFolderPaths: ['/repo'],
       }),
     ).resolves.toMatchObject({
-      projectFilePath: '/repo/.neko/imports/models/hero-123/hero/hero.gltf',
+      projectFilePath: '/repo/media/imports/models/hero-123/hero/hero.gltf',
       importedAssets: [{ mediaKind: 'model-3d', storageMode: 'disk' }],
     });
     expect([...fs.files.keys()].sort()).toEqual([
       '/downloads/hero.zip',
-      '/repo/.neko/imports/models/hero-123/hero/hero.bin',
-      '/repo/.neko/imports/models/hero-123/hero/hero.gltf',
-      '/repo/.neko/imports/models/hero-123/hero/textures/albedo.png',
+      '/repo/media/imports/models/hero-123/hero/hero.bin',
+      '/repo/media/imports/models/hero-123/hero/hero.gltf',
+      '/repo/media/imports/models/hero-123/hero/textures/albedo.png',
     ]);
     expect(commands.executeCommand).toHaveBeenCalledWith('neko.model.authoring.importAsset', {
-      path: '/repo/.neko/imports/models/hero-123/hero/hero.gltf',
+      path: '/repo/media/imports/models/hero-123/hero/hero.gltf',
       target: {
         kind: 'new',
         reveal: false,
@@ -193,7 +193,7 @@ describe('MediaImportDispatcher', () => {
       importedAssets: [{ mediaKind: 'model-3d' }],
     });
     expect(commands.executeCommand).toHaveBeenCalledWith('neko.model.authoring.importAsset', {
-      path: '/repo/.neko/imports/models/hero.glb',
+      path: '/repo/media/imports/models/hero.glb',
       target: {
         kind: 'new',
         reveal: false,
@@ -212,14 +212,14 @@ describe('MediaImportDispatcher', () => {
         workspaceFolderPaths: ['/repo'],
       }),
     ).resolves.toMatchObject({
-      projectFilePath: '/repo/.neko/imports/puppets/avatar.moc3',
+      projectFilePath: '/repo/media/imports/puppets/avatar.moc3',
       importedAssets: [{ mediaKind: 'puppet-model', storageMode: 'disk' }],
     });
     expect(commands.executeCommand).toHaveBeenCalledWith(
       'vscode.openWith',
       {
-        fsPath: '/repo/.neko/imports/puppets/avatar.moc3',
-        path: '/repo/.neko/imports/puppets/avatar.moc3',
+        fsPath: '/repo/media/imports/puppets/avatar.moc3',
+        path: '/repo/media/imports/puppets/avatar.moc3',
       },
       'neko.puppetEditor',
     );

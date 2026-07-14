@@ -33,6 +33,8 @@ import type {
   EntityFacadeUpsertBindingRequest,
   EntityFacadeUpsertVisualDraftRequest,
   EntityMemoryContribution,
+  EntityAssetProjectionRepository,
+  LocalMetadataPartition,
 } from '@neko/shared';
 import {
   ENTITY_FACADE_COMMANDS,
@@ -77,7 +79,7 @@ import {
   EntityAssetRequirementService,
   VisualIdentityDraftService,
 } from '../core/factStores';
-import { projectEntityBindingAvailability } from '../projections';
+import { EntityAssetMetadataProjector, projectEntityBindingAvailability } from '../projections';
 import { CreativeEntityRegistryService, ProjectEntityStore } from '../core/entityStore';
 import type { EntityRuntimeFileStore, EntityRuntimePorts } from '../core/ports';
 import { SerialEntityRuntimeLock } from '../core/ports';
@@ -192,6 +194,11 @@ export interface VSCodeEntityRuntimeOptions {
     info?(message: string, metadata?: Record<string, unknown>): void;
     error?(message: string, metadata?: Record<string, unknown>): void;
   };
+  readonly projection?: {
+    readonly repository: EntityAssetProjectionRepository;
+    readonly partition: LocalMetadataPartition;
+    readonly markStale?: (diagnostic: string, updatedAt: string) => Promise<unknown>;
+  };
 }
 
 export interface VSCodeDashboardEntitySourceCommandOptions {
@@ -224,6 +231,7 @@ export interface VSCodeEntityRuntime {
   readonly service: CreativeEntityService;
   readonly ports: EntityRuntimePorts;
   readonly onDidChangeEntity: vscode.Event<CreativeEntityChangeEvent>;
+  flushProjection(): Promise<void>;
   dispose(): void;
 }
 
@@ -232,6 +240,9 @@ export interface VSCodeEntityRuntimeRegistryOptions extends Pick<
   'logger'
 > {
   readonly createRuntime?: (options: VSCodeEntityRuntimeOptions) => VSCodeEntityRuntime;
+  readonly resolveProjection?: (
+    projectRoot: string,
+  ) => VSCodeEntityRuntimeOptions['projection'] | undefined;
 }
 
 export class VSCodeEntityRuntimeRegistry implements vscode.Disposable {
@@ -245,6 +256,7 @@ export class VSCodeEntityRuntimeRegistry implements vscode.Disposable {
     const next = (this.options.createRuntime ?? createVSCodeEntityRuntime)({
       projectRoot,
       logger: this.options.logger,
+      projection: this.options.resolveProjection?.(projectRoot),
     });
     this.runtimes.set(projectRoot, next);
     return next;
@@ -275,6 +287,37 @@ export function createVSCodeEntityRuntime(
     events: { emit: (event) => emitter.fire(event) },
   };
   const service = new CreativeEntityService({ projectRoot: options.projectRoot, ports });
+  const projector = options.projection
+    ? new EntityAssetMetadataProjector({
+        partition: options.projection.partition,
+        repository: options.projection.repository,
+        listCandidates: () => service.listCandidates(),
+        listBindings: () => service.bindings.list(),
+      })
+    : undefined;
+  let projectionRefresh = Promise.resolve();
+  const refreshProjection = (): void => {
+    if (!projector || !options.projection) return;
+    projectionRefresh = projectionRefresh.then(async () => {
+      try {
+        await projector.refreshFacts();
+      } catch (error) {
+        const updatedAt = new Date().toISOString();
+        try {
+          await options.projection?.markStale?.('entity-fact-projection-refresh-failed', updatedAt);
+        } catch (markError) {
+          options.logger?.warn('Failed to mark Entity/Asset projection stale', {
+            error: markError instanceof Error ? markError.message : String(markError),
+          });
+        }
+        options.logger?.warn('Entity/Asset projection refresh failed', {
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    });
+  };
+  const projectionSubscription = projector ? emitter.event(refreshProjection) : undefined;
+  refreshProjection();
   const bindingAvailabilityWatcher = new ProjectAssetBindingAvailabilityWatcher({
     projectRoot: options.projectRoot,
     service,
@@ -284,7 +327,9 @@ export function createVSCodeEntityRuntime(
     service,
     ports,
     onDidChangeEntity: emitter.event,
+    flushProjection: () => projectionRefresh,
     dispose() {
+      projectionSubscription?.dispose();
       bindingAvailabilityWatcher.dispose();
       emitter.dispose();
     },

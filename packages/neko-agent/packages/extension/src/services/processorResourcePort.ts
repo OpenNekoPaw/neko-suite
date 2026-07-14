@@ -7,7 +7,7 @@ import type {
   ProcessorResourceRetentionInput,
   ProcessorResourceStatus,
 } from '@neko-agent/types';
-import type { ResourceVariantRequest } from '@neko/shared';
+import { isPrivateCachePath, type ResourceVariantRequest } from '@neko/shared';
 import type { ResourceCacheService } from '@neko/shared/vscode/extension';
 import type { ResourceCacheOperationResult } from '@neko/shared/vscode/extension';
 
@@ -83,7 +83,28 @@ class ExtensionProcessorResourcePort implements ProcessorResourcePort {
   }
 
   async markPromoted(input: ProcessorResourcePromoteInput): Promise<ProcessorResourceStatus> {
-    const promotedSourceRef = await this.createAsset?.(input);
+    if (!this.createAsset) {
+      return promotionFailure(input, 'Processor promotion requires an owning project fact writer.');
+    }
+    const promotedSourceRef = await this.createAsset(input);
+    if (!promotedSourceRef) {
+      return promotionFailure(
+        input,
+        'Processor promotion did not produce an owning project fact ref.',
+      );
+    }
+    if (promotedSourceRef.kind !== input.target) {
+      return promotionFailure(
+        input,
+        `Processor promotion fact kind ${promotedSourceRef.kind} does not match target ${input.target}.`,
+      );
+    }
+    if (!isStablePromotedSourceRef(promotedSourceRef)) {
+      return promotionFailure(
+        input,
+        'Processor promotion did not produce a stable project fact ref.',
+      );
+    }
     const result = await this.resourceCache.updateLifecycle({
       ref: input.resourceRef,
       variant: this.defaultVariant,
@@ -110,6 +131,30 @@ function toProcessorResourceStatus(
     ...(promotedSourceRef ? { promotedSourceRef } : {}),
     diagnostics: result.error ? [diagnostic(result.error)] : [],
   };
+}
+
+function promotionFailure(
+  input: ProcessorResourcePromoteInput,
+  message: string,
+): ProcessorResourceStatus {
+  return {
+    resourceRef: input.resourceRef,
+    retentionHint: 'intermediate',
+    status: 'failed',
+    diagnostics: [diagnostic(message)],
+  };
+}
+
+function isStablePromotedSourceRef(ref: ProcessorResourcePromotedSourceRef): boolean {
+  if (ref.kind === 'asset') return ref.assetId.trim().length > 0;
+  const value = ref.path.trim();
+  return (
+    value.length > 0 &&
+    !isPrivateCachePath(value) &&
+    !/(?:^|\/)\.neko\/\.cache(?:\/|$)/iu.test(value.replace(/\\/gu, '/')) &&
+    !/^(?:[A-Za-z]:[\\/]|[/\\]{1,2})/u.test(value) &&
+    !/^(?:blob|data|vscode-webview-resource|vscode-resource|file):/iu.test(value)
+  );
 }
 
 function readRetentionHint(

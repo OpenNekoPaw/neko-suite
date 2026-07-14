@@ -628,6 +628,7 @@ function createMemoryRuntimeRegistry(
         service,
         ports,
         onDidChangeEntity: eventEmitter.event,
+        flushProjection: async () => undefined,
         dispose() {
           eventEmitter.dispose();
         },

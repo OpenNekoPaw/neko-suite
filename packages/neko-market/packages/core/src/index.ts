@@ -49,6 +49,12 @@ export { LicenseManager } from './license/license-manager';
 
 // Registry
 export { InstalledRegistry } from './registry/installed-registry';
+export { LocalMetadataInstalledRegistry } from './registry/local-metadata-installed-registry';
+export type { LocalMetadataInstalledRegistryOptions } from './registry/local-metadata-installed-registry';
+export type {
+  InstalledPackageRegistry,
+  RemovedReferenceState,
+} from './registry/installed-package-registry';
 export { WorkspaceTrustStore } from './trust/workspace-trust-store';
 export type {
   WorkspaceTrustHint,

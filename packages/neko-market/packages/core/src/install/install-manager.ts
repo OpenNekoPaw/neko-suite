@@ -43,7 +43,7 @@ import { downloadFile } from './download-service';
 import { EffectsActivator, EffectsInverter } from './effects-inverter';
 import { PresenceSignatureVerifier, type ManifestSignatureVerifier } from './signature-verifier';
 import type { InstallTargetRegistry } from './install-target';
-import type { InstalledRegistry } from '../registry/installed-registry';
+import type { InstalledPackageRegistry } from '../registry/installed-package-registry';
 
 // =============================================================================
 // Configuration
@@ -62,6 +62,7 @@ export interface InstallManagerConfig {
   effectsInverter?: EffectsInverter;
   currentTargetTriple?: string;
   workspaceTrustLevel?: WorkspaceTrustLevel;
+  getWorkspaceTrustLevel?: () => WorkspaceTrustLevel;
   developerMode?: DeveloperModeState;
   localAssetValidator?: LocalAssetValidator;
   downloadTempDir?: string;
@@ -112,7 +113,7 @@ export class InstallManager implements IInstallManager {
     private readonly license: ILicenseManager,
     private readonly versionResolver: IVersionResolver,
     private readonly targets: InstallTargetRegistry,
-    private readonly installed: InstalledRegistry,
+    private readonly installed: InstalledPackageRegistry,
     private readonly config: InstallManagerConfig,
   ) {
     this.signatureVerifier = config.signatureVerifier ?? new PresenceSignatureVerifier();
@@ -863,7 +864,7 @@ export class InstallManager implements IInstallManager {
   }
 
   private getWorkspaceTrustLevel(): WorkspaceTrustLevel {
-    return this.config.workspaceTrustLevel ?? 'trusted';
+    return this.config.getWorkspaceTrustLevel?.() ?? this.config.workspaceTrustLevel ?? 'trusted';
   }
 
   private isVerifiedPluginPublisher(manifest: AssetManifest): boolean {

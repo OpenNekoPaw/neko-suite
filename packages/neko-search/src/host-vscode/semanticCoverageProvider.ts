@@ -1,7 +1,6 @@
 import * as path from 'path';
 import * as vscode from 'vscode';
 import {
-  parseMediaSemanticIndexSidecar,
   validateCharacterMemoryFile,
   type CharacterMemoryFile,
   type CharacterMemorySourceRef,
@@ -9,28 +8,30 @@ import {
   type MediaSemanticIndex,
   type MediaTextRange,
   type MediaTextSegment,
+  type LocalMetadataPartition,
   type ProjectIndexFreshness,
   type ProjectSearchQueryContext,
-  type ProjectSemanticCoverageAnalysisKind,
   type ProjectSemanticCoverageMatchedRange,
   type ProjectSemanticCoverageQuery,
   type ProjectSemanticCoverageResult,
   type ProjectSemanticCoverageStaleReason,
   type ProjectSemanticCoverageStatus,
   type ProjectSemanticProviderMetadata,
+  type SemanticProjectionRepository,
 } from '@neko/shared';
 import type { ProjectSearchLogger, ProjectSemanticCoverageProvider } from '../core/ports';
 
 const PROVIDER_ID = 'neko-search.semantic-coverage';
 const PROVIDER_SCHEMA_VERSION = '1';
 const PROVIDER_INDEX_VERSION = 'semantic-coverage-v1';
-const SEMANTIC_INDEX_GLOB = '**/.neko/semantic-index/**/*.json';
-
 export interface VSCodeSemanticCoverageProviderOptions {
   readonly logger?: ProjectSearchLogger;
-  readonly findSemanticIndexFiles?: (projectRoot: string) => Promise<readonly string[]>;
   readonly readTextFile?: (filePath: string) => Promise<string | undefined>;
   readonly resolveCharacterMemoryPath?: (projectRoot: string) => string;
+  readonly semanticProjection?: {
+    readonly repository: SemanticProjectionRepository;
+    readonly partition: LocalMetadataPartition;
+  };
 }
 
 interface CoverageEvidence {
@@ -39,15 +40,16 @@ interface CoverageEvidence {
   readonly evidenceIds?: readonly string[];
   readonly observationIds?: readonly string[];
   readonly provider?: ProjectSemanticProviderMetadata;
+  readonly staleReasons?: readonly ProjectSemanticCoverageStaleReason[];
 }
 
 export function createVSCodeSemanticCoverageProvider(
   options: VSCodeSemanticCoverageProviderOptions = {},
 ): ProjectSemanticCoverageProvider {
   return new VSCodeSemanticCoverageProvider({
-    findSemanticIndexFiles: options.findSemanticIndexFiles ?? findVSCodeSemanticIndexFiles,
     readTextFile: options.readTextFile ?? readVSCodeTextFile,
     resolveCharacterMemoryPath: options.resolveCharacterMemoryPath ?? resolveCharacterMemoryPath,
+    semanticProjection: options.semanticProjection,
     logger: options.logger,
   });
 }
@@ -57,11 +59,11 @@ class VSCodeSemanticCoverageProvider implements ProjectSemanticCoverageProvider 
 
   constructor(
     private readonly options: Required<
-      Pick<
-        VSCodeSemanticCoverageProviderOptions,
-        'findSemanticIndexFiles' | 'readTextFile' | 'resolveCharacterMemoryPath'
-      >
-    > & { readonly logger?: ProjectSearchLogger },
+      Pick<VSCodeSemanticCoverageProviderOptions, 'readTextFile' | 'resolveCharacterMemoryPath'>
+    > & {
+      readonly logger?: ProjectSearchLogger;
+      readonly semanticProjection?: VSCodeSemanticCoverageProviderOptions['semanticProjection'];
+    },
   ) {}
 
   async querySemanticCoverage(
@@ -75,7 +77,7 @@ class VSCodeSemanticCoverageProvider implements ProjectSemanticCoverageProvider 
 
     const diagnostics: ContributionDiagnostic[] = [];
     const evidence = [
-      ...(await this.loadSemanticIndexEvidence(projectRoot, query, diagnostics)),
+      ...(await this.loadSemanticIndexEvidence(query, diagnostics)),
       ...(await this.loadCharacterMemoryEvidence(projectRoot, query, diagnostics)),
     ];
 
@@ -83,37 +85,36 @@ class VSCodeSemanticCoverageProvider implements ProjectSemanticCoverageProvider 
   }
 
   private async loadSemanticIndexEvidence(
-    projectRoot: string,
     query: ProjectSemanticCoverageQuery,
     diagnostics: ContributionDiagnostic[],
   ): Promise<readonly CoverageEvidence[]> {
-    let files: readonly string[] = [];
+    const projection = this.options.semanticProjection;
+    if (!projection) {
+      diagnostics.push(providerDiagnostic('warning', 'semantic-coverage-projection-unavailable'));
+      return [];
+    }
     try {
-      files = await this.options.findSemanticIndexFiles(projectRoot);
+      const records = await projection.repository.list(projection.partition);
+      return records.flatMap((record) => {
+        if (!stableSourceRefsMatch(query.sourceRef, record.index.sourceRef)) return [];
+        const staleReasons: readonly ProjectSemanticCoverageStaleReason[] | undefined =
+          record.freshness === 'fresh' ? undefined : ['index-stale'];
+        return semanticIndexEvidence(record.index, query).map((item) => ({
+          ...item,
+          provider: {
+            ...record.provider,
+            ...(item.provider?.model ? { model: item.provider.model } : {}),
+          },
+          ...(staleReasons ? { staleReasons } : {}),
+        }));
+      });
     } catch (error) {
-      diagnostics.push(providerDiagnostic('warning', 'semantic-coverage-index-discovery-failed'));
-      this.options.logger?.warn('Semantic coverage index discovery failed', {
+      diagnostics.push(providerDiagnostic('warning', 'semantic-coverage-projection-read-failed'));
+      this.options.logger?.warn('Semantic coverage projection read failed', {
         error: formatUnknownError(error),
       });
+      return [];
     }
-
-    const evidence: CoverageEvidence[] = [];
-    for (const filePath of files) {
-      const content = await this.readTextFile(filePath, diagnostics);
-      if (!content) continue;
-      const parsed = parseMediaSemanticIndexSidecar(content, {
-        warnOnUnrelatedRangeFields: true,
-      });
-      if (!parsed.record) {
-        diagnostics.push(providerDiagnostic('warning', 'semantic-coverage-invalid-index-record'));
-        continue;
-      }
-      if (!stableSourceRefsMatch(query.sourceRef, parsed.record.index.sourceRef)) {
-        continue;
-      }
-      evidence.push(...semanticIndexEvidence(parsed.record.index, query));
-    }
-    return evidence;
   }
 
   private async loadCharacterMemoryEvidence(
@@ -156,21 +157,6 @@ class VSCodeSemanticCoverageProvider implements ProjectSemanticCoverageProvider 
         },
       ];
     });
-  }
-
-  private async readTextFile(
-    filePath: string,
-    diagnostics: ContributionDiagnostic[],
-  ): Promise<string | undefined> {
-    try {
-      return await this.options.readTextFile(filePath);
-    } catch (error) {
-      diagnostics.push(providerDiagnostic('warning', 'semantic-coverage-read-failed'));
-      this.options.logger?.warn('Semantic coverage file read failed', {
-        error: formatUnknownError(error),
-      });
-      return undefined;
-    }
   }
 
   private async readOptionalTextFile(filePath: string): Promise<string | undefined> {
@@ -251,12 +237,22 @@ function coverageResultFromEvidence(
   diagnostics: readonly ContributionDiagnostic[],
 ): ProjectSemanticCoverageResult {
   const matched = evidence.filter((item) => rangeMatchesQuery(query.range, item.range));
-  const staleReasons = schemaStaleReasons(query);
+  const schemaReasons = schemaStaleReasons(query);
+  const staleReasons = uniqueStaleReasons([
+    ...schemaReasons,
+    ...matched.flatMap((item) => item.staleReasons ?? []),
+  ]);
   const evidenceStatus = staleReasons.length > 0 ? 'stale' : 'fresh';
   const evidenceFreshness = staleReasons.length > 0 ? 'stale' : 'fresh';
-  const matchedRanges = matched.map((item) =>
-    matchedRangeFromEvidence(item, evidenceStatus, evidenceFreshness, staleReasons),
-  );
+  const matchedRanges = matched.map((item) => {
+    const itemStaleReasons = uniqueStaleReasons([...schemaReasons, ...(item.staleReasons ?? [])]);
+    return matchedRangeFromEvidence(
+      item,
+      itemStaleReasons.length > 0 ? 'stale' : 'fresh',
+      itemStaleReasons.length > 0 ? 'stale' : 'fresh',
+      itemStaleReasons,
+    );
+  });
   const missingRanges = missingRangesForQuery(query.range, matched);
 
   if (matchedRanges.length === 0) {
@@ -298,7 +294,7 @@ function coverageResultFromEvidence(
         }
       : {}),
     ...(diagnostics.length > 0 ? { diagnostics } : {}),
-    provider: providerMetadata(query),
+    provider: matched[0]?.provider ?? providerMetadata(query),
     projectRoot,
   };
 }
@@ -593,6 +589,10 @@ function semanticCoverageDiagnosticMessage(code: string): string {
   switch (code) {
     case 'semantic-coverage-missing-project-root':
       return 'Semantic coverage requires a resolved project context.';
+    case 'semantic-coverage-projection-unavailable':
+      return 'Semantic coverage SQLite projection is unavailable.';
+    case 'semantic-coverage-projection-read-failed':
+      return 'Semantic coverage SQLite projection could not be read.';
     case 'semantic-coverage-index-discovery-failed':
       return 'Semantic coverage provider could not discover semantic index records.';
     case 'semantic-coverage-invalid-index-record':
@@ -614,11 +614,6 @@ function uniqueStaleReasons(
   values: readonly ProjectSemanticCoverageStaleReason[],
 ): readonly ProjectSemanticCoverageStaleReason[] {
   return [...new Set(values)];
-}
-
-async function findVSCodeSemanticIndexFiles(projectRoot: string): Promise<readonly string[]> {
-  const uris = await vscode.workspace.findFiles(SEMANTIC_INDEX_GLOB, '**/node_modules/**');
-  return uris.map((uri) => uri.fsPath).filter((filePath) => isPathInside(filePath, projectRoot));
 }
 
 async function readVSCodeTextFile(filePath: string): Promise<string | undefined> {
@@ -651,11 +646,6 @@ function stableStringify(value: unknown): string {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function isPathInside(filePath: string, root: string): boolean {
-  const relative = path.relative(root, filePath);
-  return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
 }
 
 function formatUnknownError(error: unknown): string {

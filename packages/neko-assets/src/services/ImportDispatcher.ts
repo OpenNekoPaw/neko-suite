@@ -170,6 +170,7 @@ export class MediaImportDispatcher {
       const plan = this.planImport(input);
       const sourceHash = await this.hashFile(plan.sourcePath);
       const puppetPath = await this.materializePlannedFile(plan);
+      const originalSourceRef = this.portableOriginalSourceRef(input, plan.sourcePath);
       await this.commands.executeCommand(
         'vscode.openWith',
         uriArg(puppetPath),
@@ -179,14 +180,14 @@ export class MediaImportDispatcher {
         {
           dimension: 'model',
           mediaKind: 'puppet-model',
-          storageMode: plan.action === 'copy' ? 'disk' : 'workspace',
+          storageMode: plan.action === 'promote' ? 'disk' : 'workspace',
           path: puppetPath,
           sourceHash,
           metadata: {
-            originalSourcePath: plan.sourcePath,
+            ...(originalSourceRef ? { originalSourcePath: originalSourceRef } : {}),
             durableProjectRef: plan.projectRef,
-            ...(plan.action === 'copy' ? { importDestination: puppetPath } : {}),
-            ...(plan.action === 'copy'
+            ...(plan.action === 'promote' ? { importDestination: puppetPath } : {}),
+            ...(plan.action === 'promote'
               ? { importDestinationRef: this.projectRefForSource(input, puppetPath) }
               : {}),
           },
@@ -203,6 +204,7 @@ export class MediaImportDispatcher {
     const plan = this.planImport(input);
     const sourceHash = await this.hashFile(plan.sourcePath);
     const modelPath = await this.materializePlannedFile(plan);
+    const originalSourceRef = this.portableOriginalSourceRef(input, plan.sourcePath);
     await this.commands.executeCommand(
       'neko.model.authoring.importAsset',
       createModelAuthoringImportPayload(input, modelPath),
@@ -211,14 +213,14 @@ export class MediaImportDispatcher {
       {
         dimension: 'model',
         mediaKind: 'model-3d',
-        storageMode: plan.action === 'copy' ? 'disk' : 'workspace',
+        storageMode: plan.action === 'promote' ? 'disk' : 'workspace',
         path: modelPath,
         sourceHash,
         metadata: {
-          originalSourcePath: plan.sourcePath,
+          ...(originalSourceRef ? { originalSourcePath: originalSourceRef } : {}),
           durableProjectRef: plan.projectRef,
-          ...(plan.action === 'copy' ? { importDestination: modelPath } : {}),
-          ...(plan.action === 'copy'
+          ...(plan.action === 'promote' ? { importDestination: modelPath } : {}),
+          ...(plan.action === 'promote'
             ? { importDestinationRef: this.projectRefForSource(input, modelPath) }
             : {}),
         },
@@ -251,7 +253,7 @@ export class MediaImportDispatcher {
     const extractRoot = this.importRoot(input, 'models');
     const targetDir = path.join(extractRoot, `${path.basename(sourcePath, '.zip')}-${this.now()}`);
     const plan: ImportPlan = {
-      action: 'extract',
+      action: 'extract-promote',
       sourcePath,
       targetDir,
       projectRef: this.projectRefForSource(input, path.join(targetDir, route.gltfEntryPath)),
@@ -278,6 +280,7 @@ export class MediaImportDispatcher {
     }
 
     const modelPath = path.join(targetDir, ...route.gltfEntryPath.split('/'));
+    const originalSourceRef = this.portableOriginalSourceRef(input, sourcePath);
     await this.commands.executeCommand(
       'neko.model.authoring.importAsset',
       createModelAuthoringImportPayload(input, modelPath),
@@ -290,7 +293,7 @@ export class MediaImportDispatcher {
         path: modelPath,
         sourceHash,
         metadata: {
-          originalSourcePath: sourcePath,
+          ...(originalSourceRef ? { originalSourcePath: originalSourceRef } : {}),
           durableProjectRef: this.projectRefForSource(input, modelPath),
           importDestination: targetDir,
           importDestinationRef: this.projectRefForSource(input, targetDir),
@@ -325,6 +328,7 @@ export class MediaImportDispatcher {
           'puppets',
         );
         const bundlePath = await this.materializePlannedFile(bundlePlan);
+        const originalSourceRef = this.portableOriginalSourceRef(input, bundlePlan.sourcePath);
         await this.commands.executeCommand('neko.puppet.importLive2dBundle', {
           path: bundlePath,
           workspaceFolderPath: input.workspaceFolderPaths[0],
@@ -337,7 +341,7 @@ export class MediaImportDispatcher {
             path: bundlePath,
             sourceHash,
             metadata: {
-              originalSourcePath: path.resolve(input.sourcePath),
+              ...(originalSourceRef ? { originalSourcePath: originalSourceRef } : {}),
               durableProjectRef: bundlePlan.projectRef,
             },
           },
@@ -374,7 +378,7 @@ export class MediaImportDispatcher {
     const targetDir = this.importRoot(input, kindDir);
     const targetPath = path.join(targetDir, path.basename(sourcePath));
     return {
-      action: 'copy',
+      action: 'promote',
       sourcePath,
       targetPath,
       targetDir,
@@ -393,6 +397,16 @@ export class MediaImportDispatcher {
     return formatProjectRef(path.relative(basePath, filePath));
   }
 
+  private portableOriginalSourceRef(input: ImportPlanInput, filePath: string): string | undefined {
+    const contracted = contractWorkspaceMediaPath(
+      path.resolve(filePath),
+      createImportWorkspaceMediaPathContext(input),
+    );
+    return contracted.format === 'workspace-relative' || contracted.format === 'variable'
+      ? contracted.path
+      : undefined;
+  }
+
   private importRoot(input: ImportPlanInput, kindDir: 'models' | 'puppets'): string {
     const documentPath = input.documentPath ? path.resolve(input.documentPath) : undefined;
     const workspaceRoot =
@@ -401,11 +415,11 @@ export class MediaImportDispatcher {
         ? findContainingWorkspaceFolder(documentPath, input.workspaceFolderPaths)
         : input.workspaceFolderPaths[0]) ??
       (documentPath ? path.dirname(documentPath) : path.dirname(input.sourcePath));
-    return path.join(path.resolve(workspaceRoot), '.neko', 'imports', kindDir);
+    return path.join(path.resolve(workspaceRoot), 'media', 'imports', kindDir);
   }
 
   private async materializePlannedFile(plan: ImportPlan): Promise<string> {
-    if (plan.action !== 'copy') return plan.sourcePath;
+    if (plan.action !== 'promote') return plan.sourcePath;
     const targetPath = await this.resolveAvailableImportPath(plan.targetPath);
     await this.fs.createDirectory(plan.targetDir);
     await this.fs.writeFile(targetPath, await this.fs.readFile(plan.sourcePath));

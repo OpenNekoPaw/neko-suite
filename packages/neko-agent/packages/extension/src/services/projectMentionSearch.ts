@@ -9,7 +9,10 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import type { ProjectSearchItem, ProjectSearchItemKind, ProjectSearchResult } from '@neko/shared';
-import { contractHostContentMediaPath } from '@neko/shared/vscode/extension';
+import {
+  contractHostContentMediaPath,
+  loadHostContentPathPolicy,
+} from '@neko/shared/vscode/extension';
 import type { AgentProjectFileSearchPlan, AgentProjectMentionCandidate } from '@neko/agent/runtime';
 import type {
   ProjectMentionExtraType,
@@ -40,11 +43,17 @@ const ROLEPLAY_SEARCH_KINDS: readonly ProjectSearchItemKind[] = [
 
 const WINDOWS_DRIVE_RE = /^[A-Za-z]:[\\/]/;
 const WINDOWS_UNC_RE = /^\\\\/;
+const HOST_CONTENT_PATH_VARIABLES = new Set(['HOME', 'NEKO_HOME', 'WORKSPACE', 'PROJECT']);
 
 interface ProjectMentionSearchOptions {
   readonly contextFilePath?: string;
   readonly contextUri?: string;
   readonly projectRoot?: string;
+}
+
+interface ProjectMentionCandidateProjection {
+  readonly candidate?: AgentProjectMentionCandidate;
+  readonly rejectedMediaPath: boolean;
 }
 
 export async function searchProjectMentionCandidates(
@@ -72,11 +81,28 @@ export async function searchProjectMentionCandidates(
   );
 
   const items = result?.items ?? [];
-  return Promise.all(
-    (isRoleplaySearch ? items.filter(isRoleplayProjectSearchItem) : items).map(
-      projectSearchItemToMentionCandidate,
+  const mentionItems = isRoleplaySearch ? items.filter(isRoleplayProjectSearchItem) : items;
+  const mediaLibraryPathVariables = await loadMediaLibraryPathVariables(
+    mentionItems,
+    options.projectRoot,
+  );
+  const projections = await Promise.all(
+    mentionItems.map((item) =>
+      projectSearchItemToMentionCandidate(item, mediaLibraryPathVariables),
     ),
   );
+  const rejectedMediaPathCount = projections.filter(
+    (projection) => projection.rejectedMediaPath,
+  ).length;
+  if (rejectedMediaPathCount > 0) {
+    void vscode.window.showErrorMessage(
+      vscode.l10n.t(
+        'Media library path variables are unavailable. Filtered {0} media item(s). Ensure Neko Assets is loaded and verify the media library path variable settings.',
+        rejectedMediaPathCount,
+      ),
+    );
+  }
+  return projections.flatMap((projection) => (projection.candidate ? [projection.candidate] : []));
 }
 
 function isRoleplayProjectSearchItem(item: ProjectSearchItem): boolean {
@@ -102,7 +128,8 @@ function isCharacterLikeString(value: string | undefined): boolean {
 
 async function projectSearchItemToMentionCandidate(
   item: ProjectSearchItem,
-): Promise<AgentProjectMentionCandidate> {
+  mediaLibraryPathVariables: ReadonlySet<string>,
+): Promise<ProjectMentionCandidateProjection> {
   const type = mentionTypeForProjectItem(item);
   const source = mentionSourceForProjectItem(item);
   const mediaType = readMentionMediaType(item.metadata?.['mediaType']);
@@ -112,32 +139,43 @@ async function projectSearchItemToMentionCandidate(
     readString(item.metadata?.['entityType']) ??
     readString(item.metadata?.['category']) ??
     item.source.sourceKind;
-  const referencePath = await projectMentionReferencePath(item);
+  const referencePath = await projectMentionReferencePath(item, mediaLibraryPathVariables);
+  if (isRejectedMediaLibraryPath(item, referencePath)) {
+    return { rejectedMediaPath: true };
+  }
   return {
-    type,
-    id: item.id,
-    label: item.label,
-    summary: item.description
-      ? `${labelForType(type)}: ${item.label} (${item.description})`
-      : `${labelForType(type)}: ${item.label}`,
-    ...(item.searchText ? { searchText: item.searchText } : {}),
-    ...(source ? { source } : {}),
-    ...(item.icon ? { icon: item.icon } : {}),
-    ...(referencePath ? { filePath: referencePath } : {}),
-    ...(mediaType ? { mediaType } : {}),
-    ...(entityType ? { entityType } : {}),
-    ...(thumbnailUri ? { thumbnailUri } : {}),
-    navigationData: projectMentionNavigationData(item, referencePath, type),
+    rejectedMediaPath: false,
+    candidate: {
+      type,
+      id: item.id,
+      label: item.label,
+      summary: item.description
+        ? `${labelForType(type)}: ${item.label} (${item.description})`
+        : `${labelForType(type)}: ${item.label}`,
+      ...(item.searchText ? { searchText: item.searchText } : {}),
+      ...(source ? { source } : {}),
+      ...(item.icon ? { icon: item.icon } : {}),
+      ...(referencePath ? { filePath: referencePath } : {}),
+      ...(mediaType ? { mediaType } : {}),
+      ...(entityType ? { entityType } : {}),
+      ...(thumbnailUri ? { thumbnailUri } : {}),
+      navigationData: projectMentionNavigationData(item, referencePath, type),
+    },
   };
 }
 
-async function projectMentionReferencePath(item: ProjectSearchItem): Promise<string | undefined> {
+async function projectMentionReferencePath(
+  item: ProjectSearchItem,
+  mediaLibraryPathVariables: ReadonlySet<string>,
+): Promise<string | undefined> {
   const filePath = readString(item.filePath);
   if (!filePath) return undefined;
 
   const normalizedPath = normalizeMentionPath(filePath);
   if (!isLocalAbsolutePath(filePath)) {
-    return normalizedPath;
+    return isAllowedMentionReferencePath(item, normalizedPath, mediaLibraryPathVariables)
+      ? normalizedPath
+      : undefined;
   }
 
   const projectRelativePath = contractWithProjectRoot(filePath, item.projectRoot);
@@ -147,10 +185,58 @@ async function projectMentionReferencePath(item: ProjectSearchItem): Promise<str
 
   const contractedPath = await contractPathWithContentPolicy(filePath, item);
   if (contractedPath && !isLocalAbsolutePath(contractedPath)) {
-    return normalizeMentionPath(contractedPath);
+    const normalizedContractedPath = normalizeMentionPath(contractedPath);
+    return isAllowedMentionReferencePath(item, normalizedContractedPath, mediaLibraryPathVariables)
+      ? normalizedContractedPath
+      : undefined;
   }
 
   return undefined;
+}
+
+function isAllowedMentionReferencePath(
+  item: ProjectSearchItem,
+  referencePath: string,
+  mediaLibraryPathVariables: ReadonlySet<string>,
+): boolean {
+  if (item.source.partition !== 'media-library') return true;
+  const variable = extractPathVariable(referencePath);
+  if (!variable) return !referencePath.startsWith('${');
+  return mediaLibraryPathVariables.has(variable);
+}
+
+async function loadMediaLibraryPathVariables(
+  items: readonly ProjectSearchItem[],
+  projectRoot: string | undefined,
+): Promise<ReadonlySet<string>> {
+  const mediaItem = items.find((item) => item.source.partition === 'media-library');
+  if (!mediaItem) return new Set();
+
+  try {
+    const policy = await loadHostContentPathPolicy({
+      workspaceRoot: projectRoot ?? mediaItem.projectRoot,
+      workspaceFolders: vscode.workspace.workspaceFolders ?? [],
+      getExtension: vscode.extensions.getExtension,
+    });
+    return new Set(
+      [...policy.pathVariables.keys()].filter(
+        (variable) => !HOST_CONTENT_PATH_VARIABLES.has(variable),
+      ),
+    );
+  } catch {
+    return new Set();
+  }
+}
+
+function isRejectedMediaLibraryPath(
+  item: ProjectSearchItem,
+  referencePath: string | undefined,
+): boolean {
+  return (
+    item.source.partition === 'media-library' &&
+    Boolean(readString(item.filePath)) &&
+    !referencePath
+  );
 }
 
 async function contractPathWithContentPolicy(

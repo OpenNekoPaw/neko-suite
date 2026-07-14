@@ -1,9 +1,19 @@
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { access, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import type { GeneratedAsset } from '@neko/shared';
-import { GeneratedAssetIndex, generateAssetId } from '../generated-asset-index';
+import {
+  PathResolver,
+  type GeneratedAsset,
+  type ResourceCacheManifest,
+  type ResourceCacheManifestStore,
+} from '@neko/shared';
+import {
+  GeneratedAssetIndex,
+  ResourceCacheGeneratedAssetIndexStore,
+  generateAssetId,
+  migrateLegacyGeneratedAssetIndex,
+} from '../generated-asset-index';
 
 const tempDirs: string[] = [];
 
@@ -34,79 +44,140 @@ async function createTempDir(): Promise<string> {
 }
 
 describe('GeneratedAssetIndex', () => {
-  it('adds, filters, sorts and removes generated assets in memory', async () => {
+  it('persists generated draft projection metadata without absolute Host paths', async () => {
+    const workspaceRoot = await createTempDir();
+    const manifest = createManifestStore();
+    const store = new ResourceCacheGeneratedAssetIndexStore({
+      manifestStore: manifest.store,
+      workspaceRoot,
+      pathResolver: new PathResolver(new Map([['WORKSPACE', workspaceRoot]])),
+    });
+    const index = new GeneratedAssetIndex(store);
+    const asset = imageAsset({
+      path: path.join(workspaceRoot, 'neko', 'generated', 'image', 'a.png'),
+    });
+
+    await index.load();
+    await index.add(asset);
+
+    expect(JSON.stringify(manifest.current())).not.toContain(workspaceRoot);
+    expect(Object.values(manifest.current().entries)).toEqual([
+      expect.objectContaining({
+        resource: expect.objectContaining({ provider: 'generated-draft-index' }),
+        variants: [],
+      }),
+    ]);
+    const restored = new GeneratedAssetIndex(store);
+    await restored.load();
+    expect(restored.get(asset.id)).toEqual(asset);
+  });
+
+  it('backs up, imports, verifies, and archives the legacy generated asset index', async () => {
+    const workspaceRoot = await createTempDir();
+    const generatedDir = path.join(workspaceRoot, 'neko', 'generated');
+    const indexPath = path.join(generatedDir, 'index.json');
+    const asset = imageAsset({ path: path.join(generatedDir, 'image', 'a.png') });
+    await mkdir(generatedDir, { recursive: true });
+    await writeFile(indexPath, JSON.stringify({ version: 1, assets: [asset] }), 'utf8');
+    const manifest = createManifestStore();
+    const store = new ResourceCacheGeneratedAssetIndexStore({
+      manifestStore: manifest.store,
+      workspaceRoot,
+      pathResolver: new PathResolver(new Map([['WORKSPACE', workspaceRoot]])),
+    });
+
+    const report = await migrateLegacyGeneratedAssetIndex({
+      indexPath,
+      store,
+      now: () => '2026-07-13T04:00:00.000Z',
+    });
+
+    expect(report).toMatchObject({
+      sourceStatus: 'migrated',
+      importedEntryCount: 1,
+      verifiedEntryCount: 1,
+    });
+    await expect(access(report.backupPath!)).resolves.toBeUndefined();
+    await expect(access(report.archivedPath!)).resolves.toBeUndefined();
+    await expect(access(indexPath)).rejects.toThrow();
+    await expect(store.load()).resolves.toEqual([asset]);
+  });
+
+  it('backs up and quarantines a malformed legacy generated asset index', async () => {
+    const workspaceRoot = await createTempDir();
+    const generatedDir = path.join(workspaceRoot, 'neko', 'generated');
+    const indexPath = path.join(generatedDir, 'index.json');
+    await mkdir(generatedDir, { recursive: true });
+    await writeFile(indexPath, '{bad json', 'utf8');
+    const manifest = createManifestStore();
+    const store = new ResourceCacheGeneratedAssetIndexStore({
+      manifestStore: manifest.store,
+      workspaceRoot,
+      pathResolver: new PathResolver(new Map([['WORKSPACE', workspaceRoot]])),
+    });
+
+    const report = await migrateLegacyGeneratedAssetIndex({
+      indexPath,
+      store,
+      now: () => '2026-07-13T04:30:00.000Z',
+    });
+
+    expect(report).toMatchObject({
+      sourceStatus: 'quarantined',
+      importedEntryCount: 0,
+      verifiedEntryCount: 0,
+      sourceDiagnostic: expect.stringContaining('JSON'),
+    });
+    await expect(access(report.backupPath!)).resolves.toBeUndefined();
+    await expect(access(report.quarantinePath!)).resolves.toBeUndefined();
+    await expect(store.load()).resolves.toEqual([]);
+  });
+
+  it('rejects the retired JSON index constructor path', async () => {
     const dir = await createTempDir();
-    const index = new GeneratedAssetIndex(dir);
+
+    expect(() => new GeneratedAssetIndex(dir as never)).toThrow(
+      'Legacy generated asset JSON indexes are migration-only.',
+    );
+  });
+
+  it('adds, filters, sorts and removes generated assets in memory', async () => {
+    const workspaceRoot = await createTempDir();
+    const manifest = createManifestStore();
+    const index = new GeneratedAssetIndex(
+      new ResourceCacheGeneratedAssetIndexStore({
+        manifestStore: manifest.store,
+        workspaceRoot,
+        pathResolver: new PathResolver(new Map([['WORKSPACE', workspaceRoot]])),
+      }),
+    );
     const first = imageAsset({
       id: 'asset-1',
+      path: path.join(workspaceRoot, 'neko', 'generated', 'image', 'a.png'),
       model: 'model-a',
       generatedAt: '2026-01-01T00:00:00.000Z',
     });
     const second = imageAsset({
       id: 'asset-2',
       type: 'generated-video',
-      path: '/tmp/b.mp4',
+      path: path.join(workspaceRoot, 'neko', 'generated', 'video', 'b.mp4'),
       mimeType: 'video/mp4',
       model: 'model-b',
       generatedAt: '2026-01-02T00:00:00.000Z',
+      duration: 3,
+      fps: 24,
     });
 
-    index.add(first);
-    index.add(second);
+    await index.add(first);
+    await index.add(second);
 
     expect(index.size).toBe(2);
     expect(index.get('asset-1')).toEqual(first);
     expect(index.list().map((asset) => asset.id)).toEqual(['asset-2', 'asset-1']);
     expect(index.list({ model: 'model-a' })).toEqual([first]);
     expect(index.list({ type: 'generated-video' })).toEqual([second]);
-    expect(index.remove('asset-1')).toBe(true);
+    await expect(index.remove('asset-1')).resolves.toBe(true);
     expect(index.size).toBe(1);
-    index.dispose();
-  });
-
-  it('persists pending writes on dispose and loads existing index files', async () => {
-    const dir = await createTempDir();
-    const index = new GeneratedAssetIndex(dir);
-    index.add(imageAsset());
-    index.dispose();
-
-    const raw = await readFile(path.join(dir, 'index.json'), 'utf-8');
-    expect(JSON.parse(raw)).toEqual({
-      version: 1,
-      assets: [imageAsset()],
-    });
-
-    const restored = new GeneratedAssetIndex(dir);
-    await restored.load();
-    expect(restored.get('asset-1')).toEqual(imageAsset());
-  });
-
-  it('merges existing on-disk entries before flushing a stale in-memory cache', async () => {
-    const dir = await createTempDir();
-    const firstWriter = new GeneratedAssetIndex(dir);
-    const secondWriter = new GeneratedAssetIndex(dir);
-    await firstWriter.load();
-    await secondWriter.load();
-
-    firstWriter.add(imageAsset({ id: 'asset-a', path: '/tmp/a.png' }));
-    secondWriter.add(imageAsset({ id: 'asset-b', path: '/tmp/b.png' }));
-    firstWriter.dispose();
-    secondWriter.dispose();
-
-    const raw = await readFile(path.join(dir, 'index.json'), 'utf-8');
-    const parsed = JSON.parse(raw) as { assets?: GeneratedAsset[] };
-    expect(parsed.assets?.map((asset) => asset.id).sort()).toEqual(['asset-a', 'asset-b']);
-  });
-
-  it('ignores missing or malformed index files during load', async () => {
-    const dir = await createTempDir();
-    const index = new GeneratedAssetIndex(dir);
-    await index.load();
-    expect(index.size).toBe(0);
-
-    await writeFile(path.join(dir, 'index.json'), '{bad json', 'utf-8');
-    await index.load();
-    expect(index.size).toBe(0);
   });
 
   it('generates unique asset ids', () => {
@@ -115,3 +186,29 @@ describe('GeneratedAssetIndex', () => {
     );
   });
 });
+
+function createManifestStore(): {
+  readonly store: ResourceCacheManifestStore;
+  readonly current: () => ResourceCacheManifest;
+} {
+  let manifest: ResourceCacheManifest = {
+    version: 1,
+    createdAt: '2026-07-13T00:00:00.000Z',
+    updatedAt: '2026-07-13T00:00:00.000Z',
+    entries: {},
+  };
+  return {
+    current: () => manifest,
+    store: {
+      load: async () => manifest,
+      save: async (next) => {
+        manifest = next;
+      },
+      update: async (operation) => {
+        manifest = await operation(manifest);
+        return manifest;
+      },
+      invalidateCache() {},
+    },
+  };
+}

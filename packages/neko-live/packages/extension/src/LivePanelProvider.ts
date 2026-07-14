@@ -6,6 +6,7 @@
  */
 
 import * as vscode from 'vscode';
+import { randomUUID } from 'node:crypto';
 import * as fs from 'fs';
 import * as path from 'path';
 import type {
@@ -15,7 +16,9 @@ import type {
   DeviceType,
   ILogger,
   TrackingServiceApi,
+  RecordingPromotionResult,
 } from '@neko/shared';
+import { RECORDING_PROMOTION_COMMAND } from '@neko/shared';
 import { createDefaultLocalResourceAccessService } from '@neko/shared/vscode/extension';
 import { EngineClient } from '@neko/neko-client/EngineClient';
 import { EngineDeviceManager, type DeviceManager } from '@neko/neko-client/device';
@@ -48,8 +51,7 @@ export class LivePanelProvider implements vscode.WebviewViewProvider {
           workspaceRoot,
           getAssetsApi: () =>
             vscode.extensions.getExtension('neko.neko-assets')?.exports as
-              | import('@neko/shared').NekoAssetsAPI
-              | undefined,
+              import('@neko/shared').NekoAssetsAPI | undefined,
         })
       : undefined;
     this.sessionService = new LiveSessionService({
@@ -435,6 +437,43 @@ export class LivePanelProvider implements vscode.WebviewViewProvider {
     }
   }
 
+  private async promoteRecording(filePath: string): Promise<void> {
+    const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    if (!workspaceRoot) {
+      throw new Error('An open workspace is required to promote a recording.');
+    }
+    const mediaType = isAudioRecordingPath(filePath) ? 'audio' : 'video';
+    const defaultDirectory = vscode.Uri.joinPath(
+      vscode.Uri.file(workspaceRoot),
+      'media',
+      'recordings',
+    );
+    await vscode.workspace.fs.createDirectory(defaultDirectory);
+    const destination = await vscode.window.showSaveDialog({
+      defaultUri: vscode.Uri.joinPath(defaultDirectory, path.basename(filePath)),
+      title: 'Save Recording to Project',
+    });
+    if (!destination) return;
+    const sourceMetadata = await fs.promises.stat(filePath);
+    const result = await vscode.commands.executeCommand<RecordingPromotionResult>(
+      RECORDING_PROMOTION_COMMAND,
+      {
+        sourcePath: filePath,
+        destinationPath: destination.fsPath,
+        workspaceRoot,
+        sourceRecordingId: randomUUID(),
+        producer: 'neko-live',
+        mediaType,
+        recordedAt: sourceMetadata.mtimeMs,
+        copyMode: 'copy-preview',
+      },
+    );
+    if (!result) {
+      throw new Error('Recording promotion did not return a project fact result.');
+    }
+    this.postMessage({ type: 'recordingPromoted', filePath: result.destinationPath });
+  }
+
   private async getRecordingDir(): Promise<string> {
     const workspaceFolders = vscode.workspace.workspaceFolders;
     if (workspaceFolders?.[0]) {
@@ -680,6 +719,19 @@ export class LivePanelProvider implements vscode.WebviewViewProvider {
             await this.stopRecording();
             break;
 
+          case 'promoteRecording': {
+            const filePath = readString(message.filePath);
+            if (!filePath) throw new Error('promoteRecording.filePath is required');
+            try {
+              await this.promoteRecording(filePath);
+            } catch (error) {
+              await handleError(error instanceof Error ? error : new Error(String(error)), {
+                showToUser: true,
+              });
+            }
+            break;
+          }
+
           case 'listCameraDevices':
             await this.listCameraDevices();
             break;
@@ -763,6 +815,16 @@ export class LivePanelProvider implements vscode.WebviewViewProvider {
 
 function readBoolean(value: unknown): boolean | undefined {
   return typeof value === 'boolean' ? value : undefined;
+}
+
+function readString(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim() ? value : undefined;
+}
+
+function isAudioRecordingPath(filePath: string): boolean {
+  return ['.aac', '.flac', '.m4a', '.mp3', '.ogg', '.opus', '.wav'].includes(
+    path.extname(filePath).toLocaleLowerCase(),
+  );
 }
 
 function readRecordingAuthority(value: unknown): 'local-preview' | 'compositor' {

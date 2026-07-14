@@ -6,6 +6,7 @@
  */
 
 import * as vscode from 'vscode';
+import { homedir } from 'node:os';
 import { join } from 'node:path';
 import {
   MarketClient,
@@ -13,8 +14,8 @@ import {
   CacheManager,
   VersionResolver,
   LicenseManager,
-  InstalledRegistry,
   InstallTargetRegistry,
+  type InstalledPackageRegistry,
 } from '@neko/market-core';
 import type {
   CheckoutUrlResult,
@@ -45,6 +46,7 @@ import {
   type InstallTargetDiagnostic,
   type InstallTargetContributorExtension,
 } from './install-target-contributions';
+import { createMarketLocalMetadataBinding } from './market-local-metadata-binding';
 
 /** Minimal NekoAuthAPI interface (defined locally to avoid cross-extension imports). */
 export interface NekoAuthAPI {
@@ -54,7 +56,6 @@ export interface NekoAuthAPI {
 
 export interface MarketplaceServiceStoragePaths {
   readonly cacheDir: string;
-  readonly installedFile: string;
 }
 
 export interface MarketplaceServiceHostAdapters {
@@ -86,17 +87,31 @@ export interface MarketplaceServiceHostAdapters {
 
 export interface MarketplaceServiceOptions {
   readonly storage: MarketplaceServiceStoragePaths;
+  readonly installedRegistry: InstalledPackageRegistry;
+  readonly disposeStorage?: () => Promise<void>;
   readonly host: MarketplaceServiceHostAdapters;
 }
 
-export function createVSCodeMarketplaceServiceOptions(
+export async function createVSCodeMarketplaceServiceOptions(
   context: vscode.ExtensionContext,
-): MarketplaceServiceOptions {
+): Promise<MarketplaceServiceOptions> {
+  const readTrustState = (): MarketplaceWorkspaceTrustState => ({
+    level: vscode.workspace.isTrusted ? 'trusted' : 'restricted',
+    canPromote: !vscode.workspace.isTrusted,
+    ...(!vscode.workspace.isTrusted
+      ? { blockedReason: 'workspace-trust-required-for-high-risk-packages' }
+      : {}),
+  });
+  const metadata = await createMarketLocalMetadataBinding({
+    homedir: homedir(),
+    getWorkspaceTrustLevel: () => readTrustState().level,
+  });
   return {
     storage: {
       cacheDir: vscode.Uri.joinPath(context.globalStorageUri, 'market-cache').fsPath,
-      installedFile: vscode.Uri.joinPath(context.globalStorageUri, 'market-installed.json').fsPath,
     },
+    installedRegistry: metadata.registry,
+    disposeStorage: () => metadata.dispose(),
     host: {
       getRegistryUrl: readRegistryUrlSetting,
       onDidChangeRegistryUrl: (listener) =>
@@ -108,8 +123,7 @@ export function createVSCodeMarketplaceServiceOptions(
       getAuthApi: getVSCodeNekoAuthAPI,
       getExtension: (extensionId) =>
         vscode.extensions.getExtension(extensionId) as
-          | InstallTargetContributorExtension
-          | undefined,
+          InstallTargetContributorExtension | undefined,
       listExtensions: () => vscode.extensions.all as readonly InstallTargetContributorExtension[],
       getExtensionVersion: (extensionId) => {
         const extension = vscode.extensions.getExtension(extensionId);
@@ -125,6 +139,11 @@ export function createVSCodeMarketplaceServiceOptions(
       getRefreshUri: (packageId) => {
         const query = packageId ? `?packageId=${encodeURIComponent(packageId)}` : '';
         return `vscode://neko.market/refresh${query}`;
+      },
+      getWorkspaceTrustState: readTrustState,
+      promoteWorkspaceTrust: async () => {
+        await vscode.commands.executeCommand('workbench.trust.manage');
+        return readTrustState();
       },
     },
   };
@@ -188,7 +207,7 @@ function readRegistryUrlSetting(): string | undefined {
 export class MarketplaceService implements vscode.Disposable {
   private readonly _client: MarketClient;
   private readonly _installManager: InstallManager;
-  private readonly _installedRegistry: InstalledRegistry;
+  private readonly _installedRegistry: InstalledPackageRegistry;
   private readonly _targetContributions: InstallTargetContributionRegistry;
   private readonly _disposables: vscode.Disposable[] = [];
 
@@ -221,7 +240,7 @@ export class MarketplaceService implements vscode.Disposable {
     const cache = new CacheManager(this._options.storage.cacheDir);
     const versionResolver = new VersionResolver();
     const license = new LicenseManager();
-    this._installedRegistry = new InstalledRegistry(this._options.storage.installedFile);
+    this._installedRegistry = this._options.installedRegistry;
 
     // Register install targets for all supported asset types
     const targets = new InstallTargetRegistry();
@@ -240,12 +259,9 @@ export class MarketplaceService implements vscode.Disposable {
       {
         nekoSuiteVersion: this._options.host.getExtensionVersion('neko.neko-market') ?? '0.0.0',
         downloadTempDir: join(this._options.storage.cacheDir, '.downloads'),
+        getWorkspaceTrustLevel: () => this.getGovernanceState().workspaceTrust.level,
       },
     );
-
-    this._installedRegistry.load().catch((err) => {
-      this._logger.error('Failed to load installed registry', toBaseError(err));
-    });
 
     this._disposables.push(
       this._onInstallProgress,
@@ -514,7 +530,8 @@ export class MarketplaceService implements vscode.Disposable {
       },
       workspaceTrust: this._options.host.getWorkspaceTrustState?.() ?? {
         level: 'restricted',
-        canPromote: true,
+        canPromote: false,
+        blockedReason: 'workspace-trust-adapter-unavailable',
       },
     };
   }
@@ -544,12 +561,11 @@ export class MarketplaceService implements vscode.Disposable {
   }
 
   async promoteWorkspaceTrust(): Promise<MarketplaceWorkspaceTrustState> {
-    return (
-      (await this._options.host.promoteWorkspaceTrust?.()) ?? {
-        level: 'trusted',
-        canPromote: false,
-      }
-    );
+    const promote = this._options.host.promoteWorkspaceTrust;
+    if (!promote) {
+      throw new Error('Workspace trust promotion is unavailable in this Host');
+    }
+    return promote();
   }
 
   async prepareLocalInstallDraft(
@@ -694,6 +710,9 @@ export class MarketplaceService implements vscode.Disposable {
 
   dispose(): void {
     this._disposables.forEach((d) => d.dispose());
+    void this._options.disposeStorage?.().catch((error: unknown) => {
+      this._logger.error('Failed to dispose Market local metadata storage', toBaseError(error));
+    });
   }
 
   private discoverInstallTargetContributions(): void {

@@ -1,14 +1,37 @@
-import { describe, expect, it } from 'vitest';
-import type { ProjectSemanticCoverageQuery } from '@neko/shared';
+import { describe, expect, it, vi } from 'vitest';
+import {
+  parseMediaSemanticIndexSidecar,
+  type MediaSemanticIndex,
+  type ProjectSemanticCoverageQuery,
+  type SemanticProjectionRepository,
+} from '@neko/shared';
 import { createVSCodeSemanticCoverageProvider } from '../host-vscode/semanticCoverageProvider';
 
 describe('VSCode semantic coverage provider', () => {
-  it('reports fresh reusable ranges from media semantic sidecars without leaking sidecar paths', async () => {
-    const indexPath = '/workspace/.neko/semantic-index/asset-page-1/index.json';
+  it('does not scan retired semantic sidecars when the SQLite projection is unavailable', async () => {
+    const readTextFile = vi.fn(async () => semanticIndexContent());
     const provider = createVSCodeSemanticCoverageProvider({
-      findSemanticIndexFiles: async () => [indexPath],
-      readTextFile: async (filePath) =>
-        filePath === indexPath ? semanticIndexContent() : undefined,
+      readTextFile,
+      resolveCharacterMemoryPath: (projectRoot) => `${projectRoot}/neko/character-memory.json`,
+    });
+
+    const result = await provider.querySemanticCoverage(makeQuery(), {
+      projectRoot: '/workspace',
+    });
+
+    expect(result.coverage).toBe('missing');
+    expect(result.diagnostics).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ code: 'semantic-coverage-projection-unavailable' }),
+      ]),
+    );
+    expect(readTextFile).not.toHaveBeenCalled();
+  });
+
+  it('reports fresh reusable ranges from the semantic projection', async () => {
+    const provider = createVSCodeSemanticCoverageProvider({
+      semanticProjection: createSemanticProjection(),
+      readTextFile: async () => undefined,
       resolveCharacterMemoryPath: (projectRoot) => `${projectRoot}/neko/character-memory.json`,
     });
 
@@ -38,15 +61,12 @@ describe('VSCode semantic coverage provider', () => {
       }),
     );
     expect(JSON.stringify(result)).not.toContain('.neko/semantic-index');
-    expect(JSON.stringify(result)).not.toContain(indexPath);
   });
 
   it('marks matched evidence stale when the query asks for another schema version', async () => {
     const provider = createVSCodeSemanticCoverageProvider({
-      findSemanticIndexFiles: async () => [
-        '/workspace/.neko/semantic-index/asset-page-1/index.json',
-      ],
-      readTextFile: async () => semanticIndexContent(),
+      semanticProjection: createSemanticProjection(),
+      readTextFile: async () => undefined,
       resolveCharacterMemoryPath: (projectRoot) => `${projectRoot}/neko/character-memory.json`,
     });
 
@@ -72,7 +92,6 @@ describe('VSCode semantic coverage provider', () => {
   it('reports character observation coverage from the project character memory ledger', async () => {
     const memoryPath = '/workspace/neko/character-memory.json';
     const provider = createVSCodeSemanticCoverageProvider({
-      findSemanticIndexFiles: async () => [],
       readTextFile: async (filePath) =>
         filePath === memoryPath ? characterMemoryContent() : undefined,
       resolveCharacterMemoryPath: () => memoryPath,
@@ -105,7 +124,99 @@ describe('VSCode semantic coverage provider', () => {
     );
     expect(JSON.stringify(result)).not.toContain('character-memory.json');
   });
+
+  it('queries injected semantic projections without scanning sidecars and preserves stale freshness', async () => {
+    const index = readSemanticIndexFixture();
+    const repository: SemanticProjectionRepository = {
+      list: async () => [
+        {
+          sourceId: 'semantic:asset-page-1',
+          sourceFingerprint: 'sha256:source-v1',
+          provider: {
+            providerId: 'ocr.local',
+            indexVersion: 'semantic-index-v1',
+            schemaVersion: '1',
+          },
+          coverage: ['ocr'],
+          freshness: 'stale',
+          index,
+          updatedAt: '2026-07-13T04:00:00.000Z',
+        },
+      ],
+      replacePartition: async () => undefined,
+      insertMissing: async () => ({ insertedSourceIds: [], preservedSourceIds: [] }),
+    };
+    const provider = createVSCodeSemanticCoverageProvider({
+      semanticProjection: {
+        repository,
+        partition: {
+          scope: 'workspace',
+          workspaceId: '1888f0bf-ed92-440b-8cd6-03107358380a',
+          domain: 'semantic-projection',
+        },
+      },
+      readTextFile: async () => {
+        throw new Error('legacy sidecar reads must not run');
+      },
+      resolveCharacterMemoryPath: (projectRoot) => `${projectRoot}/neko/character-memory.json`,
+    });
+
+    const result = await provider.querySemanticCoverage(
+      { ...makeQuery(), range: { startLine: 1, endLine: 10 } },
+      { projectRoot: '/workspace' },
+    );
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        coverage: 'stale',
+        freshness: 'stale',
+        staleReasons: ['index-stale'],
+        matchedRanges: [
+          expect.objectContaining({
+            evidenceIds: ['segment-1'],
+            staleReasons: ['index-stale'],
+          }),
+        ],
+      }),
+    );
+  });
 });
+
+function createSemanticProjection(): {
+  readonly repository: SemanticProjectionRepository;
+  readonly partition: {
+    readonly scope: 'workspace';
+    readonly workspaceId: string;
+    readonly domain: 'semantic-projection';
+  };
+} {
+  return {
+    repository: {
+      list: async () => [
+        {
+          sourceId: 'semantic:asset-page-1',
+          sourceFingerprint: 'sha256:source-v1',
+          provider: {
+            providerId: 'ocr.local',
+            indexVersion: 'semantic-index-v1',
+            schemaVersion: '1',
+          },
+          coverage: ['ocr'],
+          freshness: 'fresh',
+          index: readSemanticIndexFixture(),
+          updatedAt: '2026-07-13T04:00:00.000Z',
+        },
+      ],
+      replacePartition: async () => undefined,
+      insertMissing: async () => ({ insertedSourceIds: [], preservedSourceIds: [] }),
+    },
+    partition: {
+      scope: 'workspace',
+      workspaceId: '1888f0bf-ed92-440b-8cd6-03107358380a',
+      domain: 'semantic-projection',
+    },
+  };
+}
 
 function makeQuery(): ProjectSemanticCoverageQuery {
   return {
@@ -148,6 +259,12 @@ function semanticIndexContent(): string {
       },
     ],
   });
+}
+
+function readSemanticIndexFixture(): MediaSemanticIndex {
+  const parsed = parseMediaSemanticIndexSidecar(semanticIndexContent());
+  if (!parsed.record) throw new Error('Semantic index test fixture must be valid.');
+  return parsed.record.index;
 }
 
 function characterMemoryContent(): string {

@@ -5,16 +5,17 @@ import {
   createResourceFingerprint,
   createResourceRef,
   createResourceVariantKey,
+  type ResourceCacheManifest,
   type ResourceRef,
   type ResourceVariantRequest,
 } from '../../../types/resource-cache';
 import type { LocalResourceAccessService } from '../local-resource-access';
 import {
-  JsonResourceCacheManifestStore,
   VSCodeResourceCacheService,
   computeStats,
   resolveResourceCacheQuotaPolicy,
   type ResourceCacheFsOps,
+  type ResourceCacheManifestStore,
   type ResourceCacheProvider,
   type ResourceEnsureInput,
 } from '../resource-cache-service';
@@ -33,12 +34,14 @@ vi.mock('vscode', () => ({
 describe('resource cache service', () => {
   let fsOps: FakeFsOps;
   let localResourceAccess: LocalResourceAccessService;
+  let manifestStore: TestResourceCacheManifestStore;
   let ref: ResourceRef;
   let variant: ResourceVariantRequest;
 
   beforeEach(() => {
     fsOps = new FakeFsOps();
     localResourceAccess = createLocalResourceAccess();
+    manifestStore = createMemoryManifestStore('2026-06-05T00:00:00.000Z');
     ref = createResourceRef({
       scope: 'project',
       provider: 'document-archive',
@@ -64,137 +67,16 @@ describe('resource cache service', () => {
     variant = { role: 'thumbnail', width: 256, height: 256, mimeType: 'image/jpeg' };
   });
 
-  it('loads invalid or missing manifests as empty rebuildable cache', async () => {
-    const store = new JsonResourceCacheManifestStore({
-      manifestPath: '/workspace/.neko/.cache/resources/manifest.json',
-      projectRoot: '/workspace',
-      fsOps,
-      now: () => '2026-06-05T00:00:00.000Z',
-    });
-
-    await expect(store.load()).resolves.toEqual({
-      version: 1,
-      projectRoot: '/workspace',
-      createdAt: '2026-06-05T00:00:00.000Z',
-      updatedAt: '2026-06-05T00:00:00.000Z',
-      entries: {},
-    });
-
-    fsOps.files.set('/workspace/.neko/.cache/resources/manifest.json', 'not json');
-    await expect(store.load()).resolves.toMatchObject({ entries: {} });
-  });
-
-  it('persists manifests with atomic write semantics', async () => {
-    const store = new JsonResourceCacheManifestStore({
-      manifestPath: '/workspace/.neko/.cache/resources/manifest.json',
-      projectRoot: '/workspace',
-      fsOps,
-      now: () => '2026-06-05T00:00:00.000Z',
-    });
-
-    await store.save({
-      version: 1,
-      projectRoot: '/workspace',
-      createdAt: '2026-06-05T00:00:00.000Z',
-      updatedAt: '2026-06-05T00:00:00.000Z',
-      entries: {},
-    });
-
-    expect(fsOps.mkdirCalls).toContain('/workspace/.neko/.cache/resources');
-    expect(fsOps.writeCalls[0]?.path).toBe('/workspace/.neko/.cache/resources/manifest.json.tmp');
-    expect(fsOps.renameCalls[0]).toEqual({
-      oldPath: '/workspace/.neko/.cache/resources/manifest.json.tmp',
-      newPath: '/workspace/.neko/.cache/resources/manifest.json',
-    });
-  });
-
-  it('rejects the current update when manifest persistence fails', async () => {
-    const store = new JsonResourceCacheManifestStore({
-      manifestPath: '/workspace/.neko/.cache/resources/manifest.json',
-      projectRoot: '/workspace',
-      fsOps,
-      now: () => '2026-06-05T00:00:00.000Z',
-    });
-    fsOps.failNextRename = true;
-
-    await expect(
-      store.update((manifest) => ({
-        ...manifest,
-        updatedAt: '2026-06-05T00:00:01.000Z',
-      })),
-    ).rejects.toThrow('rename failed');
-  });
-
-  it('skips manifest writes when an update returns the current object', async () => {
-    const store = new JsonResourceCacheManifestStore({
-      manifestPath: '/workspace/.neko/.cache/resources/manifest.json',
-      projectRoot: '/workspace',
-      fsOps,
-      now: () => '2026-06-05T00:00:00.000Z',
-    });
-
-    const current = await store.load();
-    const writeCount = fsOps.writeCalls.length;
-    const updated = await store.update((manifest) => manifest);
-
-    expect(updated).toStrictEqual(current);
-    expect(fsOps.writeCalls).toHaveLength(writeCount);
-  });
-
-  it('refreshes cached manifests when another process updates the manifest file', async () => {
-    const manifestPath = '/workspace/.neko/.cache/resources/manifest.json';
-    const store = new JsonResourceCacheManifestStore({
-      manifestPath,
-      projectRoot: '/workspace',
-      fsOps,
-      now: () => '2026-06-05T00:00:00.000Z',
-    });
-    fsOps.writeExternalFile(
-      manifestPath,
-      JSON.stringify({
-        version: 1,
-        projectRoot: '/workspace',
-        createdAt: '2026-06-05T00:00:00.000Z',
-        updatedAt: '2026-06-05T00:00:00.000Z',
-        entries: {},
-      }),
-    );
-
-    await expect(store.load()).resolves.toMatchObject({
-      updatedAt: '2026-06-05T00:00:00.000Z',
-    });
-    fsOps.writeExternalFile(
-      manifestPath,
-      JSON.stringify({
-        version: 1,
-        projectRoot: '/workspace',
-        createdAt: '2026-06-05T00:00:00.000Z',
-        updatedAt: '2026-06-05T00:00:02.000Z',
-        entries: {},
-      }),
-    );
-
-    await expect(store.load()).resolves.toMatchObject({
-      updatedAt: '2026-06-05T00:00:02.000Z',
-    });
-    await expect(store.load({ refresh: true })).resolves.toMatchObject({
-      updatedAt: '2026-06-05T00:00:02.000Z',
-    });
-
-    fsOps.writeExternalFile(
-      manifestPath,
-      JSON.stringify({
-        version: 1,
-        projectRoot: '/workspace',
-        createdAt: '2026-06-05T00:00:00.000Z',
-        updatedAt: '2026-06-05T00:00:03.000Z',
-        entries: {},
-      }),
-    );
-    store.invalidateCache();
-    await expect(store.load()).resolves.toMatchObject({
-      updatedAt: '2026-06-05T00:00:03.000Z',
-    });
+  it('rejects retired JSON manifest paths as a normal ResourceCache metadata store', () => {
+    expect(
+      () =>
+        new VSCodeResourceCacheService({
+          cacheRoot: '/workspace/.neko/.cache/resources',
+          manifestPath: '/workspace/.neko/.cache/resources/manifest.json',
+          projectRoot: '/workspace',
+          fsOps,
+        }),
+    ).toThrow('Legacy ResourceCache manifest paths are retired');
   });
 
   it('materializes missing variants through a provider and records stats', async () => {
@@ -225,6 +107,33 @@ describe('resource cache service', () => {
       variantCount: 1,
       providerBytes: { 'document-archive': 'image-bytes'.length },
     });
+  });
+
+  it('uses an injected metadata store without writing a JSON manifest', async () => {
+    const manifestStore = createMemoryManifestStore('2026-06-05T00:00:00.000Z');
+    const service = new VSCodeResourceCacheService({
+      cacheRoot: '/workspace/.neko/.cache/resources',
+      projectRoot: '/workspace',
+      localResourceAccess,
+      manifestStore,
+      fsOps,
+      now: () => '2026-06-05T00:00:00.000Z',
+    });
+    const artifactPath = '/workspace/.neko/.cache/resources/documents/page-1.jpg';
+    fsOps.files.set(artifactPath, 'image-bytes');
+
+    await service.record({
+      ref,
+      variant,
+      absolutePath: artifactPath,
+      rebuildable: true,
+    });
+
+    await expect(manifestStore.load()).resolves.toMatchObject({
+      entries: { [ref.id]: { resource: ref, status: 'ready' } },
+    });
+    expect(fsOps.writeCalls).toEqual([]);
+    expect(fsOps.renameCalls).toEqual([]);
   });
 
   it('selects the first registered provider that supports a resource ref', async () => {
@@ -328,9 +237,7 @@ describe('resource cache service', () => {
       error: 'No provider supports this variant.',
     });
 
-    const manifest = JSON.parse(
-      fsOps.files.get('/workspace/.neko/.cache/resources/manifest.json') ?? '{}',
-    );
+    const manifest = manifestStore.current();
     expect(manifest.entries[ref.id]).toMatchObject({
       status: 'ready',
     });
@@ -487,7 +394,7 @@ describe('resource cache service', () => {
     });
   });
 
-  it('caches manifest reads and batches access-time touches', async () => {
+  it('batches access-time touches before updating metadata', async () => {
     let now = '2026-06-05T00:00:00.000Z';
     let clockMs = 0;
     const absolutePath = '/workspace/.neko/.cache/resources/documents/page-1.jpg';
@@ -509,8 +416,7 @@ describe('resource cache service', () => {
     });
 
     await service.ensure(ref, variant);
-    const readCountAfterEnsure = fsOps.readCalls.length;
-    const writeCountAfterEnsure = fsOps.writeCalls.length;
+    const writeCountAfterEnsure = manifestStore.writeCount;
 
     now = '2026-06-05T00:00:01.000Z';
     await service.resolve(ref, variant);
@@ -518,17 +424,14 @@ describe('resource cache service', () => {
     now = '2026-06-05T00:00:02.000Z';
     await service.resolve(ref, variant);
 
-    expect(fsOps.readCalls).toHaveLength(readCountAfterEnsure);
-    expect(fsOps.writeCalls).toHaveLength(writeCountAfterEnsure);
+    expect(manifestStore.writeCount).toBe(writeCountAfterEnsure);
 
     now = '2026-06-05T00:00:03.000Z';
     const stats = await service.stats();
     expect(stats.lastAccessedAt).toBe('2026-06-05T00:00:03.000Z');
-    expect(fsOps.writeCalls.length).toBe(writeCountAfterEnsure + 1);
+    expect(manifestStore.writeCount).toBe(writeCountAfterEnsure + 1);
 
-    const manifest = JSON.parse(
-      fsOps.files.get('/workspace/.neko/.cache/resources/manifest.json') ?? '{}',
-    );
+    const manifest = manifestStore.current();
     expect(manifest.entries[ref.id].variants[0]).toMatchObject({
       lastAccessedAt: '2026-06-05T00:00:03.000Z',
     });
@@ -556,21 +459,19 @@ describe('resource cache service', () => {
     });
 
     await service.ensure(ref, variant);
-    const writeCountAfterEnsure = fsOps.writeCalls.length;
+    const writeCountAfterEnsure = manifestStore.writeCount;
 
     now = '2026-06-05T00:00:01.000Z';
     clockMs = 99;
     await service.resolve(ref, variant);
-    expect(fsOps.writeCalls).toHaveLength(writeCountAfterEnsure);
+    expect(manifestStore.writeCount).toBe(writeCountAfterEnsure);
 
     now = '2026-06-05T00:00:02.000Z';
     clockMs = 100;
     await service.resolve(ref, variant);
 
-    expect(fsOps.writeCalls).toHaveLength(writeCountAfterEnsure + 1);
-    const manifest = JSON.parse(
-      fsOps.files.get('/workspace/.neko/.cache/resources/manifest.json') ?? '{}',
-    );
+    expect(manifestStore.writeCount).toBe(writeCountAfterEnsure + 1);
+    const manifest = manifestStore.current();
     expect(manifest.entries[ref.id].variants[0]).toMatchObject({
       lastAccessedAt: '2026-06-05T00:00:02.000Z',
     });
@@ -596,18 +497,16 @@ describe('resource cache service', () => {
     });
 
     await service.ensure(ref, variant);
-    const writeCountAfterEnsure = fsOps.writeCalls.length;
+    const writeCountAfterEnsure = manifestStore.writeCount;
     now = '2026-06-05T00:00:01.000Z';
     await service.resolve(ref, variant);
 
-    expect(fsOps.writeCalls).toHaveLength(writeCountAfterEnsure);
+    expect(manifestStore.writeCount).toBe(writeCountAfterEnsure);
 
     await service.dispose();
 
-    expect(fsOps.writeCalls).toHaveLength(writeCountAfterEnsure + 1);
-    const manifest = JSON.parse(
-      fsOps.files.get('/workspace/.neko/.cache/resources/manifest.json') ?? '{}',
-    );
+    expect(manifestStore.writeCount).toBe(writeCountAfterEnsure + 1);
+    const manifest = manifestStore.current();
     expect(manifest.entries[ref.id].variants[0]).toMatchObject({
       lastAccessedAt: '2026-06-05T00:00:01.000Z',
     });
@@ -632,21 +531,18 @@ describe('resource cache service', () => {
 
     await service.ensure(ref, variant);
     await service.resolve(ref, variant);
-    const writeCountAfterResolve = fsOps.writeCalls.length;
+    const writeCountAfterResolve = manifestStore.writeCount;
     service.invalidateManifestCache();
-    fsOps.files.set(
-      '/workspace/.neko/.cache/resources/manifest.json',
-      JSON.stringify({
-        version: 1,
-        projectRoot: '/workspace',
-        createdAt: '2026-06-05T00:00:00.000Z',
-        updatedAt: '2026-06-05T00:00:00.000Z',
-        entries: {},
-      }),
-    );
+    manifestStore.replace({
+      version: 1,
+      projectRoot: '/workspace',
+      createdAt: '2026-06-05T00:00:00.000Z',
+      updatedAt: '2026-06-05T00:00:00.000Z',
+      entries: {},
+    });
 
     await expect(service.stats()).resolves.toMatchObject({ entryCount: 0 });
-    expect(fsOps.writeCalls).toHaveLength(writeCountAfterResolve);
+    expect(manifestStore.writeCount).toBe(writeCountAfterResolve);
   });
 
   it('invalidates entries and garbage collects rebuildable variants by quota', async () => {
@@ -671,9 +567,7 @@ describe('resource cache service', () => {
     await service.invalidate(ref);
 
     const variantKey = createResourceVariantKey({ resource: ref, ...variant });
-    const manifestAfterInvalidate = JSON.parse(
-      fsOps.files.get('/workspace/.neko/.cache/resources/manifest.json') ?? '{}',
-    );
+    const manifestAfterInvalidate = manifestStore.current();
     expect(manifestAfterInvalidate.entries[ref.id].variants[0]).toMatchObject({
       key: variantKey,
       status: 'stale',
@@ -701,68 +595,64 @@ describe('resource cache service', () => {
     fsOps.files.set('/workspace/.neko/.cache/resources/pinned.jpg', 'pinned-cache');
     fsOps.files.set('/workspace/.neko/.cache/resources/active.jpg', 'active-cache');
 
-    await fsOps.writeFile(
-      '/workspace/.neko/.cache/resources/manifest.json',
-      JSON.stringify({
-        version: 1,
-        projectRoot: '/workspace',
-        createdAt: '2026-06-05T00:00:00.000Z',
-        updatedAt: '2026-06-05T00:00:00.000Z',
-        entries: {
-          [ref.id]: {
-            resource: ref,
-            status: 'ready',
-            createdAt: '2026-06-05T00:00:00.000Z',
-            updatedAt: '2026-06-05T00:00:00.000Z',
-            variants: [
-              {
-                key: oldKey,
-                role: 'thumbnail',
-                status: 'ready',
-                absolutePath: '/workspace/.neko/.cache/resources/old.jpg',
-                sizeBytes: 128,
-                createdAt: '2026-06-05T00:00:00.000Z',
-                updatedAt: '2026-06-05T00:00:00.000Z',
-                lastAccessedAt: '2026-06-05T00:00:00.000Z',
-                rebuildable: true,
-              },
-              {
-                key: 'fact',
-                role: 'thumbnail',
-                status: 'ready',
-                absolutePath: '/workspace/neko/facts.json',
-                sizeBytes: 128,
-                createdAt: '2026-06-05T00:00:00.000Z',
-                updatedAt: '2026-06-05T00:00:00.000Z',
-                rebuildable: true,
-              },
-              {
-                key: 'pinned',
-                role: 'thumbnail',
-                status: 'ready',
-                absolutePath: '/workspace/.neko/.cache/resources/pinned.jpg',
-                sizeBytes: 128,
-                createdAt: '2026-06-05T00:00:00.000Z',
-                updatedAt: '2026-06-05T00:00:00.000Z',
-                pinned: true,
-                rebuildable: true,
-              },
-              {
-                key: activeKey,
-                role: 'preview',
-                status: 'ready',
-                absolutePath: '/workspace/.neko/.cache/resources/active.jpg',
-                sizeBytes: 128,
-                createdAt: '2026-06-05T00:00:00.000Z',
-                updatedAt: '2026-06-05T00:00:00.000Z',
-                rebuildable: true,
-              },
-            ],
-          },
+    manifestStore.replace({
+      version: 1,
+      projectRoot: '/workspace',
+      createdAt: '2026-06-05T00:00:00.000Z',
+      updatedAt: '2026-06-05T00:00:00.000Z',
+      entries: {
+        [ref.id]: {
+          resource: ref,
+          status: 'ready',
+          createdAt: '2026-06-05T00:00:00.000Z',
+          updatedAt: '2026-06-05T00:00:00.000Z',
+          variants: [
+            {
+              key: oldKey,
+              role: 'thumbnail',
+              status: 'ready',
+              absolutePath: '/workspace/.neko/.cache/resources/old.jpg',
+              sizeBytes: 128,
+              createdAt: '2026-06-05T00:00:00.000Z',
+              updatedAt: '2026-06-05T00:00:00.000Z',
+              lastAccessedAt: '2026-06-05T00:00:00.000Z',
+              rebuildable: true,
+            },
+            {
+              key: 'fact',
+              role: 'thumbnail',
+              status: 'ready',
+              absolutePath: '/workspace/neko/facts.json',
+              sizeBytes: 128,
+              createdAt: '2026-06-05T00:00:00.000Z',
+              updatedAt: '2026-06-05T00:00:00.000Z',
+              rebuildable: true,
+            },
+            {
+              key: 'pinned',
+              role: 'thumbnail',
+              status: 'ready',
+              absolutePath: '/workspace/.neko/.cache/resources/pinned.jpg',
+              sizeBytes: 128,
+              createdAt: '2026-06-05T00:00:00.000Z',
+              updatedAt: '2026-06-05T00:00:00.000Z',
+              pinned: true,
+              rebuildable: true,
+            },
+            {
+              key: activeKey,
+              role: 'preview',
+              status: 'ready',
+              absolutePath: '/workspace/.neko/.cache/resources/active.jpg',
+              sizeBytes: 128,
+              createdAt: '2026-06-05T00:00:00.000Z',
+              updatedAt: '2026-06-05T00:00:00.000Z',
+              rebuildable: true,
+            },
+          ],
         },
-      }),
-      'utf-8',
-    );
+      },
+    });
 
     const gc = await service.gc({
       projectMaxBytes: 1,
@@ -1084,7 +974,7 @@ describe('resource cache service', () => {
         };
     return new VSCodeResourceCacheService({
       cacheRoot: '/workspace/.neko/.cache/resources',
-      manifestPath: '/workspace/.neko/.cache/resources/manifest.json',
+      manifestStore: (manifestStore = createMemoryManifestStore(options.now())),
       projectRoot: '/workspace',
       globalRoot: '/Users/feng/.neko',
       extensionPrivateRoot:
@@ -1102,6 +992,55 @@ describe('resource cache service', () => {
     });
   }
 });
+
+function createMemoryManifestStore(now: string): TestResourceCacheManifestStore {
+  return new TestResourceCacheManifestStore({
+    version: 1,
+    projectRoot: '/workspace',
+    createdAt: now,
+    updatedAt: now,
+    entries: {},
+  });
+}
+
+class TestResourceCacheManifestStore implements ResourceCacheManifestStore {
+  writeCount = 0;
+
+  constructor(private manifest: ResourceCacheManifest) {}
+
+  async load(): Promise<ResourceCacheManifest> {
+    return this.manifest;
+  }
+
+  async save(next: ResourceCacheManifest): Promise<void> {
+    this.writeCount += 1;
+    this.manifest = next;
+  }
+
+  async update(
+    operation: (
+      manifest: ResourceCacheManifest,
+    ) => ResourceCacheManifest | Promise<ResourceCacheManifest>,
+  ): Promise<ResourceCacheManifest> {
+    const current = this.manifest;
+    const next = await operation(current);
+    if (next !== current) {
+      this.writeCount += 1;
+      this.manifest = next;
+    }
+    return this.manifest;
+  }
+
+  invalidateCache(): void {}
+
+  current(): ResourceCacheManifest {
+    return this.manifest;
+  }
+
+  replace(manifest: ResourceCacheManifest): void {
+    this.manifest = manifest;
+  }
+}
 
 function createProvider(
   ensure: (

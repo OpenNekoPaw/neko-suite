@@ -1,8 +1,8 @@
 /**
- * InstalledRegistry — Local persistence of installed packages.
+ * InstalledRegistry — Legacy JSON persistence retained for migration fixtures.
  *
- * Manages `~/.neko/market-installed.json` as the source of truth
- * for what marketplace packages are currently installed.
+ * Production Hosts use LocalMetadataInstalledRegistry and `market_installations`.
+ * This implementation must not be wired into a normal Extension or TUI path.
  */
 
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
@@ -14,12 +14,7 @@ import type {
   InstalledRegistryData,
 } from '@neko/shared';
 import { isAssetType, parseAssetManifest } from '@neko/shared';
-
-export interface RemovedReferenceState {
-  packageId: string;
-  previous: InstalledPackageRefState;
-  next?: InstalledPackageRefState;
-}
+import type { InstalledPackageRegistry, RemovedReferenceState } from './installed-package-registry';
 
 // =============================================================================
 // Constants
@@ -31,7 +26,7 @@ const REGISTRY_VERSION = 1;
 // Implementation
 // =============================================================================
 
-export class InstalledRegistry {
+export class InstalledRegistry implements InstalledPackageRegistry {
   private data: InstalledRegistryData | undefined;
   private _loadPromise: Promise<void> | undefined;
 

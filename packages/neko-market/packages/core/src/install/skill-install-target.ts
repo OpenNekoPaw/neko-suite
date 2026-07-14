@@ -8,7 +8,7 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import type { AssetManifest, IInstallTarget } from '@neko/shared';
+import { resolveGlobalStorageLayout, type AssetManifest, type IInstallTarget } from '@neko/shared';
 
 export interface SkillInstallTargetOptions {
   skillsBaseDir?: string;
@@ -21,7 +21,7 @@ export interface SkillInstallTargetLogger {
   warn(message: string, error?: unknown): void;
 }
 
-const DEFAULT_SKILLS_BASE_DIR = join(homedir(), '.neko', 'skills');
+const DEFAULT_SKILLS_BASE_DIR = resolveGlobalStorageLayout(homedir()).skills;
 
 export class SkillInstallTarget implements IInstallTarget<'skill'> {
   readonly type = 'skill' as const;

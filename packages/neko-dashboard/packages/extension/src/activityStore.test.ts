@@ -1,5 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type * as vscode from 'vscode';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { vscodeCommandState, vscodeWorkspaceState } from './vscode-test-double';
 import {
   DASHBOARD_ACTIVITY_LIMIT,
@@ -47,40 +46,12 @@ describe('dashboard activity store helpers', () => {
     expect(normalized.entries[0]?.taskId).toBe('task-2');
   });
 
-  it('accepts an injected workspace URI provider for isolated persistence tests', async () => {
-    vscodeWorkspaceState.fs.readFile.mockRejectedValue(new Error('missing'));
-
-    const store = new ActivityStore({
-      workspaceUriProvider: () => ({ fsPath: '/workspace' }) as vscode.Uri,
-    });
-
-    await store.append({
-      taskId: 'neko-agent:task-1',
-      source: 'neko-agent',
-      sourceTaskId: 'task-1',
-      kind: 'generate-image',
-      title: 'Generate image',
-      status: 'done',
-      actions: ['reveal-output'],
-      startedAt: 1,
-      completedAt: 2,
-      outputs: [{ kind: 'file', ref: 'renders/output.png' }],
-    });
-
-    expect(vscodeWorkspaceState.fs.createDirectory).toHaveBeenCalledWith({
-      fsPath: '/workspace/.neko',
-    });
-    expect(vscodeWorkspaceState.fs.writeFile).toHaveBeenCalledOnce();
-    const [uri, bytes] = vscodeWorkspaceState.fs.writeFile.mock.calls[0] ?? [];
-    expect(uri).toEqual({ fsPath: '/workspace/.neko/dashboard-activity.json' });
-    expect(JSON.parse(new TextDecoder().decode(bytes as Uint8Array))).toEqual({
-      version: 1,
-      entries: [
-        expect.objectContaining({
-          taskId: 'neko-agent:task-1',
-          outputs: [{ kind: 'file', ref: 'renders/output.png' }],
-        }),
-      ],
-    });
+  it('poisons the retired workspace activity store without touching workspace files', () => {
+    expect(() => new ActivityStore()).toThrowError(
+      expect.objectContaining({ code: 'dashboard-retired-activity-store' }),
+    );
+    expect(vscodeWorkspaceState.fs.readFile).not.toHaveBeenCalled();
+    expect(vscodeWorkspaceState.fs.createDirectory).not.toHaveBeenCalled();
+    expect(vscodeWorkspaceState.fs.writeFile).not.toHaveBeenCalled();
   });
 });

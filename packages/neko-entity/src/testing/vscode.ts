@@ -53,6 +53,11 @@ export const workspace = {
     uri.fsPath?.startsWith('/workspace/neko-test')
       ? { uri: { fsPath: '/workspace/neko-test' } }
       : undefined,
+  createFileSystemWatcher: () => ({
+    onDidDelete: () => ({ dispose() {} }),
+    onDidCreate: () => ({ dispose() {} }),
+    dispose() {},
+  }),
 };
 
 export const l10n = {

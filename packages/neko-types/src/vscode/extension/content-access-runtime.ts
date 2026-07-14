@@ -40,6 +40,7 @@ import {
 import {
   VSCodeResourceCacheService,
   type ResourceCacheProvider,
+  type ResourceCacheManifestStore,
   type ResourceCacheService,
   type VSCodeResourceCacheServiceOptions,
 } from './resource-cache-service';
@@ -58,6 +59,7 @@ export interface HostContentAccessRuntime {
 export interface HostContentAccessRuntimeCacheOptions {
   readonly cacheRoot?: string;
   readonly manifestPath?: string;
+  readonly manifestStore?: ResourceCacheManifestStore;
   readonly projectRoot?: string;
   readonly globalRoot?: string;
   readonly extensionPrivateRoot?: string;
@@ -70,7 +72,7 @@ export interface HostContentAccessRuntimeCacheOptions {
 }
 
 type ResolvedHostContentAccessRuntimeCacheOptions = HostContentAccessRuntimeCacheOptions &
-  Required<Pick<HostContentAccessRuntimeCacheOptions, 'cacheRoot' | 'manifestPath'>>;
+  Required<Pick<HostContentAccessRuntimeCacheOptions, 'cacheRoot' | 'manifestStore'>>;
 
 export interface HostContentAccessRuntimeSourceProviderOptions {
   readonly enabled?: boolean;
@@ -227,11 +229,11 @@ function createResourceCacheIfConfigured(
   localResourceAccess: LocalResourceAccessService | undefined,
   workspaceRoot: string | undefined,
 ): ResourceCacheService | undefined {
-  const target = resolveResourceCacheTarget(options.resourceCacheOptions, workspaceRoot);
+  const target = resolveResourceCacheTarget(options.resourceCacheOptions);
   if (!target || !localResourceAccess) return undefined;
   return new VSCodeResourceCacheService({
     cacheRoot: target.cacheRoot,
-    manifestPath: target.manifestPath,
+    manifestStore: target.manifestStore,
     ...(target.projectRoot ? { projectRoot: target.projectRoot } : {}),
     ...(target.globalRoot ? { globalRoot: target.globalRoot } : {}),
     ...(target.extensionPrivateRoot ? { extensionPrivateRoot: target.extensionPrivateRoot } : {}),
@@ -252,26 +254,23 @@ function createResourceCacheIfConfigured(
 
 function resolveResourceCacheTarget(
   input: HostContentAccessRuntimeCacheOptions | undefined,
-  workspaceRoot: string | undefined,
 ): ResolvedHostContentAccessRuntimeCacheOptions | undefined {
-  if (input?.cacheRoot && input.manifestPath) {
+  if (input?.manifestPath) {
+    throw new Error(
+      'Legacy ResourceCache manifest paths are retired; provide a LocalMetadata manifestStore.',
+    );
+  }
+  if (input?.cacheRoot && input.manifestStore) {
     return {
       ...input,
       cacheRoot: input.cacheRoot,
-      manifestPath: input.manifestPath,
+      manifestStore: input.manifestStore,
     };
   }
-  if (input?.cacheRoot || input?.manifestPath) {
-    throw new Error('Resource cache options require both cacheRoot and manifestPath.');
+  if (input) {
+    throw new Error('Resource cache options require cacheRoot and a LocalMetadata manifestStore.');
   }
-  if (!input || !workspaceRoot) return undefined;
-  const layout = resolveStorageLayout(workspaceRoot, os.homedir() || workspaceRoot);
-  return {
-    ...input,
-    cacheRoot: layout.project.local.cache.resources,
-    manifestPath: layout.project.local.cache.resourceManifest,
-    projectRoot: input.projectRoot ?? workspaceRoot,
-  };
+  return undefined;
 }
 
 function createDefaultAccessProviders(input: {
@@ -284,8 +283,14 @@ function createDefaultAccessProviders(input: {
   readonly resourceCache?: ResourceCacheService;
 }): ContentAccessProvider[] {
   const providers: ContentAccessProvider[] = [];
-  const { options, mediaPathContext, fileExists, workspaceRoot, localResourceAccess, resourceCache } =
-    input;
+  const {
+    options,
+    mediaPathContext,
+    fileExists,
+    workspaceRoot,
+    localResourceAccess,
+    resourceCache,
+  } = input;
 
   if (resourceCache) {
     providers.push(
@@ -300,8 +305,7 @@ function createDefaultAccessProviders(input: {
   const documentProviderOptions = options.documentEntryProvider;
   const documentProjectRoot = documentProviderOptions?.projectRoot ?? workspaceRoot;
   if (documentProviderOptions?.enabled !== false && documentProjectRoot) {
-    const documentMediaPathContext =
-      documentProviderOptions?.mediaPathContext ?? mediaPathContext;
+    const documentMediaPathContext = documentProviderOptions?.mediaPathContext ?? mediaPathContext;
     if (!documentMediaPathContext) {
       throw new Error('Document content access requires a WorkspaceMediaPathContext.');
     }
@@ -425,29 +429,31 @@ function isExistingLocalFile(filePath: string): boolean {
 
 export function createWorkspaceResourceCacheOptions(
   workspaceRoot: string,
+  manifestStore: ResourceCacheManifestStore,
   homedir: string = os.homedir() || workspaceRoot,
 ): Required<
-  Pick<HostContentAccessRuntimeCacheOptions, 'cacheRoot' | 'manifestPath' | 'projectRoot'>
+  Pick<HostContentAccessRuntimeCacheOptions, 'cacheRoot' | 'manifestStore' | 'projectRoot'>
 > {
   const layout = resolveStorageLayout(workspaceRoot, homedir);
   return {
     cacheRoot: layout.project.local.cache.resources,
-    manifestPath: layout.project.local.cache.resourceManifest,
+    manifestStore,
     projectRoot: workspaceRoot,
   };
 }
 
 export function createExtensionPrivateResourceCacheOptions(
   context: vscode.ExtensionContext,
+  manifestStore: ResourceCacheManifestStore,
   ...segments: string[]
 ): Required<
-  Pick<HostContentAccessRuntimeCacheOptions, 'cacheRoot' | 'manifestPath' | 'extensionPrivateRoot'>
+  Pick<HostContentAccessRuntimeCacheOptions, 'cacheRoot' | 'manifestStore' | 'extensionPrivateRoot'>
 > {
   const extensionPrivateRoot = context.globalStorageUri.fsPath;
   const cacheRoot = path.join(extensionPrivateRoot, ...segments);
   return {
     cacheRoot,
-    manifestPath: path.join(cacheRoot, 'manifest.json'),
+    manifestStore,
     extensionPrivateRoot,
   };
 }

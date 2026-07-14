@@ -95,6 +95,19 @@ describe('project search commands', () => {
     service.dispose();
   });
 
+  it('does not watch the retired generated asset JSON index', () => {
+    const context = { subscriptions: [] as { dispose(): void }[] } as vscode.ExtensionContext;
+
+    const service = registerProjectSearchService(context, {
+      resolvePath: async (filePath) => filePath,
+    });
+
+    expect(vscode.workspace.createFileSystemWatcher).not.toHaveBeenCalledWith(
+      '**/.neko/.cache/generated/index.json',
+    );
+    service.dispose();
+  });
+
   it('refreshes the nearest marked Neko project instead of the parent workspace', async () => {
     setWorkspaceFolders([{ uri: { fsPath: '/workspace' }, name: 'w', index: 0 }]);
     vi.mocked(vscode.workspace.fs.stat).mockImplementation(async (uri: unknown) => {
@@ -206,8 +219,7 @@ function commandHandler(commandId: string): ((...args: unknown[]) => Promise<unk
   return vi
     .mocked(vscode.commands.registerCommand)
     .mock.calls.find((call) => call[0] === commandId)?.[1] as
-    | ((...args: unknown[]) => Promise<unknown>)
-    | undefined;
+    ((...args: unknown[]) => Promise<unknown>) | undefined;
 }
 
 function makeCoverageQuery(): ProjectSemanticCoverageQuery {

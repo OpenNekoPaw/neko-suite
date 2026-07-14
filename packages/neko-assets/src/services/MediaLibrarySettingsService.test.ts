@@ -174,6 +174,46 @@ describe('MediaLibrarySettingsService', () => {
     service.dispose();
   });
 
+  it('reopens shared and local settings from files without reading the user metadata database', async () => {
+    writeJson(settingsPath, {
+      mediaLibraries: [{ name: 'Team Library', path: '/libraries/team', variable: 'TEAM_LIBRARY' }],
+    });
+    writeJson(localSettingsPath, {
+      mediaLibraryOverrides: { TEAM_LIBRARY: '/libraries/local' },
+    });
+    markReadableDirectory('/libraries/local');
+
+    const first = new MediaLibrarySettingsService(workspaceRoot);
+    await first.load();
+    await expect(first.getResolvedLibraries()).resolves.toEqual([
+      expect.objectContaining({
+        variable: 'TEAM_LIBRARY',
+        resolvedPath: '/libraries/local',
+        overridden: true,
+      }),
+    ]);
+    first.dispose();
+
+    vi.mocked(fs.readFile).mockClear();
+    const reopened = new MediaLibrarySettingsService(workspaceRoot);
+    await reopened.load();
+
+    expect(vi.mocked(fs.readFile).mock.calls.map(([filePath]) => filePath)).toEqual([
+      settingsPath,
+      localSettingsPath,
+    ]);
+    expect(vi.mocked(fs.readFile).mock.calls.flat().join('\n')).not.toContain('neko.db');
+    await expect(reopened.getResolvedLibraries()).resolves.toEqual([
+      expect.objectContaining({
+        variable: 'TEAM_LIBRARY',
+        resolvedPath: '/libraries/local',
+        accessible: true,
+        overridden: true,
+      }),
+    ]);
+    reopened.dispose();
+  });
+
   it('resolves workspace path variables before checking media library accessibility', async () => {
     writeJson(settingsPath, {
       mediaLibraries: [

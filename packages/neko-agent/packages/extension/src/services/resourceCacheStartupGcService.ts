@@ -1,11 +1,13 @@
 import * as os from 'node:os';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
-import { type ResourceCacheSettings } from '@neko/shared';
+import type { ResourceCacheSettings } from '@neko/shared';
+import { migrateLegacyResourceCacheManifest } from '@neko/shared/local-metadata/node';
 import {
   createHostContentAccessRuntime,
   resolveResourceCacheQuotaPolicy,
   type ResourceCacheGcResult,
+  type ResourceCacheManifestStore,
   type ResourceCacheService,
 } from '@neko/shared/vscode/extension';
 import { createAgentProjectResourceCacheTarget } from '@neko/agent/runtime';
@@ -17,6 +19,10 @@ export interface ResourceCacheStartupGcServiceOptions {
   readonly context: vscode.ExtensionContext;
   readonly settings?: ResourceCacheSettings;
   readonly createCacheService?: (input: ResourceCacheStartupGcTarget) => ResourceCacheService;
+  readonly manifestStores?: {
+    readonly workspace?: ResourceCacheManifestStore;
+    readonly global?: ResourceCacheManifestStore;
+  };
 }
 
 export interface ResourceCacheStartupGcTarget {
@@ -40,10 +46,12 @@ export function createStartupGcTargets(
   const targets: ResourceCacheStartupGcTarget[] = [];
   const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
   if (workspaceRoot) {
-    targets.push(createAgentProjectResourceCacheTarget({
-      workspaceRoot,
-      homedir: os.homedir() || workspaceRoot,
-    }));
+    targets.push(
+      createAgentProjectResourceCacheTarget({
+        workspaceRoot,
+        homedir: os.homedir() || workspaceRoot,
+      }),
+    );
   }
 
   if (context.globalStorageUri.scheme === 'file') {
@@ -69,10 +77,21 @@ async function runStartupGcForTarget(
   target: ResourceCacheStartupGcTarget,
   options: ResourceCacheStartupGcServiceOptions,
 ): Promise<ResourceCacheStartupGcResult> {
-  const cacheService = options.createCacheService
-    ? options.createCacheService(target)
-    : createDefaultStartupGcCacheService(options.context, target);
   try {
+    const manifestStore =
+      target.scope === 'project'
+        ? options.manifestStores?.workspace
+        : options.manifestStores?.global;
+    if (manifestStore) {
+      await migrateLegacyResourceCacheManifest({
+        manifestPath: target.manifestPath,
+        cacheRoot: target.cacheRoot,
+        manifestStore,
+      });
+    }
+    const cacheService = options.createCacheService
+      ? options.createCacheService(target)
+      : createDefaultStartupGcCacheService(options, target);
     const result = await cacheService.gc(resolveResourceCacheQuotaPolicy(options.settings));
     if (result.removedCount > 0) {
       logger.info('Resource cache startup GC completed', {
@@ -95,16 +114,21 @@ async function runStartupGcForTarget(
 }
 
 function createDefaultStartupGcCacheService(
-  context: vscode.ExtensionContext,
+  options: ResourceCacheStartupGcServiceOptions,
   target: ResourceCacheStartupGcTarget,
 ): ResourceCacheService {
+  const manifestStore =
+    target.scope === 'project' ? options.manifestStores?.workspace : options.manifestStores?.global;
+  if (!manifestStore) {
+    throw new Error(`Resource cache startup GC requires a ${target.scope} metadata store.`);
+  }
   const runtime = createHostContentAccessRuntime({
-    extensionUri: context.extensionUri,
-    context,
+    extensionUri: options.context.extensionUri,
+    context: options.context,
     workspaceRoot: target.projectRoot,
     resourceCacheOptions: {
       cacheRoot: target.cacheRoot,
-      manifestPath: target.manifestPath,
+      manifestStore,
       ...(target.projectRoot ? { projectRoot: target.projectRoot } : {}),
       ...(target.extensionPrivateRoot ? { extensionPrivateRoot: target.extensionPrivateRoot } : {}),
       providers: [],

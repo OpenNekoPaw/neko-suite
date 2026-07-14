@@ -3,6 +3,12 @@ import type { AssetManifest, IInstallManager, IMarketClient, InstallProgress } f
 import { SkillMarketService } from '../skill-market-service';
 
 describe('SkillMarketService', () => {
+  it('rejects construction without a Host-injected local metadata install manager', () => {
+    expect(() => new SkillMarketService({} as never)).toThrow(
+      'Host-injected InstallManager backed by LocalMetadataInstalledRegistry',
+    );
+  });
+
   it('scopes search and featured requests to skill packages', async () => {
     const client = createMarketClientMock();
     client.search.mockResolvedValue({ items: [], total: 0, hasMore: false });

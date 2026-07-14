@@ -69,6 +69,13 @@ describe('compatibility project search adapters', () => {
       workspaceFileFinder: { findFiles: async () => [] },
       contractPath: async (filePath) =>
         filePath.startsWith('/media/') ? filePath.replace('/media', '${MEDIA}') : filePath,
+      queryMediaLibrary: async () => [
+        {
+          filePath: '/media/cat-school.mp4',
+          fileName: 'cat-school.mp4',
+          mediaType: 'video',
+        },
+      ],
       jsonReader: makeJsonReader({
         '/workspace/neko/assets/library.json': {
           entities: [
@@ -103,19 +110,6 @@ describe('compatibility project search adapters', () => {
         '/workspace/.neko/.cache/asset-graph.json': {
           nodes: [{ id: 'node-1', kind: 'entity', refId: '小橘', label: '小橘' }],
         },
-        '/workspace/.neko/.cache/generated/index.json': {
-          assets: [
-            {
-              id: 'gen-1',
-              type: 'generated-image',
-              path: '/workspace/.neko/.cache/generated/image/xiaoju.png',
-              mimeType: 'image/png',
-              prompt: '小橘角色参考',
-              model: 'local-image',
-              generatedAt: '2026-05-18T00:00:00.000Z',
-            },
-          ],
-        },
         '/workspace/characters.json': {
           characters: [
             {
@@ -140,6 +134,21 @@ describe('compatibility project search adapters', () => {
           ],
         },
       }),
+      queryGeneratedAssets: async () => [
+        {
+          id: 'gen-1',
+          type: 'generated-image',
+          path: '/workspace/.neko/.cache/generated/image/xiaoju.png',
+          mimeType: 'image/png',
+          prompt: '小橘角色参考',
+          model: 'local-image',
+          generatedAt: '2026-05-18T00:00:00.000Z',
+          width: 1024,
+          height: 1024,
+          ratio: '1:1',
+        },
+      ],
+      resolveThumbnailUri: (filePath) => `webview:${filePath}`,
     });
 
     const assetItems = await adapters
@@ -188,7 +197,16 @@ describe('compatibility project search adapters', () => {
       expect.objectContaining({ kind: 'entity-candidate', label: '小灰' }),
     );
     expect(generatedItems[0]).toEqual(
-      expect.objectContaining({ kind: 'generated-asset', label: 'xiaoju.png · 小橘角色参考' }),
+      expect.objectContaining({
+        kind: 'generated-asset',
+        label: 'xiaoju.png · 小橘角色参考',
+        thumbnailUri: 'webview:/workspace/.neko/.cache/generated/image/xiaoju.png',
+        source: expect.objectContaining({
+          partition: 'generated-assets',
+          sourceId: 'gen-1',
+          refId: 'generated-assets/gen-1.png',
+        }),
+      }),
     );
   });
 
@@ -239,7 +257,277 @@ describe('compatibility project search adapters', () => {
     ]);
   });
 
-  it('does not query the Assets media runtime when a loaded cache has no matches', async () => {
+  it('does not use a retired search-index JSON file as a normal query fallback', async () => {
+    const reads: string[] = [];
+    const queryMediaLibrary = vi.fn(async () => []);
+    const adapter = createCompatibilityProjectSearchAdapters({
+      workspaceFileFinder: { findFiles: async () => [] },
+      jsonReader: {
+        read: async <T>(filePath: string): Promise<T | null> => {
+          reads.push(filePath);
+          if (filePath.endsWith('/.neko/.cache/search-index.json')) {
+            return {
+              entries: [
+                {
+                  filePath: '/retired/legacy.mp4',
+                  fileName: 'legacy.mp4',
+                  mediaType: 'video',
+                },
+              ],
+            } as T;
+          }
+          return null;
+        },
+      },
+      queryMediaLibrary,
+    }).find((item) => item.partition === 'media-library');
+
+    const items = await adapter!.query(
+      { text: 'legacy', projectRoot: '/workspace' },
+      { projectRoot: '/workspace' },
+    );
+
+    expect(items).toEqual([]);
+    expect(queryMediaLibrary).toHaveBeenCalledOnce();
+    expect(reads).not.toContain('/workspace/.neko/.cache/search-index.json');
+  });
+
+  it('does not use retired media-metadata JSON as a normal query fallback', async () => {
+    const reads: string[] = [];
+    const queryMediaLibrary = vi.fn(async () => []);
+    const adapter = createCompatibilityProjectSearchAdapters({
+      workspaceFileFinder: { findFiles: async () => [] },
+      jsonReader: {
+        read: async <T>(filePath: string): Promise<T | null> => {
+          reads.push(filePath);
+          if (filePath.endsWith('/.neko/.cache/media-metadata.json')) {
+            return { entries: { '/retired/legacy.mp4': { duration: 1 } } } as T;
+          }
+          return null;
+        },
+      },
+      queryMediaLibrary,
+    }).find((item) => item.partition === 'media-library');
+
+    const items = await adapter!.query(
+      { text: 'legacy', projectRoot: '/workspace' },
+      { projectRoot: '/workspace' },
+    );
+
+    expect(items).toEqual([]);
+    expect(queryMediaLibrary).toHaveBeenCalledOnce();
+    expect(reads).not.toContain('/workspace/.neko/.cache/media-metadata.json');
+  });
+
+  it('does not use a retired generated asset index as a normal query fallback', async () => {
+    const reads: string[] = [];
+    const adapter = createCompatibilityProjectSearchAdapters({
+      workspaceFileFinder: { findFiles: async () => [] },
+      jsonReader: {
+        read: async <T>(filePath: string): Promise<T | null> => {
+          reads.push(filePath);
+          if (filePath.endsWith('/.neko/.cache/generated/index.json')) {
+            return {
+              assets: [
+                {
+                  id: 'legacy-generated',
+                  type: 'generated-image',
+                  path: '/workspace/.neko/.cache/generated/legacy.png',
+                  prompt: 'Legacy generated image',
+                },
+              ],
+            } as T;
+          }
+          return null;
+        },
+      },
+    }).find((item) => item.partition === 'generated-assets');
+
+    const items = await adapter!.query(
+      { text: 'Legacy generated', projectRoot: '/workspace' },
+      { projectRoot: '/workspace' },
+    );
+
+    expect(items).toEqual([]);
+    expect(reads).not.toContain('/workspace/.neko/.cache/generated/index.json');
+  });
+
+  it('queries injected search_documents without reading the legacy media index', async () => {
+    const adapter = createCompatibilityProjectSearchAdapters({
+      workspaceFileFinder: { findFiles: async () => [] },
+      jsonReader: {
+        read: async () => {
+          throw new Error('legacy JSON search index must not be read');
+        },
+      },
+      contractPath: async () => '${MEDIA}/cat-school.mp4',
+      searchProjection: {
+        partition: {
+          scope: 'workspace',
+          workspaceId: '1888f0bf-ed92-440b-8cd6-03107358380a',
+          domain: 'project-search',
+        },
+        hasProjection: async () => true,
+        resolveFileKey: async () => '/media/cat-school.mp4',
+        repository: {
+          list: async () => [],
+          query: async () => [
+            {
+              documentId: 'media:cat-school',
+              partition: 'media-library',
+              kind: 'media',
+              label: 'cat-school.mp4',
+              description: 'Media',
+              source: {
+                partition: 'media-library',
+                sourceId: '${MEDIA}/cat-school.mp4',
+                filePath: '${MEDIA}/cat-school.mp4',
+              },
+              fileKey: '${MEDIA}/cat-school.mp4',
+              searchText: 'cat-school.mp4 Media video',
+              freshness: 'fresh',
+              metadata: { mediaType: 'video', libraryName: 'Media' },
+              updatedAt: '2026-07-13T05:00:00.000Z',
+            },
+          ],
+          replacePartition: async () => undefined,
+          replaceSearchPartition: async () => undefined,
+          insertMissingSearchPartition: async () => ({
+            insertedDocumentIds: [],
+            preservedDocumentIds: [],
+          }),
+        },
+      },
+    }).find((item) => item.partition === 'media-library');
+
+    const items = await adapter!.query(
+      { text: 'cat-school', projectRoot: '/workspace' },
+      { projectRoot: '/workspace' },
+    );
+
+    expect(items).toEqual([
+      expect.objectContaining({
+        kind: 'media',
+        label: 'cat-school.mp4',
+        filePath: '${MEDIA}/cat-school.mp4',
+      }),
+    ]);
+  });
+
+  it('queries injected Entity/Asset projections without reading the legacy asset graph', async () => {
+    const adapter = createCompatibilityProjectSearchAdapters({
+      workspaceFileFinder: { findFiles: async () => [] },
+      jsonReader: {
+        read: async <T>(filePath: string): Promise<T | null> => {
+          if (filePath.endsWith('asset-graph.json')) {
+            throw new Error('legacy asset graph must not be read');
+          }
+          return null;
+        },
+      },
+      entityAssetProjection: {
+        partition: {
+          scope: 'workspace',
+          workspaceId: '1888f0bf-ed92-440b-8cd6-03107358380a',
+          domain: 'entity-asset-projection',
+        },
+        readRevision: async () => ({
+          partition: {
+            scope: 'workspace',
+            workspaceId: '1888f0bf-ed92-440b-8cd6-03107358380a',
+            domain: 'entity-asset-projection',
+          },
+          revision: 1,
+          freshness: 'stale',
+          diagnostic: 'entity-asset-projections-not-fresh',
+          updatedAt: '2026-07-13T08:00:00.000Z',
+        }),
+        repository: {
+          list: async () => [
+            {
+              projectionId: 'node:rin',
+              kind: 'asset-graph-node',
+              sourceId: 'entity-runtime',
+              entityId: 'char_rin',
+              freshness: 'fresh',
+              value: { id: 'node:rin', kind: 'entity', refId: 'char_rin', label: 'Rin' },
+              updatedAt: '2026-07-13T08:00:00.000Z',
+            },
+            {
+              projectionId: 'candidate:rin-alt',
+              kind: 'entity-candidate',
+              sourceId: 'entity-runtime',
+              candidateId: 'candidate:rin-alt',
+              freshness: 'fresh',
+              value: {
+                id: 'candidate:rin-alt',
+                kind: 'character',
+                name: 'Rin alternate',
+                status: 'open',
+                identityBasis: 'user-named',
+                provenance: [{ providerId: 'story', sourceKind: 'story' }],
+                sourceRefs: [],
+              },
+              updatedAt: '2026-07-13T08:00:00.000Z',
+            },
+          ],
+          replaceSource: async () => undefined,
+          insertMissing: async () => ({
+            insertedProjectionKeys: [],
+            preservedProjectionKeys: [],
+          }),
+        },
+      },
+    }).find((item) => item.partition === 'creative-entities');
+
+    const items = await adapter?.query(
+      { text: '', partitions: ['creative-entities'] },
+      { projectRoot: '/workspace' },
+    );
+
+    expect(items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ kind: 'creative-entity', label: 'Rin' }),
+        expect.objectContaining({ kind: 'entity-candidate', label: 'Rin alternate' }),
+      ]),
+    );
+    expect(adapter?.getStatus('/workspace')).toMatchObject({ freshness: 'stale' });
+  });
+
+  it('does not use a retired asset-graph JSON file as a normal entity query fallback', async () => {
+    const reads: string[] = [];
+    const adapter = createCompatibilityProjectSearchAdapters({
+      workspaceFileFinder: { findFiles: async () => [] },
+      jsonReader: {
+        read: async <T>(filePath: string): Promise<T | null> => {
+          reads.push(filePath);
+          if (filePath.endsWith('/.neko/.cache/asset-graph.json')) {
+            return {
+              nodes: [
+                {
+                  id: 'legacy-node',
+                  kind: 'entity',
+                  refId: 'legacy-character',
+                  label: 'Legacy Character',
+                },
+              ],
+            } as T;
+          }
+          return null;
+        },
+      },
+    }).find((item) => item.partition === 'creative-entities');
+
+    const items = await adapter!.query(
+      { text: 'Legacy Character', projectRoot: '/workspace' },
+      { projectRoot: '/workspace' },
+    );
+
+    expect(items).toEqual([]);
+    expect(reads).not.toContain('/workspace/.neko/.cache/asset-graph.json');
+  });
+
+  it('queries the Assets media runtime even when a retired cache file exists', async () => {
     const queryMediaLibrary = vi.fn(async () => [
       {
         filePath: '/library/浪客行.epub',
@@ -269,8 +557,10 @@ describe('compatibility project search adapters', () => {
       .find((item) => item.partition === 'media-library')!
       .query({ text: '浪客', projectRoot: '/workspace', limit: 30 }, { projectRoot: '/workspace' });
 
-    expect(mediaItems).toEqual([]);
-    expect(queryMediaLibrary).not.toHaveBeenCalled();
+    expect(mediaItems).toEqual([
+      expect.objectContaining({ kind: 'document', label: '浪客行.epub' }),
+    ]);
+    expect(queryMediaLibrary).toHaveBeenCalledOnce();
   });
 
   it('logs malformed compatibility JSON without failing provider queries', async () => {

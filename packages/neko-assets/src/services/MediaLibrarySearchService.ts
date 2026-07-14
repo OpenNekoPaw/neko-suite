@@ -9,9 +9,19 @@
 
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import { createHash } from 'node:crypto';
 import * as vscode from 'vscode';
-import { isMediaFile, isDocumentFile, detectMediaType, type AssetMediaType } from '@neko/shared';
-import type { MediaFileMetadata } from '@neko/shared';
+import {
+  isMediaFile,
+  isDocumentFile,
+  detectMediaType,
+  type AssetMediaType,
+  type LocalMetadataPartition,
+  type LocalMetadataPartitionRevision,
+  type MediaFileMetadata,
+  type SearchDocumentRepository,
+} from '@neko/shared';
+import { PathResolver } from '@neko/shared/path';
 import type { MediaLibrarySettingsService } from './MediaLibrarySettingsService';
 import type { MediaMetadataCache } from './MediaMetadataCache';
 import { getLogger } from '../utils/logger';
@@ -19,7 +29,6 @@ import { getLogger } from '../utils/logger';
 const logger = getLogger('MediaLibrarySearch');
 
 const MAX_RESULTS = 200;
-const INDEX_VERSION = 1;
 
 // =============================================================================
 // Types
@@ -53,15 +62,74 @@ interface IndexEntry {
   mediaType: AssetMediaType;
 }
 
-interface PersistedIndex {
-  version: number;
-  updatedAt: string;
-  entries: Array<{
-    filePath: string;
-    fileName: string;
-    libraryName: string;
-    mediaType: AssetMediaType;
-  }>;
+export interface MediaLibrarySearchIndexRecord {
+  readonly filePath: string;
+  readonly fileName: string;
+  readonly libraryName: string;
+  readonly mediaType: AssetMediaType;
+}
+
+export interface MediaLibrarySearchIndexStore {
+  load(): Promise<readonly MediaLibrarySearchIndexRecord[] | undefined>;
+  save(entries: readonly MediaLibrarySearchIndexRecord[]): Promise<void>;
+}
+
+export function createLocalMetadataMediaLibrarySearchIndexStore(options: {
+  readonly repository: SearchDocumentRepository;
+  readonly partition: LocalMetadataPartition;
+  readonly pathResolver: PathResolver;
+  readonly readRevision: () => Promise<LocalMetadataPartitionRevision | null>;
+  readonly now?: () => string;
+}): MediaLibrarySearchIndexStore {
+  return {
+    async load() {
+      if (!(await options.readRevision())) return undefined;
+      const documents = await options.repository.list(options.partition);
+      const mediaDocuments = documents.filter(
+        (document) => document.partition === 'media-library' && document.fileKey,
+      );
+      if (mediaDocuments.length === 0) return undefined;
+      return mediaDocuments.flatMap((document) => {
+        if (!document.fileKey) return [];
+        const filePath = options.pathResolver.resolve(document.fileKey);
+        if (!path.isAbsolute(filePath)) return [];
+        const mediaType = readMediaType(document.metadata?.['mediaType']);
+        const libraryName = readString(document.metadata?.['libraryName']);
+        if (!mediaType || !libraryName) return [];
+        return [{ filePath, fileName: document.label, libraryName, mediaType }];
+      });
+    },
+    async save(entries) {
+      const updatedAt = options.now ? options.now() : new Date().toISOString();
+      await options.repository.replaceSearchPartition({
+        partition: options.partition,
+        searchPartition: 'media-library',
+        documents: entries.map((entry) => {
+          const fileKey = options.pathResolver.contract(entry.filePath).replace(/\\/gu, '/');
+          assertPortableSearchFileKey(fileKey);
+          return {
+            documentId: `media:${createHash('sha256').update(fileKey).digest('hex').slice(0, 24)}`,
+            partition: 'media-library',
+            kind: 'media',
+            label: entry.fileName,
+            description: entry.libraryName,
+            source: {
+              partition: 'media-library',
+              sourceId: fileKey,
+              filePath: fileKey,
+              metadata: { mediaType: entry.mediaType, libraryName: entry.libraryName },
+            },
+            fileKey,
+            searchText: `${entry.fileName} ${entry.libraryName} ${entry.mediaType}`,
+            freshness: 'fresh',
+            metadata: { mediaType: entry.mediaType, libraryName: entry.libraryName },
+            updatedAt,
+          };
+        }),
+        updatedAt,
+      });
+    },
+  };
 }
 
 // =============================================================================
@@ -77,7 +145,7 @@ export class MediaLibrarySearchService implements vscode.Disposable {
   constructor(
     private readonly settingsService: MediaLibrarySettingsService,
     private readonly metadataCache: MediaMetadataCache,
-    private readonly indexPath?: string,
+    private readonly indexStore: MediaLibrarySearchIndexStore,
   ) {
     // Invalidate index when libraries change
     this.disposables.push(
@@ -111,7 +179,7 @@ export class MediaLibrarySearchService implements vscode.Disposable {
   /**
    * Search media files across all libraries by file name.
    *
-   * On first call, attempts to load persisted index from disk.
+   * On first call, attempts to load the persisted SQLite projection.
    * Falls back to full directory walk if persisted index is missing.
    */
   async search(keyword: string, options?: SearchOptions): Promise<MediaSearchResult[]> {
@@ -163,21 +231,13 @@ export class MediaLibrarySearchService implements vscode.Disposable {
   // =========================================================================
 
   private async loadOrBuildIndex(): Promise<IndexEntry[]> {
-    // Try loading persisted index first
-    if (this.indexPath) {
-      try {
-        const raw = await fs.readFile(this.indexPath, 'utf-8');
-        const data: PersistedIndex = JSON.parse(raw);
-        if (data.version === INDEX_VERSION && Array.isArray(data.entries)) {
-          logger.info(`Loaded persisted search index: ${data.entries.length} entries`);
-          return data.entries.map((e) => ({
-            ...e,
-            fileNameLower: e.fileName.toLowerCase(),
-          }));
-        }
-      } catch {
-        // Index missing or corrupt — rebuild
-      }
+    const persisted = await this.indexStore.load();
+    if (persisted !== undefined) {
+      logger.info(`Loaded persisted search index: ${persisted.length} entries`);
+      return persisted.map((entry) => ({
+        ...entry,
+        fileNameLower: entry.fileName.toLowerCase(),
+      }));
     }
 
     return this.buildAndPersistIndex();
@@ -186,26 +246,11 @@ export class MediaLibrarySearchService implements vscode.Disposable {
   private async buildAndPersistIndex(): Promise<IndexEntry[]> {
     const entries = await this.buildIndex();
 
-    // Persist to disk in background
-    if (this.indexPath) {
-      const data: PersistedIndex = {
-        version: INDEX_VERSION,
-        updatedAt: new Date().toISOString(),
-        entries: entries.map((e) => ({
-          filePath: e.filePath,
-          fileName: e.fileName,
-          libraryName: e.libraryName,
-          mediaType: e.mediaType,
-        })),
-      };
-
-      try {
-        await fs.mkdir(path.dirname(this.indexPath), { recursive: true });
-        await fs.writeFile(this.indexPath, JSON.stringify(data), 'utf-8');
-        logger.debug(`Persisted search index to ${this.indexPath}`);
-      } catch (err) {
-        logger.warn('Failed to persist search index:', err);
-      }
+    try {
+      await this.persistIndex(entries);
+      logger.debug('Persisted media library search projection');
+    } catch (error) {
+      logger.warn('Failed to persist media library search projection', { error });
     }
 
     return entries;
@@ -263,31 +308,23 @@ export class MediaLibrarySearchService implements vscode.Disposable {
   private schedulePersist(): void {
     if (this.rebuildTimer) clearTimeout(this.rebuildTimer);
     this.rebuildTimer = setTimeout(() => {
-      if (this.fileIndex && this.indexPath) {
-        void this.persistIndex(this.fileIndex);
+      if (this.fileIndex) {
+        void this.persistIndex(this.fileIndex).catch((error) =>
+          logger.warn('Failed to persist media library search projection', { error }),
+        );
       }
     }, 2000);
   }
 
   private async persistIndex(entries: IndexEntry[]): Promise<void> {
-    if (!this.indexPath) return;
-
-    const data: PersistedIndex = {
-      version: INDEX_VERSION,
-      updatedAt: new Date().toISOString(),
-      entries: entries.map((e) => ({
-        filePath: e.filePath,
-        fileName: e.fileName,
-        libraryName: e.libraryName,
-        mediaType: e.mediaType,
+    await this.indexStore.save(
+      entries.map((entry) => ({
+        filePath: entry.filePath,
+        fileName: entry.fileName,
+        libraryName: entry.libraryName,
+        mediaType: entry.mediaType,
       })),
-    };
-
-    try {
-      await fs.writeFile(this.indexPath, JSON.stringify(data), 'utf-8');
-    } catch {
-      // Silently fail
-    }
+    );
   }
 
   private disposeWatchers(): void {
@@ -358,4 +395,34 @@ export class MediaLibrarySearchService implements vscode.Disposable {
       }
     }
   }
+}
+
+function assertPortableSearchFileKey(fileKey: string): void {
+  if (
+    !fileKey.trim() ||
+    path.posix.isAbsolute(fileKey) ||
+    /^[A-Za-z]:\//u.test(fileKey) ||
+    fileKey === '..' ||
+    fileKey.startsWith('../') ||
+    fileKey.includes('/../') ||
+    fileKey.includes('/.neko/.cache/') ||
+    fileKey.startsWith('.neko/.cache/')
+  ) {
+    throw new Error(`Media search source path cannot be persisted: ${fileKey}`);
+  }
+}
+
+function readMediaType(value: unknown): AssetMediaType | undefined {
+  return value === 'video' ||
+    value === 'audio' ||
+    value === 'image' ||
+    value === 'sequence' ||
+    value === 'text' ||
+    value === 'document'
+    ? value
+    : undefined;
+}
+
+function readString(value: unknown): string | undefined {
+  return typeof value === 'string' ? value : undefined;
 }

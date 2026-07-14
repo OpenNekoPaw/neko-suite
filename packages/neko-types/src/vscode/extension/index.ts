@@ -24,6 +24,10 @@ export type { LogLevelSettingSnapshot } from './logger';
 
 // Error reporter (showErrorMessage wrapper)
 export { VSCodeErrorHandler } from './error-reporter';
+export {
+  REGISTER_AGENT_CAPABILITIES_COMMAND,
+  registerOptionalAgentCapabilityProvider,
+} from './optional-agent-capability-registration';
 
 // i18n bridge (locale detection + webview injection)
 export { getVSCodeLocale, injectLocaleAttribute } from './i18n-bridge';
@@ -59,13 +63,11 @@ export type {
 
 // Resource cache identity, materialization, manifest, and projection orchestration.
 export {
-  JsonResourceCacheManifestStore,
   VSCodeResourceCacheService,
   computeStats,
   resolveResourceCacheQuotaPolicy,
 } from './resource-cache-service';
 export type {
-  JsonResourceCacheManifestStoreOptions,
   ResourceCacheFsOps,
   ResourceCacheGcResult,
   ResourceCacheLookupResult,
@@ -162,7 +164,10 @@ export {
   loadHostContentPathPolicy,
   resolveHostContentMediaPath,
 } from './content-path-resolver';
-export type { HostContentPathPolicy, HostContentPathResolverOptions } from './content-path-resolver';
+export type {
+  HostContentPathPolicy,
+  HostContentPathResolverOptions,
+} from './content-path-resolver';
 export {
   createExtensionPrivateResourceCacheOptions,
   createHostContentAccessRuntime,
@@ -182,6 +187,18 @@ export {
 } from './workspace-media-path';
 export type { VSCodeWorkspaceMediaPathContextInput } from './workspace-media-path';
 export { readStringMetadata } from './metadata';
+export {
+  NodeLocalMetadataBulkWorkerExecutor,
+  isLocalMetadataBulkWorkerResult,
+} from './local-metadata-bulk-worker-executor';
+export type {
+  LocalMetadataBulkOperation,
+  LocalMetadataBulkWorkerRequest,
+  LocalMetadataBulkWorkerResult,
+  NodeLocalMetadataBulkWorkerExecutorOptions,
+} from './local-metadata-bulk-worker-executor';
+export { createNodeSqliteLocalMetadataStore } from './node-sqlite-local-metadata-store';
+export type { NodeSqliteLocalMetadataStoreOptions } from './node-sqlite-local-metadata-store';
 export { createVSCodeProjectFileIoAdapter } from './project-file-io';
 export type {
   VSCodeProjectFileContextInput,

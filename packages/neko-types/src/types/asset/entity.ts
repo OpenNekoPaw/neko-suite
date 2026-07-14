@@ -7,6 +7,7 @@
 
 import type { BundleEntryLocator, MediaAssetStorageMode } from '../bundle-locator';
 import type { CharacterAssetDimension, CharacterAssetMediaKind } from '../media-import';
+import type { RecordingProjectFactProvenance } from '../recording-artifact';
 
 // =============================================================================
 // Entity Categories
@@ -30,25 +31,11 @@ export type EntityCategory =
 
 /** View angle dimension */
 export type ViewAngle =
-  | 'front'
-  | 'back'
-  | 'left'
-  | 'right'
-  | 'top'
-  | 'bottom'
-  | 'isometric'
-  | '3/4';
+  'front' | 'back' | 'left' | 'right' | 'top' | 'bottom' | 'isometric' | '3/4';
 
 /** Expression/emotion state */
 export type ExpressionState =
-  | 'neutral'
-  | 'happy'
-  | 'sad'
-  | 'angry'
-  | 'surprised'
-  | 'talking'
-  | 'sleeping'
-  | 'custom';
+  'neutral' | 'happy' | 'sad' | 'angry' | 'surprised' | 'talking' | 'sleeping' | 'custom';
 
 /** Action/animation state */
 export type ActionState = 'idle' | 'walk' | 'run' | 'jump' | 'attack' | 'sit' | 'lie' | 'custom';
@@ -175,7 +162,7 @@ export interface AssetOwnership {
 /** Asset source information */
 export interface AssetSource {
   /** Source type */
-  type: 'manual' | 'ai-generated' | 'imported' | 'stock';
+  type: 'manual' | 'ai-generated' | 'imported' | 'stock' | 'recording';
   /** AI provider name (if ai-generated) */
   provider?: string;
   /** Generation prompt (if ai-generated) */
@@ -184,6 +171,8 @@ export interface AssetSource {
   license?: string;
   /** Original source URL */
   sourceUrl?: string;
+  /** Stable provenance for promoted Live/Audio recordings. */
+  recording?: RecordingProjectFactProvenance;
 }
 
 /** Entity metadata - category-specific information */

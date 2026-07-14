@@ -5,6 +5,7 @@ import {
   createResourceRef,
   type ContentAccessProvider,
   type ResourceRef,
+  type ResourceCacheManifestStore,
   type ResourceVariantRequest,
 } from '../../../types';
 import { createHostContentAccessRuntime } from '../content-access-runtime';
@@ -70,6 +71,8 @@ describe('createHostContentAccessRuntime', () => {
       context: { globalStorageUri: uri('/global/neko-agent') } as never,
       workspaceRoot: '/workspace/demo',
       resourceCacheOptions: {
+        cacheRoot: '/workspace/demo/.neko/.cache/resources',
+        manifestStore: createMemoryManifestStore(),
         providers: [
           createCacheProvider(resource, '/workspace/demo/.neko/.cache/resources/page.jpg'),
         ],
@@ -172,7 +175,7 @@ describe('createHostContentAccessRuntime', () => {
       pathResolver: new PathResolver(new Map([['BOOKS', '/media/books']])),
       resourceCacheOptions: {
         cacheRoot: '/workspace/demo/.neko/.cache/resources',
-        manifestPath: '/workspace/demo/.neko/.cache/resources/manifest.json',
+        manifestStore: createMemoryManifestStore(),
         fsOps: createResourceCacheFsOps(),
         providers: [
           createCacheProvider(resource, '/workspace/demo/.neko/.cache/resources/page.jpg'),
@@ -215,7 +218,7 @@ describe('createHostContentAccessRuntime', () => {
       webviewResolver: () => createWebview('panel') as never,
       resourceCacheOptions: {
         cacheRoot: '/workspace/demo/.neko/.cache/resources',
-        manifestPath: '/workspace/demo/.neko/.cache/resources/manifest.json',
+        manifestStore: createMemoryManifestStore(),
         fsOps: createResourceCacheFsOps(),
         providers: [
           createCacheProvider(resource, '/workspace/demo/.neko/.cache/resources/page.jpg'),
@@ -306,9 +309,41 @@ describe('createHostContentAccessRuntime', () => {
           cacheRoot: '/workspace/demo/.neko/.cache/resources',
         },
       }),
-    ).toThrow('Resource cache options require both cacheRoot and manifestPath.');
+    ).toThrow('Resource cache options require cacheRoot and a LocalMetadata manifestStore.');
+  });
+
+  it('rejects retired ResourceCache manifest paths at the Host runtime boundary', () => {
+    expect(() =>
+      createHostContentAccessRuntime({
+        localResourceAccess: createLocalResourceAccess(),
+        resourceCacheOptions: {
+          cacheRoot: '/workspace/demo/.neko/.cache/resources',
+          manifestPath: '/workspace/demo/.neko/.cache/resources/manifest.json',
+        },
+      }),
+    ).toThrow('Legacy ResourceCache manifest paths are retired');
   });
 });
+
+function createMemoryManifestStore(): ResourceCacheManifestStore {
+  let manifest = {
+    version: 1 as const,
+    createdAt: '2026-07-13T00:00:00.000Z',
+    updatedAt: '2026-07-13T00:00:00.000Z',
+    entries: {},
+  };
+  return {
+    load: async () => manifest,
+    save: async (next) => {
+      manifest = next;
+    },
+    update: async (operation) => {
+      manifest = await operation(manifest);
+      return manifest;
+    },
+    invalidateCache: () => undefined,
+  };
+}
 
 function uri(filePath: string) {
   return {

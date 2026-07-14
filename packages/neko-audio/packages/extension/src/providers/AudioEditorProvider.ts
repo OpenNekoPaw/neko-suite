@@ -38,6 +38,7 @@ import {
   createAudioStreamRequiredError,
   diagnosticsFromAudioRuntimeError,
 } from '../services/audioRuntimeDiagnostics';
+import { promoteDurableAudioRecording } from '../services/recordingPromotion';
 import type { AudioOutlineProvider } from '../views/audioOutlineProvider';
 import type { AudioStatusBar } from '../views/audioStatusBar';
 import { getWebviewHtml } from '../utils/html';
@@ -455,6 +456,12 @@ export class AudioEditorProvider implements vscode.CustomReadonlyEditorProvider<
               });
           if (!saveUri) return;
           await vscode.workspace.fs.writeFile(saveUri, Buffer.from(request.data, 'base64'));
+          const warnings = await promoteDurableAudioRecording({
+            filePath: saveUri.fsPath,
+            workspaceRoot:
+              vscode.workspace.getWorkspaceFolder(document.uri)?.uri.fsPath ??
+              vscode.workspace.workspaceFolders?.[0]?.uri.fsPath,
+          });
           await webviewPanel.webview.postMessage({
             type: 'audio:recordingResult',
             requestId: request.requestId,
@@ -462,6 +469,7 @@ export class AudioEditorProvider implements vscode.CustomReadonlyEditorProvider<
             success: true,
             action: request.action,
             outputPath: saveUri.fsPath,
+            warnings,
           });
           return;
         }
@@ -501,6 +509,14 @@ export class AudioEditorProvider implements vscode.CustomReadonlyEditorProvider<
           throw new Error('streamId is required to stop recording');
         }
         const result = await this._audioService?.recordStop(request.streamId);
+        const warnings = result?.path
+          ? await promoteDurableAudioRecording({
+              filePath: result.path,
+              workspaceRoot:
+                vscode.workspace.getWorkspaceFolder(document.uri)?.uri.fsPath ??
+                vscode.workspace.workspaceFolders?.[0]?.uri.fsPath,
+            })
+          : [];
         await webviewPanel.webview.postMessage({
           type: 'audio:recordingResult',
           requestId: request.requestId,
@@ -509,6 +525,7 @@ export class AudioEditorProvider implements vscode.CustomReadonlyEditorProvider<
           action: request.action,
           outputPath: result?.path,
           durationSeconds: result?.durationSeconds,
+          warnings,
         });
       } catch (error) {
         await webviewPanel.webview.postMessage({

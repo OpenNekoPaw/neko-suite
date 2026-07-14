@@ -37,14 +37,12 @@ export type {
 } from '../vscode/extension/content-access-providers';
 
 export {
-  JsonResourceCacheManifestStore,
   VSCodeResourceCacheService as HostResourceCacheService,
   VSCodeResourceCacheService,
   computeStats,
   resolveResourceCacheQuotaPolicy,
 } from '../vscode/extension/resource-cache-service';
 export type {
-  JsonResourceCacheManifestStoreOptions,
   ResourceCacheFsOps,
   ResourceCacheGcResult,
   ResourceCacheLookupResult,

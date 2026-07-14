@@ -37,15 +37,25 @@ import {
   resolveStorageLayout,
   parseEntityUri,
   PathResolver,
+  RECORDING_PROMOTION_COMMAND,
+  isRecordingPromotionRequest,
   type CreativeEntityKind,
+  type RecordingProjectFactInput,
   type WorkspaceMediaPathContext,
   type ResourceVariantRequest,
 } from '@neko/shared';
 import type { ImportedAssetDescriptor } from '@neko/shared';
+import {
+  createNodeWorkspaceMediaMetadataBinding,
+  createNodeWorkspaceSearchMetadataBinding,
+} from '@neko/shared/local-metadata/node';
 import { createEngineMetadataExtractor } from './services/EngineMetadataExtractor';
 import { ThumbnailService } from './services/ThumbnailService';
 import { MediaMetadataCache } from './services/MediaMetadataCache';
-import { MediaLibrarySearchService } from './services/MediaLibrarySearchService';
+import {
+  createLocalMetadataMediaLibrarySearchIndexStore,
+  MediaLibrarySearchService,
+} from './services/MediaLibrarySearchService';
 import { AssetHealthMonitor, createFileAccessChecker } from './services/AssetHealthMonitor';
 import { MediaLibrarySettingsService } from './services/MediaLibrarySettingsService';
 import { AssetFileDecorationProvider } from './providers/AssetFileDecorationProvider';
@@ -80,8 +90,18 @@ import {
   type EntityFacadeReaders,
 } from './services/EntityFacadeReaders';
 import { registerMarketInstallTargets } from './market/registerMarketInstallTargets';
+import { RecordingPromotionService } from './services/RecordingPromotionService';
 
 const logger = getLogger('Extension');
+
+function withWorkspacePathVariable(
+  workspaceRoot: string,
+  variables: ReadonlyMap<string, string>,
+): Map<string, string> {
+  const result = new Map(variables);
+  result.set('WORKSPACE', workspaceRoot);
+  return result;
+}
 
 // =============================================================================
 // Extension State
@@ -339,26 +359,78 @@ export async function activate(
     }
 
     // Initialize PathResolver for portable cache keys
-    const cachePathResolver = new PathResolver();
-    cachePathResolver.setVariables(await settingsService.getPathVariableMap());
+    const initialMetadataPathVariables = withWorkspacePathVariable(
+      workspaceRoot,
+      await settingsService.getPathVariableMap(),
+    );
+    const cachePathResolver = new PathResolver(initialMetadataPathVariables);
     settingsService.onDidChange(async () => {
-      cachePathResolver.setVariables(await settingsService.getPathVariableMap());
+      cachePathResolver.setVariables(
+        withWorkspacePathVariable(workspaceRoot, await settingsService.getPathVariableMap()),
+      );
     });
 
-    // Initialize persistent metadata cache
-    const metadataCache = new MediaMetadataCache(
-      resolveStorageLayout(workspaceRoot, os.homedir()).project.local.cache.mediaMetadata,
-      cachePathResolver,
-    );
+    const mediaMetadataBinding = await createNodeWorkspaceMediaMetadataBinding({
+      homedir: os.homedir(),
+      workDir: workspaceRoot,
+      pathVariables: initialMetadataPathVariables,
+    });
+    context.subscriptions.push({
+      dispose: () => {
+        void mediaMetadataBinding
+          .dispose()
+          .catch((error) => logger.warn('Failed to dispose media metadata store', { error }));
+      },
+    });
+    if (
+      mediaMetadataBinding.migrationReport.sourceStatus === 'quarantined' ||
+      mediaMetadataBinding.migrationReport.unrecoverable.length > 0
+    ) {
+      logger.warn('Media metadata migration requires attention', {
+        report: mediaMetadataBinding.migrationReport,
+      });
+    }
+    const metadataCache = new MediaMetadataCache({
+      repository: mediaMetadataBinding.repository,
+      partition: mediaMetadataBinding.partition,
+      pathResolver: cachePathResolver,
+    });
     await metadataCache.load();
     context.subscriptions.push(metadataCache);
 
-    // Initialize search service with persistent index
-    const storageLayout = resolveStorageLayout(workspaceRoot, os.homedir());
+    const searchMetadataBinding = await createNodeWorkspaceSearchMetadataBinding({
+      homedir: os.homedir(),
+      workDir: workspaceRoot,
+      pathVariables: initialMetadataPathVariables,
+    });
+    context.subscriptions.push({
+      dispose: () => {
+        void searchMetadataBinding
+          .dispose()
+          .catch((error) => logger.warn('Failed to dispose search metadata store', { error }));
+      },
+    });
+    if (
+      searchMetadataBinding.mediaSearchMigrationReport.sourceStatus === 'quarantined' ||
+      searchMetadataBinding.mediaSearchMigrationReport.unrecoverable.length > 0 ||
+      searchMetadataBinding.semanticMigrationReport.sourceStatus === 'partial' ||
+      searchMetadataBinding.semanticMigrationReport.sourceStatus === 'quarantined'
+    ) {
+      logger.warn('Search projection migration requires attention', {
+        media: searchMetadataBinding.mediaSearchMigrationReport,
+        semantic: searchMetadataBinding.semanticMigrationReport,
+      });
+    }
+    const searchIndexStore = createLocalMetadataMediaLibrarySearchIndexStore({
+      repository: searchMetadataBinding.searchDocuments,
+      partition: searchMetadataBinding.searchPartition,
+      pathResolver: cachePathResolver,
+      readRevision: () => searchMetadataBinding.readSearchRevision(),
+    });
     const searchService = new MediaLibrarySearchService(
       settingsService,
       metadataCache,
-      storageLayout.project.local.cache.searchIndex,
+      searchIndexStore,
     );
     context.subscriptions.push(searchService);
     trackExtensionTask('Media library search warmup', searchService.warmup());
@@ -1033,6 +1105,50 @@ function registerAssetManagerCommands(
 // =============================================================================
 
 function registerAssetCommands(context: vscode.ExtensionContext): void {
+  context.subscriptions.push(
+    vscode.commands.registerCommand(RECORDING_PROMOTION_COMMAND, async (input: unknown) => {
+      if (!isRecordingPromotionRequest(input)) {
+        throw new Error('Invalid recording promotion request.');
+      }
+      const assetLibrary = library;
+      if (!assetLibrary) {
+        throw new Error('AssetLibrary is unavailable for recording promotion.');
+      }
+      const service = new RecordingPromotionService({
+        registerProjectFact: async (fact: RecordingProjectFactInput) => {
+          const imported = await assetLibrary.importFile(fact.destinationPath, {
+            entityInput: {
+              name: path.parse(fact.destinationPath).name,
+              category: fact.mediaType === 'audio' ? 'audio' : 'object',
+              metadata: {
+                source: {
+                  type: 'recording',
+                  recording: fact.provenance,
+                },
+              },
+              tags: ['recording', fact.mediaType, fact.provenance.producer],
+              ownership: { scope: 'project', access: 'editable' },
+            },
+            variantInput: {
+              name: 'Recorded take',
+              attributes: {},
+              tags: ['recording'],
+            },
+          });
+          await assetLibrary.flush();
+          entityChangeEmitter?.fire();
+          return {
+            entityId: imported.entity.id,
+            variantId: imported.variant.id,
+            fileId: imported.file.id,
+            storedPath: imported.file.path,
+          };
+        },
+      });
+      return service.promote(input);
+    }),
+  );
+
   // Add to Timeline (neko-cut)
   context.subscriptions.push(
     vscode.commands.registerCommand('neko.assets.addToTimeline', async (uri?: vscode.Uri) => {
@@ -1592,6 +1708,10 @@ async function registerImportedAssetDescriptor(descriptor: ImportedAssetDescript
     descriptor.mediaKind.startsWith('puppet-') || descriptor.mediaKind.startsWith('model-')
       ? 'character'
       : 'object';
+  const durableProjectRef =
+    typeof descriptor.metadata?.['durableProjectRef'] === 'string'
+      ? descriptor.metadata['durableProjectRef']
+      : descriptor.path;
   await library.importFile(descriptor.path, {
     entityInput: {
       name: path.basename(descriptor.path).replace(/\.[^.]+$/i, ''),
@@ -1609,7 +1729,7 @@ async function registerImportedAssetDescriptor(descriptor: ImportedAssetDescript
         mediaKind: descriptor.mediaKind,
         storageMode: descriptor.storageMode,
         ...(descriptor.locator ? { bundleLocator: descriptor.locator } : {}),
-        sourceOrigin: descriptor.path,
+        sourceOrigin: durableProjectRef,
         ...(descriptor.sourceHash ? { sourceHash: descriptor.sourceHash } : {}),
       },
     },

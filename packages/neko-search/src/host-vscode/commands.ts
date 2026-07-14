@@ -143,7 +143,6 @@ export function registerProjectSearchWatchers(
     ['**/neko/entity-asset-requirements.json', 'creative-entities'],
     ['**/neko/entity-bindings.json', 'creative-entities'],
     ['**/neko/visual-identity-drafts.json', 'creative-entities'],
-    ['**/.neko/.cache/generated/index.json', 'generated-assets'],
     ['**/neko/settings.json', 'media-library'],
     ['**/.neko/settings.local.json', 'media-library'],
   ] as const) {

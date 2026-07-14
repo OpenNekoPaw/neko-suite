@@ -4,7 +4,6 @@ import {
   DASHBOARD_CREATIVE_ENTITY_STATE_COMMAND,
   isDashboardCreativeEntitySourceRequest,
 } from '@neko/shared/types/dashboard-creative-entity';
-import { ActivityStore } from './activityStore';
 import { CreativeEntitySourceAggregator } from './creativeEntitySourceAggregator';
 import { getDashboardHtml } from './html';
 import { NOOP_DASHBOARD_LOGGER, type DashboardLogger } from './logging';
@@ -30,7 +29,6 @@ export interface DashboardProviderOptions {
   readonly navigation?: NavigationDispatcher;
   readonly taskAggregator?: TaskAggregator;
   readonly creativeEntityAggregator?: CreativeEntitySourceAggregator;
-  readonly activityStore?: ActivityStore;
 }
 
 export class DashboardProvider implements vscode.Disposable {
@@ -43,7 +41,6 @@ export class DashboardProvider implements vscode.Disposable {
   private readonly navigation: NavigationDispatcher;
   private readonly taskAggregator: TaskAggregator;
   private readonly creativeEntityAggregator: CreativeEntitySourceAggregator;
-  private readonly activityStore: ActivityStore;
   private readonly disposables: vscode.Disposable[] = [];
 
   constructor(
@@ -62,7 +59,6 @@ export class DashboardProvider implements vscode.Disposable {
       new CreativeEntitySourceAggregator({
         logger: this.logger.child('CreativeEntitySourceAggregator'),
       });
-    this.activityStore = options.activityStore ?? new ActivityStore();
 
     this.disposables.push(this.taskAggregator);
     this.disposables.push(this.creativeEntityAggregator);
@@ -88,9 +84,6 @@ export class DashboardProvider implements vscode.Disposable {
       this.taskAggregator.onDidChangeTask((event) => {
         this.post({ type: 'taskProgress', event });
         if (event.task.status === 'done' || event.task.status === 'error') {
-          void this.activityStore
-            .append(event.task)
-            .catch((error) => this.logger.warn('Failed to persist dashboard activity', error));
           this.post({ type: 'taskCompleted', taskId: event.task.taskId, task: event.task });
         }
       }),
