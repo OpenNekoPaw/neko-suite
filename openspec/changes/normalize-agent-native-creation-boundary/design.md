@@ -1,5 +1,7 @@
 ## Context
 
+> **Superseded follow-up (2026-07-14):** [`retire-idc-and-align-agent-creative-planning`](../retire-idc-and-align-agent-creative-planning/) removes the residual dynamic/fixed creation profile-stage runtime described here. Agent-native creation no longer keeps `idc.default`, stage personas, stage lifecycle or runtime Draft/ExecutionPlan/Task as a successful path; Plan Mode, creator-review Markdown, bounded TODO, Approval and ordinary ReAct provide those product behaviors.
+
 The accepted ADR `docs/architecture/adr-agent-native-creation-capability-boundary.md` makes Agent-native creation the only owner of creative lifecycle, stage, iteration, validation feedback, review, approval, state, artifact provenance, and capability invocation decisions. IDC becomes a creation profile. Skill workflow becomes prompt-chain guidance. Executable workflow runtime concepts are forbidden as future canonical Agent creation architecture.
 
 Current code and active design artifacts still conflict with that boundary:

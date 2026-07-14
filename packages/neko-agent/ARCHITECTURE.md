@@ -1,6 +1,8 @@
 # neko-agent 架构
 
 > AI Agent 系统，提供对话、MCP 工具、技能系统、多模型 LLM 等能力。
+>
+> 2026-07-15：固定 IDC stage/run/persona、Draft/Plan/Apply runtime、Plan action/card 和 runtime artifact store 已退役。Canonical path 是普通 `AgentSession` / turn / ReAct；Plan Mode 只由 `executionMode` 控制只读规划，Markdown、TODO 和 UI 不拥有执行状态。本文未同步章节中的旧术语仅作为历史背景。
 
 ---
 
@@ -388,8 +390,7 @@ host bootstrap
 
 `AgentRuntimeConfig` 分成四个 plane：
 
-- `workflowRuntime`：IDC stage tracking / workflow 入口
-- `artifactStore`：workspace、journal writer、artifact 持久化平面
+- `workspaceStore`：workspace、journal writer 和 grounded output 引用平面
 - `capabilityRuntime`：skill / toolGroup / promptFragments 等动态能力注入
 - `feedbackLoop`：project memory、journal-as-SSOT、memory recall/extraction 等反馈设置
 
@@ -397,9 +398,9 @@ host bootstrap
 
 - 宿主的显式 `AgentSessionConfig` 字段优先于 runtime 默认值
 - extension、Terminal TUI 和 headless 工具不再各自手写一套 session bootstrap 映射逻辑
-- Node 宿主统一复用 `createNodeArtifactStore()` 组装 artifact plane
+- Node 宿主统一复用 `createNodeWorkspaceRuntimeStore()` 组装 workspace plane
 
-这层收口是 P1-P5 的前置条件：后续 IDC 主链、Prompt/Skill/Command 编排、Capability 注入、Artifact 主链化、FeedbackCoordinator，都应该优先接到 runtime plane，而不是继续把新字段散落进宿主入口。
+Prompt/Skill/Command 编排、Capability 注入和 feedback 应优先接到普通 runtime plane，而不是把新字段散落进宿主入口或恢复 IDC/Plan runtime。
 
 ---
 
@@ -412,7 +413,7 @@ Webview → Extension:
   sendMessage, confirmTool, cancelMessage,
   newConversation, switchConversation, deleteConversation,
   getSettings, updateSettings, invokeSlashCommand,
-  clearActiveSkill, planApprove/Reject,
+  clearActiveSkill,
   searchProjectFiles, getTasks, cancelTask,
   projectionEndpointDiscover, projectionAttach,
   projectionSnapshotAck, projectionDetach,

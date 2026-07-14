@@ -149,6 +149,12 @@ Skill 正文不负责：
 
 新增或修改 Neko 第一方 Skill 时，维护防回流测试，避免正文重新包含 Runtime 已拥有的工具协议。
 
+### 创作计划与执行指导
+
+影视化、动画化等复杂 Skill 应指导 Agent 从实际来源证据出发，区分观察事实、Agent 解释、创作者决策和可执行动作。需要计划时，工作单元应说明对象、触发/跳过条件、当前输入、能力意图、约束、输出、验收、失败恢复、依赖和审批要求；只列“分析、生成、后期、导出”不属于可执行计划。
+
+Skill 不得把这些方法写成固定 stage、DAG、隐藏 prompt-chain executor 或 Plan-to-Apply 协议，也不得要求每次创作都生成相同文档。`brief.md`、`plan.md` 和领域审阅文档是可选的普通用户内容；TODO 只是近期进度投影。批准后由 Agent 重新读取当前文件并选择当前 Tool，Skill 不保存 executor、Tool schema、Task handle 或项目 revision 副本。
+
 ## 创建方式
 
 三种方式都合法：

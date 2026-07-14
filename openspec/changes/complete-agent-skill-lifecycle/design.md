@@ -1,5 +1,7 @@
 ## Context
 
+> **Superseded stage-persona scope (2026-07-15):** IDC `stagePersona`, creation-stage lifetime, and automatic creation/execution persona switching are deleted by `retire-idc-and-align-agent-creative-planning`. The remaining lifecycle design applies only to ordinary domain/reference Skills.
+
 `neko-agent` currently mixes three concepts that need separate ownership:
 
 - `SkillService` is intentionally stateless and prepares `SkillInjection` payloads.

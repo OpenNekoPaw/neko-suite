@@ -1,10 +1,12 @@
 # ADR: Agent 原生创作能力与 Workflow/IDC 边界
 
-- 状态：Accepted
+- 状态：Superseded
 - 日期：2026-07-02
 - 范围：`neko-agent` 创作阶段、Skill prompt-chain、IDC profile、workflow 命名、validator、approval、artifact/state 投影和领域 capability 调用。
 
 本文记录 Neko Suite 对 Agent 创作系统的核心边界：**所有创作 lifecycle、feedback、state、approval 和后续操作判断都属于 Agent 原生能力；IDC、Skill 和 workflow 都只能在 Agent 能力上进行扩展或约束，不得在 Agent 之前或旁边建立独立运行时。**
+
+> 2026-07-15：其中仍保留的 IDC profile/stage/iteration 语义已进一步由 [`adr-agent-directed-creative-orchestration-and-domain-capability-boundary.md`](adr-agent-directed-creative-orchestration-and-domain-capability-boundary.md) 删除。当前不再存在 IDC profile；普通 Agent ReAct 是唯一创作执行路径。
 
 本文补充并收紧 [`agent.md`](agent.md)、[`adr-agent-autonomous-filmmaking-creation-boundary.md`](adr-agent-autonomous-filmmaking-creation-boundary.md)、[`adr-agent-prompt-skill-validator-boundary.md`](adr-agent-prompt-skill-validator-boundary.md)、[`adr-agent-skill-creator-and-validation.md`](adr-agent-skill-creator-and-validation.md) 和 [`adr-agent-idc-skill-planmode-trigger-boundary.md`](adr-agent-idc-skill-planmode-trigger-boundary.md)。若旧文档仍使用 `workflow runtime`、`IDC runtime` 或固定三阶段 IDC 作为 canonical 设计，应以本 ADR 为准。
 

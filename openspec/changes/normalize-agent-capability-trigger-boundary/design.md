@@ -1,5 +1,7 @@
 ## Context
 
+> **Superseded IDC scope (2026-07-14):** [`retire-idc-and-align-agent-creative-planning`](../retire-idc-and-align-agent-creative-planning/) deletes IDC workflow start/resume, fixed stage entry/advance, stage persona and restore success paths. This document remains authoritative only for explicit Skill activation and execution-mode provenance; IDC-specific decisions below are historical migration context and MUST NOT be newly implemented or restored.
+
 `neko-agent` now has multiple capability systems with their own lifecycle rules:
 
 - Skill lifecycle records and projection (`domainSkill`, `stagePersona`, `referenceSkill`, etc.).

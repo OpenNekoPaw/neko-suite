@@ -1,3 +1,5 @@
+> **Superseded IDC scope (2026-07-14):** Skill activation and execution-mode provenance remain valid. Do not implement or reopen IDC workflow/stage start, resume, advance, persona, restore, UI, CLI, or TUI success tasks below; [`retire-idc-and-align-agent-creative-planning`](../retire-idc-and-align-agent-creative-planning/) removes those paths and retains only retired-path diagnostics and poison coverage.
+
 ## 1. Contract And Characterization
 
 - [x] 1.1 Add shared activation intent/result/provenance DTOs and diagnostics for `skill`, `idc-workflow`, `idc-stage`, and `execution-mode` targets.

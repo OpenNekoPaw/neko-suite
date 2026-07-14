@@ -1,5 +1,7 @@
 ## Why
 
+> **Superseded scope (2026-07-14):** Skill 与 execution-mode 的显式触发边界继续有效；IDC workflow start/resume、stage entry、stage persona 和相关 UI/CLI/TUI 成功路径由 [`retire-idc-and-align-agent-creative-planning`](../retire-idc-and-align-agent-creative-planning/) 删除。后续实现不得完成、恢复或重新暴露 IDC trigger，只保留必要的 retired-path diagnostic 和 poison coverage。
+
 Agent capabilities currently activate through several host/runtime side paths: natural-language Skill discovery can pre-activate a Skill, ordinary Agent turns can auto-start IDC runs, and stage persona records can appear before the user sees an explicit trigger. This makes the Agent feel unpredictable and violates the intended Agent-first boundary where capability changes should be user-visible or initiated by the Agent through tools.
 
 ## What Changes

@@ -1,5 +1,7 @@
 ## ADDED Requirements
 
+> **Superseded stage-persona clauses (2026-07-15):** Requirements for IDC stage-owned persona activation, lock, expiry, or restore are non-executable history. Only ordinary domain/reference Skill lifecycle records remain canonical.
+
 ### Requirement: Skill lifecycle records are the active Skill source of truth
 The system SHALL represent active Skills as typed conversation-scoped lifecycle records. Prompt sections, tool policy, model overrides, and UI indicators SHALL be projections from those records, not independent active Skill state.
 

@@ -1,6 +1,8 @@
 # Agent 横切架构
 
-更新日期：2026-07-09
+更新日期：2026-07-15
+
+> 2026-07-15 收敛：固定 IDC profile/stage/run/persona 与 Draft/Plan/Apply runtime 已被 [`adr-agent-directed-creative-orchestration-and-domain-capability-boundary.md`](adr-agent-directed-creative-orchestration-and-domain-capability-boundary.md) 取代。本文后续章节若仍出现 IDC、stage persona 或固定三阶段，仅作为历史设计背景，不再是可执行架构。Canonical path 是普通 Agent session/turn/ReAct；`executionMode` 只控制权限和计划提示，Markdown/TODO 不拥有执行状态。
 
 Agent 是 Neko Suite 的横切创作智能层，不是一个创作领域。它为视频、音频、模型、2D 和互动创作提供意图理解、计划、工具调用、上下文压缩、审阅和修复能力。
 
@@ -15,7 +17,7 @@ Agent 是 Neko Suite 的横切创作智能层，不是一个创作领域。它�
 - Agent-first：创作意图先进入 Agent runtime，由 runtime 决定是否需要领域工具、Engine、素材库、实体或市场能力。
 - API-first：跨层交互先定义 shared contract、command、provider、port 或 message schema，再接 UI 和具体实现。
 - Prompt-first：Prompt 只表达上下文、角色、约束和行为策略，不隐藏宿主副作用。
-- Creation-first：创作 lifecycle、stage、iteration、validator feedback、review 和 approval 归 Agent 原生创作能力所有；IDC 只是 profile。
+- Agent-directed creation：创作下一步、反馈、审阅和恢复由普通 Agent ReAct 判断；Approval、Task、validation 和领域 project 各自拥有授权、异步执行、校验与项目事实，不存在 IDC profile 或平行创作 runtime。
 - Skill-first：Skill 描述领域方法、prompt-chain guidance、创作语义、输出标准和适用条件；具体工具协议、命令列表和子包 schema 由系统提示词、子包 capability 和 tool schema 提供，不成为私有 workflow engine。
 - Tool-as-capability：Tool 是可审计能力入口，必须有来源、权限、schema、trust、输入输出 contract。
 - Provider-neutral：runtime 不依赖具体模型供应商语义，provider adapter 负责 tool calling、structured output、多模态消息投影差异。
@@ -216,7 +218,7 @@ Agent 有三类协议面，不能混用：
 
 | 协议面            | 参与方                            | 内容                                                                                | 约束                                                 |
 | ----------------- | --------------------------------- | ----------------------------------------------------------------------------------- | ---------------------------------------------------- |
-| Webview protocol  | Webview ↔ Extension               | `sendMessage`、confirm tool、plan action、slash command、settings、open/reveal      | 只传投影和用户意图，不传 secret 和 runtime internals |
+| Webview protocol  | Webview ↔ Extension               | `sendMessage`、confirm tool、slash command、settings、open/reveal                  | 只传投影和用户意图，不传 secret 和 runtime internals |
 | Runtime protocol  | Extension adapter ↔ Agent runtime | turn assembly、creation iteration、tool call、approval、memory、artifact projection | host-agnostic，使用 ports/adapters                   |
 | Provider protocol | Runtime/AI SDK ↔ model provider   | messages、tool schemas、structured output、多模态 payload                           | provider-specific 差异在 adapter 内消化              |
 
@@ -241,7 +243,7 @@ Agent 有三类协议面，不能混用：
 - 跨 Webview 边界的消息必须由 `agent-types` 或共享 contract 定义，不在组件里临时拼自由对象。
 - Provider 原始 tool call、stream event 和多模态 payload 不穿透到 Webview；runtime/AI SDK 负责投影成 `Message`、`ContentBlock`、`ToolCall` 或 artifact projection。
 - Webview 不接收 secret、provider credential、native path capability 或无界二进制 payload。
-- `confirmTool`、`planApprove`、`planReject` 等用户确认消息只绑定明确 id；重复确认应可幂等处理。
+- `confirmTool` 等用户确认消息只绑定明确 id；创作者对 Markdown/范围的批准通过普通对话和现有 Approval owner 记录，不恢复 Plan action 协议。
 - `openFile`、`revealAsset`、`sendToPlugin`、`revealDocumentLocator` 是宿主意图，不是文件系统授权本身；Extension adapter 负责解析、授权和审计。
 - 错误和降级应返回 typed diagnostic，避免只把 provider/工具原始错误文本塞进 assistant message。
 

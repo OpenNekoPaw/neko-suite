@@ -1,5 +1,7 @@
 ## Why
 
+> **Superseded stage-persona scope (2026-07-15):** `retire-idc-and-align-agent-creative-planning` removes IDC stage personas and creation-stage lifetime. This change remains authoritative only for normal user/Agent-activated domain and reference Skill lifecycle records; stage-owned persona records must not be restored.
+
 `neko-agent` currently has a single active Skill injection slot, while adjacent code already hints at multi-Skill state, conflict resolution, IDC stage personas, and turn-level context projection. This gap makes Skill cleanup and composition fragile: prompt sections, permission allow rules, ToolGuard state, ToolSet activation, and Webview indicators can drift when a conversation needs multiple Skill roles or when a Skill should expire automatically.
 
 ## What Changes

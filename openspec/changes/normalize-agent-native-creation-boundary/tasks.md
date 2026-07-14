@@ -1,3 +1,5 @@
+> **Superseded follow-up (2026-07-14):** completed work here is historical input to [`retire-idc-and-align-agent-creative-planning`](../retire-idc-and-align-agent-creative-planning/). Do not extend `idc.default`, dynamic creation profiles/stages, stage personas, or prompt-chain observations as runtime state; the follow-up removes those residual paths while preserving ordinary Agent validation, approval, Skill, Task, and Tool behavior.
+
 ## 1. Contract Audit And Failing Tests
 
 - [x] 1.1 Add architecture/contract tests that fail if new Agent creation paths call `AgentWorkflowRuntime.createRun`, `transition`, `activateNode`, `complete`, or `fail`.

@@ -1,0 +1,43 @@
+{
+  "schema": "neko.agent-eval.authoring-decision.v2",
+  "behaviorId": "agent-native-creative-planning",
+  "target": {
+    "kind": "skill",
+    "identity": {
+      "name": "media-production",
+      "source": "builtin",
+      "provenance": "builtin",
+      "rootId": "builtin-skills",
+      "relativePath": "media-production",
+      "fingerprint": "sha256:1c92f1e586afefea575ec405543c6a84dbba207ddb1758f02a50e6a2f99d20e7"
+    }
+  },
+  "userBehavior": "Read actual creative source evidence, produce creator-reviewable actionable work units, replan material scope without side effects, execute approved work through current Tools and Tasks, and fail visibly when owning capabilities are unavailable.",
+  "evidenceContract": {
+    "userBehavior": "Plan, review, execute, and recover creative media work through the ordinary Agent session without IDC stage, run, persona, Draft, or ExecutionPlan runtime.",
+    "canonicalPath": ["TUI App session owner", "ordinary executionMode", "builtin media-production Skill", "current Tool and Task lifecycle", "durable output facts"],
+    "forbiddenFallback": ["IDC stage", "IDC run", "stage persona", "Draft runtime", "ExecutionPlan runtime", "Plan-to-Apply compiler"],
+    "observables": [
+      { "ref": "creative-plan-facts", "kind": "runtime-fact", "description": "Effective mode/model, Skill, turns, Tools, Tasks, TODO projection, artifacts, diagnostics, Markdown evidence, and forbidden runtime references.", "required": true }
+    ],
+    "expectedResult": "Source-grounded plans are actionable, material replans require renewed review, approved execution produces actual outputs, and missing capabilities remain blocked or partial.",
+    "expectedFailure": "Generic phase summaries, side effects in Plan Mode, completion without owning outputs, or any retired IDC path fail."
+  },
+  "coverageDelta": {
+    "schema": "neko.agent-eval.coverage-delta.v2",
+    "behaviorId": "agent-native-creative-planning",
+    "groups": [
+      { "group": "canonical", "disposition": "required" },
+      { "group": "paraphrase", "disposition": "not-applicable", "reason": "The first implementation focuses on path-level canonical and failure evidence; paraphrase stability remains residual risk." },
+      { "group": "boundary", "disposition": "required" },
+      { "group": "failure", "disposition": "required" },
+      { "group": "workflow", "disposition": "required" },
+      { "group": "artifact", "disposition": "required" },
+      { "group": "quality", "disposition": "not-applicable", "reason": "No Judge profile is configured; content quality is not inferred from hard-gate field matches." },
+      { "group": "regression", "disposition": "required" },
+      { "group": "holdout", "disposition": "not-applicable", "reason": "No optimization candidate is being accepted in this change; ablation remains comparative development evidence." }
+    ]
+  },
+  "decision": "update",
+  "suiteId": "skill.media-production"
+}

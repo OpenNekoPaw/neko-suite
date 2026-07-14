@@ -1,5 +1,7 @@
 ## ADDED Requirements
 
+> **Superseded creation-stage clauses (2026-07-15):** `retire-idc-and-align-agent-creative-planning` removes `idc.default`, dynamic/fixed creation stages, stage personas, and runtime Draft/ExecutionPlan/Task state. Ordinary Agent ReAct, creator-review Markdown, bounded TODO, Approval, Task, and owning outputs are the replacement path.
+
 ### Requirement: Agent-native creation owns lifecycle
 
 The system SHALL model creative lifecycle, validation feedback, review decisions, approval gates, artifact provenance, and next-action decisions through existing Agent session/turn, validator, approval, artifact, and capability behavior. IDC profiles, Skills, domain adapters, and prompt-chain guidance MUST NOT provide separate lifecycle, feedback, state, approval, or execution runtimes.

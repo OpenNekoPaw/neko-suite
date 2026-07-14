@@ -1,5 +1,7 @@
 ## ADDED Requirements
 
+> **Superseded IDC clauses (2026-07-15):** Any requirement below that starts, resumes, restores, or advances an IDC run/stage/persona is replaced by `retire-idc-and-align-agent-creative-planning`. Explicit Skill activation and ordinary `executionMode` provenance remain valid; no IDC success path may be implemented.
+
 ### Requirement: Capability activation requires explicit source
 The system SHALL require a typed activation source before creating initial active state for Agent capabilities including Skill records, IDC workflows, IDC stages, and execution mode changes.
 

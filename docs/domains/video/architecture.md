@@ -1,6 +1,6 @@
 # 视频创作领域架构
 
-更新日期：2026-07-06
+更新日期：2026-07-15
 
 视频创作领域围绕“素材 -> 剧本/Agent 预处理 -> Canvas 分镜产物 -> 时间线剪辑 -> 预览 -> 导出/审阅”的创作闭环组织。该领域会跨 `neko-story`、`neko-canvas`、`neko-cut`、`neko-preview`、`neko-tools` 和 Engine/Agent/Assets 等横切能力。
 
@@ -28,6 +28,12 @@
 - Cut timeline 和 `.nkv` 是剪辑、轨道、clip、效果、字幕、音频和导出的权威；从 Canvas 导入后由 Cut 管理剪辑事实。
 - Agent 可以读取和展示 Canvas 顺序，并在确认后触发 Canvas -> Cut 导入；Agent 不维护独立 timeline 顺序，也不承担视频播放器职责，Canvas 路线播放由 Canvas Editor Webview 内的 `PlaybackWorkspace` 负责，Cut 结果播放由 Cut 或 `neko-preview` / Engine 负责。
 - 被动状态进入 native StatusBar，Timeline 和画布交互状态留在 Webview。
+
+### Agent 驱动的影视化与动画化
+
+视频领域不提供固定“漫画/剧本/小说/插画 -> 动画”的中央流水线。Agent 读取当前来源和项目证据，按镜头选择分格/OCR、角色参考、Storyboard、图片准备、Puppet/逐帧/2.5D/3D/生成视频、Animatic、Audio、Quality 和 Export 等当前真实可用能力；每一步由 owning package 返回文件、ResourceRef、Task result、project revision 或 diagnostic。
+
+复杂制作可以使用 creator-review Markdown 和 living `plan.md`，但它们不编译成 timeline、DAG 或 Tool 调用。近期 TODO 不复制完整 shot graph；Canvas Storyboard、Cut timeline、生成文件和 Task result 才是进度与完成事实。缺少 owning capability 时必须返回 blocked/partial 和最小可交付结果。
 
 Canvas 预览路线、Cut 剪辑时间线、Agent 顺序感知和跨包协议边界见系统级 ADR：[`../../architecture/adr-canvas-cut-playback-route-and-timeline-boundary.md`](../../architecture/adr-canvas-cut-playback-route-and-timeline-boundary.md)。
 

@@ -13,8 +13,8 @@
 
 | 文档                                                                                                               | 内容                                                                                  |
 | ------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------- |
-| [`adr-agent-idc-skill-planmode-trigger-boundary.md`](adr-agent-idc-skill-planmode-trigger-boundary.md)             | Agent IDC、Skill 与 Plan Mode 的触发边界、冲突风险和验证要求                          |
-| [`adr-agent-autonomous-filmmaking-creation-boundary.md`](adr-agent-autonomous-filmmaking-creation-boundary.md)     | Agent 自主影视创作流程、文本/媒体身份、iteration 与 ResourceRef 边界                  |
+| [`adr-agent-idc-skill-planmode-trigger-boundary.md`](adr-agent-idc-skill-planmode-trigger-boundary.md)             | 已被 Agent 动态创作编排 ADR 取代的 IDC/Plan 历史边界                                  |
+| [`adr-agent-autonomous-filmmaking-creation-boundary.md`](adr-agent-autonomous-filmmaking-creation-boundary.md)     | 已被 Agent 动态创作编排 ADR 取代的影视创作历史边界                                    |
 | [`adr-agent-message-task-queue-boundary.md`](adr-agent-message-task-queue-boundary.md)                             | Agent 消息队列、任务队列与任务卡的展示位置、权威来源和操作边界                        |
 | [`adr-agent-internal-continuation-boundary.md`](adr-agent-internal-continuation-boundary.md)                       | Agent 内部续跑、消息队列、异步任务结果和 subagent 回传边界                            |
 | [`adr-agent-runtime-architecture-comparison-boundary.md`](adr-agent-runtime-architecture-comparison-boundary.md)   | Agent runtime 对比 Codex/OpenCode/Pi/OpenClaw/Hermes 等后的本地边界、协议面和演进约束 |
@@ -23,7 +23,8 @@
 | [`adr-agent-skill-catalog-activation-boundary.md`](adr-agent-skill-catalog-activation-boundary.md)                 | Agent Skill catalog、用户新增 Skill metadata 和激活权威边界                           |
 | [`adr-agent-skill-creator-and-validation.md`](adr-agent-skill-creator-and-validation.md)                           | 开放 Agent Skill 格式、原生创建、可选 Neko overlay、校验和 Host 边界                  |
 | [`adr-agent-prompt-skill-validator-boundary.md`](adr-agent-prompt-skill-validator-boundary.md)                     | Agent 默认提示词、Skill 提示词、Validator 和 Capability 的职责边界                    |
-| [`adr-agent-native-creation-capability-boundary.md`](adr-agent-native-creation-capability-boundary.md)             | Agent 原生创作能力、IDC profile、Skill prompt-chain 与 workflow 禁用边界              |
+| [`adr-agent-native-creation-capability-boundary.md`](adr-agent-native-creation-capability-boundary.md)             | 已取代：Agent 原生创作边界的历史过渡设计                                               |
+| [`adr-agent-directed-creative-orchestration-and-domain-capability-boundary.md`](adr-agent-directed-creative-orchestration-and-domain-capability-boundary.md) | Agent 动态创作编排、能力感知及影视化/动画化领域能力与完成事实边界 |
 | [`adr-agent-command-skill-trigger-boundary.md`](adr-agent-command-skill-trigger-boundary.md)                       | Agent `/` 命令、`$` 技能和 `@` 上下文引用的触发入口边界                               |
 | [`adr-agent-sandbox-and-external-processing-boundary.md`](adr-agent-sandbox-and-external-processing-boundary.md)   | Agent 资源沙箱、外部处理器、命令执行和审批边界                                        |
 | [`adr-code-debt-redundancy-governance.md`](adr-code-debt-redundancy-governance.md)                                 | 重复、冗余、兼容桥和 fallback 代码的分类、清理优先级与验证规则                        |
@@ -34,7 +35,7 @@
 | [`adr-unified-markdown-resource-rendering.md`](adr-unified-markdown-resource-rendering.md)                         | Canvas MCP 式能力、Markdown 扩展语法、资源增强渲染和 Send to Canvas 边界              |
 | [`adr-canvas-cut-playback-route-and-timeline-boundary.md`](adr-canvas-cut-playback-route-and-timeline-boundary.md) | Canvas 预览路线矩阵、Cut 剪辑时间线、Agent 顺序感知和跨包协议边界                     |
 | [`adr-ui-domain-panels-and-shared-primitives.md`](adr-ui-domain-panels-and-shared-primitives.md)                   | 创作领域面板与共享 UI 原语的复用边界                                                  |
-| [`agent.md`](agent.md)                                                                                             | Agent-first、IDC、skill/prompt/tool/provider 控制面和宿主分层                         |
+| [`agent.md`](agent.md)                                                                                             | Agent-first、execution mode、skill/prompt/tool/provider 控制面和宿主分层              |
 | [`asset-library.md`](asset-library.md)                                                                             | 素材库、Asset/Variant/File、导入来源、市场安装和素材搜索投影                          |
 | [`auth.md`](auth.md)                                                                                               | 用户凭据、workspace policy、Webview auth bridge 和 session 边界                       |
 | [`cache-file-access-and-paths.md`](cache-file-access-and-paths.md)                                                 | 缓存、文件读写服务、路径变量、ContentAccess 和 Webview 投影                           |

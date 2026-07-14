@@ -1,5 +1,7 @@
 ## Why
 
+> **Superseded follow-up (2026-07-14):** 本变更已删除 Workflow runtime 与 composer IDC controls，但遗留的固定 `IdcStage`、stage planner/tracker/guardian、stage persona、IDC run/artifact coupling 由 [`retire-idc-and-align-agent-creative-planning`](../retire-idc-and-align-agent-creative-planning/) 继续删除。该 follow-up 不保留 `idc.default` 或动态 creation stage 作为 runtime/profile 成功路径；Plan Mode、Markdown、TODO、Approval 和普通 Agent ReAct 取代其产品职责。
+
 Agent creation is currently split between IDC runs, workflow runtime traces, Skill lifecycle records, prompt-chain guidance, validators, and creation iteration proposals. This makes the Agent feel like it is executing hidden workflow machinery instead of using its own native reasoning, feedback, validation, approval, and capability-invocation abilities.
 
 This change implements the accepted ADR [`docs/architecture/adr-agent-native-creation-capability-boundary.md`](../../../docs/architecture/adr-agent-native-creation-capability-boundary.md): all creative lifecycle, stage, feedback, state, approval, and next-action decisions belong to Agent-native creation capability; IDC and Skill only constrain or extend that capability, and workflow is only Skill-authored prompt-chain guidance.

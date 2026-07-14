@@ -1,14 +1,10 @@
 # ADR: Agent IDC、Skill 与 Plan Mode 触发边界
 
-- 状态：Accepted
+- 状态：Superseded
 - 日期：2026-06-26
 - 适用范围：`neko-agent` IDC runtime、Skill injection、Plan Mode、Webview/Extension/CLI 触发入口、创作类媒体工作流
 
-> 2026-07-02 更新：本文的 IDC runtime / Draft -> Plan -> Apply
-> 运行骨架语言已被
-> [`adr-agent-native-creation-capability-boundary.md`](adr-agent-native-creation-capability-boundary.md)
-> 收紧。新的 canonical 边界是 Agent-native creation profile/stage/iteration；
-> Plan Mode 和 Skill 只约束 Agent 判断，不能启动独立 workflow runtime。
+> 2026-07-15：本文的 IDC runtime、stage persona、`setPromptMode` 和固定 Draft/Plan/Apply 语义已被 [`adr-agent-directed-creative-orchestration-and-domain-capability-boundary.md`](adr-agent-directed-creative-orchestration-and-domain-capability-boundary.md) 取代，仅保留历史背景。当前只有普通 Agent ReAct、`executionMode`、领域 Skill、Approval、Task 和 owning Tool/project path。
 
 本文记录 Neko Suite 对 IDC 创作流程、Skill 激活和 Plan Mode 的触发边界决策。它补充 [`agent.md`](agent.md)、[`adr-agent-command-skill-trigger-boundary.md`](adr-agent-command-skill-trigger-boundary.md) 与 [`adr-agent-skill-catalog-activation-boundary.md`](adr-agent-skill-catalog-activation-boundary.md)，用于避免 Agent 把完整创作流程误收敛成单个 Skill 激活或单个工具调用。
 

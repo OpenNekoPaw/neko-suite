@@ -1,14 +1,10 @@
 # ADR: Agent 自主影视创作流程与资源身份边界
 
-- 状态：Accepted
+- 状态：Superseded
 - 日期：2026-06-29
 - 适用范围：`neko-agent` IDC runtime、Skill lifecycle、SKILL.md prompt-chain、生成媒体、Canvas/Cut 交付、质量审查和创作文档
 
-> 2026-07-02 更新：本文关于 IDC runtime、固定 Draft/Plan/Apply
-> 边界和 workflow trace 的表述已被
-> [`adr-agent-native-creation-capability-boundary.md`](adr-agent-native-creation-capability-boundary.md)
-> 收紧。新的 canonical 设计是 Agent-native creation profile/stage/iteration；
-> IDC 只是默认 profile，workflow 只表示 Skill prompt-chain guidance。
+> 2026-07-15：本文关于 IDC、固定 Draft/Plan/Apply、creation artifact 路径和 iteration journal 的 canonical 语义已被 [`adr-agent-directed-creative-orchestration-and-domain-capability-boundary.md`](adr-agent-directed-creative-orchestration-and-domain-capability-boundary.md) 取代，仅保留历史背景。创作者文档是普通 Markdown/领域文件，执行与续作只走普通 Agent ReAct、Tool/Task 和 owning output。
 
 本文记录 Neko Suite 对 Agent 自主影视创作流程的系统级边界决策。它补充 [`agent.md`](agent.md)、[`adr-agent-idc-skill-planmode-trigger-boundary.md`](adr-agent-idc-skill-planmode-trigger-boundary.md)、[`adr-agent-skill-catalog-activation-boundary.md`](adr-agent-skill-catalog-activation-boundary.md) 与 [`adr-agent-sandbox-and-external-processing-boundary.md`](adr-agent-sandbox-and-external-processing-boundary.md)。
 

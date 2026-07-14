@@ -334,7 +334,7 @@
       "replacement": "Canonical AgentWorkflowRuntime, .neko/.cache/artifact-index.json, explicit document read modes, AgentCapabilityProvider registry identity, and object-shaped feedback.pendingGuidance snapshots.",
       "removeAfter": "Removed by cleanup-remaining-legacy-debt-surfaces Agent 7.x after repo scans found no current production caller for the compatibility paths.",
       "tests": [
-        "pnpm --dir packages/neko-agent exec vitest run packages/agent/src/runtime/__tests__/agent-turn-runtime.test.ts packages/agent/src/runtime/__tests__/artifact-service.test.ts packages/agent/src/runtime/__tests__/capability-registry-runtime.test.ts packages/agent/src/__tests__/architecture-boundary-guards.test.ts packages/extension/src/tools/__tests__/contentAccessTools.test.ts",
+        "pnpm --dir packages/neko-agent exec vitest run packages/agent/src/runtime/__tests__/agent-turn-runtime.test.ts packages/agent/src/runtime/__tests__/capability-registry-runtime.test.ts packages/agent/src/__tests__/architecture-boundary-guards.test.ts packages/extension/src/tools/__tests__/contentAccessTools.test.ts",
         "rg -n \"createLegacyWorkflowUsageRecorder|AgentLegacyWorkflow|readArtifactRestoreEntriesWithLegacyFallback|toLegacyArtifactIndexPath|legacyToolNames|normalizeLegacyResourceRef|legacyContent|content preserves legacy full read\" packages/neko-agent/packages/agent packages/neko-agent/packages/agent-types packages/neko-agent/packages/extension",
         "pnpm check:agent-boundaries"
       ],
@@ -407,18 +407,18 @@
     {
       "id": "LCD-019",
       "package": "neko-agent",
-      "surface": "Superseded IDC projected task payload content display-field mirror",
+      "surface": "Superseded IDC projected task payload and creation-task projection runtime",
       "kind": "canonical-compatibility",
       "semanticClass": "migrate-now",
       "status": "removed",
       "owner": "neko-agent-task-runtime",
-      "replacement": "Canonical CreationProjectedTaskPayload.name display field emitted by toCreationProjectedTaskPayload().",
-      "removeAfter": "Removed when Agent-native creation task projection replaced the old idc-projected-task module and rejected persisted payload.content mirrors.",
+      "replacement": "Ordinary TaskManager task state plus bounded conversation TODO projection; neither carries IDC run or stage identity.",
+      "removeAfter": "Removed by retire-idc-and-align-agent-creative-planning after ordinary TaskManager and TODO projection tests replaced the creation-task compatibility path.",
       "tests": [
-        "pnpm --dir packages/neko-agent exec vitest run packages/agent/src/task/__tests__/creation-projected-task.test.ts packages/agent/src/task/__tests__/task-manager.test.ts packages/agent/src/task/__tests__/task-manager-persistence.test.ts packages/agent/src/task/__tests__/creation-task-projection.test.ts",
-        "rg -n \"IdcProjectedTaskPayload|toIdcProjectedTaskPayload|idc-projected-task|idc-task-projection|content\\\\?: string|candidate\\\\['content'\\\\] === undefined|typeof candidate\\\\['content'\\\\]\" packages/neko-agent/packages/agent/src/task packages/neko-agent/packages/agent/src/__tests__/architecture-boundary-guards.test.ts"
+        "pnpm --dir packages/neko-agent exec vitest run packages/agent/src/task/__tests__/task-manager.test.ts packages/agent/src/task/__tests__/task-manager-persistence.test.ts packages/agent/src/task/__tests__/task-view-projector.test.ts packages/agent/src/__tests__/architecture-boundary-guards.test.ts",
+        "rg -n \"IdcProjectedTaskPayload|toIdcProjectedTaskPayload|idc-projected-task|idc-task-projection|CreationProjectedTaskPayload|toCreationProjectedTaskPayload\" packages/neko-agent/packages/agent/src packages/neko-agent/packages/agent-types/src"
       ],
-      "notes": "CreationProjectedTaskUpsertInput.content remains the current in-memory source text that serializes to payload.name; this entry only removes the persisted payload.content mirror and old IDC projection module."
+      "notes": "The retained TaskManager owns real asynchronous execution only. TODO remains disposable display state and cannot recreate creation-task runtime state."
     },
     {
       "id": "LCD-020",
@@ -439,18 +439,18 @@
     {
       "id": "LCD-021",
       "package": "neko-agent",
-      "surface": "Agent prompt/stage migration-era wording: ModuleOrchestrator legacy direct section fixture, StageMode/StageTaskShape legacy primitive comments, and stage-planner incremental-switch wording",
+      "surface": "Agent prompt and retired fixed-stage migration wording, StageMode/StageTaskShape contracts, and stage-planner activation path",
       "kind": "canonical-compatibility",
       "semanticClass": "migrate-now",
       "status": "removed",
       "owner": "neko-agent-prompt-runtime",
-      "replacement": "Current ModuleOrchestrator external-writer ownership contract and IDC StageMode/StageTaskShape contracts.",
-      "removeAfter": "Removed after stage activation and prompt module orchestration were already on the current contracts; remaining text was migration-era wording and test fixture naming, not active compatibility behavior.",
+      "replacement": "Current ModuleOrchestrator ownership plus ordinary Agent ReAct, executionMode, Approval, Task, and domain Skill lifecycle contracts.",
+      "removeAfter": "Removed by retire-idc-and-align-agent-creative-planning after fixed stage activation and stage contracts were deleted and poison tests covered the canonical no-IDC path.",
       "tests": [
-        "pnpm --dir packages/neko-agent exec vitest run packages/agent/src/prompt/__tests__/module-orchestrator.test.ts packages/agent/src/skill/__tests__/stage-planner.test.ts",
-        "rg -n 'legacy|deprecated|legacy:foo|LEGACY|activation-planner|primitive\\\\.ts|mode-activation-matrix' packages/neko-agent/packages/agent/src/prompt/composer/module-orchestrator.ts packages/neko-agent/packages/agent/src/prompt/__tests__/module-orchestrator.test.ts packages/neko-agent/packages/agent/src/skill/activation/stage-activation-matrix.ts packages/neko-agent/packages/agent/src/skill/activation/stage-planner.ts packages/neko-agent/packages/agent-types/src/stage.ts"
+        "pnpm --dir packages/neko-agent exec vitest run packages/agent/src/prompt/__tests__/module-orchestrator.test.ts packages/agent/src/skill/__tests__/skill-lifecycle-runtime.test.ts packages/agent/src/__tests__/architecture-boundary-guards.test.ts",
+        "rg -n 'IdcStage|StageMode|StageTaskShape|stageTracking|StagePersonaBinding|stage-activation-matrix|stage-planner' packages/neko-agent/packages/agent/src packages/neko-agent/packages/agent-types/src"
       ],
-      "notes": "This entry removes scanner noise after verifying no producer/consumer depended on a legacy prompt or stage API."
+      "notes": "Retained matches are limited to explicit poison fixtures and historical documentation; production runtime does not expose a stage success path."
     },
     {
       "id": "LCD-022",
@@ -473,16 +473,16 @@
       "package": "neko-agent",
       "surface": "packages/neko-agent/packages/agent/src/task/task-manager.ts migration-only cleanup bridge for pre-migration idc-prefixed projected tasks",
       "kind": "migration-adapter",
-      "semanticClass": "current-bridge",
-      "status": "active",
+      "semanticClass": "migrate-now",
+      "status": "removed",
       "owner": "neko-agent-task-runtime",
-      "replacement": "Canonical CreationProjectedTaskPayload with matching legacyTrace.runId and legacyTrace.runStartedAt provenance.",
-      "removeAfter": "Remove the idc-prefixed task id matcher after pre-migration local task storage is either migrated or intentionally discarded; runStartedAt-specific cleanup must continue to ignore corrupted or untimed payloads.",
+      "replacement": "Canonical TaskManager task identity and lifecycle owner fields without IDC-prefixed projected task compatibility.",
+      "removeAfter": "Removed by retire-idc-and-align-agent-creative-planning; prelaunch runtime-only IDC projected task storage is intentionally discarded and cannot be restored as a success path.",
       "tests": [
-        "pnpm --dir packages/neko-agent exec vitest run packages/agent/src/task/__tests__/task-manager.test.ts packages/agent/src/task/__tests__/task-manager-persistence.test.ts packages/agent/src/task/__tests__/creation-projected-task.test.ts packages/agent/src/task/__tests__/creation-task-projection.test.ts",
-        "rg -n 'Legacy payloads written|provenance tagging|falls back to IDC task id provenance|payload binding is corrupted|idBinding\\\\?\\\\.runStartedAt === undefined|binding\\\\.runStartedAt === undefined \\\\|\\\\|' packages/neko-agent/packages/agent/src/task -g'*.ts'"
+        "pnpm --dir packages/neko-agent exec vitest run packages/agent/src/task/__tests__/task-manager.test.ts packages/agent/src/task/__tests__/task-manager-persistence.test.ts packages/agent/src/task/__tests__/task-result-observation.test.ts packages/agent/src/__tests__/architecture-boundary-guards.test.ts",
+        "rg -n \"idc-prefixed|idc:\\\\$\\\\{|IdcProjectedTask|CreationProjectedTask|legacyTrace\\\\.runId\" packages/neko-agent/packages/agent/src/task packages/neko-agent/packages/agent/src/__tests__/architecture-boundary-guards.test.ts"
       ],
-      "notes": "Run cleanup without runStartedAt still clears canonical creation projected tasks for that run. The retained idc: prefix branch is a visible migration bridge for pre-migration local storage, while corrupted or untimed payload fallback remains removed."
+      "notes": "Generic runStartedAt fields used by current subagent and async-task ownership remain outside this retired IDC projection surface."
     },
     {
       "id": "LCD-024",
