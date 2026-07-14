@@ -1,11 +1,12 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-  createTuiAutomationAppPort,
+  createTuiAutomationAppPort as createProductionTuiAutomationAppPort,
   projectTaskFacts,
   readContinuationFacts,
   readMessageSummaryContent,
   readMessageToolCallSummaries,
 } from '../app-port';
+import type { TuiAutomationAppPortOptions } from '../app-port';
 import type { Message } from '../../../types/state';
 import {
   createTuiTestRuntime,
@@ -13,6 +14,16 @@ import {
 } from '../../../__tests__/render-with-presentation';
 
 let runtime: TuiTestRuntime;
+
+type TestAppPortOptions = Omit<TuiAutomationAppPortOptions, 'submitInput'> &
+  Partial<Pick<TuiAutomationAppPortOptions, 'submitInput'>>;
+
+function createTuiAutomationAppPort(options: TestAppPortOptions) {
+  return createProductionTuiAutomationAppPort({
+    ...options,
+    submitInput: options.submitInput ?? ((input) => options.readHandle().submit(input)),
+  });
+}
 
 beforeEach(() => {
   runtime = createTuiTestRuntime();
@@ -301,6 +312,35 @@ describe('createTuiAutomationAppPort', () => {
     });
 
     expect(port.getInitializationError()).toBe(initializationError);
+  });
+
+  it('submits through the App user-input dispatcher instead of the raw session handle', async () => {
+    const rawSubmit = vi.fn(async () => {
+      throw new Error('raw session submit must not receive App user input');
+    });
+    const submitInput = vi.fn(async () => {
+      runtime.conversation.stores.agent.getState().setRunning();
+    });
+    const port = createTuiAutomationAppPort({
+      stores: runtime.conversation.stores,
+      submitInput,
+      readHandle: () => ({
+        isReady: true,
+        submit: rawSubmit,
+        cancel: () => undefined,
+        listTasks: async () => [],
+        getCurrentConversationId: () => 'tui-2026-01-01T00-00-00-000Z-test',
+        getHistory: () => [],
+        getMessageQueueSnapshot: () => null,
+        getConversationPersistenceSnapshot: memoryPersistenceSnapshot,
+      }),
+      readMarkdownFacts: () => ({ pathEvents: [], droppedPathEventCount: 0 }),
+    });
+
+    await port.submitMessage({ prompt: '$creation-persona write a draft' });
+
+    expect(submitInput).toHaveBeenCalledWith('$creation-persona write a draft');
+    expect(rawSubmit).not.toHaveBeenCalled();
   });
 
   it('accepts submission without waiting for completion and exposes active cancellation', async () => {

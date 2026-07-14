@@ -33,6 +33,7 @@ import {
 import { createAgentTuiApplicationRuntime } from '../runtime/tui-application-runtime';
 import { createTuiConversationId } from '../core/tui-conversation-id';
 import { createTuiSkillInvocationCatalog } from '../core/slash-command-catalog';
+import { dispatchTuiUserInput } from '../core/tui-user-input-dispatcher';
 import type { AgentTerminalInvocationContext } from '../core/node-locale-bootstrap';
 import { AgentTerminalPresentationProvider } from '../presentation/react-context';
 import { presentReferenceSuggestionError } from '../presentation/reference-presentation';
@@ -167,21 +168,6 @@ function AppContent({
     slashCommands,
   } = agentSession;
 
-  useEffect(() => {
-    if (!automation) {
-      return;
-    }
-    const port = createTuiAutomationAppPort({
-      stores,
-      readHandle: () => agentSessionRef.current,
-      readMarkdownFacts: () => automation.readMarkdownFacts(),
-    });
-    automation.bind(port);
-    return () => {
-      automation.unbind(port);
-    };
-  }, [automation, stores]);
-
   const refreshReferenceSuggestions = useCallback(
     (query = '') => {
       let cancelled = false;
@@ -274,12 +260,31 @@ function AppContent({
   });
 
   // Handle user prompt submission
-  const handleSubmit = useCallback(
+  const handleUserInput = useCallback(
     async (text: string) => {
-      await submit(text);
+      await dispatchTuiUserInput(text, {
+        submitPrompt: submit,
+        handleControlInput: handleCommand,
+      });
     },
-    [submit],
+    [handleCommand, submit],
   );
+
+  useEffect(() => {
+    if (!automation) {
+      return;
+    }
+    const port = createTuiAutomationAppPort({
+      stores,
+      readHandle: () => agentSessionRef.current,
+      submitInput: handleUserInput,
+      readMarkdownFacts: () => automation.readMarkdownFacts(),
+    });
+    automation.bind(port);
+    return () => {
+      automation.unbind(port);
+    };
+  }, [automation, handleUserInput, stores]);
 
   useEffect(() => {
     const trimmed = initialPrompt?.trim();
@@ -287,8 +292,8 @@ function AppContent({
       return;
     }
     submittedInitialPromptRef.current = trimmed;
-    void submit(trimmed);
-  }, [initialPrompt, submit]);
+    void handleUserInput(trimmed);
+  }, [handleUserInput, initialPrompt]);
 
   // Handle tool approval
   const handleApprove = useCallback(() => {
@@ -478,9 +483,9 @@ function AppContent({
 
         {/* Input — fixed at bottom, with slash command support */}
         <InputEditor
-          onSubmit={handleSubmit}
-          onSlashCommand={handleCommand}
-          onSkillInvocation={handleCommand}
+          onSubmit={handleUserInput}
+          onSlashCommand={handleUserInput}
+          onSkillInvocation={handleUserInput}
           disabled={inputDisabled}
           commands={slashCommands}
           skills={skillSuggestions}

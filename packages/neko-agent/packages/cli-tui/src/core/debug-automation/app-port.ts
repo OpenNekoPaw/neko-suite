@@ -48,6 +48,7 @@ export interface TuiAutomationSessionHandle {
 export interface TuiAutomationAppPortOptions {
   readonly stores: TuiConversationStores;
   readonly readHandle: () => TuiAutomationSessionHandle;
+  readonly submitInput: (input: string) => Promise<void>;
   readonly readMarkdownFacts: () => TuiDebugAutomationMarkdownFacts;
 }
 
@@ -84,7 +85,7 @@ export function createTuiAutomationAppPort(
         );
       }
       const messageCountBeforeSubmit = stores.conversation.getState().messages.length;
-      const execution = handle.submit(input.prompt);
+      const execution = options.submitInput(input.prompt);
       latestSubmission = execution;
       inFlightSubmissions.add(execution);
       void execution.finally(() => {
