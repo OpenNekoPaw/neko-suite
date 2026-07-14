@@ -42,43 +42,26 @@
         "provenance": "builtin",
         "rootId": "builtin-skills",
         "relativePath": "creation-persona",
-        "fingerprint": "sha256:9c2afdf3044714259a7edc85671b6ac77daa9bb3c147dfe704b7b4c108085c34"
+        "fingerprint": "sha256:6d76c798afb0ed56ac1877182964e076d6d83ccda7573b5ecb034b2d328d3e21"
       },
       "developmentCheckpoint": {
         "kind": "git-revision",
-        "ref": "70d98e5074fd6963c752ce43c269bf6d3a74a2b6",
-        "fingerprint": "sha256:9c2afdf3044714259a7edc85671b6ac77daa9bb3c147dfe704b7b4c108085c34"
+        "ref": "2060b13a6b2b1dcb50f0c2563503febf99bbee42",
+        "fingerprint": "sha256:6d76c798afb0ed56ac1877182964e076d6d83ccda7573b5ecb034b2d328d3e21"
       },
       "buildTarget": {
-        "sourceRevision": "70d98e5074fd6963c752ce43c269bf6d3a74a2b6",
-        "sourceFingerprint": "sha256:52c7292bbf5bf20f7cd023c1ab64be080fd659e29477a4a1aebdb3a4e4057895",
-        "buildRecipeFingerprint": "sha256:73170231c97efa997838144ddc73024225ae697808eec4f5231ab12016a6e890",
+        "sourceRevision": "2060b13a6b2b1dcb50f0c2563503febf99bbee42",
+        "sourceFingerprint": "sha256:3dd17a363592dabb63577fc442f81e7acb79e4546941429e3be5bda6fe505106",
+        "buildRecipeFingerprint": "sha256:f26a6185d18b137904eacc77e4b24eac1eb2be1872a966fff0afec4af6a2ed3c",
         "buildCommands": [
           {
             "command": "pnpm",
-            "args": ["install", "--offline", "--frozen-lockfile"],
+            "args": ["install", "--offline", "--no-frozen-lockfile"],
             "timeoutMs": 600000
           },
           {
             "command": "pnpm",
-            "args": [
-              "--filter",
-              "@neko/cli",
-              "exec",
-              "esbuild",
-              "src/cli.tsx",
-              "--bundle",
-              "--platform=node",
-              "--target=node18",
-              "--format=esm",
-              "--outfile=dist/cli.js",
-              "--minify",
-              "--external:fsevents",
-              "--external:ink",
-              "--external:react",
-              "--external:yoga-wasm-web",
-              "--banner:js=import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);"
-            ],
+            "args": ["--filter", "@neko/cli", "run", "build:bundle"],
             "timeoutMs": 600000
           }
         ],
@@ -111,50 +94,33 @@
         "provenance": "builtin",
         "rootId": "builtin-skills",
         "relativePath": "creation-persona",
-        "fingerprint": "sha256:e2f33fe4a83bba4ce63b7bf37c949ef5f731d690e60bf88be2fac2fd9934d450"
+        "fingerprint": "sha256:69c95ed35c78494491620034b6e481e4dd605bcc7118029a7d5badabaf15a7aa"
       },
       "developmentCheckpoint": {
         "kind": "working-tree-patch",
         "ref": "scripts/agent-eval/ablation/patches/creation-persona-without-rationale.patch",
-        "fingerprint": "sha256:e2f33fe4a83bba4ce63b7bf37c949ef5f731d690e60bf88be2fac2fd9934d450"
+        "fingerprint": "sha256:69c95ed35c78494491620034b6e481e4dd605bcc7118029a7d5badabaf15a7aa"
       },
       "buildTarget": {
-        "sourceRevision": "70d98e5074fd6963c752ce43c269bf6d3a74a2b6",
-        "sourceFingerprint": "sha256:52c7292bbf5bf20f7cd023c1ab64be080fd659e29477a4a1aebdb3a4e4057895",
-        "buildRecipeFingerprint": "sha256:123a298ce9e0663feb1cdfff4d344fce1451b227dc64b7a3eca02dd0c93e717a",
+        "sourceRevision": "2060b13a6b2b1dcb50f0c2563503febf99bbee42",
+        "sourceFingerprint": "sha256:3dd17a363592dabb63577fc442f81e7acb79e4546941429e3be5bda6fe505106",
+        "buildRecipeFingerprint": "sha256:19a0b72fc8efe151a7957ec92753771a6f5a6746e6cc56dc78afdc4095084d33",
         "buildCommands": [
           {
             "command": "pnpm",
-            "args": ["install", "--offline", "--frozen-lockfile"],
+            "args": ["install", "--offline", "--no-frozen-lockfile"],
             "timeoutMs": 600000
           },
           {
             "command": "pnpm",
-            "args": [
-              "--filter",
-              "@neko/cli",
-              "exec",
-              "esbuild",
-              "src/cli.tsx",
-              "--bundle",
-              "--platform=node",
-              "--target=node18",
-              "--format=esm",
-              "--outfile=dist/cli.js",
-              "--minify",
-              "--external:fsevents",
-              "--external:ink",
-              "--external:react",
-              "--external:yoga-wasm-web",
-              "--banner:js=import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);"
-            ],
+            "args": ["--filter", "@neko/cli", "run", "build:bundle"],
             "timeoutMs": 600000
           }
         ],
         "executablePath": "packages/neko-agent/packages/cli-tui/dist/cli.js",
         "launchCommand": { "command": "node", "args": ["{executable}"] },
         "patchFile": "scripts/agent-eval/ablation/patches/creation-persona-without-rationale.patch",
-        "patchFingerprint": "sha256:f6b5dbb019f22f9bb4806da66e299b03f2188be17093fc5b6a322ec049ad4ebc"
+        "patchFingerprint": "sha256:53a009f0b23c0b61e2eacfc102fd89985982975cdc75562bfd7d836aa8e37f9c"
       },
       "expectedPath": [
         "detached Git worktree",
