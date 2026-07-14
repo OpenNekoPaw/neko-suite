@@ -8,7 +8,6 @@ import {
 import type {
   CreateSkillInput,
   CreateSkillResult,
-  Skill,
   SkillLifecycleDeactivationRequest,
   SkillLifecycleDiagnostic,
   SkillLifecycleProjection,
@@ -17,10 +16,6 @@ import type {
 export interface CliSkillLifecycleSessionBridge {
   readonly runtime: SkillLifecycleRuntime;
   syncProjection(): SkillLifecycleProjection;
-}
-
-interface CliSkillLifecycleProjectionState {
-  readonly activatedToolSets: Set<string>;
 }
 
 export function createCliSkillLifecycleRuntime(skillService: SkillService): SkillLifecycleRuntime {
@@ -35,13 +30,10 @@ export function wireCliSkillLifecycleSession(input: {
   readonly createSkill?: (input: CreateSkillInput) => Promise<CreateSkillResult>;
   readonly onProjection?: (projection: SkillLifecycleProjection) => void;
 }): CliSkillLifecycleSessionBridge {
-  const projectionState: CliSkillLifecycleProjectionState = {
-    activatedToolSets: new Set<string>(),
-  };
   const syncProjection = () => {
     const projection = input.lifecycleRuntime.project(input.conversationId);
     input.onProjection?.(projection);
-    synchronizeSessionProjectionAdapter(input.session, projection, projectionState);
+    input.session.applySkillLifecycleProjection(projection);
     return projection;
   };
 
@@ -206,50 +198,6 @@ export function deactivateCliSkillLifecycle(input: {
     };
   }
   return { ok: true };
-}
-
-function synchronizeSessionProjectionAdapter(
-  session: IAgentSession,
-  projection: SkillLifecycleProjection,
-  state: CliSkillLifecycleProjectionState,
-): void {
-  for (const toolSetName of state.activatedToolSets) {
-    session.deactivateToolSet(toolSetName);
-  }
-  state.activatedToolSets.clear();
-
-  if (projection.promptSections.length === 0 && projection.toolPolicy.mode === 'unrestricted') {
-    session.clearActiveSkill();
-    return;
-  }
-
-  const projectedSkill: Skill = {
-    name: 'lifecycle-projection',
-    description: 'Projected active Skill lifecycle records',
-    content: projection.promptSections.map((section) => section.content).join('\n\n'),
-    source: 'builtin',
-    enabled: true,
-  };
-  session.applySkillInjection(
-    {
-      name: projectedSkill.name,
-      type: 'skill',
-      systemPrompt: projectedSkill.content,
-      ...(projection.toolPolicy.allowedTools
-        ? { allowedTools: [...projection.toolPolicy.allowedTools] }
-        : {}),
-      ...(projection.modelOverride ? { model: projection.modelOverride.model } : {}),
-    },
-    projectedSkill,
-  );
-
-  if (projection.toolPolicy.activationTools?.length) {
-    for (const toolSetName of session.activateToolSetsForTools(
-      projection.toolPolicy.activationTools,
-    )) {
-      state.activatedToolSets.add(toolSetName);
-    }
-  }
 }
 
 function isSkillLifecycleSlot(value: unknown): value is SkillLifecycleDeactivationRequest['slot'] {

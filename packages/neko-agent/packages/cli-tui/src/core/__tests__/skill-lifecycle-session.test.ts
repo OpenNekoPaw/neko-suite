@@ -37,11 +37,18 @@ describe('wireCliSkillLifecycleSession', () => {
     expect(createSkill).toHaveBeenCalledWith(input);
     expect(lifecycleRuntime.list('conversation-1')).toEqual([]);
     expect(session.applySkillInjection).not.toHaveBeenCalled();
-    expect(session.clearActiveSkill).toHaveBeenCalledTimes(1);
+    expect(session.applySkillLifecycleProjection).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        promptSections: [],
+        toolPolicy: expect.objectContaining({ mode: 'unrestricted' }),
+      }),
+    );
   });
 
   it('activates skills from structured Agent requests without passing the object as skillName', async () => {
-    const { provider, lifecycleRuntime } = createWiredProvider([createSkill('storyboard')]);
+    const { provider, lifecycleRuntime, session } = createWiredProvider([
+      createSkill('storyboard'),
+    ]);
 
     const result = await provider.activateSkill({
       name: 'storyboard',
@@ -60,6 +67,12 @@ describe('wireCliSkillLifecycleSession', () => {
         source: 'explicit-agent',
       }),
     ]);
+    expect(session.applySkillLifecycleProjection).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        promptSections: [expect.objectContaining({ content: 'storyboard prompt' })],
+      }),
+    );
+    expect(session.applySkillInjection).not.toHaveBeenCalled();
   });
 
   it('preserves structured activation reason on lifecycle diagnostics', async () => {
@@ -93,19 +106,24 @@ describe('wireCliSkillLifecycleSession', () => {
     });
 
     expect(result.success).toBe(true);
-    expect(session.activateToolSetsForTools).toHaveBeenCalledWith([
-      'canvas.createStoryboardFromMarkdown',
-    ]);
-    expect(session.applySkillInjection).toHaveBeenLastCalledWith(
-      expect.not.objectContaining({
-        allowedTools: expect.any(Array),
+    expect(session.applySkillLifecycleProjection).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        toolPolicy: expect.objectContaining({
+          mode: 'unrestricted',
+          activationTools: ['canvas.createStoryboardFromMarkdown'],
+        }),
       }),
-      expect.any(Object),
     );
+    expect(session.applySkillInjection).not.toHaveBeenCalled();
 
     await provider.deactivateSkill({ slot: 'referenceSkill' });
 
-    expect(session.deactivateToolSet).toHaveBeenCalledWith('canvas-editing');
+    expect(session.applySkillLifecycleProjection).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        promptSections: [],
+        toolPolicy: expect.objectContaining({ mode: 'unrestricted' }),
+      }),
+    );
   });
 });
 
@@ -130,10 +148,10 @@ function createWiredProvider(
     setSkillProvider: vi.fn((next: ISkillProvider) => {
       provider = next;
     }),
-    clearActiveSkill: vi.fn(),
-    applySkillInjection: vi.fn(),
-    activateToolSetsForTools: vi.fn(() => ['canvas-editing']),
-    deactivateToolSet: vi.fn(),
+    applySkillLifecycleProjection: vi.fn(),
+    applySkillInjection: vi.fn(() => {
+      throw new Error('legacy single-Skill injection path must not be used');
+    }),
   } as unknown as IAgentSession;
 
   wireCliSkillLifecycleSession({
