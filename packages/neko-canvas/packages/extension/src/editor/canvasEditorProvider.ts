@@ -29,6 +29,7 @@ import {
   createVSCodeProjectSourceAddRequest,
   normalizeVSCodeProjectSourceAddRequest,
   resolveHostContentMediaPath,
+  resolveGeneratedAssetResourceRef,
   updateWebviewKeyboardEditableOwner,
   type IFocusedWebviewRegistry,
   type ContentAccessService,
@@ -849,6 +850,14 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
               providers: this.createCanvasResourceCacheProviders(workspaceRoot),
             }
           : undefined,
+      generatedAssetSourceProvider: {
+        resolveAsset: async (ref) =>
+          resolveGeneratedAssetResourceRef(
+            ref,
+            createWorkspacePathResolver(workspaceRoot),
+            workspaceRoot,
+          ),
+      },
       sourceFileProvider: { enabled: false },
       documentEntryProvider: { enabled: false },
       ingest: { enabled: false },
@@ -878,6 +887,25 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
       new GeneratedAssetDerivativeResourceCacheProvider({
         pathResolver: createWorkspacePathResolver(workspaceRoot),
         projectRoot: workspaceRoot,
+        generator: {
+          generate: async (filePath, request) => {
+            const api = await this.getNekoAssetsApi();
+            await api?.getThumbnailVisual?.(filePath, {
+              role: 'thumbnail',
+              width: request.width,
+              height: request.height,
+              mimeType: 'image/jpeg',
+            });
+            const thumbnailPath = await api?.getThumbnailPath(filePath);
+            if (!thumbnailPath) return undefined;
+            return {
+              bytes: await fs.promises.readFile(thumbnailPath),
+              width: request.width ?? request.height ?? 256,
+              height: request.height ?? request.width ?? 256,
+              mimeType: 'image/jpeg',
+            };
+          },
+        },
       }),
       new ThumbnailResourceCacheProvider({
         generator: {
