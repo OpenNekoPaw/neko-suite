@@ -1,5 +1,4 @@
 import { spawn as nodeSpawn } from 'node:child_process';
-import { resolve } from 'node:path';
 import { prepareWorkspaceFixture } from '../fixtures/workspace-fixture.mjs';
 import {
   createM1ReportDocuments,
@@ -20,6 +19,7 @@ import { createJudgeEvidenceProjection } from '../judge/evidence-projection.mjs'
 import { classifyRubricJudge, runRubricJudge } from '../judge/rubric-judge.mjs';
 import { compareWithBaseline, createCurrentBaselineDescriptor } from '../comparison/baseline.mjs';
 import { createFailureAttribution } from '../reports/failure-attribution.mjs';
+import { resolveTuiDebugLaunch } from './tui-debug-launch.mjs';
 
 export async function runV2Case(selection, options = {}) {
   const repetitions = selection.scenario.budget.repetitions;
@@ -98,20 +98,21 @@ async function runV2Sample(selection, options = {}) {
   let judgeResult;
   let judgeDiagnostic;
   try {
-    const configuredDebugCommand = options.debugCommand ?? options.env?.NEKO_DEBUG_COMMAND;
-    const command = configuredDebugCommand ?? process.execPath;
+    const launch = resolveTuiDebugLaunch({
+      debugCommand: options.debugCommand ?? options.env?.NEKO_DEBUG_COMMAND,
+      debugCommandArgsPrefix: options.debugCommandArgsPrefix,
+    });
     const commandArgs = [
-      ...(options.debugCommandArgsPrefix ??
-        (configuredDebugCommand ? [] : ['apps/neko-tui/dist/main.js'])),
+      ...launch.argsPrefix,
       'debug',
       'automation',
       '--stdio',
       '-C',
       prepared.workspace,
     ];
-    const child = (options.spawn ?? nodeSpawn)(command, commandArgs, {
+    const child = (options.spawn ?? nodeSpawn)(launch.command, commandArgs, {
       cwd: options.cwd ?? process.cwd(),
-      shell: configuredDebugCommand !== undefined,
+      shell: launch.shell,
       stdio: ['pipe', 'pipe', 'inherit'],
     });
     try {

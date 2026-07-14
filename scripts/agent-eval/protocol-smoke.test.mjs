@@ -1,4 +1,6 @@
+import process from 'node:process';
 import { describe, expect, it, vi } from 'vitest';
+import { Readable } from 'node:stream';
 import {
   EXIT_CASE_FAIL,
   EXIT_CONFIG_INVALID,
@@ -40,9 +42,7 @@ describe('Agent Evaluation CLI handling', () => {
     expect(() => parseArgs(['--timeout-ms', '0'])).toThrow(
       '--timeout-ms must be a positive integer',
     );
-    expect(() => parseArgs(['--manifest', 'legacy.json'])).toThrow(
-      'Unknown argument: --manifest',
-    );
+    expect(() => parseArgs(['--manifest', 'legacy.json'])).toThrow('Unknown argument: --manifest');
   });
 
   it('dry-runs a direct prompt without spawning TUI', async () => {
@@ -71,13 +71,7 @@ describe('Agent Evaluation CLI handling', () => {
     const stderr = createWritableCapture();
     const spawn = vi.fn();
     const code = await main(
-      [
-        '--suite',
-        'agent-runtime.single-message-tui',
-        '--case',
-        'canonical-answer',
-        '--dry-run',
-      ],
+      ['--suite', 'agent-runtime.single-message-tui', '--case', 'canonical-answer', '--dry-run'],
       { stdout, stderr, env: {}, cwd: () => '/repo', spawn },
     );
     expect(code).toBe(0);
@@ -109,13 +103,52 @@ describe('Agent Evaluation CLI handling', () => {
     const stdout = createWritableCapture();
     const stderr = createWritableCapture();
     const spawn = vi.fn();
-    const code = await main(
-      ['--suite', 'agent-runtime.single-message-tui', '--dry-run'],
-      { stdout, stderr, env: {}, cwd: () => '/repo', spawn },
-    );
+    const code = await main(['--suite', 'agent-runtime.single-message-tui', '--dry-run'], {
+      stdout,
+      stderr,
+      env: {},
+      cwd: () => '/repo',
+      spawn,
+    });
     expect(code).toBe(EXIT_CONFIG_INVALID);
     expect(spawn).not.toHaveBeenCalled();
     expect(stderr.text()).toContain('--case is required');
+  });
+
+  it('launches direct prompts through the canonical app executable', async () => {
+    const stdout = createWritableCapture();
+    const stderr = createWritableCapture();
+    const spawn = vi.fn(() => createProtocolChild());
+    const code = await main(['--cwd', '/tmp/project', '--prompt', 'hello'], {
+      stdout,
+      stderr,
+      env: {},
+      cwd: () => '/repo',
+      spawn,
+    });
+    expect(code).toBe(0);
+    expect(spawn).toHaveBeenCalledWith(
+      process.execPath,
+      ['apps/neko-tui/dist/main.js', 'debug', 'automation', '--stdio', '-C', '/tmp/project'],
+      { cwd: '/repo', shell: false, stdio: ['pipe', 'pipe', 'inherit'] },
+    );
+  });
+
+  it('preserves an explicit direct-prompt debug command override', async () => {
+    const spawn = vi.fn(() => createProtocolChild());
+    const code = await main(['--cwd', '/tmp/project', '--prompt', 'hello'], {
+      stdout: createWritableCapture(),
+      stderr: createWritableCapture(),
+      env: { NEKO_DEBUG_COMMAND: 'custom-neko-debug' },
+      cwd: () => '/repo',
+      spawn,
+    });
+    expect(code).toBe(0);
+    expect(spawn).toHaveBeenCalledWith(
+      'custom-neko-debug',
+      ['debug', 'automation', '--stdio', '-C', '/tmp/project'],
+      { cwd: '/repo', shell: true, stdio: ['pipe', 'pipe', 'inherit'] },
+    );
   });
 });
 
@@ -200,9 +233,7 @@ describe('direct prompt result gates', () => {
   });
 
   it('creates direct dry-run evidence and model session params', () => {
-    expect(
-      createDryRunResult({ cwd: '/workspace', prompt: 'hello', timeoutMs: 100 }),
-    ).toEqual({
+    expect(createDryRunResult({ cwd: '/workspace', prompt: 'hello', timeoutMs: 100 })).toEqual({
       ok: true,
       dryRun: true,
       mode: 'direct-prompt',
@@ -216,9 +247,9 @@ describe('direct prompt result gates', () => {
   });
 
   it('fails runtime errors, error turns, internal-user continuations, and empty answers', () => {
-    expect(() =>
-      assertSuccessfulFacts({ runtimeErrors: ['runtime failed'], turns: [] }),
-    ).toThrow('runtime errors');
+    expect(() => assertSuccessfulFacts({ runtimeErrors: ['runtime failed'], turns: [] })).toThrow(
+      'runtime errors',
+    );
     expect(() =>
       assertSuccessfulFacts({
         runtimeErrors: [],
@@ -269,6 +300,28 @@ function createFakeChild() {
       write: vi.fn((line) => requests.push(JSON.parse(line))),
       end: vi.fn(),
     },
+    kill: vi.fn(),
+  };
+}
+
+function createProtocolChild() {
+  const responses = [
+    { ok: true, result: { sessionId: 's1', conversationId: 'conversation-1' } },
+    { ok: true, result: { submitted: true } },
+    { ok: true, result: { fullyIdle: true } },
+    {
+      ok: true,
+      result: {
+        runtimeErrors: [],
+        idle: { fullyIdle: true },
+        turns: [{ id: 'a1', role: 'assistant', content: 'done' }],
+      },
+    },
+    { ok: true, result: { disposed: true } },
+  ];
+  return {
+    stdout: Readable.from(responses.map((response) => `${JSON.stringify(response)}\n`)),
+    stdin: { write: vi.fn(), end: vi.fn() },
     kill: vi.fn(),
   };
 }

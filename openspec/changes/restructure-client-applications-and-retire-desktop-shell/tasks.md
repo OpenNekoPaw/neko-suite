@@ -33,6 +33,7 @@
 - [x] 4.4 Add path-level tests proving the app owns the TUI source and executable while poisoning `@neko/cli`, package-local source, and legacy executable participation.
 - [x] 4.5 Run focused real Agent Evaluation through the relocated `apps/neko-tui` source and record effective config, canonical-path, queue/resume/Skill/artifact, and forbidden-old-path evidence.
 - [x] 4.6 Delete `packages/neko-agent/packages/cli-tui`, the `@neko/cli` dependency/export surface, and every package-local product, test, documentation, and tooling caller.
+- [x] 4.7 Strengthen Evaluation launch-contract and focused-selection tests for TUI app entry/build files, complete coverage-index suite ownership, explicit command overrides, and forbidden legacy executable paths.
 
 ## 5. Neko For VSCode Build Root
 

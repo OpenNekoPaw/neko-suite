@@ -1,5 +1,6 @@
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
+import process from 'node:process';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -100,7 +101,36 @@ describe('v2 single-case orchestration', () => {
       artifactRefs: ['asset:scene-1'],
       usage: { inputTokens: 12, outputTokens: 4, retries: 1 },
     });
+    expect(spawn).toHaveBeenCalledWith(
+      process.execPath,
+      ['apps/neko-tui/dist/main.js', 'debug', 'automation', '--stdio', '-C', workspace],
+      { cwd: process.cwd(), shell: false, stdio: ['pipe', 'pipe', 'inherit'] },
+    );
     await expect(fs.stat(workspace)).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+
+  it('preserves an explicit v2 debug command override', async () => {
+    const outputRoot = await fs.mkdtemp(join(os.tmpdir(), 'neko-agent-eval-v2-command-'));
+    temporaryDirectories.push(outputRoot);
+    const spawn = vi.fn(() => ({ stdout: null }));
+    let workspace;
+    const run = await runV2Case(await selection(), {
+      outputRoot,
+      runId: 'run-command-override',
+      cwd: '/repo',
+      debugCommand: 'custom-neko-debug',
+      spawn,
+      runDriver: async () => {
+        workspace = spawn.mock.calls[0][1].at(-1);
+        return facts();
+      },
+    });
+    expect(run.outcome).toBe('pass');
+    expect(spawn).toHaveBeenCalledWith(
+      'custom-neko-debug',
+      ['debug', 'automation', '--stdio', '-C', workspace],
+      { cwd: '/repo', shell: true, stdio: ['pipe', 'pipe', 'inherit'] },
+    );
   });
 
   it('records a negative runtime-fact pilot as case-fail', async () => {

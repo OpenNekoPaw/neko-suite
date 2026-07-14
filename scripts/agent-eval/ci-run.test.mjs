@@ -43,8 +43,28 @@ describe('Agent Evaluation CI runner', () => {
       ),
     ).resolves.toEqual([
       'agent-runtime.model-binding',
+      'agent-runtime.perception-routing',
+      'agent-runtime.single-message-tui',
       'agent-runtime.workflow-controller',
     ]);
+  });
+
+  it('selects complete TUI runtime coverage for application entry and build changes', async () => {
+    const suites = await discoverSuites();
+    await expect(
+      selectSuiteIds(
+        { mode: 'focused', baseSha: 'base', headSha: 'head', repetitions: 1 },
+        suites,
+        {
+          changedPaths: [
+            'apps/neko-tui/src/main.ts',
+            'apps/neko-tui/src/application.ts',
+            'apps/neko-tui/package.json',
+            'apps/neko-tui/tsup.config.ts',
+          ],
+        },
+      ),
+    ).resolves.toEqual(['agent-runtime.single-message-tui', 'agent-runtime.workflow-controller']);
   });
 
   it('fails visible when a relevant custom Skill has no indexed suite', async () => {

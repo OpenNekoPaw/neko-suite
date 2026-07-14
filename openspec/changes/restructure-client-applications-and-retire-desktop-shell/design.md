@@ -112,6 +112,8 @@ Testing:
 
 - Boundary checks prove app-to-public-package dependency direction and reject restoration of `@neko/cli`.
 - Path tests prove app build roots are hit and old product entries cannot succeed.
+- Evaluation launch-contract tests assert each runner independently selects `node apps/neko-tui/dist/main.js`, preserves explicit debug-command overrides, and never reaches a retired executable.
+- Focused Evaluation selection covers TUI application entry, build configuration, debug facts, workflows, tasks, and event projection, and selects every owning suite declared by the coverage index.
 - Home uses deterministic instance-isolation tests plus Electron functional scenarios for multi-session switching, queue/cancel/restart, AIGC task/output projection, and professional-tool handoff.
 - TUI uses deterministic tests plus real Agent Evaluation.
 - VSCode uses VSIX/install activation and Extension Development Host scenarios.

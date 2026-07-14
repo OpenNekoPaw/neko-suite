@@ -11,6 +11,7 @@ import {
 } from './runner/debug-protocol-client.mjs';
 import { runSingleMessageTuiDriver } from './runner/single-message-driver.mjs';
 import { createV2DryRun, runV2Case } from './runner/run-v2-case.mjs';
+import { resolveTuiDebugLaunch } from './runner/tui-debug-launch.mjs';
 import { discoverSuites, selectSuiteCases } from './suites/discovery.mjs';
 
 export const EXIT_CASE_FAIL = 1;
@@ -51,21 +52,13 @@ export async function main(argv = process.argv.slice(2), io = defaultIo()) {
     return EXIT_CONFIG_INVALID;
   }
 
-  const configuredDebugCommand = io.env.NEKO_DEBUG_COMMAND;
-  const command = configuredDebugCommand ?? process.execPath;
+  const launch = resolveTuiDebugLaunch({ debugCommand: io.env.NEKO_DEBUG_COMMAND });
   const child = io.spawn(
-    command,
-    [
-      ...(configuredDebugCommand ? [] : ['apps/neko-tui/dist/main.js']),
-      'debug',
-      'automation',
-      '--stdio',
-      '-C',
-      args.cwd,
-    ],
+    launch.command,
+    [...launch.argsPrefix, 'debug', 'automation', '--stdio', '-C', args.cwd],
     {
       cwd: io.cwd(),
-      shell: configuredDebugCommand !== undefined,
+      shell: launch.shell,
       stdio: ['pipe', 'pipe', 'inherit'],
     },
   );

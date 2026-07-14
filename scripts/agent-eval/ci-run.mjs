@@ -2,7 +2,7 @@
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import { execFile as nodeExecFile } from 'node:child_process';
-import { dirname, resolve } from 'node:path';
+import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import {
@@ -141,7 +141,8 @@ export function parseArgs(argv) {
 export async function selectSuiteIds(args, suites, options = {}) {
   const available = new Set(suites.map((entry) => entry.suite.id));
   if (args.suiteId) {
-    if (!available.has(args.suiteId)) throw new Error(`selected suite does not exist: ${args.suiteId}`);
+    if (!available.has(args.suiteId))
+      throw new Error(`selected suite does not exist: ${args.suiteId}`);
     return [args.suiteId];
   }
   if (args.mode === 'nightly') return NIGHTLY_SUITES.filter((id) => available.has(id));
@@ -152,21 +153,25 @@ export async function selectSuiteIds(args, suites, options = {}) {
     options.changedPaths ?? (await readChangedPaths(args.baseSha, args.headSha, options.execFile));
   const relevant = changedPaths.filter(isAgentEvaluationRelevantPath);
   const selections = relevant.length > 0 ? selectEvaluationCoverage(relevant) : [];
-  const suiteIds = [...new Set(selections.map((item) => item.suiteId))].filter((id) =>
-    available.has(id),
-  );
+  const selectedSuiteIds = selections.flatMap((item) => item.suiteIds ?? [item.suiteId]);
+  const suiteIds = [...new Set(selectedSuiteIds)].filter((id) => available.has(id));
   const missing = selections
-    .map((item) => item.suiteId)
+    .flatMap((item) => item.suiteIds ?? [item.suiteId])
     .filter((id) => id !== 'agent-runtime.evaluation-platform' && !available.has(id));
   if (missing.length > 0) {
-    throw new Error(`changed behavior references missing suite(s): ${[...new Set(missing)].join(', ')}`);
+    throw new Error(
+      `changed behavior references missing suite(s): ${[...new Set(missing)].join(', ')}`,
+    );
   }
   return suiteIds;
 }
 
 async function readChangedPaths(baseSha, headSha, injectedExecFile = execFile) {
   const { stdout } = await injectedExecFile('git', ['diff', '--name-only', baseSha, headSha]);
-  return stdout.split(/\r?\n/u).map((item) => item.trim()).filter(Boolean);
+  return stdout
+    .split(/\r?\n/u)
+    .map((item) => item.trim())
+    .filter(Boolean);
 }
 
 async function readInfrastructureBlocker(env) {
@@ -201,7 +206,10 @@ function exitCode(outcome) {
 
 async function writeSummary(reportRoot, summary) {
   await fs.mkdir(reportRoot, { recursive: true });
-  await fs.writeFile(resolve(reportRoot, 'ci-summary.json'), `${JSON.stringify(summary, null, 2)}\n`);
+  await fs.writeFile(
+    resolve(reportRoot, 'ci-summary.json'),
+    `${JSON.stringify(summary, null, 2)}\n`,
+  );
 }
 
 function requireValue(name, value) {

@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { CASE_GROUPS, SCHEMAS } from '../schemas/contracts.mjs';
-import { selectEvaluationCoverage, validateAuthoringCoverage } from './change-selector.mjs';
+import {
+  isAgentEvaluationRelevantPath,
+  selectEvaluationCoverage,
+  validateAuthoringCoverage,
+} from './change-selector.mjs';
 
 const HASH = `sha256:${'a'.repeat(64)}`;
 
@@ -51,7 +55,9 @@ describe('Agent Evaluation change-to-suite selector', () => {
         'packages/neko-agent/packages/agent/src/session/agent-session.ts',
         'packages/neko-agent/packages/agent/src/subagent/task-tool.ts',
         'packages/neko-agent/packages/agent/src/task/task-runtime.ts',
+        'apps/neko-tui/src/tui/core/tui-media-background-tasks.ts',
         'apps/neko-tui/src/tui/core/debug-automation/types.ts',
+        'apps/neko-tui/src/tui/markdown/controller.ts',
         'scripts/agent-eval/schemas/contracts.mjs',
       ]),
     ).toEqual(
@@ -75,14 +81,22 @@ describe('Agent Evaluation change-to-suite selector', () => {
         expect.objectContaining({
           behaviorId: 'session-workflows',
           suiteId: 'agent-runtime.workflow-controller',
+          suiteIds: ['agent-runtime.single-message-tui', 'agent-runtime.workflow-controller'],
         }),
         expect.objectContaining({
           behaviorId: 'task-recovery',
           suiteId: 'agent-runtime.workflow-controller',
+          suiteIds: ['agent-runtime.workflow-controller', 'agent-runtime.creative-media-workflow'],
         }),
         expect.objectContaining({
           behaviorId: 'tui-debug-facts',
           suiteId: 'agent-runtime.single-message-tui',
+          suiteIds: ['agent-runtime.single-message-tui', 'agent-runtime.workflow-controller'],
+        }),
+        expect.objectContaining({
+          behaviorId: 'tui-event-projection',
+          suiteId: 'agent-runtime.stream-delivery',
+          suiteIds: ['agent-runtime.stream-delivery', 'agent-runtime.tui-markdown'],
         }),
         expect.objectContaining({
           behaviorId: 'evaluation-platform',
@@ -90,6 +104,24 @@ describe('Agent Evaluation change-to-suite selector', () => {
         }),
       ]),
     );
+  });
+
+  it('maps TUI application entry and build files to every owning runtime suite', () => {
+    const paths = [
+      'apps/neko-tui/src/main.ts',
+      'apps/neko-tui/src/application.ts',
+      'apps/neko-tui/package.json',
+      'apps/neko-tui/tsup.config.ts',
+    ];
+    expect(paths.every(isAgentEvaluationRelevantPath)).toBe(true);
+    expect(selectEvaluationCoverage(paths)).toEqual([
+      {
+        behaviorId: 'tui-debug-facts',
+        suiteId: 'agent-runtime.single-message-tui',
+        suiteIds: ['agent-runtime.single-message-tui', 'agent-runtime.workflow-controller'],
+        changedPaths: paths,
+      },
+    ]);
   });
 
   it('deduplicates files owned by the same behavior and suite', () => {
@@ -102,6 +134,7 @@ describe('Agent Evaluation change-to-suite selector', () => {
       {
         behaviorId: 'session-workflows',
         suiteId: 'agent-runtime.workflow-controller',
+        suiteIds: ['agent-runtime.single-message-tui', 'agent-runtime.workflow-controller'],
         changedPaths: [
           'packages/neko-agent/packages/agent/src/session/agent-session.ts',
           'packages/neko-agent/packages/agent/src/session/conversation-control-runtime.ts',

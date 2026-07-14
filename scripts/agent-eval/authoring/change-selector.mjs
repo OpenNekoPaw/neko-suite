@@ -1,4 +1,20 @@
+import { readFileSync } from 'node:fs';
+import { URL } from 'node:url';
 import { validateAuthoringDecision } from '../schemas/contracts.mjs';
+
+const coverageIndex = JSON.parse(
+  readFileSync(new URL('../suites/coverage-index.json', import.meta.url), 'utf8'),
+);
+const runtimeSuiteIds = new Map(
+  coverageIndex.targets
+    .filter(
+      (target) =>
+        target.kind === 'agent-runtime-capability' &&
+        target.disposition === 'suite' &&
+        Array.isArray(target.suiteIds),
+    )
+    .map((target) => [target.id, Object.freeze([...target.suiteIds])]),
+);
 
 const RULES = Object.freeze([
   rule('evaluation-platform', 'agent-runtime.evaluation-platform', [
@@ -38,16 +54,29 @@ const RULES = Object.freeze([
     'packages/neko-agent/packages/agent/src/session/',
     'packages/neko-agent/packages/agent/src/subagent/',
     'apps/neko-tui/src/tui/hooks/useAgentSession',
+    'apps/neko-tui/src/tui/runtime/',
+    'apps/neko-tui/src/tui/core/message-queue-',
+    'apps/neko-tui/src/tui/presentation/session-control-',
+    'apps/neko-tui/src/tui/presentation/work-queue-',
   ]),
   rule('task-recovery', 'agent-runtime.workflow-controller', [
     'packages/neko-agent/packages/agent/src/task/',
     'packages/neko-agent/packages/agent/src/runtime/continuation',
     'packages/neko-agent/packages/agent-types/src/agent-message-queue',
+    'apps/neko-tui/src/tui/core/tui-media-background-tasks',
+    'apps/neko-tui/src/tui/host/node-media-task-delivery-host',
   ]),
   rule('tui-event-projection', 'agent-runtime.stream-delivery', [
     'apps/neko-tui/src/tui/core/timeline-',
     'apps/neko-tui/src/tui/markdown/',
     'apps/neko-tui/src/tui/core/markdown',
+  ]),
+  rule('tui-debug-facts', 'agent-runtime.single-message-tui', [
+    'apps/neko-tui/src/main.ts',
+    'apps/neko-tui/src/application.ts',
+    'apps/neko-tui/package.json',
+    'apps/neko-tui/tsup.config.ts',
+    'apps/neko-tui/src/tui/',
   ]),
 ]);
 
@@ -65,11 +94,18 @@ export function selectEvaluationCoverage(changedPaths) {
       continue;
     }
     const suiteId = match.suiteId(path);
+    const suiteIds = readOwningSuiteIds(match.behaviorId, suiteId);
+    if (!suiteIds.includes(suiteId)) {
+      throw new Error(
+        `coverage-index mismatch: ${match.behaviorId} does not own primary suite ${suiteId}`,
+      );
+    }
     const key = `${match.behaviorId}:${suiteId}`;
     const existing = selected.get(key);
     selected.set(key, {
       behaviorId: match.behaviorId,
       suiteId,
+      suiteIds,
       changedPaths: [...(existing?.changedPaths ?? []), path],
     });
   }
@@ -89,7 +125,7 @@ export function isAgentEvaluationRelevantPath(rawPath) {
     path.startsWith('packages/neko-skills/src/builtins/') ||
     path.startsWith('packages/neko-agent/packages/agent/src/') ||
     path.startsWith('packages/neko-agent/packages/ai-sdk/src/') ||
-    path.startsWith('apps/neko-tui/src/tui/') ||
+    path.startsWith('apps/neko-tui/') ||
     path.startsWith('packages/neko-agent/packages/extension/src/tools/') ||
     path.startsWith('packages/neko-agent/packages/platform/src/') ||
     path.startsWith('scripts/agent-eval/')
@@ -157,4 +193,15 @@ function normalizeRepositoryPath(value) {
     throw new Error(`changed path must not traverse outside the repository: ${value}`);
   }
   return path;
+}
+
+function readOwningSuiteIds(behaviorId, primarySuiteId) {
+  if (behaviorId === 'portable-skill-content' || behaviorId === 'evaluation-platform') {
+    return [primarySuiteId];
+  }
+  const suiteIds = runtimeSuiteIds.get(behaviorId);
+  if (!suiteIds) {
+    throw new Error(`coverage-index mismatch: missing suite ownership for ${behaviorId}`);
+  }
+  return suiteIds;
 }
