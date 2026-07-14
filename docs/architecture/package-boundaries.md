@@ -39,16 +39,15 @@
 
 ## 跨宿主 Adapter 组合边界
 
-Neko 当前存在 VSCode Extension/Webview、Node/TUI、Electron/Desktop 三个真实客户端宿主。宿主 adapter 的实现权归各自 composition root，而不是每个功能包各自实现一套 VSCode/Node/Electron UI 或桥接。
+Neko 当前存在 VSCode Extension/Webview、Node/TUI、Electron/Home 三个真实客户端宿主。宿主 adapter 的实现权归各自 composition root，而不是每个功能包各自实现一套 VSCode/Node/Electron UI 或桥接。
 
 约束：
 
 - VSCode adapter 放在 Extension composition root：负责 VSCode API、Webview CSP/resource projection、custom editor、storage、command/tree/status integration。
 - Node adapter 放在 TUI/headless composition root：负责 Node fs/path/env/process、Platform/Agent runtime、content access、task storage、artifact writes。
-- Electron adapter 放在 Desktop main/preload/renderer bridge：负责 Electron IPC、window/menu、workspace file/resource access、viewport session、scoped Webview/runtime messaging。
+- Electron adapter 放在 Home main/preload/renderer bridge：负责 Electron IPC、窗口生命周期、设置、Agent 会话、资源与专业工具交接；不拥有专业 editor/viewport 真值。
 - 功能包暴露 package-owned UI、runtime descriptor、typed message contract、facade 或 capability provider；不要新增平行的 `createVSCodeAdapter` / `createNodeAdapter` / `createElectronAdapter` 全栈实现。
 - Host-neutral Webview 代码需要宿主行为时，使用注入的 host facade、package-owned neutral port 或 Workbench/Agent runtime contract。不要直接调用 `window.vscodeApi`、`acquireVsCodeApi`、Electron IPC、Node fs/path 或未作用域的全局 shim。
-- Desktop 中的 `vscodeApi` 形状全局对象只能作为迁移 shim；已经迁移到 scoped runtime 的 Agent surface 必须走 `sendAgentRuntimeMessage` 和 `AgentHostRuntimeAdapter`。
 - Workbench resource stable ref 与 runtime projection 必须分离；`.neko/.cache`、Webview URI、Electron runtime protocol、blob URL、Engine token、绝对路径都不能作为 durable resource identity。
 
 ## 公共代码
@@ -106,7 +105,7 @@ Neko 当前存在 VSCode Extension/Webview、Node/TUI、Electron/Desktop 三个�
 - 不得把 `@neko/host` 扩展成领域/插件 registry；Host ports 仍只表达宿主原语，Workbench Core 只表达 contribution/plugin 契约。
 - Plugin manifest/schema/version、permission、trust、activation event 和 contribution id 校验必须 fail-visible。
 - Resource source contribution 只能表达 stable ref 与 runtime projection 边界；不得把 `.neko/.cache`、Webview URI、blob URL、Engine token 或绝对路径作为持久事实。
-- Desktop、VSCode 和未来 Tauri/native host 应作为 adapter 消费 Workbench Core；TUI 只消费 headless projection。
+- VSCode 和未来经独立 OpenSpec 接受的 Studio host 可作为 adapter 消费 Workbench Core；Home 只消费管理面需要的 host-neutral 契约，TUI 只消费 headless projection。
 - VSCode 兼容只能是显式 subset mapping，不承诺完整 VSCode API 兼容。
 
 ### 跨子包能力复用
@@ -264,8 +263,9 @@ Webview 包负责浏览器沙箱内的交互体验。
 | `platform`    | host-agnostic 平台桥、配置和 provider glue                                |
 | `extension`   | VS Code commands、配置桥接、host adapters、会话入口                       |
 | `webview`     | Chat/Agent UI、消息投影、用户输入                                         |
-| `cli-tui`     | 非 VS Code 的 TUI shell                                                   |
 | `test-utils`  | 测试支撑                                                                  |
+
+Terminal TUI/headless 的单产品 host composition 位于 `apps/neko-tui`；它消费上述公共 package，不属于 `neko-agent` 子包。
 
 约束：
 
@@ -296,7 +296,7 @@ Webview 包负责浏览器沙箱内的交互体验。
 | `neko-live`      | 实时合成、设备和直播交互                                                    | 设备/流走 Engine client；UI 不直接访问设备宿主 API                                                                                                                                     |
 | `neko-tools`     | 工具集合、Media LSP、差异/诊断                                              | LSP/diagnostic 在 Extension；Webview 只消费授权结果                                                                                                                                    |
 | `neko-dashboard` | 项目 dashboard、实体/搜索聚合视图                                           | Webview 不直接文件 mutation；聚合通过 entity/search/service contract                                                                                                                   |
-| `neko-suite`     | 聚合发布包                                                                  | 不承载领域业务，只组织扩展组合和发布入口                                                                                                                                               |
+| `apps/neko-vscode` | Neko for VSCode 产品根                                                    | 只拥有 Extension Pack manifest、VSIX 打包和发布；不承载领域业务                                                                                                                        |
 
 领域内部架构文档放在 `docs/domains/<domain>/architecture.md`。只有跨多个领域、跨多个运行平面的不变量才提升到 `docs/architecture/`。
 

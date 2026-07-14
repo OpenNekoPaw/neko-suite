@@ -29,7 +29,6 @@
 | [`adr-code-debt-redundancy-governance.md`](adr-code-debt-redundancy-governance.md)                                 | 重复、冗余、兼容桥和 fallback 代码的分类、清理优先级与验证规则                        |
 | [`adr-code-review-quality-gates.md`](adr-code-review-quality-gates.md)                                             | 代码审查、风险分级、验证矩阵和功能偏离检查                                            |
 | [`adr-local-metadata-store-sqlite.md`](adr-local-metadata-store-sqlite.md)                                         | 用户级 SQLite 本地元数据 Store、项目事实和缓存索引边界                                |
-| [`adr-neko-desktop-apphost-resource-viewport-boundary.md`](adr-neko-desktop-apphost-resource-viewport-boundary.md) | Neko Desktop AppHost、资源工作台、Market/Skills 管理面和 Engine-owned viewport 边界   |
 | [`adr-neko-workbench-core-plugin-host.md`](adr-neko-workbench-core-plugin-host.md)                                 | Neko Workbench Core、Plugin Host、VSCode 设计参考和 Desktop Host Adapter 边界         |
 | [`application-composition.md`](application-composition.md)                                                       | Home、TUI、Neko for VSCode 与延后 Studio 的应用 composition root 和依赖方向          |
 | [`adr-unified-markdown-resource-rendering.md`](adr-unified-markdown-resource-rendering.md)                         | Canvas MCP 式能力、Markdown 扩展语法、资源增强渲染和 Send to Canvas 边界              |
@@ -39,7 +38,7 @@
 | [`asset-library.md`](asset-library.md)                                                                             | 素材库、Asset/Variant/File、导入来源、市场安装和素材搜索投影                          |
 | [`auth.md`](auth.md)                                                                                               | 用户凭据、workspace policy、Webview auth bridge 和 session 边界                       |
 | [`cache-file-access-and-paths.md`](cache-file-access-and-paths.md)                                                 | 缓存、文件读写服务、路径变量、ContentAccess 和 Webview 投影                           |
-| [`client-targets.md`](client-targets.md)                                                                           | TUI、VSCode 插件客户端和独立编辑器的产品目标、职责边界和验证重点                      |
+| [`client-targets.md`](client-targets.md)                                                                           | Home、TUI、Neko for VSCode 的产品目标、职责边界和验证重点                            |
 | [`engine-runtime.md`](engine-runtime.md)                                                                           | Rust Engine runtime、GPU/0-copy、2D/3D/Live2D、ECS/OOP 与数据路径                     |
 | [`headless-project-authoring.md`](headless-project-authoring.md)                                                   | `.nk*` 持久项目写入的无 UI authoring 边界、operation 分类、canonical 入口和客户端适配 |
 | [`marketplace.md`](marketplace.md)                                                                                 | Marketplace/Registry、manifest、install target 和 trust 边界                          |
@@ -53,6 +52,7 @@
 
 | 文档                                                                                     | 取代说明                                                                                                                                                                                                |
 | ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`adr-neko-desktop-apphost-resource-viewport-boundary.md`](adr-neko-desktop-apphost-resource-viewport-boundary.md) | Desktop 产品壳已删除；host-neutral 契约由 application composition、package boundaries 与 Workbench Core ADR 接续 |
 | [`adr-markdown-storyboard-draft-protocol.md`](adr-markdown-storyboard-draft-protocol.md) | 已被 [`adr-unified-markdown-resource-rendering.md`](adr-unified-markdown-resource-rendering.md) 和 Canvas `canvas.ingestMarkdown` / Creative Table profile 方案取代；仅保留为历史背景，不作为新实现入口 |
 
 机器可读的质量门禁输入放在 [`../../quality/`](../../quality/)，例如代码债务台账和 Agent 边界 LCD register；本目录只保留人类可读的架构决策和规则说明。

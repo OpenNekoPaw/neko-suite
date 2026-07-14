@@ -20,13 +20,13 @@ The product challenge is to expose professional creative and AI workflows inside
 
 Neko Suite splits client targets by product goal:
 
-| Client                   | Goal                                                                                                                                                     |
-| ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| TUI client               | Agent feature validation, model quality validation, eval scenario acceptance, ablation experiments, regression tests, and structured reports              |
-| VS Code extension client | Lightweight plugin-based creative client for future extension capabilities and fast authoring/editing                                                    |
-| Standalone editor        | Professional creative client that raises the editing and rendering ceiling, avoids VS Code constraints, and provides a more controllable automation host |
+| Product | Build root | Goal |
+| --- | --- | --- |
+| Neko Home | `apps/neko-home` | Multi-Agent-session and AIGC creation-lifecycle management without a professional editor shell |
+| Neko TUI | `apps/neko-tui` | Agent, model, Skill/Tool, ablation, and regression validation |
+| Neko for VSCode | `apps/neko-vscode` | Plugin-based professional authoring and Extension Pack distribution |
 
-The three clients share the Agent runtime, domain capabilities, Host adapter ports, Engine client, and Rust Engine, but they do not aim for full feature parity. See [`docs/architecture/client-targets.md`](./docs/architecture/client-targets.md) for the detailed boundary.
+`apps/*` owns product composition, lifecycle, build, test, packaging, and release. Reusable runtime and domain implementations remain in `packages/*`. The old Desktop shell is removed; a future Studio is outside the current architecture. See [`docs/architecture/client-targets.md`](./docs/architecture/client-targets.md).
 
 ## Layering
 

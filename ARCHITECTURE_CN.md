@@ -20,13 +20,13 @@ Neko Suite 是集成在 VS Code 内的创意工作套件，由三个协作平面
 
 Neko Suite 的客户端产物按目标分工：
 
-| 产物              | 目标                                                                                     |
-| ----------------- | ---------------------------------------------------------------------------------------- |
-| TUI 客户端        | Agent 功能验证、模型效果验证、eval 场景验收、消融实验、回归测试和结构化报告              |
-| VSCode 插件客户端 | 插件化轻量创作客户端，方便 VSCode 等插件继续扩展能力，并支持快速创作编辑                 |
-| 独立编辑器        | 专业创作客户端，提高编辑器上限和渲染效果，绕开 VSCode 限制，并提供更可控的自动化测试宿主 |
+| 产物 | 构建根 | 目标 |
+| --- | --- | --- |
+| Neko Home | `apps/neko-home` | 多 Agent 会话与 AIGC 创作生命周期管理，不承载专业编辑器 |
+| Neko TUI | `apps/neko-tui` | Agent、模型、Skill/Tool、消融和回归验证 |
+| Neko for VSCode | `apps/neko-vscode` | 插件化专业创作入口和 Extension Pack 发布 |
 
-三个客户端共享 Agent runtime、领域 capability、Host adapter ports、Engine client 与 Rust Engine，但不追求功能完全等价。详细边界见 [`docs/architecture/client-targets.md`](./docs/architecture/client-targets.md)。
+`apps/*` 只拥有产品 composition、生命周期、构建、测试、打包和发布；可复用 runtime 与领域实现仍由 `packages/*` 拥有。旧 Desktop 壳已删除，未来 Studio 不属于当前架构。详细边界见 [`docs/architecture/client-targets.md`](./docs/architecture/client-targets.md)。
 
 ## 分层
 

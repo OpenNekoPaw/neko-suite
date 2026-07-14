@@ -1,8 +1,10 @@
 # ADR: Neko Desktop AppHost、资源工作台与 Engine Viewport 边界
 
-状态：Accepted  
+状态：Superseded（2026-07-14）
 日期：2026-07-08  
 范围：`neko-desktop`、Desktop AppHost、Resource Explorer、Market/Packages/Skills 管理面、Engine-owned viewport、VSCode/TUI/未来客户端边界。
+
+取代说明：Desktop 产品壳已由 `restructure-client-applications-and-retire-desktop-shell` 删除；本文仅保留历史决策背景，不是当前产品或实现入口。仍有效的 host-neutral 契约以 `application-composition.md`、`package-boundaries.md` 和 Workbench Core ADR 为准。
 
 ## 背景
 

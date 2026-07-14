@@ -16,10 +16,10 @@
 
 - [x] 3.1 Create `apps/neko-home` Electron main/preload/renderer, build, test, and package root without the Desktop editor shell.
 - [x] 3.2 Compose the initial typed bridge, security, theme/i18n, settings, Engine Core, Agent conversation, resource, and handoff slice through canonical owners.
-- [ ] 3.3 Define and implement the Home multi-session application runtime with explicit session/runtime identity and independently owned config, queue, task, log, async, and resource state.
-- [ ] 3.4 Implement Codex-style session navigation and controls for create/select/resume/queue/cancel while keeping selection projection separate from runtime ownership.
+- [x] 3.3 Define and implement the Home multi-session application runtime with explicit session/runtime identity and independently owned config, queue, task, log, async, and resource state.
+- [x] 3.4 Implement Codex-style session navigation and controls for create/select/resume/queue/cancel while keeping selection projection separate from runtime ownership.
 - [ ] 3.5 Compose AIGC creation task/run projection, progress, diagnostics, retry/cancel, generated-output provenance/validation, and promotion actions through owning public contracts.
-- [ ] 3.6 Implement stable Resource/Artifact/Task handoff to professional tools without cache-path identity or Desktop editor fallback.
+- [x] 3.6 Implement stable Resource/Artifact/Task handoff to professional tools without cache-path identity or Desktop editor fallback.
 - [x] 3.7 Add initial Home boundary/unit/build/smoke tests and generalized Electron functional-host ownership.
 - [x] 3.8 Pass the initial Home Electron startup/restart, typed IPC, Engine ready/unavailable, Agent/resource, handoff, and conversation-preservation scenarios.
 - [ ] 3.9 Add deterministic instance-isolation and stale-identity tests plus real Electron scenarios for multi-session switching, background queue/task continuity, cancel/resume, and restart recovery.
@@ -28,20 +28,20 @@
 ## 4. Neko TUI Build Root
 
 - [x] 4.1 Create `apps/neko-tui` package metadata, executable build, typecheck, and tests.
-- [x] 4.2 Expose one documented Agent-owned public terminal application entry and keep terminal runtime/command/Ink/debug semantics in `@neko/cli`.
-- [x] 4.3 Route root commands, CI, debug automation, ablation, and Agent Evaluation build/executable selection through `apps/neko-tui`.
-- [ ] 4.4 Add path-level tests proving the app executable consumes the public terminal entry and poison package-local executable participation.
-- [ ] 4.5 Run focused real Agent Evaluation through `apps/neko-tui` and record effective config, canonical-path, queue/resume/Skill/artifact, and forbidden-old-path evidence.
-- [ ] 4.6 Remove `@neko/cli` product `bin`, executable build/dev/package scripts, self-start entry behavior, and obsolete generated executable ownership.
+- [x] 4.2 Move terminal runtime, Commander commands, Ink UI, presentation, Node host composition, tests, and debug automation into `apps/neko-tui`, retaining only proven host-neutral capabilities in existing public owners.
+- [x] 4.3 Route root commands, CI, debug automation, ablation, cross-host conformance, and Agent Evaluation source/executable selection through `apps/neko-tui`.
+- [x] 4.4 Add path-level tests proving the app owns the TUI source and executable while poisoning `@neko/cli`, package-local source, and legacy executable participation.
+- [x] 4.5 Run focused real Agent Evaluation through the relocated `apps/neko-tui` source and record effective config, canonical-path, queue/resume/Skill/artifact, and forbidden-old-path evidence.
+- [x] 4.6 Delete `packages/neko-agent/packages/cli-tui`, the `@neko/cli` dependency/export surface, and every package-local product, test, documentation, and tooling caller.
 
 ## 5. Neko For VSCode Build Root
 
-- [ ] 5.1 Confirm `packages/neko-suite` is a pure Extension Pack product root with no domain runtime.
-- [ ] 5.2 Create `apps/neko-vscode` with the preserved `neko.neko-suite` manifest, member extension IDs, packaging, README/license inputs, and release metadata.
-- [ ] 5.3 Update root scripts, workspace/Turborepo selection, CI/release, launch configuration, and Marketplace packaging to use the app root.
-- [ ] 5.4 Add manifest/boundary/VSIX tests proving exactly one product root and unchanged published identity.
-- [ ] 5.5 Run packaged install/activation plus focused Extension Development Host/Webview scenarios with runtime-error gates.
-- [ ] 5.6 Delete `packages/neko-suite`, checked-in obsolete VSIX output, and package-local product callers after acceptance.
+- [x] 5.1 Confirm `packages/neko-suite` is a pure Extension Pack product root with no domain runtime.
+- [x] 5.2 Create `apps/neko-vscode` with the preserved `neko.neko-suite` manifest, member extension IDs, packaging, README/license inputs, and release metadata.
+- [x] 5.3 Update root scripts, workspace/Turborepo selection, CI/release, launch configuration, and Marketplace packaging to use the app root.
+- [x] 5.4 Add manifest/boundary/VSIX tests proving exactly one product root and unchanged published identity.
+- [x] 5.5 Run packaged install/activation plus focused Extension Development Host/Webview scenarios with runtime-error gates.
+- [x] 5.6 Delete `packages/neko-suite`, checked-in obsolete VSIX output, and package-local product callers after acceptance.
 
 ## 6. Remove Neko Desktop
 
@@ -53,8 +53,8 @@
 
 ## 7. Documentation And Final Validation
 
-- [ ] 7.1 Update Chinese/English README, architecture, package boundaries, client targets, contribution, release, test ownership, and navigation for the three app roots and no current Desktop/Studio product.
-- [ ] 7.2 Run OpenSpec validation, `git diff --check`, focused app/package tests, and path-level no-fallback assertions.
-- [ ] 7.3 Run real Home Electron, real TUI Agent Evaluation, and packaged VSCode Extension Development Host/Webview acceptance.
-- [ ] 7.4 Run `pnpm check:legacy-debt`, `pnpm check:unused`, `pnpm build`, `pnpm test`, `pnpm check`, and `pnpm ci:local`, recording external blockers.
+- [x] 7.1 Update Chinese/English README, architecture, package boundaries, client targets, contribution, release, test ownership, and navigation for the three app roots, complete TUI ownership, and no current Desktop/Studio product.
+- [x] 7.2 Run OpenSpec validation, `git diff --check`, focused app/package tests, and path-level no-fallback assertions.
+- [x] 7.3 Run real Home Electron, real TUI Agent Evaluation, and packaged VSCode Extension Development Host/Webview acceptance.
+- [x] 7.4 Run `pnpm check:legacy-debt`, `pnpm check:unused`, `pnpm build`, `pnpm test`, `pnpm check`, and `pnpm ci:local`, recording external blockers.
 - [ ] 7.5 Record removed product roots, preserved user-data policy, canonical build evidence, unexecuted validation, and residual risk before archive.

@@ -89,6 +89,7 @@ See [ARCHITECTURE.md](./ARCHITECTURE.md) for current package and extension bound
 
 ```
 neko-suite/
+├── apps/                # Home, TUI, and Neko for VSCode product build roots
 ├── packages/
 │   ├── neko-engine/     # Rust GPU media engine + VSCode extension integration (unified Sidecar process)
 │   ├── neko-cut/        # Video editor (Extension + Webview)

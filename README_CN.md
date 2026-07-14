@@ -30,11 +30,13 @@ Neko Suite 是一个面向 AI 原生创作工作流的 monorepo。它把剧本�
 
 Neko Suite 当前按三个客户端产物分工，而不是让每个客户端承载完整同构体验：
 
-| 产物        | 核心目标                                                                                                    |
-| ----------- | ----------------------------------------------------------------------------------------------------------- |
-| TUI 客户端  | 由外部 Evaluation 平台驱动的 canonical Agent runtime target，用于功能、模型质量、消融、回归和结构化报告证据 |
-| VSCode 插件 | 插件化轻量创作客户端，方便 VSCode 等插件继续扩展能力，并支持快速创作、编辑、预览与编排                      |
-| 独立编辑器  | 专业创作客户端，提高 UI 与渲染上限，绕开 VSCode Webview 限制，并提供更可控的自动化测试面                    |
+| 产物 | Canonical root | 核心目标 |
+| --- | --- | --- |
+| Neko Home | `apps/neko-home` | 类 Codex 的多 Agent 会话与 AIGC 创作任务、产物和专业工具交接管理 |
+| Neko TUI | `apps/neko-tui` | Agent runtime、模型质量、消融、回归和结构化 Evaluation 证据 |
+| Neko for VSCode | `apps/neko-vscode` | 插件化创作、编辑、预览与编排；领域 Extension 仍由各功能包拥有 |
+
+旧 Desktop 编辑器壳已退出当前产品结构；未来 Studio 必须通过新的 OpenSpec 重新设计。
 
 详细职责边界见 [客户端产物目标与职责边界](./docs/architecture/client-targets.md)。
 
@@ -46,7 +48,7 @@ Neko Suite 当前按三个客户端产物分工，而不是让每个客户端承
 | 引擎             | `neko-engine`                                                         |
 | Agent 与项目接地 | `neko-agent`, `neko-dashboard`, `neko-entity`, `neko-search`          |
 | 创作界面         | `neko-story`, `neko-canvas`, `neko-cut`, `neko-preview`, `neko-tools` |
-| 资产与分发       | `neko-assets`, `neko-market`, `neko-suite`                            |
+| 资产与分发       | `neko-assets`, `neko-market`                                          |
 | 互动创作         | `neko-model`, `neko-sketch`, `neko-puppet`, `neko-audio`, `neko-live` |
 
 ## 当前重点
@@ -85,6 +87,7 @@ Rust 引擎相关：
 
 | 路径                                     | 作用                           |
 | ---------------------------------------- | ------------------------------ |
+| `apps/`                                  | 当前产品构建、测试、打包与发布根 |
 | `packages/`                              | Workspace 包和 VS Code 扩展    |
 | `openspec/`                              | 活跃和归档的 OpenSpec change   |
 | `docs/`                                  | 架构、领域、调研和状态文档入口 |

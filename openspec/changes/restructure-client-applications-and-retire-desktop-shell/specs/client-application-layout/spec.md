@@ -12,13 +12,14 @@ Neko Suite SHALL define `apps/neko-home`, `apps/neko-tui`, and `apps/neko-vscode
 - **WHEN** repository tooling enumerates current products
 - **THEN** it MUST NOT discover a buildable Desktop or Studio product
 
-### Requirement: Applications build public package capabilities
-Applications SHALL compose documented public package entries. Reusable packages MUST NOT import applications, and applications MUST NOT import package source or internal implementation paths.
+### Requirement: Applications compose public package capabilities
+Applications SHALL own their single-product host composition while consuming documented public package entries. Reusable packages MUST NOT import applications, and applications MUST NOT import package source or internal implementation paths.
 
 #### Scenario: TUI is bundled
 - **WHEN** `apps/neko-tui` builds its executable
-- **THEN** it MUST bundle the Agent-owned public terminal application entry
-- **AND** Agent runtime, CLI command semantics, Ink UI, and debug protocol MUST remain package-owned
+- **THEN** it MUST own the CLI command surface, Ink UI, terminal presentation, Node host composition, and debug automation protocol
+- **AND** host-neutral Agent runtime, provider/platform behavior, and shared contracts MUST remain in their public package owners
+- **AND** no `@neko/cli` package or package-local TUI source root may remain buildable or importable
 
 #### Scenario: VSCode product is packaged
 - **WHEN** `apps/neko-vscode` produces a VSIX
@@ -40,6 +41,6 @@ Each application SHALL expose focused build, test, package, and applicable relea
 After an app-root replacement passes its required gates, its package-local executable, manifest, build, start, package, and release entries SHALL be removed or fail closed.
 
 #### Scenario: A legacy entry is invoked
-- **WHEN** a caller invokes a retired Desktop, Agent-package TUI, or package-local Neko Suite product entry
+- **WHEN** a caller invokes a retired Desktop, `@neko/cli`, Agent-package TUI, or package-local Neko Suite product entry
 - **THEN** it MUST be absent or return an explicit retired-entry diagnostic
 - **AND** it MUST NOT forward to the app root or another fallback

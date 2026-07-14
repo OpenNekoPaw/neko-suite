@@ -32,11 +32,13 @@ Neko Suite has three connected product layers:
 
 Neko Suite currently splits product goals across three client targets instead of making every client carry the same full experience:
 
-| Client             | Primary Goal                                                                                                                                               |
-| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| TUI client         | Canonical Agent runtime target driven by the external Evaluation platform for feature, model-quality, ablation, regression, and structured-report evidence |
-| VS Code extensions | Lightweight plugin-based creative client for fast authoring, editing, preview, orchestration, and future extension capabilities                            |
-| Standalone editor  | Professional creative client with a friendlier UI, higher rendering ceiling, fewer VS Code Webview constraints, and a more controllable automation surface |
+| Product | Canonical root | Primary goal |
+| --- | --- | --- |
+| Neko Home | `apps/neko-home` | Codex-style multi-Agent-session and AIGC task, output, and professional-tool handoff management |
+| Neko TUI | `apps/neko-tui` | Agent runtime, model quality, ablation, regression, and structured Evaluation evidence |
+| Neko for VSCode | `apps/neko-vscode` | Plugin-based authoring, editing, preview, and orchestration; domain Extensions remain package-owned |
+
+The retired Desktop editor shell is not a current product. A future Studio requires a separate accepted OpenSpec design.
 
 See [Client Targets And Responsibilities](./docs/architecture/client-targets.md) for the detailed boundary.
 
@@ -48,7 +50,7 @@ See [Client Targets And Responsibilities](./docs/architecture/client-targets.md)
 | Engine                  | `neko-engine`                                                         |
 | Agent and grounding     | `neko-agent`, `neko-dashboard`, `neko-entity`, `neko-search`          |
 | Creative surfaces       | `neko-story`, `neko-canvas`, `neko-cut`, `neko-preview`, `neko-tools` |
-| Assets and distribution | `neko-assets`, `neko-market`, `neko-suite`                            |
+| Assets and distribution | `neko-assets`, `neko-market`                                          |
 | Interactive creation    | `neko-model`, `neko-sketch`, `neko-puppet`, `neko-audio`, `neko-live` |
 
 ## Current Focus
@@ -87,6 +89,7 @@ For Rust engine work:
 
 | Path                                     | Purpose                                                  |
 | ---------------------------------------- | -------------------------------------------------------- |
+| `apps/`                                  | Current product build, test, package, and release roots  |
 | `packages/`                              | Workspace packages and VS Code extensions                |
 | `openspec/`                              | Active and archived OpenSpec changes                     |
 | `docs/`                                  | Architecture, domain, research, and status documentation |

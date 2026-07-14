@@ -87,6 +87,7 @@ code --install-extension neko-cut-*.vsix
 
 ```
 neko-suite/
+├── apps/                # Home、TUI、Neko for VSCode 产品构建根
 ├── packages/
 │   ├── neko-engine/     # Rust GPU 媒体引擎 + VSCode 扩展集成（统一 Sidecar 进程）
 │   ├── neko-cut/        # 视频剪辑器（Extension + Webview）

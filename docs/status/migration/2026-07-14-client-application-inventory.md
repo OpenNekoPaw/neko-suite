@@ -79,9 +79,9 @@ Generated `.turbo`, `coverage`, and `dist` content is rebuildable and not migrat
 
 | Surface | Current state | Stable identity / migration requirement |
 | --- | --- | --- |
-| Package | `@neko/cli` in `packages/neko-agent/packages/cli-tui` | Product becomes `apps/neko-tui`; Agent-owned public surface remains separately named |
+| Product source | `@neko/cli` in `packages/neko-agent/packages/cli-tui` | Complete terminal host composition moves to `apps/neko-tui`; host-neutral Agent/runtime owners remain packages |
 | Executable | `dist/cli.js`, bin `neko-agent`, source `src/cli.tsx` | Preserve user-facing command until canonical app entry replaces it, then remove old successful entry rather than forward |
-| Root command | `pnpm nekoagent` filters `@neko/cli` | Migrate to canonical `apps/neko-tui` filter/command |
+| Root command | `pnpm nekoagent` previously filtered `@neko/cli` | Use canonical `@neko/app-tui` filter/command and remove the old package |
 | Debug automation | TUI JSON-line debug server and `.vscode/launch.json`/evaluation command references | Evaluation must drive the new executable and prove no old path participation |
 | Runtime state | Workspace root, conversation IDs/storage, user config, Skill identity, task/artifact state | Preserve canonical owners and storage scopes; source path movement cannot change identity |
 | Agent Evaluation | `scripts/agent-eval` invokes the real TUI entry through configured debug command | Update only the canonical executable command; runner/session assembly remains external and unchanged |

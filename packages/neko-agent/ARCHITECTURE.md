@@ -18,8 +18,10 @@ packages/neko-agent/
 │   ├── agent/        # @neko/agent — Agent 运行时（核心，零 VSCode 依赖）
 │   ├── platform/     # @neko/platform — AI 服务平台（LLM 适配 + 媒体生成）
 │   ├── extension/    # @neko-agent/extension — VSCode Extension Host（纯胶水层）
-│   ├── webview/      # @neko-agent/webview — React 对话 UI
-│   └── cli-tui/      # @neko/cli — Ink TUI 终端界面 + headless 工具
+│   └── webview/      # @neko-agent/webview — React 对话 UI
+
+apps/
+└── neko-tui/         # @neko/app-tui — Ink TUI 终端产品 + headless 工具
 ```
 
 **依赖方向**（严格单向）：
@@ -29,13 +31,13 @@ webview ──(postMessage)──→ extension ──→ agent ──→ platfor
                                │                      │
                                └──→ shared             └──→ ai-sdk
 
-cli-tui ──→ agent ──→ platform ──→ shared
-  │                      │
-  └──→ shared            └──→ ai-sdk
+apps/neko-tui ──→ agent ──→ platform ──→ shared
+       │                         │
+       └──→ shared               └──→ ai-sdk
 ```
 
 > **说明**：`agent` 通过 `@neko/shared` 的 `IService` 接口抽象 LLM 调用，`platform` 提供具体实现。
-> `cli-tui` 直接复用 `@neko/platform`，通过 `createCLIPlatform()` 创建实例，`toSharedService()` 适配为 `IService`。
+> `apps/neko-tui` 直接复用 `@neko/platform`，通过 `createCLIPlatform()` 创建实例，`toSharedService()` 适配为 `IService`。
 > Extension、Terminal TUI 和 headless 工具共享同一套 LLM 和 Provider 管理。
 
 ---
@@ -92,7 +94,7 @@ cli-tui ──→ agent ──→ platform ──→ shared
 │            Terminal TUI / headless（独立进程）             │
 │                                                         │
 │  ┌──────────────────────────────────────────┐           │
-│  │ @neko/cli (cli-tui) — Ink React + tools  │           │
+│  │ apps/neko-tui — Ink React + tools        │           │
 │  │                                          │           │
 │  │  App                                     │           │
 │  │    ├─ ChatView + Input + StatusBar       │           │
@@ -325,9 +327,9 @@ conversation snapshots
 
 这些 coordinator 都留在 owning package：它们分别拥有 Agent 语义、VS Code `postMessage`、Webview frame/DOM 和 conversation storage 生命周期。当前不存在可同时满足这些契约的共享调度器；只有第二个子包出现相同运行环境与生命周期语义时才提取中立抽象。
 
-### @neko/cli — Terminal TUI 与 headless 工具
+### apps/neko-tui — Terminal TUI 与 headless 工具
 
-独立终端 TUI 与 headless/validation 命令包，直接复用 `@neko/agent` + `@neko/platform`。
+独立终端 TUI 与 headless/validation 应用，直接复用 `@neko/agent` + `@neko/platform`。Commander 命令、Ink UI、terminal presentation、Node host composition 与 debug automation 均由应用拥有，不再通过 `@neko/cli` facade 暴露。
 
 TUI/headless 特有的 bootstrap 层（`createCLIPlatform()`）负责：
 
@@ -354,15 +356,15 @@ Assistant Markdown from the first streaming delta through finalization uses one 
 ```text
 authoritative assistant source
   -> @neko/markdown normalized session/document
-  -> cli-tui terminal projector
+  -> apps/neko-tui terminal projector
   -> adaptive table/code/text layout
   -> renderer-owned safe ANSI/OSC encoding
   -> thin Ink Text component
 ```
 
-The semantic parser/document is shared, while terminal projection remains `cli-tui`-local. `TerminalTextMetrics`, Unicode/ASCII borders, terminal theme/capability resolution, table modes, whole-block highlighting, resize reflow and ANSI/OSC trust handling are terminal presentation responsibilities and do not belong in `@neko/markdown` or `@neko/ui`.
+The semantic parser/document is shared, while terminal projection remains `apps/neko-tui`-local. `TerminalTextMetrics`, Unicode/ASCII borders, terminal theme/capability resolution, table modes, whole-block highlighting, resize reflow and ANSI/OSC trust handling are terminal presentation responsibilities and do not belong in `@neko/markdown` or `@neko/ui`.
 
-All source-backed ranges use half-open UTF-16 offsets `[startOffset, endOffset)`. Resize changes projection/layout generations against the same document revision and must not reparse. Resource/link resolution is immutable and revision-associated; arbitrary provider terminal controls and unvalidated local/file targets remain inert. Resource budgets and caches are centralized in package-local `MarkdownResourcePolicy`, not user settings.
+All source-backed ranges use half-open UTF-16 offsets `[startOffset, endOffset)`. Resize changes projection/layout generations against the same document revision and must not reparse. Resource/link resolution is immutable and revision-associated; arbitrary provider terminal controls and unvalidated local/file targets remain inert. Resource budgets and caches are centralized in application-local `MarkdownResourcePolicy`, not user settings.
 
 The removed TUI regex parser, line-regex highlighter, final-only renderer and assistant `StreamingText` Markdown path have no fallback. Agent Webview migration is separately tracked by `openspec/changes/migrate-agent-webview-to-normalized-markdown`; cross-host semantic unification is not complete until its legacy parser poison and Extension Development Host gates pass.
 

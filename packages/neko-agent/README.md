@@ -11,8 +11,8 @@
 ## Quick Reference
 
 - **职责**：自然语言 → 多模型 LLM 推理 → 工具调用 / AI 生成 API
-- **入口**：`packages/extension/src/index.ts`（Extension）、`packages/cli-tui/src/cli.tsx`（Terminal TUI / headless）
-- **子包**：`agent`（运行时）、`platform`（LLM 路由）、`extension`（VSCode 宿主）、`webview`（对话 UI）、`cli-tui`（终端 TUI）
+- **入口**：`packages/extension/src/index.ts`（Extension）；Terminal TUI / headless 产品位于 `../../apps/neko-tui/src/tui/cli.tsx`
+- **子包**：`agent`（运行时）、`platform`（LLM 路由）、`extension`（VSCode 宿主）、`webview`（对话 UI）
 - **依赖**：`@neko/agent`、`@neko/platform`、`@neko/shared`
 - **激活依赖**：neko-engine、neko-tools、neko-preview
 
@@ -77,20 +77,16 @@ packages/
 │   ├── services/     ConfigBridge + SkillFileService + HookFileService
 │   ├── editor/       EditorModel + EditorRegistry
 │   └── tools/        扩展工具注册（NekoCut/NekoCanvas 桥接）
-├── webview/    # @neko-agent/webview — React 对话 UI
+└── webview/    # @neko-agent/webview — React 对话 UI
 │   ├── components/   ChatView + ContentBlocks 时序渲染 + SettingsView
 │   ├── handlers/     消息处理注册（streaming/tool/conversation/config）
 │   ├── hooks/        Zustand 状态管理（多会话隔离）
 │   ├── messages/     type-safe postMessage 构建器
 │   ├── config/       预设配置
 │   └── i18n/         国际化
-└── cli-tui/    # @neko/cli — Ink TUI 终端界面 + headless 工具
-    ├── components/   Ink React 组件（ChatView/Input/StatusBar/ToolCall）
-    ├── adapters/     LLMServiceAdapter（IService 桥接）
-    ├── stores/       Zustand 终端状态（agent/conversation/config/ui）
-    ├── hooks/        useAgentSession + useKeyboardShortcuts
-    └── core/         createCLIPlatform + bootstrap
 ```
+
+`apps/neko-tui` 拥有 Ink 组件、TUI adapter/store/hook、Commander 命令、Node host composition、debug automation、测试和 executable；它通过以上公共 package 复用 host-neutral Agent/runtime 能力。
 
 ## TUI/Webview 工作区共享边界
 
