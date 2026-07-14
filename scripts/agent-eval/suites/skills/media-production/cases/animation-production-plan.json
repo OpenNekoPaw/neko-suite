@@ -1,0 +1,29 @@
+{
+  "schema": "neko.agent-eval.scenario.v2",
+  "id": "animation-production-plan",
+  "suiteId": "skill.media-production",
+  "caseGroup": "workflow",
+  "visibility": "public",
+  "evidenceContract": {
+    "userBehavior": "Plan a recoverable animation production from source normalization through delivery verification.",
+    "canonicalPath": ["builtin media-production Skill", "creation stages", "quality Gates", "project/export verification plan"],
+    "forbiddenFallback": ["one-shot generation prompt", "skip Storyboard validation", "skip pre/post export Gates"],
+    "observables": [{ "ref": "production-facts", "kind": "runtime-fact", "description": "Skill injection and structured production workflow output.", "required": true }],
+    "expectedResult": "The plan covers source, Storyboard, generation, quality, authoring, export, and verification with recovery points.",
+    "expectedFailure": "Missing Skill injection, stages, Gates, or recovery evidence fails."
+  },
+  "fixtureRefs": ["empty-workspace"],
+  "runtimeProfileId": "markdown",
+  "modelProfileIds": ["configured-default"],
+  "steps": [
+    { "id": "submit", "kind": "submit", "prompt": "$media-production 为一个两镜头雨夜车站短片制定可恢复的动画制作计划，不实际调用生成工具。必须覆盖 source normalization、Storyboard validation、shot generation planning、asset quality Gate、project authoring、pre-export Gate、export 和 post-export verification，并说明失败恢复点。" },
+    { "id": "idle", "kind": "wait-for-idle", "timeoutMs": 180000 }
+  ],
+  "assertions": [
+    { "id": "skill", "kind": "skill", "identity": { "name": "media-production", "source": "builtin", "provenance": "builtin", "rootId": "builtin-skills", "relativePath": "media-production", "fingerprint": "sha256:70449ffcfb24aeaa7ab1b3530a4d3d68329077f4826cd53f4a300991e55de136" }, "status": "injected", "evidenceRef": "production-facts" },
+    { "id": "output", "kind": "structured-output", "format": "markdown", "requiredFields": ["source normalization", "Storyboard", "quality", "export", "recovery"], "locale": "zh-cn", "evidenceRef": "production-facts" },
+    { "id": "fallback", "kind": "no-fallback", "forbiddenRefs": ["legacy-workflow-runtime"], "evidenceRef": "production-facts" }
+  ],
+  "artifactChecks": [],
+  "budget": { "timeoutMs": 180000, "repetitions": 1 }
+}

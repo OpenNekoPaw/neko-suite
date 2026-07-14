@@ -1,38 +1,43 @@
 #!/usr/bin/env node
-import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import { spawn } from 'node:child_process';
-import { once } from 'node:events';
-import { createInterface } from 'node:readline';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
-  applyScenarioSetup,
-  evaluateScenario,
-  validateAndNormalizeScenarioRuntime,
-} from './scenario-runtime.mjs';
+  REQUEST_SCHEMA,
+  createDebugResponseReader,
+  readRequiredString,
+  sendDebugRequest,
+} from './runner/debug-protocol-client.mjs';
+import { runSingleMessageTuiDriver } from './runner/single-message-driver.mjs';
+import { createV2DryRun, runV2Case } from './runner/run-v2-case.mjs';
+import { discoverSuites, selectSuiteCases } from './suites/discovery.mjs';
 
 export const EXIT_CASE_FAIL = 1;
 export const EXIT_INFRASTRUCTURE_FAIL = 2;
 export const EXIT_CONFIG_INVALID = 3;
-export const REQUEST_SCHEMA = 'neko.tui-debug-automation.request.v1';
-const TERMINAL_RESIZE_SETTLE_MS = 50;
-export const SUPPORTED_CASE_KINDS = new Set([
-  undefined,
-  'single-prompt',
-  'async-task',
-  'explicit-skill',
-  'triggered-skill',
-  'model-binding',
-  'cancellation',
-]);
-
+export { REQUEST_SCHEMA };
 const scriptPath = fileURLToPath(import.meta.url);
 
 export async function main(argv = process.argv.slice(2), io = defaultIo()) {
   let args;
   try {
     args = await resolveArgs(argv, { env: io.env });
+    if (args.mode === 'suite') {
+      if (args.dryRun) {
+        io.stdout.write(`${JSON.stringify(createV2DryRun(args.selection), null, 2)}\n`);
+        return 0;
+      }
+      const run = await runV2Case(args.selection, {
+        spawn: io.spawn,
+        env: io.env,
+        cwd: io.cwd(),
+        outputRoot: args.reportRoot,
+        runId: args.runId,
+      });
+      io.stdout.write(`${JSON.stringify(run, null, 2)}\n`);
+      return exitCodeForOutcome(run.outcome);
+    }
     if (!args.cwd || !args.prompt) {
       printUsage(io.stderr);
       return EXIT_CONFIG_INVALID;
@@ -42,16 +47,8 @@ export async function main(argv = process.argv.slice(2), io = defaultIo()) {
       return 0;
     }
   } catch (error) {
-    io.stderr.write(`manifest/config invalid: ${formatErrorMessage(error)}\n`);
+    io.stderr.write(`configuration invalid: ${formatErrorMessage(error)}\n`);
     return EXIT_CONFIG_INVALID;
-  }
-
-  let setupEvidence;
-  try {
-    setupEvidence = await applyScenarioSetup(args);
-  } catch (error) {
-    io.stderr.write(`infrastructure fail: scenario setup failed: ${formatErrorMessage(error)}\n`);
-    return EXIT_INFRASTRUCTURE_FAIL;
   }
 
   const command = io.env.NEKO_DEBUG_COMMAND ?? './packages/neko-agent/neko';
@@ -61,18 +58,14 @@ export async function main(argv = process.argv.slice(2), io = defaultIo()) {
     stdio: ['pipe', 'pipe', 'inherit'],
   });
 
-  const responses = createResponseReader(child.stdout);
+  const responses = createDebugResponseReader(child.stdout);
 
   try {
     const facts = await runSinglePromptProtocol(child, responses, args);
-    assertSuccessfulFacts(facts, { requireFinalAnswer: args.kind !== 'cancellation' });
-    const evaluation = await evaluateScenario(args, facts);
-    io.stdout.write(
-      `${JSON.stringify({ ok: true, setup: setupEvidence, evaluation, facts }, null, 2)}\n`,
-    );
+    assertSuccessfulFacts(facts);
+    io.stdout.write(`${JSON.stringify({ ok: true, facts }, null, 2)}\n`);
     return 0;
   } catch (error) {
-    child.kill();
     const classification = classifyError(error);
     io.stderr.write(`${classification.label}: ${formatErrorMessage(error)}\n`);
     return classification.exitCode;
@@ -123,110 +116,32 @@ export function assertSuccessfulFacts(facts, options = { requireFinalAnswer: tru
 }
 
 export async function runSinglePromptProtocol(child, responses, args) {
-  const created = await sendRequest(child, responses, {
-    id: 'create',
-    method: 'session.create',
-    params: createSessionParams(args),
+  return runSingleMessageTuiDriver(child, responses, {
+    sessionParams: createSessionParams(args),
+    prompt: args.prompt,
+    timeoutMs: args.timeoutMs,
+    cancelAfterMs: args.cancelAfterMs,
+    terminalResizes: args.terminalResizes,
+    includeHistory: true,
   });
-  const sessionId = readString(created, 'sessionId');
-
-  await sendRequest(child, responses, {
-    id: 'submit',
-    method: 'message.submit',
-    params: { sessionId, prompt: args.prompt },
-  });
-
-  let messageCancellation;
-  if (args.cancelAfterMs !== undefined) {
-    await new Promise((resolve) => setTimeout(resolve, args.cancelAfterMs));
-    messageCancellation = await sendRequest(child, responses, {
-      id: 'cancel',
-      method: 'message.cancel',
-      params: { sessionId },
-    });
-  }
-
-  await sendRequest(child, responses, {
-    id: 'idle',
-    method: 'session.waitForIdle',
-    params: {
-      sessionId,
-      timeoutMs: args.timeoutMs ?? 120_000,
-    },
-  });
-
-  for (const [index, resize] of (args.terminalResizes ?? []).entries()) {
-    await sendRequest(child, responses, {
-      id: `resize-${index + 1}`,
-      method: 'terminal.resize',
-      params: { sessionId, columns: resize.columns, rows: resize.rows },
-    });
-    await new Promise((resolve) => setTimeout(resolve, TERMINAL_RESIZE_SETTLE_MS));
-  }
-
-  const rawFacts = await sendRequest(child, responses, {
-    id: 'facts',
-    method: 'session.facts',
-    params: {
-      sessionId,
-      includeHistory: true,
-    },
-  });
-
-  const facts =
-    messageCancellation === undefined
-      ? rawFacts
-      : { ...rawFacts, automation: { messageCancellation } };
-
-  await sendRequest(child, responses, {
-    id: 'dispose',
-    method: 'session.dispose',
-    params: { sessionId },
-  });
-
-  child.stdin.end();
-  child.kill();
-  return facts;
 }
 
 export async function sendRequest(childProcess, reader, input) {
-  const request = {
-    schema: REQUEST_SCHEMA,
-    ...input,
-  };
-  childProcess.stdin.write(`${JSON.stringify(request)}\n`);
-  const response = await reader.next();
-  if (response.done) {
-    throw new Error('debug automation process ended before responding');
-  }
-  if (!response.value.ok) {
-    const error = new Error(response.value.error?.message ?? 'debug automation request failed');
-    error.code = response.value.error?.code;
-    throw error;
-  }
-  return response.value.result;
+  return sendDebugRequest(childProcess, reader, input);
 }
 
 export async function* createResponseReader(output) {
-  const lines = createInterface({ input: output });
-  for await (const line of lines) {
-    if (!line.trim()) continue;
-    yield JSON.parse(line);
-  }
-  await once(output, 'close').catch(() => undefined);
+  yield* createDebugResponseReader(output);
 }
 
 export function readString(value, key) {
-  if (!value || typeof value[key] !== 'string' || value[key].length === 0) {
-    throw new Error(`debug automation response missing string field: ${key}`);
-  }
-  return value[key];
+  return readRequiredString(value, key);
 }
 
 export function classifyError(error) {
   const code = error && typeof error === 'object' ? error.code : undefined;
   if (code === 'invalid-request' || code === 'invalid-schema' || code === 'invalid-json') {
-    return { label: 'manifest/config invalid', exitCode: EXIT_CONFIG_INVALID };
+    return { label: 'configuration invalid', exitCode: EXIT_CONFIG_INVALID };
   }
   if (code === 'session-timeout' || code === 'internal-error' || code === 'session-not-ready') {
     return { label: 'infrastructure fail', exitCode: EXIT_INFRASTRUCTURE_FAIL };
@@ -244,8 +159,8 @@ export function parseArgs(argv) {
     } else if (arg === '--prompt') {
       parsed.prompt = readOptionValue(argv, index, arg);
       index += 1;
-    } else if (arg === '--manifest') {
-      parsed.manifest = readOptionValue(argv, index, arg);
+    } else if (arg === '--suite') {
+      parsed.suiteId = readOptionValue(argv, index, arg);
       index += 1;
     } else if (arg === '--case') {
       parsed.caseId = readOptionValue(argv, index, arg);
@@ -255,6 +170,12 @@ export function parseArgs(argv) {
       index += 1;
     } else if (arg === '--dry-run') {
       parsed.dryRun = true;
+    } else if (arg === '--report-root') {
+      parsed.reportRoot = readOptionValue(argv, index, arg);
+      index += 1;
+    } else if (arg === '--run-id') {
+      parsed.runId = readOptionValue(argv, index, arg);
+      index += 1;
     } else {
       throw new Error(`Unknown argument: ${arg}`);
     }
@@ -262,69 +183,21 @@ export function parseArgs(argv) {
   return parsed;
 }
 
-export async function resolveArgs(argv, options = {}) {
+export async function resolveArgs(argv) {
   const parsed = parseArgs(argv);
-  if (!parsed.manifest) {
-    return {
-      ...parsed,
-      cwd: parsed.cwd ? expandHome(parsed.cwd) : undefined,
-    };
+  if (parsed.suiteId) {
+    if (!parsed.caseId) throw new Error('--case is required when --suite is provided');
+    const discovered = await discoverSuites();
+    const [selection] = selectSuiteCases(discovered, {
+      suiteId: parsed.suiteId,
+      caseId: parsed.caseId,
+    });
+    return { ...parsed, mode: 'suite', selection };
   }
-
-  const manifestPath = expandHome(parsed.manifest);
-  const manifest = JSON.parse(await fs.readFile(manifestPath, 'utf8'));
-  return resolveManifestCase(parsed, manifest, options);
-}
-
-export function resolveManifestCase(parsed, manifest, options = {}) {
-  if (manifest.schema !== 'neko.agent-eval.scenarios.v1' || !Array.isArray(manifest.cases)) {
-    throw new Error('scenario manifest schema must be neko.agent-eval.scenarios.v1');
-  }
-  if (!parsed.caseId) {
-    throw new Error('--case is required when --manifest is provided');
-  }
-  const scenario = manifest.cases.find((item) => item && item.id === parsed.caseId);
-  if (!scenario) {
-    throw new Error(`scenario case not found: ${parsed.caseId}`);
-  }
-  assertSupportedScenario(scenario);
-  if (typeof scenario.prompt !== 'string' || scenario.prompt.trim().length === 0) {
-    throw new Error(`scenario ${parsed.caseId} must define a non-empty prompt`);
-  }
-
-  const env = options.env ?? process.env;
-  const runtime = validateAndNormalizeScenarioRuntime(scenario, { env });
-  const cancelAfterMs = readOptionalPositiveInteger(
-    scenario.cancelAfterMs,
-    `scenario ${parsed.caseId} cancelAfterMs`,
-  );
-  const cwd = parsed.cwd ?? scenario.cwd ?? manifest.defaultCwd;
   return {
     ...parsed,
-    caseId: parsed.caseId,
-    kind: scenario.kind,
-    cwd: cwd ? expandHome(interpolateEnv(cwd, env)) : undefined,
-    prompt: scenario.prompt,
-    timeoutMs: parsed.timeoutMs ?? scenario.timeoutMs ?? manifest.defaultTimeoutMs,
-    expectations: scenario.expectations,
-    assertions: runtime.assertions,
-    setup: runtime.setup,
-    postChecks: runtime.postChecks,
-    terminalResizes: runtime.terminalResizes,
-    ...(cancelAfterMs !== undefined ? { cancelAfterMs } : {}),
-    skills: scenario.skills,
-    model: scenario.model,
-    provider: scenario.provider,
+    cwd: parsed.cwd ? expandHome(parsed.cwd) : undefined,
   };
-}
-
-export function assertSupportedScenario(scenario) {
-  if (!SUPPORTED_CASE_KINDS.has(scenario.kind)) {
-    const kind = scenario.kind ?? '(missing)';
-    throw new Error(
-      `scenario ${scenario.id ?? '(unknown)'} kind ${kind} is documented but not supported by protocol-smoke yet`,
-    );
-  }
 }
 
 export function createSessionParams(args) {
@@ -342,31 +215,11 @@ export function createDryRunResult(args) {
   return {
     ok: true,
     dryRun: true,
-    caseId: args.caseId,
-    kind: args.kind ?? 'single-prompt',
+    mode: 'direct-prompt',
     cwd: args.cwd,
     prompt: args.prompt,
     timeoutMs: args.timeoutMs,
-    expectations: args.expectations ?? [],
-    assertions: args.assertions ?? [],
-    setup: args.setup ?? [],
-    postChecks: args.postChecks ?? [],
-    terminalResizes: args.terminalResizes ?? [],
-    ...(args.cancelAfterMs !== undefined ? { cancelAfterMs: args.cancelAfterMs } : {}),
-    skills: args.skills ?? [],
-    ...(args.model ? { model: args.model } : {}),
-    ...(args.provider ? { provider: args.provider } : {}),
   };
-}
-
-export function interpolateEnv(value, env = process.env) {
-  return value.replace(/\$\{([A-Z_][A-Z0-9_]*)\}/g, (_match, name) => {
-    const replacement = env[name];
-    if (!replacement) {
-      throw new Error(`environment variable ${name} is required by scenario manifest`);
-    }
-    return replacement;
-  });
 }
 
 export function expandHome(value) {
@@ -387,14 +240,6 @@ function readOptionValue(argv, index, arg) {
   return value;
 }
 
-function readOptionalPositiveInteger(value, label) {
-  if (value === undefined) return undefined;
-  if (!Number.isInteger(value) || value <= 0) {
-    throw new Error(`${label} must be a positive integer`);
-  }
-  return value;
-}
-
 function parseTimeoutMs(value) {
   const timeoutMs = Number.parseInt(value, 10);
   if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
@@ -406,8 +251,15 @@ function parseTimeoutMs(value) {
 function printUsage(stderr = process.stderr) {
   stderr.write(
     'Usage: node scripts/agent-eval/protocol-smoke.mjs --cwd <dir> --prompt <prompt> [--timeout-ms <ms>]\n' +
-      '   or: node scripts/agent-eval/protocol-smoke.mjs --manifest <file> --case <id> [--dry-run]\n',
+      '   or: node scripts/agent-eval/protocol-smoke.mjs --suite <id> --case <id> [--dry-run] [--report-root <dir>]\n',
   );
+}
+
+function exitCodeForOutcome(outcome) {
+  if (outcome === 'pass') return 0;
+  if (outcome === 'case-fail') return EXIT_CASE_FAIL;
+  if (outcome === 'configuration-invalid') return EXIT_CONFIG_INVALID;
+  return EXIT_INFRASTRUCTURE_FAIL;
 }
 
 function formatErrorMessage(error) {

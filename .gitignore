@@ -97,3 +97,5 @@ coverage/
 
 # 系统杂项
 .DS_Store
+# Local Agent Evaluation evidence (trusted CI uploads this directory as an artifact).
+/reports/agent-eval/

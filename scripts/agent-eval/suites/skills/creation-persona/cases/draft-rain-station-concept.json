@@ -1,0 +1,35 @@
+{
+  "schema": "neko.agent-eval.scenario.v2",
+  "id": "draft-rain-station-concept",
+  "suiteId": "skill.creation-persona",
+  "caseGroup": "canonical",
+  "visibility": "public",
+  "evidenceContract": {
+    "userBehavior": "Turn a short creative brief into a reviewable Draft without committing changes.",
+    "canonicalPath": ["builtin creation-persona", "prompt composition", "reviewable Draft"],
+    "forbiddenFallback": ["execution-persona", "silent mutation", "bare task checklist"],
+    "observables": [{ "ref": "persona-facts", "kind": "runtime-fact", "description": "Creation persona identity, prompt fragment, and structured Draft output.", "required": true }],
+    "expectedResult": "The response preserves the brief and provides a concrete two-shot Draft with meaningful decisions for user review.",
+    "expectedFailure": "Missing persona injection, concrete shots, review decisions, or execution fallback fails."
+  },
+  "fixtureRefs": ["empty-workspace"],
+  "runtimeProfileId": "markdown",
+  "modelProfileIds": ["configured-default"],
+  "steps": [
+    { "id": "submit", "kind": "submit", "prompt": "$creation-persona 为一个 30 秒夜雨废弃车站短片起草可供评审的两镜头创作 Draft。不执行、不调用工具、不写入文件。请给出具体镜头方案和仍需用户决定的关键取舍。" },
+    { "id": "idle", "kind": "wait-for-idle", "timeoutMs": 180000 }
+  ],
+  "assertions": [
+    { "id": "runtime", "kind": "runtime-errors-empty", "evidenceRef": "persona-facts" },
+    { "id": "skill", "kind": "skill", "identity": { "name": "creation-persona", "source": "builtin", "provenance": "builtin", "rootId": "builtin-skills", "relativePath": "creation-persona", "fingerprint": "sha256:9c2afdf3044714259a7edc85671b6ac77daa9bb3c147dfe704b7b4c108085c34" }, "status": "injected", "evidenceRef": "persona-facts" },
+    { "id": "output", "kind": "structured-output", "format": "markdown", "requiredFields": ["镜头", "决定"], "locale": "zh-cn", "evidenceRef": "persona-facts" },
+    { "id": "fallback", "kind": "no-fallback", "forbiddenRefs": ["execution-persona"], "evidenceRef": "persona-facts" }
+  ],
+  "artifactChecks": [],
+  "rubric": {
+    "kind": "domain-rubric",
+    "ref": "rubrics/rain-station-draft-quality.json",
+    "judgeProfileId": "content-quality-judge"
+  },
+  "budget": { "timeoutMs": 180000, "repetitions": 1 }
+}

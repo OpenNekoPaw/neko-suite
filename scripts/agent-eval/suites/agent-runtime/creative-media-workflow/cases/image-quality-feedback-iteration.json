@@ -1,0 +1,36 @@
+{
+  "schema": "neko.agent-eval.scenario.v2",
+  "id": "image-quality-feedback-iteration",
+  "suiteId": "agent-runtime.creative-media-workflow",
+  "caseGroup": "workflow",
+  "visibility": "public",
+  "evidenceContract": {
+    "userBehavior": "Generate and review an image, then feed the observed review into a second improvement turn.",
+    "canonicalPath": ["TUI queue", "image_generation task", "task result continuation", "assistant review", "closed-loop feedback", "second task"],
+    "forbiddenFallback": ["static second prompt", "review before task result", "best-run selection", "mock image task"],
+    "observables": [{ "ref": "workflow-facts", "kind": "runtime-fact", "description": "Two task rounds, feedback source digest, ordered steps, and terminal idle facts.", "required": true }],
+    "expectedResult": "The second turn is generated from the first assistant review and completes a second image task.",
+    "expectedFailure": "Missing first review, static feedback, fewer than two task observations, or incomplete idle fails."
+  },
+  "fixtureRefs": ["empty-workspace"],
+  "runtimeProfileId": "canonical-default",
+  "modelProfileIds": ["configured-default"],
+  "steps": [
+    { "id": "round-one", "kind": "submit", "prompt": "生成一张猫玩红球的图片，等待真实结果，并评审构图、动作和明显问题。" },
+    { "id": "round-one-idle", "kind": "wait-for-idle", "timeoutMs": 600000 },
+    { "id": "round-two", "kind": "feedback", "prompt": "根据上一轮真实评审重新生成改进版图片，等待结果并说明具体改进：\n${lastAssistant}", "afterStepId": "round-one-idle" },
+    { "id": "round-two-idle", "kind": "wait-for-idle", "timeoutMs": 600000 }
+  ],
+  "assertions": [
+    { "id": "runtime", "kind": "runtime-errors-empty", "evidenceRef": "workflow-facts" },
+    { "id": "order", "kind": "process-order", "events": [
+      { "kind": "workflow-step", "stepId": "round-one", "method": "message.submit" },
+      { "kind": "task", "taskType": "image_generation", "status": "completed" },
+      { "kind": "workflow-step", "stepId": "round-two", "method": "message.submit" },
+      { "kind": "task", "taskType": "image_generation", "status": "completed" }
+    ], "evidenceRef": "workflow-facts" },
+    { "id": "terminal", "kind": "terminal-idle", "concerns": ["turnIdle", "backgroundTasksIdle", "mediaDeliveryIdle", "taskResultObservationIdle", "continuationQueueIdle"], "evidenceRef": "workflow-facts" }
+  ],
+  "artifactChecks": [],
+  "budget": { "timeoutMs": 1200000, "repetitions": 1 }
+}

@@ -33,7 +33,7 @@
     "test": "turbo run test --concurrency=2",
     "test:desktop": "pnpm --filter neko-desktop run test",
     "test:agent:mock": "pnpm --filter neko-agent run test:agent:mock",
-    "test:agent:eval": "vitest --config vitest.agent-eval.config.mts --run",
+    "test:agent:eval": "vitest --config vitest.agent-eval.config.mts --run && node scripts/agent-eval/all-suite-dry-run.mjs",
     "package:all": "turbo run package --filter='neko-*'",
     "clean": "turbo run clean && rm -rf .turbo node_modules/.cache",
     "generate:types": "node scripts/proto-gen-ts.mjs",
@@ -102,6 +102,8 @@
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.62.0",
     "vite": "6.4.2",
-    "vitest": "4.1.2"
+    "vitest": "4.1.2",
+    "ws": "8.18.3",
+    "yaml": "2.9.0"
   }
 }

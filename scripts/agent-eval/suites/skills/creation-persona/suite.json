@@ -1,0 +1,27 @@
+{
+  "schema": "neko.agent-eval.suite.v2",
+  "id": "skill.creation-persona",
+  "owner": { "kind": "skill", "id": "creation-persona" },
+  "target": { "kind": "skill", "identity": { "name": "creation-persona", "source": "builtin", "provenance": "builtin", "rootId": "builtin-skills", "relativePath": "creation-persona", "fingerprint": "sha256:9c2afdf3044714259a7edc85671b6ac77daa9bb3c147dfe704b7b4c108085c34" } },
+  "repositoryRevision": "working-tree",
+  "runtimeProfiles": [{ "id": "markdown", "settings": { "outputFormat": "markdown" }, "configurationHash": "sha256:f949e317ef6531bd9fa4f15b04f4cc038036365bc0a8a8f97dcb229049f0baac" }],
+  "modelProfiles": [{ "id": "configured-default", "selection": "configured-default", "configurationHash": "sha256:e183fac48c090594694dc19a3e356145a40821960e6f06ad1a4b67e8dfc6f915" }],
+  "judgeProfiles": [
+    {
+      "id": "content-quality-judge",
+      "adapter": "openai-chat-completions-v1",
+      "providerId": "openai",
+      "modelId": "gpt-5-mini",
+      "endpointEnv": "NEKO_AGENT_EVAL_JUDGE_ENDPOINT",
+      "apiKeyEnv": "NEKO_AGENT_EVAL_JUDGE_API_KEY",
+      "temperature": 0,
+      "maxTokens": 1800,
+      "timeoutMs": 120000
+    }
+  ],
+  "fixtures": [{ "id": "empty-workspace", "root": "shared-fixtures/empty-workspace", "source": "repository", "digest": "sha256:789049929d67cf16d190dc363325175f3d63ef62ca210de508ede615e2376081", "mutable": true }],
+  "cases": [{ "id": "draft-rain-station-concept", "file": "cases/draft-rain-station-concept.json", "group": "canonical", "visibility": "public" }],
+  "rubricRefs": ["rubrics/rain-station-draft-quality.json"],
+  "baselinePolicy": { "mode": "none" },
+  "reportPolicy": { "rawRetentionDays": 14, "trustedCiRetentionDays": 14, "committedSummary": true, "includeHistory": false }
+}

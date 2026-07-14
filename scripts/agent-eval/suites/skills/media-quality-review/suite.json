@@ -1,0 +1,15 @@
+{
+  "schema": "neko.agent-eval.suite.v2",
+  "id": "skill.media-quality-review",
+  "owner": { "kind": "skill", "id": "media-quality-review" },
+  "target": { "kind": "skill", "identity": { "name": "media-quality-review", "source": "builtin", "provenance": "builtin", "rootId": "builtin-skills", "relativePath": "media-quality-review", "fingerprint": "sha256:b15736d3132226cb35a0c4d12a7b11ed1e1c7ff915d098d7723dda07d484bcdc" } },
+  "repositoryRevision": "working-tree",
+  "runtimeProfiles": [{ "id": "json", "settings": { "outputFormat": "json" }, "configurationHash": "sha256:eab0d90e30f34b6ad79eaa27ee6aafb1eb75e0468a285d9114cf3e67d5c012b8" }],
+  "modelProfiles": [{ "id": "configured-default", "selection": "configured-default", "configurationHash": "sha256:e183fac48c090594694dc19a3e356145a40821960e6f06ad1a4b67e8dfc6f915" }],
+  "judgeProfiles": [],
+  "fixtures": [{ "id": "empty-workspace", "root": "shared-fixtures/empty-workspace", "source": "repository", "digest": "sha256:789049929d67cf16d190dc363325175f3d63ef62ca210de508ede615e2376081", "mutable": true }],
+  "cases": [{ "id": "missing-perception-evidence", "file": "cases/missing-perception-evidence.json", "group": "quality", "visibility": "public" }],
+  "rubricRefs": [],
+  "baselinePolicy": { "mode": "none" },
+  "reportPolicy": { "rawRetentionDays": 14, "trustedCiRetentionDays": 14, "committedSummary": true, "includeHistory": false }
+}

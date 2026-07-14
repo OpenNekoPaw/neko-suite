@@ -1,0 +1,30 @@
+{
+  "schema": "neko.agent-eval.scenario.v2",
+  "id": "generate-image",
+  "suiteId": "skill.image",
+  "caseGroup": "canonical",
+  "visibility": "public",
+  "evidenceContract": {
+    "userBehavior": "Generate one image through the builtin image Skill and observe the real task result.",
+    "canonicalPath": ["builtin image Skill", "GenerateImage", "image_generation task", "task-result observation", "artifact delivery"],
+    "forbiddenFallback": ["text-only generation claim", "mock image task", "unobserved task result"],
+    "observables": [{ "ref": "image-facts", "kind": "runtime-fact", "description": "Skill composition, Tool call, task terminal result, continuation, and idle facts.", "required": true }],
+    "expectedResult": "The image Skill calls GenerateImage and the completed task result is observed before finalization.",
+    "expectedFailure": "Missing Skill/Tool/task/result or non-idle delivery fails."
+  },
+  "fixtureRefs": ["empty-workspace"],
+  "runtimeProfileId": "canonical-default",
+  "modelProfileIds": ["configured-default"],
+  "steps": [
+    { "id": "submit", "kind": "submit", "prompt": "$image Generate one image of a playful cat chasing a red ball. Wait for the real result and report the delivered artifact reference." },
+    { "id": "idle", "kind": "wait-for-idle", "timeoutMs": 300000 }
+  ],
+  "assertions": [
+    { "id": "skill", "kind": "skill", "identity": { "name": "image", "source": "builtin", "provenance": "builtin", "rootId": "builtin-skills", "relativePath": "image", "fingerprint": "sha256:9819c463a7c8a95a52ab2573365bfd0706d495fbe7c8b20222e989ef71d22970" }, "status": "injected", "evidenceRef": "image-facts" },
+    { "id": "tool", "kind": "tool-call", "name": "GenerateImage", "status": "success", "evidenceRef": "image-facts" },
+    { "id": "task", "kind": "task-terminal", "taskType": "image_generation", "status": "completed", "evidenceRef": "image-facts" },
+    { "id": "terminal", "kind": "terminal-idle", "concerns": ["turnIdle", "backgroundTasksIdle", "mediaDeliveryIdle", "taskResultObservationIdle", "continuationQueueIdle"], "evidenceRef": "image-facts" }
+  ],
+  "artifactChecks": [],
+  "budget": { "timeoutMs": 300000, "repetitions": 1 }
+}
