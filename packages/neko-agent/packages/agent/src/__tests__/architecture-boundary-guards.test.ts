@@ -1,13 +1,17 @@
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
-import { basename, join, relative } from 'node:path';
+import { basename, dirname, join, relative, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
-const repoRoot = process.cwd();
+const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../../../..');
 const agentSrc = join(repoRoot, 'packages/agent/src');
 const packageRoot = join(repoRoot, 'packages');
 const webviewSrc = join(packageRoot, 'webview/src');
 const extensionSrc = join(packageRoot, 'extension/src');
+const cliTuiSrc = join(packageRoot, 'cli-tui/src');
+const agentTypesSrc = join(packageRoot, 'agent-types/src');
+const testUtilsSrc = join(repoRoot, 'test-utils/src');
 
 function hasQuotedIdentity(source: string, identity: string): boolean {
   const escaped = identity.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -15,6 +19,89 @@ function hasQuotedIdentity(source: string, identity: string): boolean {
 }
 
 describe('agent architecture boundary guards', () => {
+  it('keeps retired JSON and Memento metadata stores out of public and Host runtime paths', () => {
+    const forbiddenRuntimeSymbols = [
+      'ConversationIndexStore',
+      'FileConversationStorage',
+      'createFileConversationStorage',
+      'createFileConversationPersistenceRuntime',
+      'StateTaskStorage',
+      'FileTaskStorage',
+      'WorkspaceVisibleAgentTaskStorage',
+      'createStateTaskStorage',
+      'createFileTaskStorage',
+      'createFileWorkspaceVisibleAgentTaskStorage',
+      'StateTaskRecoveryStorage',
+      'FileTaskRecoveryStorage',
+      'createStateTaskRecoveryStorage',
+      'createFileRecoveryStorage',
+    ] as const;
+    const publicBarrels = [
+      join(agentSrc, 'index.ts'),
+      join(agentSrc, 'session/index.ts'),
+      join(agentSrc, 'task/index.ts'),
+    ];
+    const hostRuntimeSources = [...listFiles(extensionSrc), ...listFiles(cliTuiSrc)].filter(
+      (file) => (file.endsWith('.ts') || file.endsWith('.tsx')) && !isTestFile(file),
+    );
+    const testUtilitySources = listFiles(testUtilsSrc).filter(
+      (file) => (file.endsWith('.ts') || file.endsWith('.tsx')) && !isTestFile(file),
+    );
+    const symbolViolations = [...publicBarrels, ...hostRuntimeSources].flatMap((file) => {
+      const source = stripTypeScriptComments(readFileSync(file, 'utf-8'));
+      return forbiddenRuntimeSymbols
+        .filter((symbol) => new RegExp(`\\b${symbol}\\b`, 'u').test(source))
+        .map((symbol) => `${relative(repoRoot, file)} exposes retired ${symbol}`);
+    });
+    const pathViolations = [...hostRuntimeSources, ...testUtilitySources].flatMap((file) => {
+      const source = stripTypeScriptComments(readFileSync(file, 'utf-8'));
+      return ['tasks.json']
+        .filter((legacyPath) => source.includes(legacyPath))
+        .map((legacyPath) => `${relative(repoRoot, file)} uses retired runtime path ${legacyPath}`);
+    });
+
+    const retiredTaskIdentities = [
+      'neko.agent.tasks',
+      'neko.agent.taskRecovery',
+      'taskStateMigrationBackup',
+      'migrate-tasks',
+      'reviewLegacyTaskMigration',
+      'LegacyAgentTaskStateMigration',
+      'task-storage-migration',
+      'sqlite-task-state-migration',
+    ] as const;
+    const productionSources = [
+      ...listFiles(agentSrc),
+      ...listFiles(extensionSrc),
+      ...listFiles(cliTuiSrc),
+      ...listFiles(agentTypesSrc),
+      ...testUtilitySources,
+    ].filter((file) => (file.endsWith('.ts') || file.endsWith('.tsx')) && !isTestFile(file));
+    const identityViolations = [...productionSources, join(repoRoot, 'package.json')].flatMap(
+      (file) => {
+        const source = stripTypeScriptComments(readFileSync(file, 'utf-8'));
+        return retiredTaskIdentities
+          .filter((identity) => source.includes(identity))
+          .map((identity) => `${relative(repoRoot, file)} retains ${identity}`);
+      },
+    );
+
+    expect(existsSync(join(agentSrc, 'task/task-storage-migration.ts'))).toBe(false);
+    expect(existsSync(join(agentSrc, 'task/sqlite-task-state-migration.ts'))).toBe(false);
+
+    expect([...symbolViolations, ...pathViolations, ...identityViolations]).toEqual([]);
+  });
+
+  it('keeps the Agent Platform Market path off the retired JSON installation registry', () => {
+    const source = stripTypeScriptComments(
+      readFileSync(join(packageRoot, 'platform/src/market/skill-market-service.ts'), 'utf-8'),
+    );
+
+    expect(source).not.toContain('market-installed.json');
+    expect(source).not.toMatch(/\bnew InstalledRegistry\b/u);
+    expect(source).toContain('LocalMetadataInstalledRegistry');
+  });
+
   it('keeps Webview from importing runtime, platform, ai-sdk, or vscode modules', () => {
     const source = readSourceFiles(webviewSrc, (file) => !isTestFile(file));
 
