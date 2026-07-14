@@ -664,8 +664,8 @@ export {
   type SubAgentCreateAgentContext,
   type SubAgentSkillContentProvider,
   type ISubAgentManager,
-  type TaskToolArgs,
-  type TaskOutputToolArgs,
+  type SubAgentToolArgs,
+  type SubAgentOutputToolArgs,
   type ContextExtractionOptions,
   type IContextBridge,
   type SubAgentSystemOptions,
@@ -679,8 +679,8 @@ export {
   estimateTokens,
   createContextSummaryForSubAgent,
   // Tools
-  createTaskTool,
-  createTaskOutputTool,
+  createSubAgentTool,
+  createSubAgentOutputTool,
   registerSubAgentTools,
   // Factory
   createSubAgentSystem,

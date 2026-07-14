@@ -71,7 +71,7 @@ describe('agent runtime summary trace logs', () => {
       trace,
     });
 
-    const { createTaskTool } = await import('../subagent/task-tool');
+    const { createSubAgentTool } = await import('../subagent/task-tool');
     const subAgentManager = {
       spawn: vi.fn(async (scope: ChildRunScope) => scope),
       spawnBatch: vi.fn(async (entries: readonly { scope: ChildRunScope }[]) =>
@@ -93,7 +93,7 @@ describe('agent runtime summary trace logs', () => {
       cleanupRun: vi.fn(),
       onEvent: vi.fn(() => () => {}),
     };
-    const taskTool = createTaskTool(subAgentManager);
+    const taskTool = createSubAgentTool(subAgentManager);
     await taskTool.execute(
       {
         description: 'review plan',

@@ -20,7 +20,8 @@
       "user-authored internal continuation",
       "mock media task",
       "GetAsset for generated-output id",
-      "implicit AssetLibrary membership"
+      "implicit AssetLibrary membership",
+      "SubAgent result lookup for a media Task"
     ],
     "observables": [
       {
@@ -64,6 +65,20 @@
       "id": "no-generated-output-asset-lookup",
       "kind": "tool-call",
       "name": "GetAsset",
+      "status": "absent",
+      "evidenceRef": "continuation-facts"
+    },
+    {
+      "id": "no-subagent-spawn",
+      "kind": "tool-call",
+      "name": "subagent",
+      "status": "absent",
+      "evidenceRef": "continuation-facts"
+    },
+    {
+      "id": "no-subagent-output",
+      "kind": "tool-call",
+      "name": "subagent_output",
       "status": "absent",
       "evidenceRef": "continuation-facts"
     },

@@ -38,8 +38,8 @@ export type {
   SubAgentSkillContentProvider,
   ISubAgentManager,
   // Tool types
-  TaskToolArgs,
-  TaskOutputToolArgs,
+  SubAgentToolArgs,
+  SubAgentOutputToolArgs,
   // Context bridge types
   ContextExtractionOptions,
   IContextBridge,
@@ -66,7 +66,7 @@ export {
 // Tools
 // =============================================================================
 
-export { createTaskTool, createTaskOutputTool, registerSubAgentTools } from './task-tool';
+export { createSubAgentTool, createSubAgentOutputTool, registerSubAgentTools } from './task-tool';
 
 // =============================================================================
 // Coordinator

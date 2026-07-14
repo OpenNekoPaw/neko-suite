@@ -69,8 +69,8 @@ The coordinator manages the full workflow: plan → optional user confirmation �
 - Multi-step pipeline with dependency chain
 
 ## When NOT to Use
-- Single task (use 'task' tool instead)
-- Independent parallel tasks without dependencies (use multiple 'task' calls)
+- Single task (use the 'subagent' tool instead)
+- Independent parallel tasks without dependencies (use multiple 'subagent' calls)
 
 ## Task Dependencies
 Use the 'dependencies' field to specify task IDs that must complete first.
@@ -89,7 +89,7 @@ Dependency results are automatically passed to dependent tasks as context.`,
 - 带依赖链的多步骤流程
 
 ## 何时不要使用
-- 单个任务，请改用 task 工具
+- 单个任务，请改用 subagent 工具
 - 无依赖的独立并行任务，请使用多个 task 调用`,
         parameters: {
           description: '工作流描述。',

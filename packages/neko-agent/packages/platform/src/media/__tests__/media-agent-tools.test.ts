@@ -97,7 +97,10 @@ describe('registerMediaAgentTools', () => {
     const music = byName.get('GenerateMusic');
     const tts = byName.get('GenerateTTS');
 
-    expect(image?.description).toContain('异步图像生成任务');
+    expect(image?.description).toContain('异步图像生成 Task');
+    expect(image?.description).toContain('不是 SubAgent ID');
+    expect(image?.description).toContain('禁止传给 subagent 或 subagent_output');
+    expect(image?.description).toContain('Task observation/continuation');
     expect(getPropertyDescription(image, 'prompt')).toBe('图像生成或编辑提示词。');
     expect(getPropertyDescription(image, 'referenceImageUri')).toContain('宿主已解析');
     expect(getPropertyDescription(image, 'editInstruction')).toContain('编辑指令');
@@ -107,17 +110,34 @@ describe('registerMediaAgentTools', () => {
     expect(getPropertyDescription(transform, 'sourceImageUri')).toContain('源图像');
     expect(getPropertyDescription(transform, 'operationPlan')).toContain('可审阅');
 
-    expect(video?.description).toContain('异步视频生成任务');
+    expect(video?.description).toContain('异步视频生成 Task');
+    expect(video?.description).toContain('禁止传给 subagent 或 subagent_output');
     expect(getPropertyDescription(video, 'prompt')).toBe('视频生成或编辑提示词。');
     expect(getPropertyDescription(video, 'referenceImageUri')).toContain('图生视频');
     expect(getPropertyDescription(video, 'editInstruction')).toContain('视频编辑');
 
-    expect(music?.description).toContain('异步音乐生成任务');
+    expect(music?.description).toContain('异步音乐生成 Task');
+    expect(music?.description).toContain('禁止传给 subagent 或 subagent_output');
     expect(getPropertyDescription(music, 'mood')).toContain('音乐情绪');
 
-    expect(tts?.description).toContain('异步文本转语音任务');
+    expect(tts?.description).toContain('异步文本转语音 Task');
+    expect(tts?.description).toContain('禁止传给 subagent 或 subagent_output');
     expect(getPropertyDescription(tts, 'text')).toBe('要朗读的文本。');
     expect(getPropertyDescription(tts, 'sourceCueId')).toContain('对白 cue ID');
+  });
+
+  it('keeps media Task IDs out of the SubAgent result path in English definitions', () => {
+    const registry = new ToolRegistry();
+    registerMediaAgentTools(registry, createMediaMock() as never);
+
+    for (const name of ['GenerateImage', 'GenerateVideo', 'GenerateMusic', 'GenerateTTS']) {
+      const definition = registry
+        .toToolDefinitions()
+        .find((tool) => tool.function.name === name)?.function;
+      expect(definition?.description).toContain('not a SubAgent ID');
+      expect(definition?.description).toContain('never pass it to subagent or subagent_output');
+      expect(definition?.description).toContain('Host Task observation/continuation');
+    }
   });
 
   it('keeps GenerateImage prompt mode compatible and passes explicit provider/model routing', async () => {

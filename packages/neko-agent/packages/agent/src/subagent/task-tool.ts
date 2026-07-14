@@ -1,9 +1,9 @@
 /**
- * Task Tools - Tools for spawning and managing SubAgents
+ * SubAgent Tools - Tools for spawning and managing SubAgents
  *
  * Provides:
- * - task: Spawn a SubAgent for complex tasks
- * - task_output: Get results from background SubAgents
+ * - subagent: Spawn a SubAgent for complex tasks
+ * - subagent_output: Get results from background SubAgents
  */
 
 import {
@@ -21,8 +21,8 @@ import type {
   SubAgentConfig,
   SpecializedAgentType,
   ModelTier,
-  TaskToolArgs,
-  TaskOutputToolArgs,
+  SubAgentToolArgs,
+  SubAgentOutputToolArgs,
 } from './types';
 import { getLogger } from '../utils/logger';
 
@@ -39,6 +39,10 @@ function generateSubAgentId(): string {
   const timestamp = Date.now();
   const random = Math.random().toString(36).slice(2, 7);
   return `subagent-${timestamp}-${random}`;
+}
+
+function isSubAgentId(value: string): boolean {
+  return value.startsWith('subagent-') && value.length > 'subagent-'.length;
 }
 
 function buildSubAgentToolResultMetadata(
@@ -84,18 +88,18 @@ function readNonEmptyString(value: unknown): string | undefined {
 // =============================================================================
 
 /**
- * Create the Task tool for spawning SubAgents
+ * Create the SubAgent tool for spawning SubAgents
  */
-export function createTaskTool(subAgentManager: ISubAgentManager): Tool {
+export function createSubAgentTool(subAgentManager: ISubAgentManager): Tool {
   return {
-    name: 'task',
+    name: 'subagent',
     description: `Launch a SubAgent to handle complex, multi-step tasks autonomously.
 
 Each SubAgent runs its own ReAct loop with an isolated context — intermediate work does NOT pollute the main conversation.
 
 ## When to Use SubAgent
 - Task requires extensive searching/reading across many files (context isolation)
-- Multiple independent subtasks can run in parallel (use run_in_background: true, then task_output to collect)
+- Multiple independent subtasks can run in parallel (use run_in_background: true, then subagent_output to collect)
 - Task needs multi-step reasoning (explore → analyze → synthesize)
 - Main conversation context is already long and needs "offloading"
 
@@ -114,7 +118,7 @@ Each SubAgent runs its own ReAct loop with an isolated context — intermediate 
 ## Parallel Execution
 Launch multiple SubAgents in a single turn for independent tasks:
 - Use run_in_background: true for each
-- Then call task_output for each to collect results
+- Then call subagent_output for each to collect results
 - Max 5 concurrent SubAgents
 
 ## Skill & ToolSkill Injection
@@ -225,7 +229,7 @@ Launch multiple SubAgents in a single turn for independent tasks:
       options?: ToolExecuteOptions,
     ): Promise<ToolResult> {
       const trace = deriveAgentTraceContext(options?.trace, { phase: 'subagent' });
-      const typedArgs = args as unknown as TaskToolArgs;
+      const typedArgs = args as unknown as SubAgentToolArgs;
       const {
         description,
         prompt,
@@ -250,6 +254,12 @@ Launch multiple SubAgents in a single turn for independent tasks:
 
       // Handle resume case
       if (resume) {
+        if (!isSubAgentId(resume)) {
+          return {
+            success: false,
+            error: `Expected a SubAgent ID beginning with "subagent-", received "${resume}". Task IDs are delivered through the Host task observation path.`,
+          };
+        }
         logger.debug(
           'neko.agent.subagent.resume.request',
           withAgentTrace(trace, { subAgentId: resume }),
@@ -354,7 +364,7 @@ Launch multiple SubAgents in a single turn for independent tasks:
               subAgentId,
               ...resultMetadata,
               status: 'running',
-              message: 'SubAgent started in background. Use task_output to get results.',
+              message: 'SubAgent started in background. Use subagent_output to get results.',
             },
           };
         }
@@ -403,11 +413,11 @@ Launch multiple SubAgents in a single turn for independent tasks:
 // =============================================================================
 
 /**
- * Create the TaskOutput tool for getting SubAgent results
+ * Create the SubAgent output tool for getting SubAgent results
  */
-export function createTaskOutputTool(subAgentManager: ISubAgentManager): Tool {
+export function createSubAgentOutputTool(subAgentManager: ISubAgentManager): Tool {
   return {
-    name: 'task_output',
+    name: 'subagent_output',
     description: `Get output from a background SubAgent task.
 
 - block=true (default): Wait for the SubAgent to complete, then return its full result
@@ -421,7 +431,7 @@ export function createTaskOutputTool(subAgentManager: ISubAgentManager): Tool {
 - block=false：非阻塞查询，只返回当前状态
 - 在使用 run_in_background: true 启动 SubAgent 后调用`,
         parameters: {
-          task_id: 'SubAgent 任务 ID。',
+          subagent_id: 'SubAgent ID。',
           block: '是否等待任务完成，默认 true。',
           timeout: '最大等待时间，单位毫秒，默认 30000。',
         },
@@ -431,9 +441,9 @@ export function createTaskOutputTool(subAgentManager: ISubAgentManager): Tool {
     parameters: {
       type: 'object',
       properties: {
-        task_id: {
+        subagent_id: {
           type: 'string',
-          description: 'The SubAgent task ID',
+          description: 'The SubAgent ID',
         },
         block: {
           type: 'boolean',
@@ -444,7 +454,7 @@ export function createTaskOutputTool(subAgentManager: ISubAgentManager): Tool {
           description: 'Max wait time in ms (default: 30000)',
         },
       },
-      required: ['task_id'],
+      required: ['subagent_id'],
     },
 
     category: 'system' as ToolCategory,
@@ -455,19 +465,26 @@ export function createTaskOutputTool(subAgentManager: ISubAgentManager): Tool {
       options?: ToolExecuteOptions,
     ): Promise<ToolResult> {
       const trace = deriveAgentTraceContext(options?.trace, { phase: 'subagent' });
-      const typedArgs = args as unknown as TaskOutputToolArgs;
-      const { task_id, block = true, timeout = 30000 } = typedArgs;
+      const typedArgs = args as unknown as SubAgentOutputToolArgs;
+      const { subagent_id, block = true, timeout = 30000 } = typedArgs;
 
-      if (!task_id) {
+      if (!subagent_id) {
         return {
           success: false,
-          error: 'Missing required argument: task_id',
+          error: 'Missing required argument: subagent_id',
+        };
+      }
+
+      if (!isSubAgentId(subagent_id)) {
+        return {
+          success: false,
+          error: `Expected a SubAgent ID beginning with "subagent-", received "${subagent_id}". Task IDs are delivered through the Host task observation path.`,
         };
       }
 
       let scope: ChildRunScope;
       try {
-        scope = createSubAgentScope(requireSubAgentOwnerScope(options), task_id);
+        scope = createSubAgentScope(requireSubAgentOwnerScope(options), subagent_id);
       } catch (error) {
         return { success: false, error: error instanceof Error ? error.message : String(error) };
       }
@@ -476,11 +493,11 @@ export function createTaskOutputTool(subAgentManager: ISubAgentManager): Tool {
       if (!status) {
         logger.debug(
           'neko.agent.subagent.output.missing',
-          withAgentTrace(trace, { subAgentId: task_id }),
+          withAgentTrace(trace, { subAgentId: subagent_id }),
         );
         return {
           success: false,
-          error: `SubAgent not found: ${task_id}`,
+          error: `SubAgent not found: ${subagent_id}`,
         };
       }
 
@@ -489,7 +506,7 @@ export function createTaskOutputTool(subAgentManager: ISubAgentManager): Tool {
         logger.debug(
           'neko.agent.subagent.output.pending',
           withAgentTrace(trace, {
-            subAgentId: task_id,
+            subAgentId: subagent_id,
             status,
             block,
           }),
@@ -499,8 +516,7 @@ export function createTaskOutputTool(subAgentManager: ISubAgentManager): Tool {
           data: {
             scope,
             status: 'running',
-            taskId: task_id,
-            subAgentId: task_id,
+            subAgentId: subagent_id,
             message: 'Task is still running',
           },
         };
@@ -512,7 +528,7 @@ export function createTaskOutputTool(subAgentManager: ISubAgentManager): Tool {
         logger.debug(
           'neko.agent.subagent.output.result',
           withAgentTrace(trace, {
-            subAgentId: task_id,
+            subAgentId: subagent_id,
             status: result.status,
             block,
             duration: result.duration,
@@ -524,8 +540,8 @@ export function createTaskOutputTool(subAgentManager: ISubAgentManager): Tool {
           data: {
             ...result,
             scope,
-            subAgentId: task_id,
-            continuation: buildSubAgentResultContinuationSummary(task_id, result),
+            subAgentId: subagent_id,
+            continuation: buildSubAgentResultContinuationSummary(subagent_id, result),
           },
           error: result.error,
         };
@@ -533,7 +549,7 @@ export function createTaskOutputTool(subAgentManager: ISubAgentManager): Tool {
         logger.debug(
           'neko.agent.subagent.output.failed',
           withAgentTrace(trace, {
-            subAgentId: task_id,
+            subAgentId: subagent_id,
             error: error instanceof Error ? error.message : String(error),
           }),
         );
@@ -572,6 +588,6 @@ export function registerSubAgentTools(
   registry: { register: (tool: Tool) => void },
   subAgentManager: ISubAgentManager,
 ): void {
-  registry.register(createTaskTool(subAgentManager));
-  registry.register(createTaskOutputTool(subAgentManager));
+  registry.register(createSubAgentTool(subAgentManager));
+  registry.register(createSubAgentOutputTool(subAgentManager));
 }

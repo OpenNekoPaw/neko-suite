@@ -49,6 +49,7 @@ describe('Agent Evaluation change-to-suite selector', () => {
         'packages/neko-agent/packages/platform/src/service/shared-service-adapter.ts',
         'packages/neko-agent/packages/platform/src/llm/adapter/openai-adapter.ts',
         'packages/neko-agent/packages/agent/src/session/agent-session.ts',
+        'packages/neko-agent/packages/agent/src/subagent/task-tool.ts',
         'packages/neko-agent/packages/agent/src/task/task-runtime.ts',
         'apps/neko-tui/src/tui/core/debug-automation/types.ts',
         'scripts/agent-eval/schemas/contracts.mjs',

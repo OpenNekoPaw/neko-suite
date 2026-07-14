@@ -53,7 +53,7 @@ describe('SubAgentRuntimeCoordinator', () => {
     });
 
     const taskTool = (toolRegistry.register as ReturnType<typeof vi.fn>).mock.calls.find(
-      (call) => call[0].name === 'task',
+      (call) => call[0].name === 'subagent',
     )?.[0];
     expect(taskTool).toBeDefined();
 
@@ -98,7 +98,7 @@ describe('SubAgentRuntimeCoordinator', () => {
     });
 
     const taskTool = (toolRegistry.register as ReturnType<typeof vi.fn>).mock.calls.find(
-      (call) => call[0].name === 'task',
+      (call) => call[0].name === 'subagent',
     )?.[0];
     expect(taskTool).toBeDefined();
 
@@ -140,7 +140,7 @@ describe('SubAgentRuntimeCoordinator', () => {
     });
 
     const taskTool = (toolRegistry.register as ReturnType<typeof vi.fn>).mock.calls.find(
-      (call) => call[0].name === 'task',
+      (call) => call[0].name === 'subagent',
     )?.[0];
     expect(taskTool).toBeDefined();
 

@@ -688,7 +688,7 @@ const MEDIA_TOOL_LOCALIZATION = {
   GenerateImage: {
     zh: {
       description:
-        '提交异步图像生成任务（照片、插画、艺术图）。只用于静态图像；视频或动态内容使用 GenerateVideo。此工具只提交任务并立即返回 taskId，图像尚未完成；回复用户时应说明任务已提交并在后台处理。',
+        '提交异步图像生成 Task（照片、插画、艺术图）。只用于静态图像；视频或动态内容使用 GenerateVideo。此工具立即返回媒体 taskId，图像尚未完成；该 ID 不是 SubAgent ID，禁止传给 subagent 或 subagent_output。等待 Host 通过 Task observation/continuation 投递结果，并告知用户任务已在后台处理。',
       parameters: {
         prompt: '图像生成或编辑提示词。',
         negativePrompt: '可选反向提示词，描述要避免的内容。',
@@ -769,7 +769,7 @@ const MEDIA_TOOL_LOCALIZATION = {
   GenerateVideo: {
     zh: {
       description:
-        '提交异步视频生成任务（短片、动画、动态内容）。用户要求视频、动画或动态内容时使用；静态图像使用 GenerateImage。此工具只提交任务并立即返回 taskId，视频尚未完成；回复用户时应说明任务已提交并在后台处理。',
+        '提交异步视频生成 Task（短片、动画、动态内容）。用户要求视频、动画或动态内容时使用；静态图像使用 GenerateImage。此工具立即返回媒体 taskId，视频尚未完成；该 ID 不是 SubAgent ID，禁止传给 subagent 或 subagent_output。等待 Host 通过 Task observation/continuation 投递结果，并告知用户任务已在后台处理。',
       parameters: {
         prompt: '视频生成或编辑提示词。',
         taskRef: '可选 Task markdown URI/path，作为生成意图来源。',
@@ -805,7 +805,7 @@ const MEDIA_TOOL_LOCALIZATION = {
   GenerateMusic: {
     zh: {
       description:
-        '提交异步音乐生成任务。此工具只提交任务并立即返回 taskId，音乐尚未完成；回复用户时应说明任务已提交并在后台处理。',
+        '提交异步音乐生成 Task。此工具立即返回媒体 taskId，音乐尚未完成；该 ID 不是 SubAgent ID，禁止传给 subagent 或 subagent_output。等待 Host 通过 Task observation/continuation 投递结果，并告知用户任务已在后台处理。',
       parameters: {
         prompt: '音乐生成提示词。',
         duration: '音乐时长，单位秒，范围 5 到 300，默认 30。',
@@ -819,7 +819,7 @@ const MEDIA_TOOL_LOCALIZATION = {
   GenerateTTS: {
     zh: {
       description:
-        '提交异步文本转语音任务。此工具只提交任务并立即返回 taskId，音频尚未完成；回复用户时应说明任务已提交并在后台处理。',
+        '提交异步文本转语音 Task。此工具立即返回媒体 taskId，音频尚未完成；该 ID 不是 SubAgent ID，禁止传给 subagent 或 subagent_output。等待 Host 通过 Task observation/continuation 投递结果，并告知用户任务已在后台处理。',
       parameters: {
         text: '要朗读的文本。',
         voice: '声音 ID 或名称，例如 alloy、echo、onyx、nova。',
@@ -848,7 +848,7 @@ export function registerMediaAgentTools(
     createTool({
       name: 'GenerateImage',
       description:
-        'Submit an async IMAGE generation task (photos, illustrations, artwork). Only use this for still images — for videos use GenerateVideo instead. This tool only SUBMITS the task and returns immediately with a taskId — the image is NOT ready yet. Always tell the user the task has been submitted and is being processed in the background; do NOT say the image is ready or finished.',
+        'Submit an async IMAGE generation Task (photos, illustrations, artwork). Only use this for still images — for videos use GenerateVideo instead. This tool returns a media taskId immediately; the image is NOT ready. This is not a SubAgent ID: never pass it to subagent or subagent_output. Wait for the Host Task observation/continuation to deliver results, and tell the user the Task is processing in the background.',
       localization: MEDIA_TOOL_LOCALIZATION.GenerateImage,
       category: 'generation',
       isConcurrencySafe: true,
@@ -1335,7 +1335,7 @@ export function registerMediaAgentTools(
     createTool({
       name: 'GenerateVideo',
       description:
-        'Submit an async VIDEO generation task (clips, animations, motion content). Use this when the user asks for a video, animation, or moving content — for still images use GenerateImage instead. This tool only SUBMITS the task and returns immediately with a taskId — the video is NOT ready yet. Always tell the user the task has been submitted and is being processed in the background; do NOT say the video is ready or finished.',
+        'Submit an async VIDEO generation Task (clips, animations, motion content). Use this for moving content; use GenerateImage for still images. This tool returns a media taskId immediately; the video is NOT ready. This is not a SubAgent ID: never pass it to subagent or subagent_output. Wait for the Host Task observation/continuation to deliver results, and tell the user the Task is processing in the background.',
       localization: MEDIA_TOOL_LOCALIZATION.GenerateVideo,
       category: 'generation',
       isConcurrencySafe: true,
@@ -1547,7 +1547,7 @@ export function registerMediaAgentTools(
     createTool({
       name: 'GenerateMusic',
       description:
-        'Submit an async music generation task. This tool only SUBMITS the task and returns immediately with a taskId — the music is NOT ready yet. Always tell the user the task has been submitted and is being processed in the background; do NOT say the music is ready or finished.',
+        'Submit an async music generation Task. This tool returns a media taskId immediately; the music is NOT ready. This is not a SubAgent ID: never pass it to subagent or subagent_output. Wait for the Host Task observation/continuation to deliver results, and tell the user the Task is processing in the background.',
       localization: MEDIA_TOOL_LOCALIZATION.GenerateMusic,
       category: 'generation',
       isConcurrencySafe: true,
@@ -1632,7 +1632,7 @@ export function registerMediaAgentTools(
     createTool({
       name: 'GenerateTTS',
       description:
-        'Submit an async text-to-speech task. This tool only SUBMITS the task and returns immediately with a taskId — the audio is NOT ready yet. Always tell the user the task has been submitted and is being processed in the background; do NOT say the audio is ready or finished.',
+        'Submit an async text-to-speech Task. This tool returns a media taskId immediately; the audio is NOT ready. This is not a SubAgent ID: never pass it to subagent or subagent_output. Wait for the Host Task observation/continuation to deliver results, and tell the user the Task is processing in the background.',
       localization: MEDIA_TOOL_LOCALIZATION.GenerateTTS,
       category: 'generation',
       isConcurrencySafe: true,

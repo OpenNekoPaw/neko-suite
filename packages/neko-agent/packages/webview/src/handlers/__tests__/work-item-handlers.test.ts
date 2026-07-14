@@ -974,7 +974,7 @@ describe('work item message handlers', () => {
                   timestamp: 1,
                   toolCall: {
                     id: 'tool-b',
-                    name: 'task',
+                    name: 'subagent',
                     arguments: {},
                   },
                 },
@@ -1045,7 +1045,7 @@ describe('work item message handlers', () => {
               timestamp: 1,
               toolCall: {
                 id: 'tool-a',
-                name: 'task',
+                name: 'subagent',
                 arguments: {},
               },
             },

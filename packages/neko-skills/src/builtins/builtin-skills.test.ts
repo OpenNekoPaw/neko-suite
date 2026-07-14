@@ -296,6 +296,7 @@ describe('@neko/skills builtins', () => {
       'GetTimelineInfo',
       'ListTimelineElements',
       'task_output',
+      'subagent_output',
       'canvas.createStoryboardFromMarkdown',
       'canvas.ingestMarkdown',
       'neko.story.toTimeline',

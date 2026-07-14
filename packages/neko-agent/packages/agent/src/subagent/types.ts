@@ -360,9 +360,9 @@ export interface ISubAgentManager {
 // =============================================================================
 
 /**
- * Task tool arguments
+ * SubAgent tool arguments
  */
-export interface TaskToolArgs {
+export interface SubAgentToolArgs {
   /** Short task description (3-5 words) */
   description: string;
   /** Detailed task prompt */
@@ -391,11 +391,11 @@ export interface TaskToolArgs {
 }
 
 /**
- * TaskOutput tool arguments
+ * SubAgent output tool arguments
  */
-export interface TaskOutputToolArgs {
-  /** SubAgent task ID */
-  task_id: string;
+export interface SubAgentOutputToolArgs {
+  /** SubAgent ID */
+  subagent_id: string;
   /** Whether to block until completion */
   block?: boolean;
   /** Max wait time in ms */

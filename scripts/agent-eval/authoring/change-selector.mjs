@@ -36,6 +36,7 @@ const RULES = Object.freeze([
   ]),
   rule('session-workflows', 'agent-runtime.workflow-controller', [
     'packages/neko-agent/packages/agent/src/session/',
+    'packages/neko-agent/packages/agent/src/subagent/',
     'apps/neko-tui/src/tui/hooks/useAgentSession',
   ]),
   rule('task-recovery', 'agent-runtime.workflow-controller', [

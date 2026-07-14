@@ -1063,7 +1063,7 @@ describe('AgentRunner', () => {
       });
       const listener = vi.fn();
       runner.onDidRunnerEvent(listener);
-      const taskTool = mockPlatform.tools.get('task');
+      const taskTool = mockPlatform.tools.get('subagent');
 
       await taskTool?.execute(
         {

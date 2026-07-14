@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { createTaskTool, createTaskOutputTool, registerSubAgentTools } from '../task-tool';
+import { createSubAgentTool, createSubAgentOutputTool, registerSubAgentTools } from '../task-tool';
 import type { ISubAgentManager, SubAgentStatus, SubAgentResult } from '../types';
 import { formatChildRunScope, type ChildRunScope } from '@neko-agent/types';
 import { ToolRegistry } from '../../tools';
@@ -53,7 +53,7 @@ function createMockManager(): ISubAgentManager {
 }
 
 function executeWithRuntimeMetadata(
-  tool: ReturnType<typeof createTaskTool>,
+  tool: ReturnType<typeof createSubAgentTool>,
   args: Record<string, unknown>,
   metadata: Record<string, unknown> = {
     parentAgentId: 'parent-1',
@@ -68,7 +68,7 @@ function executeWithRuntimeMetadata(
 // Tests
 // =============================================================================
 
-describe('createTaskTool', () => {
+describe('createSubAgentTool', () => {
   let manager: ISubAgentManager;
 
   beforeEach(() => {
@@ -77,16 +77,16 @@ describe('createTaskTool', () => {
 
   describe('tool definition', () => {
     it('should create a tool with correct properties', () => {
-      const tool = createTaskTool(manager);
+      const tool = createSubAgentTool(manager);
 
-      expect(tool.name).toBe('task');
+      expect(tool.name).toBe('subagent');
       expect(tool.description).toContain('SubAgent');
       expect(tool.category).toBe('system');
       expect(tool.requiresConfirmation).toBe(false);
     });
 
     it('should have correct parameter schema', () => {
-      const tool = createTaskTool(manager);
+      const tool = createSubAgentTool(manager);
       const params = tool.parameters as unknown as Record<string, unknown>;
 
       expect(params.required).toContain('description');
@@ -94,7 +94,7 @@ describe('createTaskTool', () => {
     });
 
     it('should allow host-contributed SubAgent types without a fixed domain enum', () => {
-      const tool = createTaskTool(manager);
+      const tool = createSubAgentTool(manager);
       const params = tool.parameters as {
         readonly properties: Record<
           string,
@@ -113,13 +113,13 @@ describe('createTaskTool', () => {
 
     it('should project Chinese model-facing schema text through ToolRegistry', () => {
       const registry = new ToolRegistry();
-      registry.register(createTaskTool(manager));
-      registry.register(createTaskOutputTool(manager));
+      registry.register(createSubAgentTool(manager));
+      registry.register(createSubAgentOutputTool(manager));
 
       const definitions = registry.toToolDefinitions(undefined, { locale: 'zh-CN' });
       const byName = new Map(definitions.map((tool) => [tool.function.name, tool.function]));
-      const task = byName.get('task');
-      const taskOutput = byName.get('task_output');
+      const task = byName.get('subagent');
+      const taskOutput = byName.get('subagent_output');
       const taskParameters = task?.parameters as
         { properties?: Record<string, { description?: string }> } | undefined;
       const outputParameters = taskOutput?.parameters as
@@ -128,7 +128,10 @@ describe('createTaskTool', () => {
       expect(task?.description).toContain('启动一个 SubAgent');
       expect(taskParameters?.properties?.prompt?.description).toBe('给 SubAgent 的详细任务说明。');
       expect(taskOutput?.description).toContain('获取后台 SubAgent 任务的输出');
-      expect(outputParameters?.properties?.task_id?.description).toBe('SubAgent 任务 ID。');
+      expect(outputParameters?.properties?.subagent_id?.description).toBe('SubAgent ID。');
+      expect(outputParameters?.properties?.task_id).toBeUndefined();
+      expect(byName.has('task')).toBe(false);
+      expect(byName.has('task_output')).toBe(false);
       expect(task?.description).not.toContain('Launch a SubAgent');
       expect(taskParameters?.properties?.prompt?.description).not.toContain(
         'Detailed task instructions',
@@ -137,8 +140,22 @@ describe('createTaskTool', () => {
   });
 
   describe('execute', () => {
+    it('should reject a Task ID passed as a SubAgent resume identity', async () => {
+      const tool = createSubAgentTool(manager);
+
+      const result = await executeWithRuntimeMetadata(tool, {
+        description: 'Resume task',
+        prompt: 'Resume work',
+        resume: 'task_1784011924806_30',
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('Expected a SubAgent ID');
+      expect(manager.getStatus).not.toHaveBeenCalled();
+    });
+
     it('should spawn a SubAgent and return result in foreground mode', async () => {
-      const tool = createTaskTool(manager);
+      const tool = createSubAgentTool(manager);
 
       const result = await executeWithRuntimeMetadata(tool, {
         description: 'Test task',
@@ -155,7 +172,7 @@ describe('createTaskTool', () => {
     });
 
     it('should return immediately in background mode', async () => {
-      const tool = createTaskTool(manager);
+      const tool = createSubAgentTool(manager);
 
       const result = await executeWithRuntimeMetadata(tool, {
         description: 'Test task',
@@ -169,7 +186,7 @@ describe('createTaskTool', () => {
     });
 
     it('should include rehydrate metadata in background results', async () => {
-      const tool = createTaskTool(manager);
+      const tool = createSubAgentTool(manager);
 
       const result = await tool.execute(
         {
@@ -203,7 +220,7 @@ describe('createTaskTool', () => {
     });
 
     it('should pass parent runtime locale into spawned SubAgent config', async () => {
-      const tool = createTaskTool(manager);
+      const tool = createSubAgentTool(manager);
 
       await tool.execute(
         {
@@ -234,7 +251,7 @@ describe('createTaskTool', () => {
     });
 
     it('should fail closed when conversationId metadata is missing', async () => {
-      const tool = createTaskTool(manager);
+      const tool = createSubAgentTool(manager);
 
       const result = await tool.execute(
         {
@@ -252,7 +269,7 @@ describe('createTaskTool', () => {
     });
 
     it('should pass conversation and parent lineage into spawn config', async () => {
-      const tool = createTaskTool(manager);
+      const tool = createSubAgentTool(manager);
 
       await executeWithRuntimeMetadata(
         tool,
@@ -283,7 +300,7 @@ describe('createTaskTool', () => {
     });
 
     it('should handle resume for running SubAgent', async () => {
-      const tool = createTaskTool(manager);
+      const tool = createSubAgentTool(manager);
 
       // First, spawn a SubAgent
       await executeWithRuntimeMetadata(tool, {
@@ -307,12 +324,12 @@ describe('createTaskTool', () => {
     });
 
     it('should return error for non-existent resume', async () => {
-      const tool = createTaskTool(manager);
+      const tool = createSubAgentTool(manager);
 
       const result = await executeWithRuntimeMetadata(tool, {
         description: '',
         prompt: '',
-        resume: 'non-existent-id',
+        resume: 'subagent-non-existent-id',
       });
 
       expect(result.success).toBe(false);
@@ -320,7 +337,7 @@ describe('createTaskTool', () => {
     });
 
     it('fails visibly when metadata and trace owners disagree', async () => {
-      const tool = createTaskTool(manager);
+      const tool = createSubAgentTool(manager);
 
       const conversationMismatch = await tool.execute(
         { description: 'Test task', prompt: 'Do something' },
@@ -345,7 +362,7 @@ describe('createTaskTool', () => {
     });
 
     it('requires run and parent owner metadata', async () => {
-      const tool = createTaskTool(manager);
+      const tool = createSubAgentTool(manager);
 
       const missingRun = await tool.execute(
         { description: 'Test task', prompt: 'Do something' },
@@ -362,7 +379,7 @@ describe('createTaskTool', () => {
     });
 
     it('should use specialized agent type', async () => {
-      const tool = createTaskTool(manager);
+      const tool = createSubAgentTool(manager);
 
       await executeWithRuntimeMetadata(tool, {
         description: 'Search code',
@@ -376,7 +393,7 @@ describe('createTaskTool', () => {
     });
 
     it('should use model tier', async () => {
-      const tool = createTaskTool(manager);
+      const tool = createSubAgentTool(manager);
 
       await executeWithRuntimeMetadata(tool, {
         description: 'Complex task',
@@ -389,7 +406,7 @@ describe('createTaskTool', () => {
     });
 
     it('should return error for missing required args', async () => {
-      const tool = createTaskTool(manager);
+      const tool = createSubAgentTool(manager);
 
       const result = await executeWithRuntimeMetadata(tool, {});
 
@@ -399,7 +416,7 @@ describe('createTaskTool', () => {
   });
 });
 
-describe('createTaskOutputTool', () => {
+describe('createSubAgentOutputTool', () => {
   let manager: ISubAgentManager;
 
   beforeEach(() => {
@@ -408,9 +425,9 @@ describe('createTaskOutputTool', () => {
 
   describe('tool definition', () => {
     it('should create a tool with correct properties', () => {
-      const tool = createTaskOutputTool(manager);
+      const tool = createSubAgentOutputTool(manager);
 
-      expect(tool.name).toBe('task_output');
+      expect(tool.name).toBe('subagent_output');
       expect(tool.description).toContain('background');
       expect(tool.category).toBe('system');
     });
@@ -418,7 +435,7 @@ describe('createTaskOutputTool', () => {
 
   describe('execute', () => {
     it('should return result for completed SubAgent', async () => {
-      const tool = createTaskOutputTool(manager);
+      const tool = createSubAgentOutputTool(manager);
 
       // Setup a completed result
       (manager.getStatus as ReturnType<typeof vi.fn>).mockReturnValue('completed');
@@ -427,16 +444,16 @@ describe('createTaskOutputTool', () => {
           conversationId: 'conv-1',
           runId: 'run-1',
           parentRunId: 'parent-1',
-          childRunId: 'test-id',
+          childRunId: 'subagent-test-id',
           childKind: 'subagent',
         },
-        id: 'test-id',
+        id: 'subagent-test-id',
         status: 'completed',
         response: 'Done',
       });
 
       const result = await tool.execute(
-        { task_id: 'test-id' },
+        { subagent_id: 'subagent-test-id' },
         { metadata: { parentAgentId: 'parent-1', conversationId: 'conv-1', runId: 'run-1' } },
       );
 
@@ -444,18 +461,18 @@ describe('createTaskOutputTool', () => {
       expect((result.data as SubAgentResult).status).toBe('completed');
       expect((result.data as Record<string, unknown>).continuation).toMatchObject({
         source: 'subagent-result-continuation',
-        subagentId: 'test-id',
+        subagentId: 'subagent-test-id',
         summary: 'Done',
       });
     });
 
     it('should return status for running SubAgent in non-blocking mode', async () => {
-      const tool = createTaskOutputTool(manager);
+      const tool = createSubAgentOutputTool(manager);
 
       (manager.getStatus as ReturnType<typeof vi.fn>).mockReturnValue('running');
 
       const result = await tool.execute(
-        { task_id: 'test-id', block: false },
+        { subagent_id: 'subagent-test-id', block: false },
         { metadata: { parentAgentId: 'parent-1', conversationId: 'conv-1', runId: 'run-1' } },
       );
 
@@ -465,13 +482,13 @@ describe('createTaskOutputTool', () => {
         conversationId: 'conv-1',
         runId: 'run-1',
         parentRunId: 'parent-1',
-        childRunId: 'test-id',
+        childRunId: 'subagent-test-id',
         childKind: 'subagent',
       });
     });
 
     it('should wait for result in blocking mode', async () => {
-      const tool = createTaskOutputTool(manager);
+      const tool = createSubAgentOutputTool(manager);
 
       (manager.getStatus as ReturnType<typeof vi.fn>).mockReturnValue('running');
       (manager.getResult as ReturnType<typeof vi.fn>).mockResolvedValue({
@@ -479,16 +496,16 @@ describe('createTaskOutputTool', () => {
           conversationId: 'conv-1',
           runId: 'run-1',
           parentRunId: 'parent-1',
-          childRunId: 'test-id',
+          childRunId: 'subagent-test-id',
           childKind: 'subagent',
         },
-        id: 'test-id',
+        id: 'subagent-test-id',
         status: 'completed',
         response: 'Done after waiting',
       });
 
       const result = await tool.execute(
-        { task_id: 'test-id', block: true },
+        { subagent_id: 'subagent-test-id', block: true },
         { metadata: { parentAgentId: 'parent-1', conversationId: 'conv-1', runId: 'run-1' } },
       );
 
@@ -497,12 +514,12 @@ describe('createTaskOutputTool', () => {
     });
 
     it('should return error for non-existent SubAgent', async () => {
-      const tool = createTaskOutputTool(manager);
+      const tool = createSubAgentOutputTool(manager);
 
       (manager.getStatus as ReturnType<typeof vi.fn>).mockReturnValue(undefined);
 
       const result = await tool.execute(
-        { task_id: 'non-existent' },
+        { subagent_id: 'subagent-non-existent' },
         { metadata: { parentAgentId: 'parent-1', conversationId: 'conv-1', runId: 'run-1' } },
       );
 
@@ -510,19 +527,31 @@ describe('createTaskOutputTool', () => {
       expect(result.error).toContain('not found');
     });
 
-    it('should return error for missing task_id', async () => {
-      const tool = createTaskOutputTool(manager);
+    it('should return error for missing subagent_id', async () => {
+      const tool = createSubAgentOutputTool(manager);
 
       const result = await tool.execute({});
 
       expect(result.success).toBe(false);
-      expect(result.error).toContain('Missing required');
+      expect(result.error).toContain('subagent_id');
+    });
+
+    it('should reject Task IDs before querying the SubAgent manager', async () => {
+      const tool = createSubAgentOutputTool(manager);
+
+      const result = await tool.execute({ subagent_id: 'task_1784011924806_30' });
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('Expected a SubAgent ID');
+      expect(result.error).toContain('Host task observation path');
+      expect(manager.getStatus).not.toHaveBeenCalled();
+      expect(manager.getResult).not.toHaveBeenCalled();
     });
   });
 });
 
 describe('registerSubAgentTools', () => {
-  it('should register both task tools', () => {
+  it('should register only canonical SubAgent tools', () => {
     const manager = createMockManager();
     const registry = { register: vi.fn() };
 
@@ -533,7 +562,9 @@ describe('registerSubAgentTools', () => {
     const registeredNames = (registry.register as ReturnType<typeof vi.fn>).mock.calls.map(
       (call) => call[0].name,
     );
-    expect(registeredNames).toContain('task');
-    expect(registeredNames).toContain('task_output');
+    expect(registeredNames).toContain('subagent');
+    expect(registeredNames).toContain('subagent_output');
+    expect(registeredNames).not.toContain('task');
+    expect(registeredNames).not.toContain('task_output');
   });
 });

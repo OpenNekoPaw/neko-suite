@@ -71,10 +71,10 @@ export class SubAgentRuntimeCoordinator {
 
   ensureSystem(config: AgentSubAgentSystemConfig): void {
     if (this._system) {
-      const hasTaskTool =
-        config.toolRegistry.has?.('task') ??
-        config.toolRegistry.list().some((tool) => tool.name === 'task');
-      if (!hasTaskTool) {
+      const hasSubAgentTool =
+        config.toolRegistry.has?.('subagent') ??
+        config.toolRegistry.list().some((tool) => tool.name === 'subagent');
+      if (!hasSubAgentTool) {
         registerSubAgentTools(config.toolRegistry, this._system.manager);
       }
       return;
