@@ -1316,7 +1316,8 @@ describe('ContentOverlay', () => {
     ).toBe('fill');
     expect(host.querySelector('[data-scene-shot-table="true"]')).not.toBeNull();
     expect(host.querySelector('[data-scene-shot-table-row-id="shot-overlay-row"]')).not.toBeNull();
-    expect(host.textContent).toContain('Visible fullscreen video prompt');
+    expect(host.querySelector('[data-scene-shot-table-column="video-prompt"]')).toBeNull();
+    expect(host.textContent).toContain('Use the imported reference frame.');
     expect(host.textContent).toContain('The table is still here.');
     expect(host.textContent).toContain('Generate reference image');
     expect(host.textContent).toContain('Generate image');

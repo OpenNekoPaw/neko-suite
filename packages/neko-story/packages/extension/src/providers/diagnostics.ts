@@ -6,12 +6,20 @@ import type { WorkspaceIndexService } from '../services/WorkspaceIndexService';
 // ─── Pure types (no vscode dependency) ───────────────────────────────────────
 
 export interface DiagnosticEntry {
+  code: StoryDiagnosticCode;
   message: string;
   line: number; // 0-based
   startChar: number;
   endChar: number;
   severity: 'error' | 'warning';
 }
+
+export type StoryDiagnosticCode =
+  | 'story.syntax.unclosed-note'
+  | 'story.syntax.empty-transition'
+  | 'story.syntax.unclosed-boneyard'
+  | 'story.semantic.single-occurrence-character'
+  | 'story.semantic.dialogue-without-character';
 
 // ─── Pure logic (testable without vscode) ────────────────────────────────────
 
@@ -33,6 +41,7 @@ export function checkSyntax(text: string): DiagnosticEntry[] {
       const closeIdx = line.indexOf(']]', openIdx + 2);
       if (closeIdx === -1) {
         entries.push({
+          code: 'story.syntax.unclosed-note',
           message: '未闭合的备注 [[ （缺少 ]]）',
           line: i,
           startChar: openIdx,
@@ -64,6 +73,7 @@ export function checkSyntax(text: string): DiagnosticEntry[] {
     // Check empty forced transition: line is exactly ">"
     if (line.trim() === '>') {
       entries.push({
+        code: 'story.syntax.empty-transition',
         message: 'empty transition marker（缺少转场名称）',
         line: i,
         startChar: line.indexOf('>'),
@@ -78,6 +88,7 @@ export function checkSyntax(text: string): DiagnosticEntry[] {
     const openLine = lines[boneyardOpenLine] ?? '';
     const col = openLine.indexOf('/*');
     entries.push({
+      code: 'story.syntax.unclosed-boneyard',
       message: '未闭合的删除区域 /* （缺少 */）',
       line: boneyardOpenLine,
       startChar: col,
@@ -113,6 +124,7 @@ export function checkSemantics(doc: FountainDocument): DiagnosticEntry[] {
     if (count === 1) {
       const line = characterFirstLine.get(name) ?? 0;
       entries.push({
+        code: 'story.semantic.single-occurrence-character',
         message: `角色 "${name}" 只出现一次，可能是拼写错误`,
         line,
         startChar: 0,
@@ -132,6 +144,7 @@ export function checkSemantics(doc: FountainDocument): DiagnosticEntry[] {
         (prev.type !== 'character' && prev.type !== 'parenthetical' && prev.type !== 'dialogue')
       ) {
         entries.push({
+          code: 'story.semantic.dialogue-without-character',
           message: '对话行出现在角色名之前，可能格式有误',
           line: el.range.start.line,
           startChar: el.range.start.character,
@@ -219,13 +232,15 @@ export class FountainDiagnosticsProvider implements vscode.Disposable {
           new vscode.Position(e.line, e.startChar),
           new vscode.Position(e.line, e.endChar),
         );
-        return new vscode.Diagnostic(
+        const diagnostic = new vscode.Diagnostic(
           range,
           e.message,
           e.severity === 'error'
             ? vscode.DiagnosticSeverity.Error
             : vscode.DiagnosticSeverity.Warning,
         );
+        diagnostic.code = e.code;
+        return diagnostic;
       }),
     );
   }

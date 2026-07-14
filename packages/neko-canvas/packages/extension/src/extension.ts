@@ -5,6 +5,7 @@
  * It provides canvas editing and asset management capabilities.
  */
 import * as vscode from 'vscode';
+import * as os from 'node:os';
 import * as path from 'path';
 import {
   type CanvasCreativeScope,
@@ -19,10 +20,12 @@ import {
   type CanvasMarkdownCapabilityInput,
   type ResourceRef,
 } from '@neko/shared';
+import { createNodeWorkspaceResourceCacheMetadataBinding } from '@neko/shared/local-metadata/node';
 import {
   createVSCodeLogger,
   VSCodeErrorHandler,
   createNewFile,
+  registerOptionalAgentCapabilityProvider,
   resolveLogLevelSetting,
   watchLogLevel,
 } from '@neko/shared/vscode/extension';
@@ -31,7 +34,6 @@ import { NEKO_EXTENSION_IDS } from '@neko/shared';
 import { getRootLogger, setRootLogger } from './utils/logger';
 import { setErrorHandler, handleError } from './utils/errorHandler';
 import { CanvasEditorProvider } from './editor';
-import { broadcastQuietMode } from './services/batchGenerationScheduler';
 import { CanvasOutlineProvider, CanvasStatusBar } from './views';
 import type { NekoCanvasAPI, CanvasConfig } from './api';
 import type { ISkillProvider, SkillDef } from '@neko/shared';
@@ -152,7 +154,9 @@ function matchesAssetFilter(
 /**
  * Activate the extension
  */
-export function activate(context: vscode.ExtensionContext): NekoCanvasAPI & ISkillProvider {
+export async function activate(
+  context: vscode.ExtensionContext,
+): Promise<NekoCanvasAPI & ISkillProvider> {
   const rootLogger = createVSCodeLogger(
     'Neko Canvas',
     'NekoCanvas',
@@ -171,11 +175,24 @@ export function activate(context: vscode.ExtensionContext): NekoCanvasAPI & ISki
     readNarrativePreviewFeatureToggles(
       vscode.workspace.getConfiguration(NARRATIVE_PREVIEW_CONFIG_SECTION),
     );
-  canvasEditorProvider = new CanvasEditorProvider(
-    context,
-    undefined,
-    getNarrativePreviewFeatureToggles,
-  );
+  const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+  const resourceCacheMetadata = workspaceRoot
+    ? await createNodeWorkspaceResourceCacheMetadataBinding({
+        homedir: os.homedir() || workspaceRoot,
+        workDir: workspaceRoot,
+      })
+    : undefined;
+  try {
+    canvasEditorProvider = new CanvasEditorProvider(
+      context,
+      undefined,
+      getNarrativePreviewFeatureToggles,
+      resourceCacheMetadata,
+    );
+  } catch (error) {
+    await resourceCacheMetadata?.dispose();
+    throw error;
+  }
   canvasProjectAuthoringService = new CanvasProjectAuthoringService({
     context,
     canvasEditorProvider,
@@ -445,13 +462,9 @@ export function activate(context: vscode.ExtensionContext): NekoCanvasAPI & ISki
 
   logger.info('Extension activated');
 
-  // Register capability provider with neko-agent (if installed)
-  try {
-    const provider = createNekoCanvasCapabilityProvider(api);
-    void vscode.commands.executeCommand('neko.agent.registerCapabilities', provider);
-  } catch {
-    // neko-agent not installed — silently ignore
-  }
+  void registerOptionalAgentCapabilityProvider(createNekoCanvasCapabilityProvider(api)).catch(
+    (error: unknown) => handleError(error),
+  );
 
   return api;
 }
@@ -753,30 +766,6 @@ function registerCommands(
             { showToUser: true, severity: 'warning' },
           );
         }
-      },
-    ),
-  );
-
-  // Orchestrator coordination — neko-agent's Workflow Plan handler fires
-  // this command on plan state transitions.  We route it to all live
-  // BatchGenerationSchedulers so their pump pauses while a plan is
-  // executing (avoids double-queue with the orchestrator's batchGenerate
-  // stage running the same generateForNode requests).
-  context.subscriptions.push(
-    vscode.commands.registerCommand(
-      'neko.canvas.orchestrator.planStateChanged',
-      (payload?: {
-        status?: 'executing' | 'paused' | 'completed' | 'aborted' | 'failed';
-        planId?: string;
-        pipelineId?: string;
-      }) => {
-        if (!payload || typeof payload.status !== 'string') return;
-        // Any non-terminal "work is active" state pauses canvas generation.
-        const quiet =
-          payload.status === 'executing' || payload.status === 'paused'
-            ? `workflow plan ${payload.planId ?? ''}`.trim()
-            : undefined;
-        broadcastQuietMode(quiet);
       },
     ),
   );

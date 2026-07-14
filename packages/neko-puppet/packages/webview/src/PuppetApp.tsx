@@ -60,9 +60,6 @@ type PendingPuppetLoad =
 
 type PuppetRightDockMode = 'basic' | 'professional';
 
-/** Debounce timer ref for parameter save */
-let saveTimer: ReturnType<typeof setTimeout> | null = null;
-
 /** Send current parameters to extension for persistence */
 function saveParametersToExtension(): void {
   const params = usePuppetStore.getState().puppetParameters;
@@ -71,12 +68,6 @@ function saveParametersToExtension(): void {
     paramMap[p.name] = p.current;
   }
   vscode.postMessage({ type: 'state:save', parameters: paramMap });
-}
-
-/** Debounced parameter save (300ms) */
-function debouncedSaveParameters(): void {
-  if (saveTimer) clearTimeout(saveTimer);
-  saveTimer = setTimeout(saveParametersToExtension, 300);
 }
 
 function extractNativeBlendShapes(project: NkpNativeProjectData) {
@@ -141,6 +132,16 @@ function PuppetWorkbench() {
   const [rightDockMode, setRightDockMode] = useState<PuppetRightDockMode>('basic');
   const [documentContext, setDocumentContext] = useState<PuppetDocumentContext | null>(null);
   const isRightDockVisible = isRightPanelVisible && puppetLoaded;
+
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const debouncedSaveParameters = useCallback(() => {
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => {
+      saveTimerRef.current = null;
+      saveParametersToExtension();
+    }, 300);
+  }, []);
 
   /** Pending parameter overrides received before puppet loads */
   const pendingStateRef = useRef<Record<string, number> | null>(null);
@@ -439,7 +440,7 @@ function PuppetWorkbench() {
   // Subscribe to parameter changes and debounce-save to extension
   useEffect(() => {
     let prev = usePuppetStore.getState().puppetParameters;
-    const unsub = usePuppetStore.subscribe((state) => {
+    const unsubscribe = usePuppetStore.subscribe((state) => {
       if (state.puppetParameters !== prev) {
         prev = state.puppetParameters;
         if (state.puppetLoaded) {
@@ -447,8 +448,15 @@ function PuppetWorkbench() {
         }
       }
     });
-    return unsub;
-  }, []);
+    return () => {
+      unsubscribe();
+      if (saveTimerRef.current) {
+        clearTimeout(saveTimerRef.current);
+        saveTimerRef.current = null;
+        saveParametersToExtension();
+      }
+    };
+  }, [debouncedSaveParameters]);
 
   return (
     <CreativeWorkbenchShell

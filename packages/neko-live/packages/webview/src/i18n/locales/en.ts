@@ -23,7 +23,9 @@ export const en = {
 
   // Recording
   'recording.rec': 'REC',
-  'recording.saved': 'Saved: {filename}',
+  'recording.saved': 'Preview: {filename}',
+  'recording.saveProject': 'Save to project',
+  'recording.retained': 'Project media',
   'recording.noAvatar': 'Load an avatar before recording',
   'recording.noCanvas': 'No rendering canvas available',
   'recording.captureFailed': 'Canvas capture failed',

@@ -83,7 +83,7 @@ describe('Engine viewport session contract', () => {
   it('rejects non-Engine viewport authority', () => {
     const invalidSession: WorkbenchEngineViewportSessionContract = {
       ...validSession,
-      owner: { ...WORKBENCH_ENGINE_VIEWPORT_OWNER, id: 'neko-desktop-bootstrap' },
+      owner: { ...WORKBENCH_ENGINE_VIEWPORT_OWNER, id: 'test-host-bootstrap' },
     };
 
     expect(() => validateWorkbenchEngineViewportSessionContract(invalidSession)).toThrow(

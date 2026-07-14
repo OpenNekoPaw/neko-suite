@@ -15,6 +15,9 @@ vi.mock('vscode', () => ({
       { uri: { fsPath: '/workspace/project' }, name: 'project', index: 1 },
     ],
   },
+  extensions: {
+    getExtension: vi.fn(() => undefined),
+  },
 }));
 
 describe('ExportService', () => {
@@ -22,6 +25,7 @@ describe('ExportService', () => {
     const requests: ContentAccessRequest[] = [];
     const dispatched: ActionRequest[] = [];
     const service = new ExportService(createEngineClient(dispatched), '/workspace/project', {
+      fileExists: () => true,
       contentAccess: {
         registerProvider: vi.fn(),
         resolve: async (request) => {
@@ -75,6 +79,7 @@ describe('ExportService', () => {
   it('passes explicit draft-proxy quality mode into export content access diagnostics', async () => {
     const requests: ContentAccessRequest[] = [];
     const service = new ExportService(createEngineClient([]), '/workspace/project', {
+      fileExists: () => true,
       contentAccess: {
         registerProvider: vi.fn(),
         resolve: async (request) => {

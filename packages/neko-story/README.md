@@ -11,14 +11,14 @@
 
 - **职责**：剧本语法高亮、智能补全、实时预览、一键转换为 neko-cut 时间线、向 Agent 提供剧本/场景上下文
 - **入口**：`packages/extension/src/extension.ts`
-- **支持格式**：`.nks`（Neko Story）、`.story`（通用）、`.fountain`（Fountain 标准）
+- **支持格式**：`.story`（Neko Story）、`.fountain`（Fountain 标准）；`.nks` 归 Sketch/Image 领域
 - **子包**：`extension/`、`parser/`（`@neko-story/parser`）、`types/`、`webview/`
 - **依赖**：`@neko-story/types`、`@neko-story/parser`、`@neko/shared`
 
 ## Architecture
 
 ```
-VSCode 原生编辑器（.nks / .fountain 文件）
+VSCode 原生编辑器（.story / .fountain 文件）
   │
   ├── TextMate Grammar     → 语法高亮
   ├── LSP / Language Server → 智能补全（角色/场景/动作）
@@ -39,7 +39,7 @@ VSCode 原生编辑器（.nks / .fountain 文件）
 ```
 packages/
 ├── types/      # @neko-story/types  剧本 AST 类型定义
-├── parser/     # @neko-story/parser 剧本解析器（支持 .nks / .fountain）
+├── parser/     # @neko-story/parser 剧本解析器（支持 .story / .fountain）
 ├── extension/  # VSCode 扩展：语言服务、命令、规划器、状态管理、Webview 触发
 │     ├── services/scriptIndexBuilder.ts    # 稳定 sceneId + 场景元数据构建
 │     ├── services/storyScenePlanner.ts     # ScenePlan / ShotPlan 确定性规划
@@ -52,7 +52,7 @@ packages/
 ### 工作流
 
 ```
-编写剧本 (.nks / .fountain)
+编写剧本 (.story / .fountain)
   │
   ├── 实时预览（Webview 剧本预览面板）
   ├── Agent 预处理（基于剧本文本、场景索引和角色索引自主判断分析步骤）

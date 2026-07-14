@@ -721,7 +721,7 @@ export function CanvasApp() {
   // VSCode messages
   // =========================================================================
 
-  const { isReady, keyboardActionRef } = useVSCodeMessages({
+  const { isReady, loadDiagnostic, keyboardActionRef } = useVSCodeMessages({
     vscode,
     defaultCanvasData: DEFAULT_CANVAS_DATA,
     setCanvasData,
@@ -1720,6 +1720,26 @@ export function CanvasApp() {
   // =========================================================================
   // Render
   // =========================================================================
+
+  if (loadDiagnostic) {
+    return (
+      <main
+        className="canvas-load-diagnostic flex h-screen flex-col items-center justify-center gap-3 px-8 text-center"
+        role="alert"
+        data-testid="canvas-load-diagnostic"
+        data-diagnostic-code={loadDiagnostic.code}
+        style={{ backgroundColor: 'var(--canvas-bg)', color: 'var(--toolbar-fg)' }}
+      >
+        <h1 className="text-base font-semibold">{t('loadError.title')}</h1>
+        <p className="max-w-xl text-sm" style={{ color: 'var(--toolbar-fg-secondary)' }}>
+          {loadDiagnostic.message}
+        </p>
+        <code className="text-xs" style={{ color: 'var(--error-fg, #f14c4c)' }}>
+          {loadDiagnostic.code}
+        </code>
+      </main>
+    );
+  }
 
   if (!isReady) {
     return (

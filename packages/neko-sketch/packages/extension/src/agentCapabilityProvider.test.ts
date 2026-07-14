@@ -5,6 +5,8 @@ import type {
   NekoSketchAPI,
   SketchAIContextSnapshot,
   SketchSelectionData,
+  TaskRunScope,
+  ToolExecuteOptions,
 } from '@neko/shared';
 import { TOOL_NAMES_SKETCH } from '@neko/shared';
 import { createNekoSketchCapabilityProvider } from './agentCapabilityProvider';
@@ -120,7 +122,10 @@ describe('NekoSketch capability provider AI kill switches', () => {
       .getTools(createContext(media))
       .find((tool) => tool.name === TOOL_NAMES_SKETCH.SKETCH_GENERATE);
 
-    const result = await generateTool?.execute({ prompt: 'cat', size: '512x512' });
+    const result = await generateTool?.execute(
+      { prompt: 'cat', size: '512x512' },
+      toolExecutionOptions(),
+    );
 
     expect(result?.success).toBe(true);
     expect(applyAIImageResult).toHaveBeenCalledWith(
@@ -142,7 +147,7 @@ describe('NekoSketch capability provider AI kill switches', () => {
     const registerAIRun = vi.fn((_runId: string, _cancel: () => Promise<void>) => {});
     const unregisterAIRun = vi.fn((_runId: string) => {});
     const reportAIProgress = vi.fn(async () => true);
-    const cancelTask = vi.fn(async (_taskId: string) => true);
+    const cancelTask = vi.fn(async (_taskScope: TaskRunScope) => true);
     const completed = createDeferred<Awaited<ReturnType<ICapabilityMediaService['waitForTask']>>>();
     const api = createApi({ applyAIImageResult, reportAIProgress, registerAIRun, unregisterAIRun });
     const media = createMediaService();
@@ -153,7 +158,10 @@ describe('NekoSketch capability provider AI kill switches', () => {
       .getTools(createContext(media))
       .find((tool) => tool.name === TOOL_NAMES_SKETCH.SKETCH_GENERATE);
 
-    const execution = generateTool?.execute({ prompt: 'cat', size: '512x512' });
+    const execution = generateTool?.execute(
+      { prompt: 'cat', size: '512x512' },
+      toolExecutionOptions(),
+    );
     await flushPromises();
 
     expect(registerAIRun).toHaveBeenCalledWith('task-1', expect.any(Function));
@@ -169,7 +177,7 @@ describe('NekoSketch capability provider AI kill switches', () => {
     }
 
     await cancel();
-    expect(cancelTask).toHaveBeenCalledWith('task-1');
+    expect(cancelTask).toHaveBeenCalledWith(taskScope('task-1'));
     expect(unregisterAIRun).not.toHaveBeenCalled();
 
     completed.resolve({
@@ -211,10 +219,13 @@ describe('NekoSketch capability provider AI kill switches', () => {
       .getTools(createContext(media))
       .find((tool) => tool.name === TOOL_NAMES_SKETCH.SKETCH_SMART_SELECTION);
 
-    const result = await selectionTool?.execute({
-      prompt: 'main character',
-      negativePrompt: 'background',
-    });
+    const result = await selectionTool?.execute(
+      {
+        prompt: 'main character',
+        negativePrompt: 'background',
+      },
+      toolExecutionOptions(),
+    );
 
     expect(result?.success).toBe(true);
     expect(media.generateImage).toHaveBeenCalledWith(
@@ -258,7 +269,10 @@ describe('NekoSketch capability provider AI kill switches', () => {
       .getTools(createContext(media))
       .find((tool) => tool.name === TOOL_NAMES_SKETCH.SKETCH_SMART_SELECTION);
 
-    const result = await selectionTool?.execute({ prompt: 'main character' });
+    const result = await selectionTool?.execute(
+      { prompt: 'main character' },
+      toolExecutionOptions(),
+    );
 
     expect(result?.success).toBe(true);
     expect(media.generateImage).toHaveBeenCalledWith(
@@ -289,12 +303,15 @@ describe('NekoSketch capability provider AI kill switches', () => {
       .getTools(createContext(media))
       .find((tool) => tool.name === TOOL_NAMES_SKETCH.SKETCH_INPAINT);
 
-    const result = await inpaintTool?.execute({
-      prompt: 'add flowers',
-      negativePrompt: 'text',
-      strength: 0.6,
-      layerName: 'Flowers',
-    });
+    const result = await inpaintTool?.execute(
+      {
+        prompt: 'add flowers',
+        negativePrompt: 'text',
+        strength: 0.6,
+        layerName: 'Flowers',
+      },
+      toolExecutionOptions(),
+    );
 
     expect(result?.success).toBe(true);
     expect(media.generateImage).toHaveBeenCalledWith(
@@ -334,12 +351,15 @@ describe('NekoSketch capability provider AI kill switches', () => {
       .getTools(createContext(media))
       .find((tool) => tool.name === TOOL_NAMES_SKETCH.SKETCH_UPSCALE);
 
-    const result = await upscaleTool?.execute({
-      scale: 4,
-      scope: 'layer',
-      prompt: 'clean line art',
-      layerName: 'Upscaled Lines',
-    });
+    const result = await upscaleTool?.execute(
+      {
+        scale: 4,
+        scope: 'layer',
+        prompt: 'clean line art',
+        layerName: 'Upscaled Lines',
+      },
+      toolExecutionOptions(),
+    );
 
     expect(result?.success).toBe(true);
     expect(media.generateImage).toHaveBeenCalledWith(
@@ -375,12 +395,15 @@ describe('NekoSketch capability provider AI kill switches', () => {
       .getTools(createContext(media))
       .find((tool) => tool.name === TOOL_NAMES_SKETCH.SKETCH_LINEART_COLORIZE);
 
-    const result = await colorizeTool?.execute({
-      prompt: 'warm evening colors',
-      palette: ['#f43f5e', '#facc15'],
-      scope: 'layer',
-      layerName: 'Flats',
-    });
+    const result = await colorizeTool?.execute(
+      {
+        prompt: 'warm evening colors',
+        palette: ['#f43f5e', '#facc15'],
+        scope: 'layer',
+        layerName: 'Flats',
+      },
+      toolExecutionOptions(),
+    );
 
     expect(result?.success).toBe(true);
     expect(media.generateImage).toHaveBeenCalledWith(
@@ -419,7 +442,10 @@ describe('NekoSketch capability provider AI kill switches', () => {
       .getTools(createContext(media))
       .find((tool) => tool.name === TOOL_NAMES_SKETCH.SKETCH_AUTO_LAYER);
 
-    const result = await autoLayerTool?.execute({ layers: ['shadow', 'highlight'] });
+    const result = await autoLayerTool?.execute(
+      { layers: ['shadow', 'highlight'] },
+      toolExecutionOptions(),
+    );
 
     expect(result?.success).toBe(true);
     expect(media.generateImage).toHaveBeenCalledTimes(2);
@@ -476,6 +502,15 @@ function createApi(
   };
 }
 
+function toolExecutionOptions(): ToolExecuteOptions {
+  return {
+    metadata: {
+      conversationId: 'conv-sketch',
+      runId: 'run-sketch',
+    },
+  };
+}
+
 function createProjectQualityFacadeStub(): NekoSketchAPI['projectQuality'] {
   const notExpected = async (): Promise<never> => {
     throw new Error('ProjectQuality facade is not expected in capability provider tests.');
@@ -510,13 +545,27 @@ function createMediaService(
   return {
     generateImage: vi.fn(async () => {
       taskIndex += 1;
-      return { id: `task-${taskIndex}` };
+      const id = `task-${taskIndex}`;
+      return { id, scope: taskScope(id) };
     }),
-    generateVideo: vi.fn(async () => ({ id: 'video-task-1' })),
-    waitForTask: vi.fn(async (taskId: string) => ({
-      status: 'completed',
-      outputs: completed.outputByTaskId?.[taskId] ?? completed.outputs ?? [],
+    generateVideo: vi.fn(async () => ({
+      id: 'video-task-1',
+      scope: taskScope('video-task-1'),
     })),
+    waitForTask: vi.fn(async (scope: TaskRunScope) => ({
+      status: 'completed',
+      outputs: completed.outputByTaskId?.[scope.childRunId] ?? completed.outputs ?? [],
+    })),
+  };
+}
+
+function taskScope(childRunId: string): TaskRunScope {
+  return {
+    conversationId: 'conv-sketch',
+    runId: 'run-sketch',
+    parentRunId: 'run-sketch',
+    childRunId,
+    childKind: 'task',
   };
 }
 

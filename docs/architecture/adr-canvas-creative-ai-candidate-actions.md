@@ -168,7 +168,7 @@ Canvas 需要展示聚合进度，例如总任务数、完成数、失败数、�
 - Canvas tests 覆盖 action preflight、video prompt 合并、缺参诊断、candidate 写回、promotion revision conflict。
 - Agent runtime tests 覆盖 lane 并发、workItem 排队、取消、重试、judge pass/fail、idempotent duplicate invocation。
 - Legacy poison tests 证明新按钮不会命中 `sendToAgent`、`neko.agent.generateForNode`、`generationProgress dataUrl` 或 Webview store 直接写回。
-- VS Code Webview runtime smoke 覆盖按钮 disabled、诊断展示、candidate/progress UI 和 Agent 会话投影。
+- 真实 VS Code Webview 功能场景覆盖按钮 disabled、诊断展示、candidate/progress UI、Agent 会话投影和运行错误门禁。
 
 ## 后果
 

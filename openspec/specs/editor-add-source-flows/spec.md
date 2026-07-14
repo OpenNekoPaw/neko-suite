@@ -185,7 +185,7 @@ The system SHALL validate migrated add-source flows in Extension Development Hos
 #### Scenario: Runtime smoke validates add-save-reopen
 
 - **WHEN** Cut, Canvas, or Audio add-source behavior is migrated
-- **THEN** validation MUST include a VS Code Webview runtime smoke that adds a source, saves the project, closes or reloads the editor, and verifies the added record remains present
+- **THEN** validation MUST include a real VS Code Webview functional scenario that adds a source through the UI, saves the project, closes or reloads the editor, and verifies the durable record remains present
 - **AND** a normal browser, Vite dev server, Playwright page, or generic Chrome session MUST NOT be the only acceptance evidence
 
 #### Scenario: Runtime smoke checks dirty state

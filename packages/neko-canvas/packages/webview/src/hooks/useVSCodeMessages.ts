@@ -181,7 +181,13 @@ function isFieldValueType(value: unknown): value is FieldBinding['valueType'] {
 
 export interface UseVSCodeMessagesReturn {
   isReady: boolean;
+  loadDiagnostic: CanvasLoadDiagnostic | null;
   keyboardActionRef: React.MutableRefObject<(action: string) => void>;
+}
+
+export interface CanvasLoadDiagnostic {
+  readonly code: string;
+  readonly message: string;
 }
 
 // =============================================================================
@@ -224,6 +230,7 @@ export function useVSCodeMessages(options: UseVSCodeMessagesOptions): UseVSCodeM
   } = options;
 
   const [isReady, setIsReady] = useState(false);
+  const [loadDiagnostic, setLoadDiagnostic] = useState<CanvasLoadDiagnostic | null>(null);
   const keyboardActionRef = useRef<(action: string) => void>(() => {});
 
   // Stable refs for callbacks to avoid re-registering listener
@@ -313,10 +320,24 @@ export function useVSCodeMessages(options: UseVSCodeMessagesOptions): UseVSCodeM
         switch (message.type) {
           case 'update': {
             const canvasData = message.data ? (message.data as CanvasData) : defaultCanvasData;
+            setLoadDiagnostic(null);
             setCanvasData(canvasData);
             onCanvasDataLoadedRef.current?.(canvasData);
             setIsReady(true);
             vscode.postMessage({ type: 'canvasDataReady' });
+            break;
+          }
+          case 'canvas.loadFailed': {
+            const diagnostic = message.diagnostic;
+            if (
+              !isRecord(diagnostic) ||
+              typeof diagnostic.code !== 'string' ||
+              typeof diagnostic.message !== 'string'
+            ) {
+              throw new Error('Invalid canvas.loadFailed diagnostic payload.');
+            }
+            setLoadDiagnostic({ code: diagnostic.code, message: diagnostic.message });
+            setIsReady(false);
             break;
           }
           case 'canvas.hostAppliedDocument': {
@@ -734,5 +755,5 @@ export function useVSCodeMessages(options: UseVSCodeMessagesOptions): UseVSCodeM
     }
   }, [vscode, setCanvasData, defaultCanvasData]);
 
-  return { isReady, keyboardActionRef };
+  return { isReady, loadDiagnostic, keyboardActionRef };
 }

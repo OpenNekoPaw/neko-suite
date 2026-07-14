@@ -4,7 +4,7 @@ import type { FountainDocument, Section } from '@neko-story/types';
 import type { IWorkspaceIndex, SymbolLocation, ScriptIndex } from './types';
 import { buildScriptIndex } from './scriptIndexBuilder';
 
-const FOUNTAIN_GLOB = '**/*.{fountain,nks,story}';
+const FOUNTAIN_GLOB = '**/*.{fountain,story}';
 
 /**
  * Workspace-wide index service for Fountain documents.

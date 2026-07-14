@@ -118,6 +118,37 @@ describe('useVSCodeMessaging project snapshot protocol', () => {
     expect(vscodePostMessage).not.toHaveBeenCalled();
   });
 
+  it('projects a typed Engine unavailable diagnostic and clears it on ready', () => {
+    act(() => {
+      root.render(<EngineDiagnosticHarness />);
+    });
+
+    act(() => {
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          data: {
+            type: 'engine:status',
+            status: 'unavailable',
+            diagnostic: {
+              code: 'cut.engine.unavailable',
+              message: 'Engine unavailable',
+            },
+          },
+        }),
+      );
+    });
+    expect(host.querySelector('[data-diagnostic-code="cut.engine.unavailable"]')?.textContent).toBe(
+      'Engine unavailable',
+    );
+
+    act(() => {
+      window.dispatchEvent(
+        new MessageEvent('message', { data: { type: 'engine:status', status: 'ready' } }),
+      );
+    });
+    expect(host.querySelector('[data-diagnostic-code="cut.engine.unavailable"]')).toBeNull();
+  });
+
   it('sends project-changed snapshots when the Cut store changes locally', () => {
     act(() => {
       root.render(<Harness subscribeToExtensionMessages />);
@@ -357,6 +388,13 @@ function Harness({
 }): React.ReactElement | null {
   useVSCodeMessaging({ subscribeToExtensionMessages });
   return null;
+}
+
+function EngineDiagnosticHarness(): React.ReactElement | null {
+  const { engineDiagnostic } = useVSCodeMessaging({ subscribeToExtensionMessages: true });
+  return engineDiagnostic ? (
+    <div data-diagnostic-code={engineDiagnostic.code}>{engineDiagnostic.message}</div>
+  ) : null;
 }
 
 function createProject(overrides: Partial<ProjectData> = {}): ProjectData {

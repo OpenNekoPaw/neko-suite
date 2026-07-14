@@ -143,8 +143,10 @@ describe('engine file access architecture boundary', () => {
     const modelProvider = readSource(
       'packages/neko-model/packages/extension/src/editor/ModelEditorProvider.ts',
     );
+    expect(modelProvider).toContain('this.resolveModelEngineSource(filePath');
+    expect(modelProvider).toContain('client.registerFile({');
     expect(modelProvider).toContain("purpose: 'model'");
-    expect(modelProvider).toContain('client.loadModel({ token: registered.token })');
+    expect(modelProvider).toContain('client.loadModel({ token: source.token })');
     expect(modelProvider).not.toContain("type: 'loadModel'");
   });
 });

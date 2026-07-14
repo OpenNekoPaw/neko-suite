@@ -552,6 +552,7 @@ export const en = {
 
   // Loading
   loading: 'Loading canvas...',
+  'loadError.title': 'Unable to open Canvas project',
 
   // Canvas
   'canvas.dropHint': 'Drop files here to add to canvas',

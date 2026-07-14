@@ -138,6 +138,19 @@ const EMPTY_SNAPSHOT: CrossModalDataSnapshot = {
 // -- Tests --
 
 describe('CreativeEntityGraphService', () => {
+  it('does not read a retired asset graph JSON path during initialization', async () => {
+    const service = Reflect.construct(CreativeEntityGraphService, [
+      createMockDataProvider(EMPTY_SNAPSHOT),
+      createMockCharacterIndex(),
+      '/workspace/.neko/.cache/asset-graph.json',
+    ]) as CreativeEntityGraphService;
+
+    await service.ensureInitialized();
+
+    expect(mockVscode.workspace.fs.readFile).not.toHaveBeenCalled();
+    service.dispose();
+  });
+
   describe('registry edges', () => {
     it('creates default-visual-for edge from registry defaults.galleryNodeId', async () => {
       const charIndex = createMockCharacterIndex([

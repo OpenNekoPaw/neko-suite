@@ -290,7 +290,7 @@ describe('PropertyPanel node properties registry', () => {
     expect(items.some((item) => item.kind === 'action' && item.action === 'open-media')).toBe(true);
   });
 
-  it('enumerates migrated Scene actions and child count via composable metadata', () => {
+  it('does not expose retired Scene container actions through composable metadata', () => {
     const node = {
       ...createMigratedNode('scene', {
         sceneTitle: 'Arrival',
@@ -302,7 +302,7 @@ describe('PropertyPanel node properties registry', () => {
     const items = enumerateComposablePropertyItems(node);
     const actions = items.filter((item) => item.kind === 'action').map((item) => item.action);
 
-    expect(actions).toEqual(['assign-selected-children', 'auto-layout', 'batch-generate']);
+    expect(actions).toEqual([]);
   });
 });
 

@@ -125,7 +125,7 @@ L1 可作为 fallback；L2 是默认交互的目标状态；L3 用于高质量�
 pnpm --filter @neko-model/webview test
 pnpm --filter @neko-model/webview exec tsc --noEmit
 pnpm check:3d-route-a-boundaries
-pnpm smoke:webview:runtime
+pnpm test:webview:functional --owner neko-model
 ```
 
 若涉及 Rust hit-test、camera projection、Proto 或 stream descriptor，还需增加对应契约测试、Engine 测试和 smoke。

@@ -443,7 +443,7 @@ describe('StoryDashboardCreativeEntitySource', () => {
           characters: ['小橘', '小灰'],
         },
         {
-          uri: `file://${workspaceRoot}/cases/episode.nks`,
+          uri: `file://${workspaceRoot}/cases/episode.fountain`,
           characters: ['花花老师'],
         },
         {

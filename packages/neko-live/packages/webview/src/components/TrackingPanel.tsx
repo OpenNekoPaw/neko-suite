@@ -19,6 +19,7 @@ export function TrackingPanel() {
     recordingState,
     recordingElapsedMs,
     lastRecordingPath,
+    lastRecordingRetained,
     deviceBindings,
     setTrackingMode,
   } = useLiveStore();
@@ -158,16 +159,33 @@ export function TrackingPanel() {
 
       {/* Last recording path */}
       {lastRecordingPath && !isRecording && (
-        <div
-          style={{
-            fontSize: 10,
-            color: 'var(--vscode-descriptionForeground)',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
-          }}
-        >
-          {t('recording.saved', { filename: lastRecordingPath.split('/').pop() ?? '' })}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+          <span
+            style={{
+              minWidth: 0,
+              flex: 1,
+              fontSize: 10,
+              color: 'var(--vscode-descriptionForeground)',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {t('recording.saved', { filename: lastRecordingPath.split('/').pop() ?? '' })}
+          </span>
+          {lastRecordingRetained ? (
+            <Badge tone="success">{t('recording.retained')}</Badge>
+          ) : (
+            <Button
+              size="xs"
+              variant="secondary"
+              onClick={() =>
+                vscode.postMessage({ type: 'promoteRecording', filePath: lastRecordingPath })
+              }
+            >
+              {t('recording.saveProject')}
+            </Button>
+          )}
         </div>
       )}
 

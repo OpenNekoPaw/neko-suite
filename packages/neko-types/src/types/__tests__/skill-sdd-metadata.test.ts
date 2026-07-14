@@ -355,7 +355,7 @@ describe('validateSkillManifest — explicit legacy compatibility pass', () => {
           versionRange: '^1.0.0',
         },
         {
-          profileId: 'comic-shot-asset-prep',
+          profileId: 'media-production.shot-image-prep',
           kind: 'artifact',
           relationship: 'produces',
         },
@@ -363,7 +363,7 @@ describe('validateSkillManifest — explicit legacy compatibility pass', () => {
       mediaWorkflow: {
         acceptedModalities: ['comic', 'image-sequence'],
         producedArtifacts: ['CompositeArtifact', 'GenericTable', 'StoryboardTable'],
-        artifactProfiles: ['comic-shot-asset-prep'],
+        artifactProfiles: ['media-production.shot-image-prep'],
         referencedCapabilities: ['canvas.ingestMarkdown'],
         suggestedProjectors: ['capability:canvas.ingestMarkdown'],
         tags: ['comic', 'storyboard'],
@@ -391,7 +391,7 @@ describe('validateSkillManifest — explicit legacy compatibility pass', () => {
       mediaWorkflow: {
         acceptedModalities: ['image'],
         producedArtifacts: ['StoryboardTable', 'storyboard-plan-overlay'],
-        artifactProfiles: ['comic-shot-asset-prep'],
+        artifactProfiles: ['media-production.shot-image-prep'],
         inputArtifacts: ['generated-media-ref'],
         referencedCapabilities: ['cut.importStoryboard'],
         suggestedProjectors: ['projector:storyboard-to-cut'],
@@ -529,11 +529,11 @@ describe('validateSkillManifest — explicit legacy compatibility pass', () => {
         profileReferences: [
           { profileId: 'studio.creation.review', kind: 'creation', relationship: 'requires' },
         ],
-        mediaWorkflow: { artifactProfiles: ['comic-shot-asset-prep'] },
+        mediaWorkflow: { artifactProfiles: ['media-production.shot-image-prep'] },
       }),
     ).toEqual([
       { profileId: 'studio.creation.review', kind: 'creation', relationship: 'requires' },
-      { profileId: 'comic-shot-asset-prep', kind: 'artifact', relationship: 'produces' },
+      { profileId: 'media-production.shot-image-prep', kind: 'artifact', relationship: 'produces' },
     ]);
   });
 });

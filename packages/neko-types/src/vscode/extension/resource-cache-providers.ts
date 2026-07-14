@@ -27,6 +27,7 @@ export const GENERATED_RESOURCE_CACHE_PROVIDER_ID = 'generated-asset';
 
 export interface ResourceCacheFileOps {
   copyFile(source: string, target: string): Promise<void>;
+  writeFile(filePath: string, content: Uint8Array): Promise<void>;
   mkdir(filePath: string, options: { recursive: boolean }): Promise<void>;
   stat(filePath: string): Promise<{ readonly size: number }>;
 }
@@ -79,8 +80,28 @@ export interface GeneratedAssetDerivativeResourceCacheProviderOptions {
     ref: ResourceRef,
   ) => Promise<GeneratedAssetResourceResolverResult | undefined>;
   readonly fsOps?: ResourceCacheFileOps;
+  readonly generator?: GeneratedImageVariantGenerator;
   readonly pathResolver?: PathResolver;
   readonly projectRoot?: string;
+}
+
+export interface GeneratedImageVariantGeneratorResult {
+  readonly bytes: Uint8Array;
+  readonly mimeType: string;
+  readonly width: number;
+  readonly height: number;
+}
+
+export interface GeneratedImageVariantGenerator {
+  generate(
+    sourcePath: string,
+    request: {
+      readonly role: 'thumbnail';
+      readonly width?: number;
+      readonly height?: number;
+      readonly mimeType?: string;
+    },
+  ): Promise<GeneratedImageVariantGeneratorResult | undefined>;
 }
 
 export interface CreateFileThumbnailResourceRefInput {
@@ -215,12 +236,14 @@ export class GeneratedAssetDerivativeResourceCacheProvider implements ResourceCa
 
   private readonly resolveAsset?: GeneratedAssetDerivativeResourceCacheProviderOptions['resolveAsset'];
   private readonly fsOps: ResourceCacheFileOps;
+  private readonly generator?: GeneratedImageVariantGenerator;
   private readonly pathResolver?: PathResolver;
   private readonly projectRoot?: string;
 
   constructor(options: GeneratedAssetDerivativeResourceCacheProviderOptions = {}) {
     this.resolveAsset = options.resolveAsset;
     this.fsOps = options.fsOps ?? nodeFileOps;
+    this.generator = options.generator;
     this.pathResolver = options.pathResolver;
     this.projectRoot = options.projectRoot;
   }
@@ -230,7 +253,8 @@ export class GeneratedAssetDerivativeResourceCacheProvider implements ResourceCa
       ref.provider === this.id &&
       ref.kind === 'generated' &&
       ref.source.kind === 'generated-asset' &&
-      (variant.role === 'thumbnail' || variant.role === 'preview')
+      variant.role === 'thumbnail' &&
+      isPositiveDimension(variant.width, variant.height)
     );
   }
 
@@ -241,33 +265,54 @@ export class GeneratedAssetDerivativeResourceCacheProvider implements ResourceCa
 
     const resolved =
       (await this.resolveAsset?.(input.ref)) ??
-      readGeneratedAssetFromRef(input.ref, this.pathResolver, this.projectRoot);
+      resolveGeneratedAssetResourceRef(input.ref, this.pathResolver, this.projectRoot);
     if (!resolved?.path) {
       return unsupported(
         input,
         'Generated asset resource requires local generated asset metadata.',
       );
     }
-    if (
-      (input.variant.role === 'thumbnail' || input.variant.role === 'preview') &&
-      resolved.mimeType &&
-      !resolved.mimeType.startsWith('image/')
-    ) {
+    if (resolved.mimeType && !resolved.mimeType.startsWith('image/')) {
       return unsupported(input, 'Generated asset preview is only supported for image metadata.');
     }
-
-    return copyProviderArtifact({
-      input,
-      fsOps: this.fsOps,
-      sourcePath: resolved.path,
-      directory: 'generated',
-      mimeType: resolved.mimeType ?? input.variant.mimeType,
-      width: resolved.width ?? input.variant.width,
-      height: resolved.height ?? input.variant.height,
-      sizeBytes: resolved.sizeBytes,
-      rebuildable: true,
+    if (!this.generator) {
+      return unsupported(input, 'Generated image thumbnail requires an image variant generator.');
+    }
+    const generated = await this.generator.generate(resolved.path, {
+      role: 'thumbnail',
+      width: input.variant.width,
+      height: input.variant.height,
+      mimeType: input.variant.mimeType,
     });
+    if (!generated || generated.bytes.byteLength === 0) {
+      return unsupported(input, 'Generated image thumbnail generator did not produce an artifact.');
+    }
+    const relativePath = createProviderRelativePath(
+      'generated',
+      input.ref,
+      { ...input.variant, mimeType: generated.mimeType },
+      resolved.path,
+    );
+    const targetPath = path.join(input.cacheRoot, relativePath);
+    await this.fsOps.mkdir(path.dirname(targetPath), { recursive: true });
+    await this.fsOps.writeFile(targetPath, generated.bytes);
+    return {
+      status: 'ready',
+      ref: input.ref,
+      variant: input.variant,
+      absolutePath: targetPath,
+      relativePath,
+      mimeType: generated.mimeType,
+      width: generated.width,
+      height: generated.height,
+      sizeBytes: generated.bytes.byteLength,
+      rebuildable: true,
+    };
   }
+}
+
+function isPositiveDimension(width: number | undefined, height: number | undefined): boolean {
+  return (width !== undefined && width > 0) || (height !== undefined && height > 0);
 }
 
 export function createFileThumbnailResourceRef(
@@ -434,7 +479,7 @@ function readLocalSourcePath(ref: ResourceRef): string | undefined {
   return readLocalPath(locatorPath ?? readResourceSourceLocalPath(ref.source) ?? metadataPath);
 }
 
-function readGeneratedAssetFromRef(
+export function resolveGeneratedAssetResourceRef(
   ref: ResourceRef,
   pathResolver?: PathResolver,
   projectRoot?: string,
@@ -514,6 +559,7 @@ function readString(value: unknown): string | undefined {
 
 const nodeFileOps: ResourceCacheFileOps = {
   copyFile: (source, target) => fs.copyFile(source, target),
+  writeFile: (filePath, content) => fs.writeFile(filePath, content),
   mkdir: (filePath, options) => fs.mkdir(filePath, options).then(() => undefined),
   stat: async (filePath) => {
     const stat = await fs.stat(filePath);

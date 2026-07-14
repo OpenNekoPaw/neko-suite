@@ -15,6 +15,7 @@ export {
   CacheArtifactContentIngestProvider,
   DocumentEntryContentAccessProvider,
   ExportStagingContentIngestProvider,
+  GeneratedAssetSourceContentAccessProvider,
   GeneratedOutputContentIngestProvider,
   ImportSourceContentIngestProvider,
   PreviewVariantContentAccessProvider,
@@ -30,6 +31,7 @@ export type {
   ContentAccessWebviewResolver,
   ContentIngestFileProviderOptions,
   DocumentEntryContentAccessProviderOptions,
+  GeneratedAssetSourceContentAccessProviderOptions,
   PreviewVariantContentAccessProviderOptions,
   ResourceCacheContentAccessProviderOptions,
   SourceFileContentAccessProviderOptions,
@@ -78,10 +80,13 @@ export {
   GENERATED_RESOURCE_CACHE_PROVIDER_ID,
   GeneratedAssetDerivativeResourceCacheProvider,
   createGeneratedAssetResourceRef,
+  resolveGeneratedAssetResourceRef,
 } from '../vscode/extension/resource-cache-providers';
 export type {
   CreateGeneratedAssetResourceRefInput,
   GeneratedAssetDerivativeResourceCacheProviderOptions,
   GeneratedAssetResourceResolverResult,
+  GeneratedImageVariantGenerator,
+  GeneratedImageVariantGeneratorResult,
   ResourceCacheFileOps,
 } from '../vscode/extension/resource-cache-providers';

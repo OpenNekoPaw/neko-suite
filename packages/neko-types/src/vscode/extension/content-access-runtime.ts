@@ -21,6 +21,7 @@ import {
   DocumentEntryContentAccessProvider,
   ExportStagingContentIngestProvider,
   GeneratedOutputContentIngestProvider,
+  GeneratedAssetSourceContentAccessProvider,
   ImportSourceContentIngestProvider,
   RegisterExistingSourceContentIngestProvider,
   ResourceCacheContentAccessProvider,
@@ -29,6 +30,7 @@ import {
   type ContentAccessFileExists,
   type ContentAccessWebviewResolver,
   type DocumentEntryContentAccessProviderOptions,
+  type GeneratedAssetSourceContentAccessProviderOptions,
   type SourceFileContentAccessProviderOptions,
 } from './content-access-providers';
 import {
@@ -95,6 +97,13 @@ export interface HostContentAccessRuntimeDocumentProviderOptions {
   readonly entryReader?: DocumentEntryContentAccessProviderOptions['entryReader'];
 }
 
+export interface HostContentAccessRuntimeGeneratedSourceProviderOptions extends Omit<
+  GeneratedAssetSourceContentAccessProviderOptions,
+  'localResourceAccess' | 'webviewResolver'
+> {
+  readonly enabled?: boolean;
+}
+
 export interface HostContentAccessRuntimeIngestProviderOptions {
   readonly enabled?: boolean;
   readonly pathResolver?: PathResolver;
@@ -124,6 +133,7 @@ export interface CreateHostContentAccessRuntimeOptions {
   readonly ingestProviders?: readonly ContentIngestProvider[];
   readonly sourceFileProvider?: HostContentAccessRuntimeSourceProviderOptions;
   readonly documentEntryProvider?: HostContentAccessRuntimeDocumentProviderOptions;
+  readonly generatedAssetSourceProvider?: HostContentAccessRuntimeGeneratedSourceProviderOptions;
   readonly ingest?: HostContentAccessRuntimeIngestProviderOptions;
   readonly webviewResolver?: ContentAccessWebviewResolver;
   readonly fileOps?: ContentAccessFileOps;
@@ -291,6 +301,19 @@ function createDefaultAccessProviders(input: {
     localResourceAccess,
     resourceCache,
   } = input;
+
+  const generatedSourceProviderOptions = options.generatedAssetSourceProvider;
+  if (generatedSourceProviderOptions?.enabled !== false && generatedSourceProviderOptions) {
+    providers.push(
+      new GeneratedAssetSourceContentAccessProvider({
+        ...(generatedSourceProviderOptions.id ? { id: generatedSourceProviderOptions.id } : {}),
+        resolveAsset: generatedSourceProviderOptions.resolveAsset,
+        fileOps: generatedSourceProviderOptions.fileOps ?? options.fileOps,
+        ...(localResourceAccess ? { localResourceAccess } : {}),
+        webviewResolver: options.webviewResolver,
+      }),
+    );
+  }
 
   if (resourceCache) {
     providers.push(

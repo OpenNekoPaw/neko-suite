@@ -95,6 +95,7 @@ export {
   createFileThumbnailResourceRef,
   createGeneratedAssetResourceRef,
   createPreviewAssetResourceRef,
+  resolveGeneratedAssetResourceRef,
 } from './resource-cache-providers';
 export type {
   CreateFileThumbnailResourceRefInput,
@@ -102,6 +103,8 @@ export type {
   CreatePreviewAssetResourceRefInput,
   GeneratedAssetDerivativeResourceCacheProviderOptions,
   GeneratedAssetResourceResolverResult,
+  GeneratedImageVariantGenerator,
+  GeneratedImageVariantGeneratorResult,
   PreviewVariantResourceApi,
   PreviewVariantResourceCacheProviderOptions,
   ResourceCacheFileOps,
@@ -178,6 +181,7 @@ export type {
   HostContentAccessRuntime,
   HostContentAccessRuntimeCacheOptions,
   HostContentAccessRuntimeDocumentProviderOptions,
+  HostContentAccessRuntimeGeneratedSourceProviderOptions,
   HostContentAccessRuntimeIngestProviderOptions,
   HostContentAccessRuntimeSourceProviderOptions,
 } from './content-access-runtime';

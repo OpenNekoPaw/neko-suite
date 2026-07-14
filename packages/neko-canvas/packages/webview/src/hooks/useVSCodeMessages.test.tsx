@@ -121,6 +121,35 @@ describe('useVSCodeMessages keyboard action guards', () => {
     expect(vscode.postMessage).toHaveBeenCalledWith({ type: 'canvasDataReady' });
   });
 
+  it('projects a typed load diagnostic without acknowledging canvas readiness', () => {
+    const vscode = createVSCodeApi();
+
+    act(() => {
+      root.render(
+        <VSCodeMessageHarness
+          action={action}
+          isComposingRef={isComposingRef}
+          options={{ vscode }}
+        />,
+      );
+    });
+
+    act(() => {
+      postHostMessage({
+        type: 'canvas.loadFailed',
+        diagnostic: {
+          code: 'canvas.project.invalid-json',
+          message: 'Canvas project contains invalid JSON.',
+        },
+      });
+    });
+
+    expect(document.querySelector('[data-testid="load-diagnostic"]')?.textContent).toBe(
+      'canvas.project.invalid-json:Canvas project contains invalid JSON.',
+    );
+    expect(vscode.postMessage).not.toHaveBeenCalledWith({ type: 'canvasDataReady' });
+  });
+
   it('applies host-authored Canvas document updates from headless authoring', () => {
     const vscode = createVSCodeApi();
     const setCanvasData = vi.fn();
@@ -257,11 +286,15 @@ function VSCodeMessageHarness({
   readonly isKeyboardFocusedRef?: React.MutableRefObject<boolean>;
   readonly options?: Partial<UseVSCodeMessagesOptions>;
 }): React.ReactElement | null {
-  const { keyboardActionRef } = useVSCodeMessages(
+  const { keyboardActionRef, loadDiagnostic } = useVSCodeMessages(
     createOptions(isComposingRef, isKeyboardFocusedRef, options),
   );
   keyboardActionRef.current = action;
-  return null;
+  return loadDiagnostic ? (
+    <output data-testid="load-diagnostic">
+      {loadDiagnostic.code}:{loadDiagnostic.message}
+    </output>
+  ) : null;
 }
 
 function createOptions(

@@ -41,7 +41,9 @@ describe('workspace resource provider helpers', () => {
   });
 
   it('keeps thumbnail projections runtime-only while stable refs stay portable', () => {
-    expect(createWorkbenchThumbnailRuntimeProjection('neko-resource://workspace/assets%2Fimage.png')).toEqual({
+    expect(
+      createWorkbenchThumbnailRuntimeProjection('neko-resource://workspace/assets%2Fimage.png'),
+    ).toEqual({
       kind: 'thumbnail',
       uri: 'neko-resource://workspace/assets%2Fimage.png',
       currentSessionOnly: true,
@@ -51,7 +53,7 @@ describe('workspace resource provider helpers', () => {
       validateWorkbenchResourceProviderSnapshot({
         provider: {
           providerId: 'workspace-files',
-          ownerId: 'neko-desktop-bootstrap',
+          ownerId: 'test-host-bootstrap',
           surfaceId: 'explorer',
           providerKind: 'bootstrap-temporary',
         },
@@ -84,7 +86,7 @@ describe('workspace resource provider helpers', () => {
       validateWorkbenchResourceProviderSnapshot({
         provider: {
           providerId: 'workspace-files',
-          ownerId: 'neko-desktop-bootstrap',
+          ownerId: 'test-host-bootstrap',
           surfaceId: 'explorer',
           providerKind: 'bootstrap-temporary',
         },
@@ -98,7 +100,7 @@ describe('workspace resource provider helpers', () => {
       validateWorkbenchResourceProviderSnapshot({
         provider: {
           providerId: 'workspace-files',
-          ownerId: 'neko-desktop-bootstrap',
+          ownerId: 'test-host-bootstrap',
           surfaceId: 'explorer',
           providerKind: 'bootstrap-temporary',
         },

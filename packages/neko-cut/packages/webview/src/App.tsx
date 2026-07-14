@@ -69,7 +69,9 @@ function App() {
   const mainPanelToolsVisible = useEditorStore((state) => state.mainPanelToolsVisible);
   const toggleMainPanelTools = useEditorStore((state) => state.toggleMainPanelTools);
   const togglePropertyPanel = useEditorStore((state) => state.togglePropertyPanel);
-  const { sendMessage } = useVSCodeMessaging({ subscribeToExtensionMessages: true });
+  const { engineDiagnostic, sendMessage } = useVSCodeMessaging({
+    subscribeToExtensionMessages: true,
+  });
   const animationFrameRef = useRef<number>(0);
   const lastSeekTimeRef = useRef<number>(currentTime); // Track last known currentTime
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -246,11 +248,20 @@ function App() {
   return (
     <div
       ref={rootRef}
-      className="flex h-full bg-vscode-bg"
+      className="relative flex h-full bg-vscode-bg"
       data-neko-keyboard-focused={isKeyboardFocused ? 'true' : 'false'}
       onDragOver={handleDragOver}
       onDrop={handleDrop}
     >
+      {engineDiagnostic ? (
+        <div
+          className="absolute left-3 right-3 top-3 z-50 border border-vscode-warning bg-vscode-editor-bg px-3 py-2 text-sm text-vscode-fg shadow-md"
+          data-diagnostic-code={engineDiagnostic.code}
+          role="alert"
+        >
+          {engineDiagnostic.message}
+        </div>
+      ) : null}
       <CreativeWorkbenchShell
         className="cut-workbench-shell"
         bodyClassName="cut-workbench-body"

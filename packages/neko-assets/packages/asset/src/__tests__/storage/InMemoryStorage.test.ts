@@ -140,6 +140,17 @@ describe('InMemoryStorage', () => {
           createdAt: Date.now() - 3000,
           updatedAt: Date.now(),
         },
+        {
+          id: 'recording-1',
+          name: 'Recorded Dialogue',
+          category: 'object',
+          metadata: { source: { type: 'recording' } },
+          variants: [],
+          tags: ['recording'],
+          usageCount: 1,
+          createdAt: Date.now() - 2000,
+          updatedAt: Date.now(),
+        },
       ];
 
       for (const entity of entities) {
@@ -166,6 +177,11 @@ describe('InMemoryStorage', () => {
     it('should search by any tags (OR logic)', async () => {
       const result = await storage.search({ anyTags: ['hero', 'villain'] });
       expect(result.total).toBe(2);
+    });
+
+    it('should search promoted recordings by source type', async () => {
+      const result = await storage.search({ sourceTypes: ['recording'] });
+      expect(result.entities.map((entity) => entity.id)).toEqual(['recording-1']);
     });
 
     it('should sort by usage count', async () => {

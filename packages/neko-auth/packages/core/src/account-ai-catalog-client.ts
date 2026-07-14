@@ -10,8 +10,10 @@ export interface AccountAiCatalogClientConfig {
   readonly catalogUrl?: string;
 }
 
+export type AccountAiCatalogFetch = (url: string, init?: RequestInit) => Promise<Response>;
+
 export interface AccountAiCatalogClientOptions {
-  readonly fetchFn?: typeof fetch;
+  readonly fetchFn?: AccountAiCatalogFetch;
   readonly now?: () => number;
 }
 
@@ -29,7 +31,7 @@ interface AccountAiCatalogResponse {
 const DEFAULT_CATALOG_TTL_MS = 5 * 60 * 1000;
 
 export class AccountAiCatalogClient {
-  private readonly fetchFn: typeof fetch;
+  private readonly fetchFn: AccountAiCatalogFetch;
   private readonly now: () => number;
 
   constructor(

@@ -37,6 +37,7 @@ import {
   type ResourceCacheProvider,
   type ResourceCacheService,
 } from '@neko/shared/vscode/extension';
+import type { NodeWorkspaceResourceCacheMetadataBinding } from '@neko/shared';
 import {
   buildStoryboardImportTimelineSyncPayload,
   createCanvasStoryboardExecutionSummary,
@@ -135,6 +136,7 @@ import type {
   ProjectionWriteBackResult,
   ProjectedCanvasData,
   ProjectedCanvasSource,
+  ProjectFileDiagnostic,
   ProjectFileSaveReason,
   NekoAssetsAPI,
   NekoStoryAPI,
@@ -774,6 +776,10 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
     focusedWebviews: IFocusedWebviewRegistry = createFocusedWebviewRegistry(),
     getNarrativePreviewFeatureToggles: () => NarrativePreviewFeatureToggles = () =>
       normalizeNarrativePreviewFeatureToggles(undefined),
+    private readonly resourceCacheMetadata?: Pick<
+      NodeWorkspaceResourceCacheMetadataBinding,
+      'manifestStore' | 'dispose'
+    >,
   ) {
     this.focusedWebviews = focusedWebviews;
     this.narrativePreviewBridge = new NarrativePreviewBridge(this, {
@@ -808,6 +814,13 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
     this._onSelectionChange.dispose();
     this._onDidChangeCanvas.dispose();
     this._onDidChangeCustomDocument.dispose();
+    void this.resourceCache
+      ?.dispose()
+      .catch((error) => logger.warn('Failed to dispose Canvas ResourceCache', { error }))
+      .finally(() => this.disposeResourceCacheMetadata());
+    if (!this.resourceCache) {
+      this.disposeResourceCacheMetadata();
+    }
   }
 
   private createCanvasContentAccessRuntime(context: vscode.ExtensionContext): {
@@ -819,15 +832,19 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
     const layout = workspaceRoot
       ? resolveStorageLayout(workspaceRoot, os.homedir() || workspaceRoot)
       : undefined;
+    const manifestStore = this.resourceCacheMetadata?.manifestStore;
+    if (workspaceRoot && !manifestStore) {
+      throw new Error('Canvas ResourceCache requires the canonical local metadata store.');
+    }
     const runtime = createHostContentAccessRuntime({
       extensionUri: context.extensionUri,
       context,
       workspaceRoot,
       resourceCacheOptions:
-        workspaceRoot && layout
+        workspaceRoot && layout && manifestStore
           ? {
               cacheRoot: layout.project.local.cache.resources,
-              manifestPath: layout.project.local.cache.resourceManifest,
+              manifestStore,
               projectRoot: workspaceRoot,
               providers: this.createCanvasResourceCacheProviders(workspaceRoot),
             }
@@ -846,6 +863,12 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
       ...(runtime.resourceCache ? { resourceCache: runtime.resourceCache } : {}),
       contentAccess: runtime.contentAccess,
     };
+  }
+
+  private disposeResourceCacheMetadata(): void {
+    void this.resourceCacheMetadata
+      ?.dispose()
+      .catch((error) => logger.warn('Failed to dispose Canvas metadata store', { error }));
   }
 
   private createCanvasResourceCacheProviders(
@@ -2214,6 +2237,11 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
     childNodeId?: string,
     options: { readonly routeCreativeAi?: boolean } = {},
   ): Promise<void> {
+    const document = this.activeDocument;
+    if (!document) {
+      throw new Error(`Cannot generate Canvas node "${nodeId}": no active Canvas document.`);
+    }
+    const ownerConversationId = `canvas:${hashProjectionSource(document.uri.toString())}`;
     const node = await this.getNode(nodeId);
     const lineage = node ? extractCanvasNodeGenerationLineage(node) : { sourceNodeId: nodeId };
     const referenceRefs = node ? extractReferenceRefs(node) : undefined;
@@ -2238,6 +2266,7 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
     }
 
     this.scheduler.enqueue({
+      ownerConversationId,
       nodeId,
       childNodeId,
       params,
@@ -2638,7 +2667,7 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
   private async loadCanvasProject(uri: vscode.Uri): Promise<{
     readonly ok: boolean;
     readonly data: CanvasData | null;
-    readonly diagnostics: readonly { readonly message: string }[];
+    readonly diagnostics: readonly ProjectFileDiagnostic[];
   }> {
     const result = await this.projectFileStore.load<CanvasData>({
       filePath: uri.fsPath,
@@ -2741,42 +2770,45 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
       case 'ready': {
         this.focusedWebviews.syncFocus(document.uri.toString());
         this.canvasDataReadyDocumentUris.delete(document.uri.toString());
-        // Read file content and send to webview
         try {
           const result = await this.loadCanvasProject(document.uri);
           const data = result.data;
-          if (!result.ok && result.diagnostics.length > 0) {
-            logger.warn(
-              'NKC validation errors:',
-              result.diagnostics.map((diagnostic) => diagnostic.message).join('; '),
-            );
+          if (!result.ok || !data) {
+            const diagnostic =
+              result.diagnostics.find((entry) => entry.severity === 'error') ??
+              createProjectFileDiagnostic({
+                code: 'invalid-document',
+                message: 'Canvas project could not be loaded.',
+              });
+            webviewPanel.webview.postMessage({
+              type: 'canvas.loadFailed',
+              diagnostic: {
+                code: `canvas.project.${diagnostic.code}`,
+                message: diagnostic.message,
+              },
+            });
+            break;
           }
-          if (data) {
-            const canvasRecord = data as unknown as Record<string, unknown>;
-            await this.normalizeCanvasPathsForLoad(
-              canvasRecord,
-              document.uri,
-              webviewPanel.webview,
-            );
-            if (isProjectedCanvasData(data)) {
-              await this.tryRegenerateProjectedCanvas(data, webviewPanel.webview, document);
-            }
+          const canvasRecord = data as unknown as Record<string, unknown>;
+          await this.normalizeCanvasPathsForLoad(canvasRecord, document.uri, webviewPanel.webview);
+          if (isProjectedCanvasData(data)) {
+            await this.tryRegenerateProjectedCanvas(data, webviewPanel.webview, document);
           }
           webviewPanel.webview.postMessage({ type: 'update', data });
-          // Sync outline & status bar on initial load
-          if (data) {
-            const canvasRecord = data as unknown as Record<string, unknown>;
-            this.rememberCanvasSnapshot(document, canvasRecord);
-            if (this.isActiveCanvasDocument(document)) {
-              this.syncOutline(document.uri.toString(), canvasRecord);
-              this.syncStatusBar(canvasRecord);
-            }
+          this.rememberCanvasSnapshot(document, canvasRecord);
+          if (this.isActiveCanvasDocument(document)) {
+            this.syncOutline(document.uri.toString(), canvasRecord);
+            this.syncStatusBar(canvasRecord);
           }
-          this.reportCanvasReady(document.uri, data as unknown as Record<string, unknown> | null);
-        } catch {
-          // File is empty or invalid JSON — send null to use defaults
-          webviewPanel.webview.postMessage({ type: 'update', data: null });
-          this.reportCanvasReady(document.uri, null);
+          this.reportCanvasReady(document.uri, canvasRecord);
+        } catch (error) {
+          webviewPanel.webview.postMessage({
+            type: 'canvas.loadFailed',
+            diagnostic: {
+              code: 'canvas.project.read-failed',
+              message: error instanceof Error ? error.message : String(error),
+            },
+          });
         }
         break;
       }
@@ -3460,6 +3492,7 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
         if (!routed) break;
 
         this.scheduler.enqueue({
+          ownerConversationId: `canvas:${hashProjectionSource(document.uri.toString())}`,
           nodeId,
           childNodeId,
           params,
@@ -4521,18 +4554,6 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
       }
       await this.materializeDocumentResourcePreview(nodeData, webview, documentUri);
     }
-  }
-
-  private projectLocalResource(
-    webview: vscode.Webview,
-    source: string,
-    caller: string,
-  ): string | undefined {
-    return this.localResourceAccess.createSyncProjector(
-      webview,
-      webview.options.localResourceRoots ?? [],
-      { caller },
-    )(source);
   }
 
   private async projectCanvasMediaLocalFile(

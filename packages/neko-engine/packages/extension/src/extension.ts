@@ -24,6 +24,7 @@ import {
 import { setRootLogger, setErrorHandler, handleError, getLogger } from './base';
 import {
   createVSCodeLogger,
+  registerOptionalAgentCapabilityProvider,
   VSCodeErrorHandler,
   resolveLogLevelSetting,
   watchLogLevel,
@@ -104,15 +105,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   // Update status bar
   updateStatusBar('idle');
 
-  // Register agent capability provider (fire-and-forget — neko-agent may activate later)
-  try {
-    const provider = createEngineCapabilityProvider();
-    void vscode.commands.executeCommand('neko.agent.registerCapabilities', provider);
-  } catch {
-    // neko-agent not installed
-  }
-
   log('Extension activated');
+
+  void registerOptionalAgentCapabilityProvider(createEngineCapabilityProvider()).catch(
+    (error: unknown) => {
+      void handleError(error, { showToUser: false });
+    },
+  );
 }
 
 // =============================================================================

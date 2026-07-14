@@ -25,6 +25,7 @@ export type LiveExtensionMessage =
       authority?: 'local-preview' | 'compositor';
       diagnostics?: string[];
     }
+  | { type: 'recordingPromoted'; filePath: string }
   | { type: 'recordingProgress'; elapsedMs: number }
   | { type: 'cameraDevices'; devices: CameraDevice[] }
   | { type: 'cameraStreamStarted'; streamId: string; wsUrl?: string }
@@ -44,6 +45,7 @@ export type LiveWebviewMessage =
   | { type: 'setPuppetParam'; name: string; value: number }
   | { type: 'startRecording'; includeAudio: boolean; authority?: 'local-preview' | 'compositor' }
   | { type: 'stopRecording' }
+  | { type: 'promoteRecording'; filePath: string }
   | { type: 'listCameraDevices' }
   | { type: 'startCameraCapture'; deviceId?: string }
   | { type: 'stopCameraCapture' }

@@ -8,7 +8,7 @@ import {
 } from '../composite-artifact';
 
 const profile: ArtifactProfileDescriptor = {
-  profileId: 'comic-shot-asset-prep',
+  profileId: 'media-production.shot-image-prep',
   kind: 'artifact',
   protocol: 'GenericTable',
   version: 1,
@@ -35,7 +35,7 @@ describe('composite artifact contracts', () => {
       schemaVersion: 1,
       kind: 'composite-artifact',
       artifactId: 'artifact-1',
-      title: 'Comic to animation plan',
+      title: 'Media production from comic',
       blocks: [
         { blockId: 'summary', kind: 'text', text: 'Review these shots.', format: 'plain' },
         { blockId: 'table', kind: 'table', table },
@@ -351,7 +351,7 @@ function makeTable(overrides: Partial<GenericTable> = {}): GenericTable {
     schemaVersion: 1,
     kind: 'generic-table',
     tableId: 'asset-prep',
-    profile: 'comic-shot-asset-prep',
+    profile: 'media-production.shot-image-prep',
     profileVersion: 1,
     title: 'Asset prep',
     columns: [

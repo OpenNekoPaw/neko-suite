@@ -54,6 +54,11 @@ export interface PreviewPanelRef {
   captureScreenshot: () => Promise<void>;
 }
 
+type PreviewInitDiagnostic = {
+  readonly code: 'cut.engine.stream-unavailable' | 'cut.preview.initialization-failed';
+  readonly message: string;
+};
+
 interface PreviewCanvasOverlayProps {
   project: ProjectData;
   currentTime: number;
@@ -286,12 +291,13 @@ export const PreviewPanel = memo(function PreviewPanel({
   const [frameServerPort, setFrameServerPort] = useState<number | null>(null);
   const [streamWsUrl, setStreamWsUrl] = useState<string | null>(null);
   const [audioWsUrl, setAudioWsUrl] = useState<string | null>(null);
+  const [audioUnlocked, setAudioUnlocked] = useState(false);
   const [displaySize, setDisplaySize] = useState<{ width: number; height: number } | null>(null);
 
   // State
   const [isStreamReady, setIsStreamReady] = useState(false);
   const [hasVideoFrame, setHasVideoFrame] = useState(false);
-  const [initError, setInitError] = useState<string | null>(null);
+  const [initError, setInitError] = useState<PreviewInitDiagnostic | null>(null);
 
   // Media info cache
   const mediaInfo = useMediaInfoCache();
@@ -362,6 +368,26 @@ export const PreviewPanel = memo(function PreviewPanel({
     return addFrameServerMessageListener(handleFrameServerMessage);
   }, []);
 
+  const unlockAudio = useCallback(() => {
+    if (!audioWsUrl) return;
+    if (!audioCtxRef.current || audioCtxRef.current.state === 'closed') {
+      audioCtxRef.current = new AudioContext({ sampleRate: 48000 });
+    }
+    if (audioCtxRef.current.state === 'suspended') {
+      void audioCtxRef.current.resume();
+    }
+    setAudioUnlocked(true);
+  }, [audioWsUrl]);
+
+  useEffect(() => {
+    window.addEventListener('pointerdown', unlockAudio, { capture: true });
+    window.addEventListener('keydown', unlockAudio, { capture: true });
+    return () => {
+      window.removeEventListener('pointerdown', unlockAudio, { capture: true });
+      window.removeEventListener('keydown', unlockAudio, { capture: true });
+    };
+  }, [unlockAudio]);
+
   // ==========================================================================
   // Frame Rendering
   // ==========================================================================
@@ -400,16 +426,6 @@ export const PreviewPanel = memo(function PreviewPanel({
     monitor.reset();
 
     let cancelled = false;
-    if (audioWsUrl) {
-      // Create / resume AudioContext (may already exist from user gesture)
-      if (!audioCtxRef.current || audioCtxRef.current.state === 'closed') {
-        audioCtxRef.current = new AudioContext({ sampleRate: 48000 });
-      }
-      if (audioCtxRef.current.state === 'suspended') {
-        audioCtxRef.current.resume().catch(() => {});
-      }
-    }
-
     void lifecycleRef.current
       ?.start(
         {
@@ -433,24 +449,25 @@ export const PreviewPanel = memo(function PreviewPanel({
             },
             onError: (error: Error) => {
               logger.error('H.264 stream error:', error);
-              setInitError(error.message);
+              setInitError(toPreviewInitDiagnostic(error));
             },
             onPacketReceived: (sizeBytes: number) => {
               monitor.recordPacketSize(sizeBytes);
             },
           },
-          audio: audioWsUrl
-            ? {
-                websocketUrl: audioWsUrl,
-                volume: 1.0,
-                onConnectionChange: (connected) => {
-                  logger.info(`Audio stream ${connected ? 'connected' : 'disconnected'}`);
-                },
-                onError: (err) => {
-                  logger.warn('Audio stream error:', err);
-                },
-              }
-            : undefined,
+          audio:
+            audioWsUrl && audioUnlocked
+              ? {
+                  websocketUrl: audioWsUrl,
+                  volume: 1.0,
+                  onConnectionChange: (connected) => {
+                    logger.info(`Audio stream ${connected ? 'connected' : 'disconnected'}`);
+                  },
+                  onError: (err) => {
+                    logger.warn('Audio stream error:', err);
+                  },
+                }
+              : undefined,
           fps: project.fps || 25,
           schedulerMode: 'video',
           videoFrameRoute: 'callback',
@@ -470,7 +487,8 @@ export const PreviewPanel = memo(function PreviewPanel({
       .catch((error) => {
         if (!cancelled) {
           logger.error('Stream lifecycle error:', error);
-          setInitError(error instanceof Error ? error.message : String(error));
+          const lifecycleError = error instanceof Error ? error : new Error(String(error));
+          setInitError(toPreviewInitDiagnostic(lifecycleError));
         }
       });
 
@@ -489,6 +507,7 @@ export const PreviewPanel = memo(function PreviewPanel({
   }, [
     streamWsUrl,
     audioWsUrl,
+    audioUnlocked,
     project?.resolution.width,
     project?.resolution.height,
     project?.fps,
@@ -571,13 +590,6 @@ export const PreviewPanel = memo(function PreviewPanel({
     }
 
     // Resume playback (stream already created at editor open)
-    if (!audioCtxRef.current || audioCtxRef.current.state === 'closed') {
-      audioCtxRef.current = new AudioContext({ sampleRate: 48000 });
-    }
-    if (audioCtxRef.current.state === 'suspended') {
-      audioCtxRef.current.resume().catch(() => {});
-    }
-
     // Initialize wall-clock refs
     playStartTimeRef.current = currentTimeRef.current;
     playWallTimeRef.current = performance.now();
@@ -1030,7 +1042,11 @@ export const PreviewPanel = memo(function PreviewPanel({
   if (initError) {
     return (
       <div className="flex flex-col items-center justify-center h-full bg-black gap-4">
-        <div className="text-vscode-error flex items-center gap-2">
+        <div
+          className="text-vscode-error flex items-center gap-2"
+          data-diagnostic-code={initError.code}
+          role="alert"
+        >
           <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
             <path
               fillRule="evenodd"
@@ -1038,9 +1054,11 @@ export const PreviewPanel = memo(function PreviewPanel({
               clipRule="evenodd"
             />
           </svg>
-          <span>{initError}</span>
+          <span>{initError.message}</span>
         </div>
-        <span className="text-vscode-description text-sm">{t('preview.gpuRequired')}</span>
+        {initError.code === 'cut.preview.initialization-failed' ? (
+          <span className="text-vscode-description text-sm">{t('preview.gpuRequired')}</span>
+        ) : null}
       </div>
     );
   }
@@ -1109,3 +1127,13 @@ export const PreviewPanel = memo(function PreviewPanel({
     </div>
   );
 });
+
+function toPreviewInitDiagnostic(error: Error): PreviewInitDiagnostic {
+  return {
+    code:
+      error.message === 'WebSocket connection error'
+        ? 'cut.engine.stream-unavailable'
+        : 'cut.preview.initialization-failed',
+    message: error.message,
+  };
+}

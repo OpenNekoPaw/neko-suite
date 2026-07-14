@@ -17,6 +17,7 @@ import {
   VSCodeErrorHandler,
   resolveLogLevelSetting,
   watchLogLevel,
+  registerOptionalAgentCapabilityProvider,
 } from '@neko/shared/vscode/extension';
 import { setErrorHandler, handleError } from './utils/errorHandler';
 import { FountainDocumentSymbolProvider } from './providers/documentSymbol';
@@ -56,14 +57,12 @@ import {
 } from './services/storySceneStateStore';
 import { setRootLogger, getRootLogger } from './utils/logger';
 import * as path from 'path';
-import * as os from 'os';
 import { parse } from '@neko-story/parser';
-import { resolveStorageLayout } from '@neko/shared';
 import { TimelineConverter, formatDuration } from './converters/TimelineConverter';
 
 const FOUNTAIN_SELECTOR: vscode.DocumentSelector = { language: 'nekostory' };
 
-export function activate(context: vscode.ExtensionContext) {
+export async function activate(context: vscode.ExtensionContext) {
   const rootLogger = createVSCodeLogger(
     'Neko Story',
     'NekoStory',
@@ -91,11 +90,9 @@ export function activate(context: vscode.ExtensionContext) {
   });
   context.subscriptions.push(occurrenceIndexService);
 
-  const graphPath = resolveGraphPath();
   const entityGraphService = new CreativeEntityGraphService(
     crossModalDataProvider,
     characterIndexService,
-    graphPath,
   );
   context.subscriptions.push(entityGraphService);
 
@@ -593,13 +590,11 @@ export function activate(context: vscode.ExtensionContext) {
     },
   };
 
-  // Register capability provider with neko-agent (if installed)
-  try {
-    const provider = createNekoStoryCapabilityProvider(api);
-    void vscode.commands.executeCommand('neko.agent.registerCapabilities', provider);
-  } catch {
-    // neko-agent not installed — silently ignore
-  }
+  void registerOptionalAgentCapabilityProvider(createNekoStoryCapabilityProvider(api)).catch(
+    (error: unknown) => {
+      void handleError(error, { showToUser: false });
+    },
+  );
 
   return api;
 }
@@ -745,15 +740,6 @@ function resolveUriOrPath(uriOrPath: string): vscode.Uri {
   return uriOrPath.startsWith('file://') || uriOrPath.includes('://')
     ? vscode.Uri.parse(uriOrPath)
     : vscode.Uri.file(uriOrPath);
-}
-
-function resolveGraphPath(): string | undefined {
-  const folder = vscode.workspace.workspaceFolders?.[0];
-  if (!folder) {
-    return undefined;
-  }
-  const layout = resolveStorageLayout(folder.uri.fsPath, os.homedir());
-  return layout.project.local.cache.assetGraph;
 }
 
 function formatError(error: unknown): string {

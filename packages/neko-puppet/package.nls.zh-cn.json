@@ -4,5 +4,7 @@
   "neko.puppet.importLive2dBundle.title": "导入 Live2D Bundle",
   "neko.puppet.exportModel.title": "导出 Puppet 模型包",
   "neko.puppet.exportMotions.title": "导出 Puppet 动作包",
-  "neko.puppet.exportConfig.title": "导出 Puppet 配置包"
+  "neko.puppet.exportConfig.title": "导出 Puppet 配置包",
+  "neko.puppet.liveMode.start.title": "启动 Puppet Live Mode",
+  "neko.puppet.liveMode.stop.title": "停止 Puppet Live Mode"
 }

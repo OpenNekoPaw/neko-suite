@@ -5,7 +5,7 @@
 // @neko/shared/hooks/useVSCodeMessaging as a generic base, with this hook
 // composing domain-specific handlers on top of it.
 
-import { useEffect, useCallback, useRef } from 'react';
+import { useEffect, useCallback, useRef, useState } from 'react';
 import { useEditorStore, type EditorStore } from '../stores/editor-store';
 import type { EditorSubtitleElement, ProjectData, TextElement, TimelineTrack } from '../types';
 import { getLogger } from '../utils/logger';
@@ -52,6 +52,11 @@ export interface UseVSCodeMessagingOptions {
   readonly subscribeToExtensionMessages?: boolean;
 }
 
+export interface CutEngineDiagnostic {
+  readonly code: 'cut.engine.unavailable';
+  readonly message: string;
+}
+
 export function useVSCodeMessaging(options: UseVSCodeMessagingOptions = {}) {
   const subscribeToExtensionMessages = options.subscribeToExtensionMessages === true;
   const {
@@ -67,6 +72,7 @@ export function useVSCodeMessaging(options: UseVSCodeMessagingOptions = {}) {
     getTotalDuration,
   } = useEditorStore();
   const projectRef = useRef(project);
+  const [engineDiagnostic, setEngineDiagnostic] = useState<CutEngineDiagnostic | undefined>();
 
   projectRef.current = project;
 
@@ -146,6 +152,21 @@ export function useVSCodeMessaging(options: UseVSCodeMessagingOptions = {}) {
       }
 
       switch (message.type) {
+        case 'engine:status':
+          if (message.status === 'ready') {
+            setEngineDiagnostic(undefined);
+          } else if (
+            message.status === 'unavailable' &&
+            message.diagnostic?.code === 'cut.engine.unavailable' &&
+            typeof message.diagnostic.message === 'string'
+          ) {
+            setEngineDiagnostic({
+              code: 'cut.engine.unavailable',
+              message: message.diagnostic.message,
+            });
+          }
+          break;
+
         case 'frameServer:config':
         case 'frameServer:streamCreated':
         case 'frameServer:streamStopped':
@@ -547,6 +568,7 @@ export function useVSCodeMessaging(options: UseVSCodeMessagingOptions = {}) {
   );
 
   return {
+    engineDiagnostic,
     sendMessage,
     requestFileUri,
     getFileUri,

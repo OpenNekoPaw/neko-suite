@@ -47,7 +47,7 @@ describe('neko-story protocol', () => {
       const regexExts = regexMatch?.[1]?.split('|').sort() ?? [];
 
       expect(globExts).toEqual(regexExts);
-      expect(globExts).toEqual(['fountain', 'nks', 'story']);
+      expect(globExts).toEqual(['fountain', 'story']);
     });
 
     it('package.json language extensions match FOUNTAIN_GLOB', () => {
@@ -60,7 +60,7 @@ describe('neko-story protocol', () => {
       expect(lang).toBeDefined();
 
       const pkgExts = (lang.extensions as string[]).map((e: string) => e.replace(/^\./, '')).sort();
-      expect(pkgExts).toEqual(['fountain', 'nks', 'story']);
+      expect(pkgExts).toEqual(['fountain', 'story']);
     });
 
     it('activates the Dashboard creative entity source command for screenplay analysis', () => {

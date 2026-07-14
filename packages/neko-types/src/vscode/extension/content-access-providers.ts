@@ -38,6 +38,10 @@ import {
 } from '../../types';
 import { resolveWorkspaceGeneratedAssetRelativeDirectory } from '../../types/generated-asset';
 import type { LocalResourceAccessService } from './local-resource-access';
+import type {
+  GeneratedAssetResourceResolverResult,
+  GeneratedAssetDerivativeResourceCacheProviderOptions,
+} from './resource-cache-providers';
 import { readStringMetadata } from './metadata';
 import type { ResourceCacheService } from './resource-cache-service';
 
@@ -56,6 +60,16 @@ export interface ResourceCacheContentAccessProviderOptions {
   readonly id?: string;
   readonly resourceCache: ResourceCacheService;
   readonly fileOps?: Pick<ContentAccessFileOps, 'readFile'>;
+  readonly webviewResolver?: ContentAccessWebviewResolver;
+}
+
+export interface GeneratedAssetSourceContentAccessProviderOptions {
+  readonly id?: string;
+  readonly resolveAsset: NonNullable<
+    GeneratedAssetDerivativeResourceCacheProviderOptions['resolveAsset']
+  >;
+  readonly fileOps?: Pick<ContentAccessFileOps, 'readFile'>;
+  readonly localResourceAccess?: LocalResourceAccessService;
   readonly webviewResolver?: ContentAccessWebviewResolver;
 }
 
@@ -145,6 +159,93 @@ const nodeFileOps: ContentAccessFileOps = {
     await fs.mkdir(dirPath, options);
   },
 };
+
+export class GeneratedAssetSourceContentAccessProvider implements ContentAccessProvider {
+  readonly id: string;
+  private readonly resolveAsset: GeneratedAssetSourceContentAccessProviderOptions['resolveAsset'];
+  private readonly fileOps: Pick<ContentAccessFileOps, 'readFile'>;
+  private readonly localResourceAccess?: LocalResourceAccessService;
+  private readonly webviewResolver?: ContentAccessWebviewResolver;
+
+  constructor(options: GeneratedAssetSourceContentAccessProviderOptions) {
+    this.id = options.id ?? 'generated-asset-source-content-access';
+    this.resolveAsset = options.resolveAsset;
+    this.fileOps = options.fileOps ?? nodeFileOps;
+    this.localResourceAccess = options.localResourceAccess;
+    this.webviewResolver = options.webviewResolver;
+  }
+
+  supports(request: ContentAccessRequest): boolean {
+    const role = request.variant?.role ?? request.role ?? 'preview';
+    return (
+      isGeneratedAssetResourceRef(request.ref) &&
+      (request.intent === 'interactive-preview' || request.intent === 'agent-context') &&
+      (role === 'preview' || role === 'source') &&
+      (request.target === 'bytes' ||
+        request.target === 'local-path' ||
+        request.target === 'webview-uri')
+    );
+  }
+
+  async resolve({ request }: ContentAccessProviderRequest): Promise<ContentAccessResult> {
+    if (!isGeneratedAssetResourceRef(request.ref)) {
+      return unsupported(request, this.id, 'Generated source provider requires a generated asset.');
+    }
+    const resolved = await this.resolveAsset(request.ref);
+    if (!resolved?.path) {
+      return missingSource(request, this.id, 'Generated asset source could not be resolved.');
+    }
+    return this.resolveTarget(request, request.ref, resolved);
+  }
+
+  private async resolveTarget(
+    request: ContentAccessRequest,
+    source: ResourceRef,
+    resolved: GeneratedAssetResourceResolverResult,
+  ): Promise<ContentAccessResult> {
+    const base = {
+      status: 'ready' as const,
+      request,
+      providerId: this.id,
+      source,
+      role: request.variant?.role ?? request.role ?? 'preview',
+      localPath: resolved.path,
+      ...(resolved.mimeType ? { mimeType: resolved.mimeType } : {}),
+      ...(resolved.width !== undefined ? { width: resolved.width } : {}),
+      ...(resolved.height !== undefined ? { height: resolved.height } : {}),
+      ...(resolved.sizeBytes !== undefined ? { sizeBytes: resolved.sizeBytes } : {}),
+    };
+    if (request.target === 'bytes') {
+      return { ...base, bytes: await this.fileOps.readFile(resolved.path) };
+    }
+    if (request.target === 'local-path') {
+      return base;
+    }
+    const webview = this.webviewResolver?.(request);
+    if (!webview || !this.localResourceAccess) {
+      return unsupportedDestination(
+        request,
+        this.id,
+        'Generated source Webview projection requires local resource access and a Webview resolver.',
+      );
+    }
+    const projection = await this.localResourceAccess.toWebviewUri(webview, resolved.path, {
+      caller: request.caller,
+    });
+    if (!projection.ok) {
+      return {
+        ...base,
+        status: projection.reason === 'unauthorized' ? 'unauthorized' : 'failed',
+        error: projection.message,
+      };
+    }
+    return { ...base, uri: projection.uri };
+  }
+}
+
+function isGeneratedAssetResourceRef(ref: ContentSourceRef): ref is ResourceRef {
+  return isResourceRef(ref) && ref.kind === 'generated' && ref.source.kind === 'generated-asset';
+}
 
 export class ResourceCacheContentAccessProvider implements ContentAccessProvider {
   readonly id: string;

@@ -184,6 +184,7 @@ vi.mock('./mediaEngine/export', () => ({
 
 vi.mock('@neko/shared/vscode/extension', () => ({
   createVSCodeLogger: vi.fn(() => createLogger()),
+  registerOptionalAgentCapabilityProvider: vi.fn(async () => false),
   VSCodeErrorHandler: class {
     handleError = vi.fn(async () => undefined);
   },

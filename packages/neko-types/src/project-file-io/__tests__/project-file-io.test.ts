@@ -1182,8 +1182,8 @@ describe('source descriptor helpers', () => {
     );
   });
 
-  it('stores nkc, nka, and nks documents through the shared lifecycle', async () => {
-    const files = createMemoryFileOps({
+  it('stores nkc, nka, and nks documents without reading workspace cache state', async () => {
+    const projectFiles = createMemoryFileOps({
       '/workspace/project/canvas.nkc': JSON.stringify({
         version: '2.1',
         name: 'Canvas',
@@ -1209,6 +1209,16 @@ describe('source descriptor helpers', () => {
         viewport: { panX: 0, panY: 0, zoom: 1 },
       }),
     });
+    const readProjectFile = projectFiles.readFile.bind(projectFiles);
+    const files = {
+      ...projectFiles,
+      readFile: vi.fn(async (filePath: string) => {
+        if (filePath.includes('/.neko/')) {
+          throw new Error(`Project document attempted to read local cache state: ${filePath}`);
+        }
+        return readProjectFile(filePath);
+      }),
+    };
     const store = new ProjectFileStore({
       registry: createDefaultProjectFormatCodecRegistry(),
       fileOps: files,
@@ -1240,6 +1250,12 @@ describe('source descriptor helpers', () => {
     expect(sketch.ok).toBe(true);
     expect(canvasSave.ok).toBe(true);
     expect(files.readText('/workspace/project/canvas.nkc')).toContain('"name": "Saved Canvas"');
+    expect(files.readFile).toHaveBeenCalledTimes(3);
+    expect(files.readFile.mock.calls.map(([filePath]) => filePath)).toEqual([
+      '/workspace/project/canvas.nkc',
+      '/workspace/project/audio.nka',
+      '/workspace/project/sketch.nks',
+    ]);
   });
 
   it('saves and reloads NKA add-source audio tracks through durable source refs', async () => {

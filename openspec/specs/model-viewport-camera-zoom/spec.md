@@ -69,7 +69,7 @@ Changes to Model viewport camera zoom SHALL include validation for the affected 
 
 #### Scenario: Webview-only zoom behavior changes
 - **WHEN** the implementation changes only Webview camera state, gesture handling, or HUD feedback
-- **THEN** focused Model Webview tests, typecheck, 3D Route A boundary checks, and VS Code Webview runtime smoke are run or documented as residual risk
+- **THEN** focused Model Webview tests, typecheck, 3D Route A boundary checks, and a real VS Code Webview functional scenario are run or documented as blocked with residual risk
 
 #### Scenario: Engine or Proto camera contracts change
 - **WHEN** the implementation adds or modifies editor camera projection fields, hit-test payloads, or Engine camera ingestion

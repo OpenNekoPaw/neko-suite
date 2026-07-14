@@ -134,6 +134,8 @@ export type CreateSkillFailureCode =
 export interface CreateSkillFailure {
   readonly code: CreateSkillFailureCode;
   readonly diagnostics: readonly SkillDiagnostic[];
+  /** Raw external failure detail, preserved without localization. */
+  readonly detail?: string;
 }
 
 export type SkillProvenance = 'builtin' | 'workspace' | 'user' | 'marketplace' | 'plugin';

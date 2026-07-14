@@ -446,7 +446,10 @@ describe('agentCapabilityProvider storyboard export contracts', () => {
       '不要用 Canvas handoff 跳过漫画/页面视觉分析或分镜表生成。',
     );
     expect(createStoryboardTool?.description).toContain(
-      'Requires a completed storyboard creative table',
+      'Prefer a typed canonical Storyboard artifact',
+    );
+    expect(createStoryboardTool?.description).toContain(
+      'Markdown remains a source adapter for text-only inputs',
     );
     expect(createStoryboardTool?.description).toContain(
       'host-confirmed tool calls provide approval automatically',

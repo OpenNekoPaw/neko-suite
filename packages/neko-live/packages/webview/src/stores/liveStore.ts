@@ -30,6 +30,7 @@ export interface LiveState {
   recordingState: RecordingState;
   recordingElapsedMs: number;
   lastRecordingPath: string | null;
+  lastRecordingRetained: boolean;
   deviceBindings: Partial<Record<LiveDeviceRole, LiveDeviceBinding>>;
 
   // ─── UI ───────────────────────────────────────────────────────────────
@@ -46,6 +47,7 @@ export interface LiveState {
   setRecordingState: (state: RecordingState) => void;
   setRecordingElapsed: (ms: number) => void;
   setLastRecordingPath: (path: string | null) => void;
+  setLastRecordingRetained: (retained: boolean) => void;
   setDeviceBinding: (role: LiveDeviceRole, binding?: LiveDeviceBinding) => void;
   toggleSkeletonOverlay: () => void;
 
@@ -54,69 +56,73 @@ export interface LiveState {
   onStopRecording?: () => void;
 }
 
-// Sliding window for FPS calculation
 const FPS_WINDOW_MS = 1000;
-let frameTimestamps: number[] = [];
 
-export const useLiveStore = create<LiveState>((set) => ({
-  trackingMode: 'vmc',
-  isTracking: false,
-  trackingFps: 0,
-  currentTrackingData: null,
+export const useLiveStore = create<LiveState>((set) => {
+  const frameTimestamps: number[] = [];
 
-  avatarUrl: null,
-  avatarType: 'vrm',
-  isAvatarLoaded: false,
+  return {
+    trackingMode: 'vmc',
+    isTracking: false,
+    trackingFps: 0,
+    currentTrackingData: null,
 
-  puppetParameters: [],
-  currentPuppetDelta: null,
+    avatarUrl: null,
+    avatarType: 'vrm',
+    isAvatarLoaded: false,
 
-  recordingState: 'idle',
-  recordingElapsedMs: 0,
-  lastRecordingPath: null,
-  deviceBindings: {},
+    puppetParameters: [],
+    currentPuppetDelta: null,
 
-  showSkeletonOverlay: false,
+    recordingState: 'idle',
+    recordingElapsedMs: 0,
+    lastRecordingPath: null,
+    lastRecordingRetained: false,
+    deviceBindings: {},
 
-  setTrackingMode: (mode) => set({ trackingMode: mode }),
-  setIsTracking: (active) => {
-    if (!active) {
-      frameTimestamps = [];
-    }
-    set({ isTracking: active, trackingFps: 0 });
-  },
+    showSkeletonOverlay: false,
 
-  applyTrackingData: (data) => {
-    const now = performance.now();
-    frameTimestamps.push(now);
-
-    const cutoff = now - FPS_WINDOW_MS;
-    while (frameTimestamps.length > 0 && frameTimestamps[0]! < cutoff) {
-      frameTimestamps.shift();
-    }
-
-    set({
-      currentTrackingData: data,
-      trackingFps: frameTimestamps.length,
-    });
-  },
-
-  setAvatarUrl: (url, type) => set({ avatarUrl: url, avatarType: type, isAvatarLoaded: false }),
-  setAvatarLoaded: (loaded) => set({ isAvatarLoaded: loaded }),
-  setPuppetParameters: (params) => set({ puppetParameters: params }),
-  applyPuppetDelta: (delta) => set({ currentPuppetDelta: delta }),
-  setRecordingState: (state) => set({ recordingState: state }),
-  setRecordingElapsed: (ms) => set({ recordingElapsedMs: ms }),
-  setLastRecordingPath: (path) => set({ lastRecordingPath: path }),
-  setDeviceBinding: (role, binding) =>
-    set((state) => {
-      const deviceBindings = { ...state.deviceBindings };
-      if (binding) {
-        deviceBindings[role] = binding;
-      } else {
-        delete deviceBindings[role];
+    setTrackingMode: (mode) => set({ trackingMode: mode }),
+    setIsTracking: (active) => {
+      if (!active) {
+        frameTimestamps.length = 0;
       }
-      return { deviceBindings };
-    }),
-  toggleSkeletonOverlay: () => set((s) => ({ showSkeletonOverlay: !s.showSkeletonOverlay })),
-}));
+      set({ isTracking: active, trackingFps: 0 });
+    },
+
+    applyTrackingData: (data) => {
+      const now = performance.now();
+      frameTimestamps.push(now);
+
+      const cutoff = now - FPS_WINDOW_MS;
+      while (frameTimestamps.length > 0 && frameTimestamps[0]! < cutoff) {
+        frameTimestamps.shift();
+      }
+
+      set({
+        currentTrackingData: data,
+        trackingFps: frameTimestamps.length,
+      });
+    },
+
+    setAvatarUrl: (url, type) => set({ avatarUrl: url, avatarType: type, isAvatarLoaded: false }),
+    setAvatarLoaded: (loaded) => set({ isAvatarLoaded: loaded }),
+    setPuppetParameters: (params) => set({ puppetParameters: params }),
+    applyPuppetDelta: (delta) => set({ currentPuppetDelta: delta }),
+    setRecordingState: (state) => set({ recordingState: state }),
+    setRecordingElapsed: (ms) => set({ recordingElapsedMs: ms }),
+    setLastRecordingPath: (path) => set({ lastRecordingPath: path }),
+    setLastRecordingRetained: (retained) => set({ lastRecordingRetained: retained }),
+    setDeviceBinding: (role, binding) =>
+      set((state) => {
+        const deviceBindings = { ...state.deviceBindings };
+        if (binding) {
+          deviceBindings[role] = binding;
+        } else {
+          delete deviceBindings[role];
+        }
+        return { deviceBindings };
+      }),
+    toggleSkeletonOverlay: () => set((s) => ({ showSkeletonOverlay: !s.showSkeletonOverlay })),
+  };
+});

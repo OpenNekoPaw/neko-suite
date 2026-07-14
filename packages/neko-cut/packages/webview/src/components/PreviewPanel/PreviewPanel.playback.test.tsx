@@ -51,6 +51,22 @@ const storeMock = vi.hoisted(() => {
   };
 });
 
+const streamLifecycleMock = vi.hoisted(() => {
+  let onVideoError: ((error: Error) => void) | undefined;
+  return {
+    captureVideoError(handler: ((error: Error) => void) | undefined) {
+      onVideoError = handler;
+    },
+    emitVideoError(error: Error) {
+      if (!onVideoError) throw new Error('Video error handler has not been registered');
+      onVideoError(error);
+    },
+    reset() {
+      onVideoError = undefined;
+    },
+  };
+});
+
 vi.mock('../../i18n/I18nContext', () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));
@@ -151,11 +167,12 @@ vi.mock('@neko/neko-client', () => {
     }
 
     async start(descriptor: {
-      video?: unknown;
+      video?: { onError?: (error: Error) => void };
       audio?: unknown;
       schedulerMode?: 'auto' | 'video' | 'av' | 'none';
     }) {
       lifecycleStart(descriptor);
+      streamLifecycleMock.captureVideoError(descriptor.video?.onError);
       const videoClient = descriptor.video ? new H264StreamClient() : null;
       const audioClient = descriptor.audio ? new AudioStreamClient() : null;
       const scheduler =
@@ -242,6 +259,7 @@ function clearFrameServerStreamCache(): void {
 describe('PreviewPanel playback controls', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    streamLifecycleMock.reset();
     clearFrameServerStreamCache();
     vi.stubGlobal(
       'ResizeObserver',
@@ -432,6 +450,62 @@ describe('PreviewPanel playback controls', () => {
     });
   });
 
+  it('defers AudioContext and audio stream startup until a user gesture', async () => {
+    const audioContexts: Array<{ state: AudioContextState }> = [];
+    vi.stubGlobal(
+      'AudioContext',
+      class AudioContext {
+        state: AudioContextState = 'running';
+        constructor() {
+          audioContexts.push(this);
+        }
+        resume(): Promise<void> {
+          return Promise.resolve();
+        }
+        close(): Promise<void> {
+          this.state = 'closed';
+          return Promise.resolve();
+        }
+      },
+    );
+    publishFrameServerMessage({ type: 'frameServer:config', port: 39001 });
+    publishFrameServerMessage({
+      type: 'frameServer:streamCreated',
+      streamId: 'strm_editor-v_audio-gated',
+      wsUrl: 'ws://127.0.0.1:39001/v1/streams/strm_editor-v_audio-gated',
+      audioStreamId: 'strm_editor-a_audio-gated',
+      audioWsUrl: 'ws://127.0.0.1:39001/v1/streams/strm_editor-a_audio-gated',
+    });
+
+    const { root } = await renderPreview();
+    const clientModule = await import('@neko/neko-client');
+    const lifecycleStart = (
+      clientModule as typeof clientModule & { __lifecycleStart: ReturnType<typeof vi.fn> }
+    ).__lifecycleStart;
+
+    expect(audioContexts).toHaveLength(0);
+    expect(lifecycleStart).toHaveBeenLastCalledWith(expect.objectContaining({ audio: undefined }));
+
+    await act(async () => {
+      window.dispatchEvent(new PointerEvent('pointerdown'));
+      await Promise.resolve();
+    });
+
+    expect(audioContexts).toHaveLength(1);
+    expect(lifecycleStart).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        audio: expect.objectContaining({
+          websocketUrl: 'ws://127.0.0.1:39001/v1/streams/strm_editor-a_audio-gated',
+        }),
+      }),
+    );
+
+    await act(async () => {
+      root.unmount();
+      await Promise.resolve();
+    });
+  });
+
   it('does not keep the GPU initializing overlay after the frame server stream is ready', async () => {
     const { root, container } = await renderPreview();
 
@@ -456,6 +530,35 @@ describe('PreviewPanel playback controls', () => {
     const canvas = container.querySelector('canvas');
     expect(canvas).not.toBeNull();
     expect(canvas?.style.display).toBe('block');
+
+    await act(async () => {
+      root.unmount();
+      await Promise.resolve();
+    });
+  });
+
+  it('projects an Engine stream disconnect as a typed visible diagnostic', async () => {
+    publishFrameServerMessage({ type: 'frameServer:config', port: 39001 });
+    publishFrameServerMessage({
+      type: 'frameServer:streamCreated',
+      streamId: 'strm_editor-v_unavailable',
+      wsUrl: 'ws://127.0.0.1:39001/v1/streams/strm_editor-v_unavailable',
+      audioStreamId: null,
+      audioWsUrl: null,
+    });
+
+    const { root, container } = await renderPreview();
+
+    await act(async () => {
+      streamLifecycleMock.emitVideoError(new Error('WebSocket connection error'));
+      await Promise.resolve();
+    });
+
+    const diagnostic = container.querySelector(
+      '[role="alert"][data-diagnostic-code="cut.engine.stream-unavailable"]',
+    );
+    expect(diagnostic?.textContent).toContain('WebSocket connection error');
+    expect(container.textContent).not.toContain('preview.gpuRequired');
 
     await act(async () => {
       root.unmount();

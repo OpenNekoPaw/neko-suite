@@ -881,8 +881,7 @@ export class MediaService implements vscode.Disposable {
       const params =
         payload?.params ??
         (msg.params as
-          | Array<{ name: string; default: number; min: number; max: number }>
-          | undefined);
+          Array<{ name: string; default: number; min: number; max: number }> | undefined);
       await this.client.registerShader(id, code, params);
       this.sendResponse({
         type: 'effects:response:register',
@@ -921,7 +920,7 @@ export class MediaService implements vscode.Disposable {
    */
   private async resolveMediaPath(mediaPath: string): Promise<string> {
     const baseDir = this.documentDir ?? vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? '';
-    return resolveMediaPathHelper(mediaPath, baseDir, undefined, {
+    return resolveMediaPathHelper(mediaPath, baseDir, {
       ...(this.documentUri
         ? { documentUri: this.documentUri, projectFilePath: this.documentUri.fsPath }
         : {}),

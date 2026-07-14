@@ -949,7 +949,7 @@ export class ExportService implements vscode.Disposable {
    * Resolve a media path to absolute (relative to .nkv document dir)
    */
   private async resolveMediaPath(mediaPath: string, config: ExportConfig): Promise<string> {
-    const resolvedPath = await resolveMediaPathHelper(mediaPath, this.documentDir, undefined, {
+    const resolvedPath = await resolveMediaPathHelper(mediaPath, this.documentDir, {
       ...(this.documentUri
         ? { documentUri: this.documentUri, projectFilePath: this.documentUri.fsPath }
         : {}),

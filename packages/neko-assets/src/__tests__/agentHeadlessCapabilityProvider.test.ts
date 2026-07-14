@@ -70,6 +70,44 @@ describe('createNekoAssetsHeadlessCapabilityProvider', () => {
     ]);
   });
 
+  it('keeps generated outputs outside AssetLibrary until explicit import', async () => {
+    const entities: AssetEntity[] = [];
+    const promoted = createEntity({
+      id: 'asset-promoted',
+      name: 'Promoted Image',
+      category: 'object',
+    });
+    const importFile = vi.fn(async () => {
+      entities.push(promoted);
+      return promoted;
+    });
+    const provider = createNekoAssetsHeadlessCapabilityProvider(
+      createApi({ entities, importFile }),
+    );
+    const tools = provider.getTools(createContext());
+    const getTool = tools.find((tool) => tool.name === TOOL_NAMES_ASSETS.GET_ASSET);
+    const importTool = tools.find((tool) => tool.name === TOOL_NAMES_ASSETS.IMPORT_ASSET);
+
+    await expect(getTool?.execute({ assetId: 'generated-output-1' })).resolves.toEqual({
+      success: false,
+      error: 'Asset not found: generated-output-1',
+    });
+
+    await expect(
+      importTool?.execute({ filePath: '/workspace/neko/generated/image/output-1.png' }),
+    ).resolves.toMatchObject({
+      success: true,
+      data: { asset: { id: 'asset-promoted' } },
+    });
+    await expect(getTool?.execute({ assetId: 'asset-promoted' })).resolves.toMatchObject({
+      success: true,
+      data: { asset: { id: 'asset-promoted' } },
+    });
+    await expect(getTool?.execute({ assetId: 'generated-output-1' })).resolves.toMatchObject({
+      success: false,
+    });
+  });
+
   it('does not import vscode from headless provider source', () => {
     const source = readFileSync(join(__dirname, '../agentHeadlessCapabilityProvider.mts'), 'utf8');
 

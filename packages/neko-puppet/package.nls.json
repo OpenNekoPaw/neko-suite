@@ -4,5 +4,7 @@
   "neko.puppet.importLive2dBundle.title": "Import Live2D Bundle",
   "neko.puppet.exportModel.title": "Export Puppet Model Package",
   "neko.puppet.exportMotions.title": "Export Puppet Motion Package",
-  "neko.puppet.exportConfig.title": "Export Puppet Config Package"
+  "neko.puppet.exportConfig.title": "Export Puppet Config Package",
+  "neko.puppet.liveMode.start.title": "Start Puppet Live Mode",
+  "neko.puppet.liveMode.stop.title": "Stop Puppet Live Mode"
 }

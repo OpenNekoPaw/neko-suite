@@ -1049,7 +1049,8 @@ describe('canvasEditorProvider message contracts', () => {
       expect(providerSource).toContain('private async addCanvasProjectSource(');
       expect(providerSource).toContain('ingestProjectSourceAddRequest(');
       expect(providerSource).toContain('const runtimeAssetPath =');
-      expect(providerSource).toContain('this.projectLocalResource(');
+      expect(providerSource).not.toContain('private projectLocalResource(');
+      expect(providerSource).not.toContain('this.projectLocalResource(');
       expect(providerSource).toContain('await this.projectCanvasMediaLocalFile(');
       expect(providerSource).toContain('...(runtimeAssetPath ? { runtimeAssetPath } : {}),');
       expect(providerSource).toContain('postProjectSourceAddResult');

@@ -15,6 +15,7 @@ import {
   DocumentEntryContentAccessProvider,
   ExportStagingContentIngestProvider,
   GeneratedOutputContentIngestProvider,
+  GeneratedAssetSourceContentAccessProvider,
   ImportSourceContentIngestProvider,
   PreviewVariantContentAccessProvider,
   RegisterExistingSourceContentIngestProvider,
@@ -66,6 +67,40 @@ describe('content access providers', () => {
     height: 256,
     mimeType: 'image/jpeg',
   };
+
+  it('reads generated image source bytes without materializing ResourceCache', async () => {
+    const sourcePath = '/workspace/demo/neko/generated/image/shot.png';
+    const resolveAsset = vi.fn(async () => ({ path: sourcePath, mimeType: 'image/png' }));
+    const provider = new GeneratedAssetSourceContentAccessProvider({
+      resolveAsset,
+      fileOps: { readFile: vi.fn(async () => bytes('generated-source')) },
+    });
+    const generated = createResourceRef({
+      scope: 'project',
+      provider: 'generated-asset',
+      kind: 'generated',
+      source: { kind: 'generated-asset', assetId: 'asset-1' },
+      fingerprint: createResourceFingerprint({ strategy: 'provider', value: 'asset-1' }),
+    });
+
+    const result = await provider.resolve({
+      request: {
+        ref: generated,
+        intent: 'agent-context',
+        target: 'bytes',
+        variant: { role: 'preview' },
+      },
+    });
+
+    expect(result).toMatchObject({
+      status: 'ready',
+      providerId: 'generated-asset-source-content-access',
+      localPath: sourcePath,
+      mimeType: 'image/png',
+    });
+    expect(text(result.bytes)).toBe('generated-source');
+    expect(resolveAsset).toHaveBeenCalledWith(generated);
+  });
 
   it('resolves preview cache variants and materializes missing cache', async () => {
     const cache = createResourceCache({

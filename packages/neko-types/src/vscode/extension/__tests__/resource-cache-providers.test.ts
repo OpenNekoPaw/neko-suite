@@ -121,7 +121,7 @@ describe('resource cache provider adapters', () => {
     });
   });
 
-  it('maps generated asset metadata into source, preview, or thumbnail variants', async () => {
+  it('materializes bounded generated thumbnails without copying source bytes', async () => {
     const fsOps = new FakeFileOps({
       '/workspace/neko/generated/image/shot.png': 'generated',
     });
@@ -130,25 +130,60 @@ describe('resource cache provider adapters', () => {
       path: '/workspace/neko/generated/image/shot.png',
       mimeType: 'image/png',
     });
-    const provider = new GeneratedAssetDerivativeResourceCacheProvider({ fsOps });
+    const generator = {
+      generate: vi.fn(async () => ({
+        bytes: new TextEncoder().encode('small-thumbnail'),
+        width: 256,
+        height: 144,
+        mimeType: 'image/webp',
+      })),
+    };
+    const provider = new GeneratedAssetDerivativeResourceCacheProvider({ fsOps, generator });
 
     const result = await provider.ensure({
       ref,
-      variant: { role: 'preview', width: 1024, height: 1024, mimeType: 'image/png' },
+      variant: { role: 'thumbnail', width: 256, height: 256, mimeType: 'image/webp' },
       cacheRoot: '/workspace/.neko/.cache/resources',
     });
 
     expect(result).toMatchObject({
       status: 'ready',
       relativePath: expect.stringMatching(/^generated\/generated-asset\/res_/),
-      mimeType: 'image/png',
-      width: 1024,
-      height: 1024,
+      mimeType: 'image/webp',
+      width: 256,
+      height: 144,
     });
-    expect(fsOps.copyCalls[0]).toEqual({
-      source: '/workspace/neko/generated/image/shot.png',
-      target: expect.stringContaining('/workspace/.neko/.cache/resources/generated/'),
+    expect(generator.generate).toHaveBeenCalledWith('/workspace/neko/generated/image/shot.png', {
+      role: 'thumbnail',
+      width: 256,
+      height: 256,
+      mimeType: 'image/webp',
     });
+    expect(fsOps.copyCalls).toEqual([]);
+    expect(fsOps.files.get(result.absolutePath!)).toBe('small-thumbnail');
+  });
+
+  it('rejects untransformed generated previews instead of copying the source into cache', async () => {
+    const fsOps = new FakeFileOps({
+      '/workspace/neko/generated/image/shot.png': 'generated',
+    });
+    const provider = new GeneratedAssetDerivativeResourceCacheProvider({
+      fsOps,
+      generator: { generate: vi.fn() },
+    });
+
+    const result = await provider.ensure({
+      ref: createGeneratedAssetResourceRef({
+        assetId: 'asset-1',
+        path: '/workspace/neko/generated/image/shot.png',
+        mimeType: 'image/png',
+      }),
+      variant: { role: 'preview', mimeType: 'image/png' },
+      cacheRoot: '/workspace/.neko/.cache/resources',
+    });
+
+    expect(result).toMatchObject({ status: 'unsupported' });
+    expect(fsOps.copyCalls).toEqual([]);
   });
 
   it('rejects generated source variants because ResourceCache only stores derivatives', async () => {
@@ -175,7 +210,7 @@ describe('resource cache provider adapters', () => {
     expect(fsOps.copyCalls).toEqual([]);
   });
 
-  it('expands generated asset variable paths before materializing previews', async () => {
+  it('expands generated asset variable paths before materializing thumbnails', async () => {
     const fsOps = new FakeFileOps({
       '/workspace/neko/generated/image/shot.png': 'generated',
     });
@@ -188,16 +223,17 @@ describe('resource cache provider adapters', () => {
       fsOps,
       pathResolver: new PathResolver(new Map([['WORKSPACE', '/workspace']])),
       projectRoot: '/workspace',
+      generator: createGeneratedThumbnailGenerator(),
     });
 
     const result = await provider.ensure({
       ref,
-      variant: { role: 'preview', mimeType: 'image/png' },
+      variant: { role: 'thumbnail', width: 256, mimeType: 'image/webp' },
       cacheRoot: '/workspace/.neko/.cache/resources',
     });
 
     expect(result.status).toBe('ready');
-    expect(fsOps.copyCalls[0]?.source).toBe('/workspace/neko/generated/image/shot.png');
+    expect(fsOps.files.get(result.absolutePath!)).toBe('small-thumbnail');
   });
 
   it('keys generated derivatives by promoted generated source refs', async () => {
@@ -205,7 +241,10 @@ describe('resource cache provider adapters', () => {
       '/workspace/neko/generated/image/shot-a.png': 'generated-a',
       '/workspace/neko/generated/image/shot-b.png': 'generated-b',
     });
-    const provider = new GeneratedAssetDerivativeResourceCacheProvider({ fsOps });
+    const provider = new GeneratedAssetDerivativeResourceCacheProvider({
+      fsOps,
+      generator: createGeneratedThumbnailGenerator(),
+    });
     const firstRef = createGeneratedAssetResourceRef({
       assetId: 'asset-a',
       path: '/workspace/neko/generated/image/shot-a.png',
@@ -245,10 +284,13 @@ describe('resource cache provider adapters', () => {
       path: sourcePath,
       mimeType: 'image/png',
     });
-    const provider = new GeneratedAssetDerivativeResourceCacheProvider({ fsOps });
+    const provider = new GeneratedAssetDerivativeResourceCacheProvider({
+      fsOps,
+      generator: createGeneratedThumbnailGenerator(),
+    });
     const input = {
       ref,
-      variant: { role: 'preview' as const, width: 512, mimeType: 'image/png' },
+      variant: { role: 'thumbnail' as const, width: 512, mimeType: 'image/webp' },
       cacheRoot: '/workspace/.neko/.cache/resources',
     };
 
@@ -265,9 +307,20 @@ describe('resource cache provider adapters', () => {
       absolutePath: first.absolutePath,
       relativePath: first.relativePath,
     });
-    expect(fsOps.copyCalls.filter((call) => call.source === sourcePath)).toHaveLength(2);
+    expect(fsOps.copyCalls).toEqual([]);
   });
 });
+
+function createGeneratedThumbnailGenerator() {
+  return {
+    generate: vi.fn(async () => ({
+      bytes: new TextEncoder().encode('small-thumbnail'),
+      width: 256,
+      height: 144,
+      mimeType: 'image/webp',
+    })),
+  };
+}
 
 class FakeFileOps implements ResourceCacheFileOps {
   readonly files = new Map<string, string>();
@@ -285,6 +338,10 @@ class FakeFileOps implements ResourceCacheFileOps {
     if (content === undefined) throw new Error(`ENOENT: ${source}`);
     this.copyCalls.push({ source, target });
     this.files.set(target, content);
+  }
+
+  async writeFile(filePath: string, content: Uint8Array): Promise<void> {
+    this.files.set(filePath, new TextDecoder().decode(content));
   }
 
   async mkdir(filePath: string): Promise<void> {

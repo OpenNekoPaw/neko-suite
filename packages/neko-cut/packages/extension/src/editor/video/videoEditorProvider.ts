@@ -844,6 +844,19 @@ export class VideoEditorProvider implements vscode.CustomEditorProvider<VideoPro
         if (message.type === 'ready') {
           logger.info('Webview ready, replaying project data and frame server config');
           updateWebview();
+          webviewPanel.webview.postMessage(
+            client
+              ? { type: 'engine:status', status: 'ready' }
+              : {
+                  type: 'engine:status',
+                  status: 'unavailable',
+                  diagnostic: {
+                    code: 'cut.engine.unavailable',
+                    message:
+                      'Neko Engine is unavailable. Timeline editing remains available, but media preview and processing cannot run.',
+                  },
+                },
+          );
           if (frameServerPort) {
             webviewPanel.webview.postMessage({
               type: 'frameServer:config',

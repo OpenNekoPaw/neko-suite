@@ -1309,6 +1309,7 @@ describe('checkSyntax', () => {
     const text = 'This is [[unclosed note\nNext line';
     const diags = checkSyntax(text);
     expect(diags.some((d) => d.severity === 'error' && d.message.includes('[['))).toBe(true);
+    expect(diags.some((d) => d.code === 'story.syntax.unclosed-note')).toBe(true);
   });
 
   it('passes when note is closed on same line', () => {
@@ -1321,6 +1322,7 @@ describe('checkSyntax', () => {
     const text = 'Normal line\n/* unclosed boneyard\nAnother line';
     const diags = checkSyntax(text);
     expect(diags.some((d) => d.severity === 'error' && d.message.includes('/*'))).toBe(true);
+    expect(diags.some((d) => d.code === 'story.syntax.unclosed-boneyard')).toBe(true);
   });
 
   it('passes when boneyard is closed', () => {
@@ -1335,6 +1337,7 @@ describe('checkSyntax', () => {
     expect(
       diags.some((d) => d.severity === 'warning' && d.message.toLowerCase().includes('transition')),
     ).toBe(true);
+    expect(diags.some((d) => d.code === 'story.syntax.empty-transition')).toBe(true);
   });
 });
 
@@ -1367,6 +1370,7 @@ How are you?`;
     const diags = checkSemantics(doc);
     const aliceWarning = diags.find((d) => d.message.includes('ALICE'));
     expect(aliceWarning?.severity).toBe('warning');
+    expect(aliceWarning?.code).toBe('story.semantic.single-occurrence-character');
     expect(diags.find((d) => d.message.includes('BOB'))).toBeUndefined();
   });
 });

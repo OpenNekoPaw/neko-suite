@@ -25,7 +25,6 @@ type MessageFromWebview =
   | { type: 'scroll'; line: number };
 
 export class PreviewPanel implements vscode.Disposable {
-  private static readonly panels = new Set<PreviewPanel>();
   private static readonly viewType = 'nekoStory.preview';
 
   private readonly panel: vscode.WebviewPanel;
@@ -101,7 +100,6 @@ export class PreviewPanel implements vscode.Disposable {
     await localResourceAccess.configureWebview(panel.webview, { enableScripts: true });
 
     const instance = new PreviewPanel(panel, extensionUri, localResourceAccess);
-    PreviewPanel.panels.add(instance);
     return instance;
   }
 
@@ -282,8 +280,6 @@ export class PreviewPanel implements vscode.Disposable {
 
     this.isDisposed = true;
     this.updateVersion++;
-    PreviewPanel.panels.delete(this);
-
     if (this.updateTimeout) {
       clearTimeout(this.updateTimeout);
       this.updateTimeout = undefined;

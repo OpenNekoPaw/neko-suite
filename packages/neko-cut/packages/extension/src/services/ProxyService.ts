@@ -464,7 +464,7 @@ export class ProxyService implements vscode.Disposable {
   }
 
   private async resolveMediaPath(mediaPath: string): Promise<string> {
-    return resolveMediaPathHelper(mediaPath, this.projectDir ?? '', undefined, {
+    return resolveMediaPathHelper(mediaPath, this.projectDir ?? '', {
       ...(this.projectFilePath ? { projectFilePath: this.projectFilePath } : {}),
       ...(this.documentUri ? { documentUri: this.documentUri } : {}),
       fileExists: isExistingLocalFile,

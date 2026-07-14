@@ -30,7 +30,8 @@ export function NodeHeader({
 }: NodeHeaderProps) {
   return (
     <div
-      className="flex items-center gap-2 px-3 py-2"
+      className="node-header flex items-center gap-2 px-3 py-2"
+      tabIndex={-1}
       style={{
         backgroundColor: 'var(--node-header-bg)',
         borderBottom: '1px solid var(--node-divider)',

@@ -3,8 +3,7 @@
 // graph tracking connections between creative entities and their canvas, asset,
 // and generated-asset representations.
 //
-// Persistence: debounced atomic flush to .neko/.cache/asset-graph.json
-// via mkdir + .tmp write + rename (follows GeneratedAssetIndex pattern).
+// The graph is rebuilt from owning project facts and cross-modal runtime data.
 //
 // See ADR §4.5 for the CreativeEntityGraph model.
 // =============================================================================
@@ -13,7 +12,6 @@ import * as vscode from 'vscode';
 import type {
   AssetEntity,
   CanvasNode,
-  CreativeEntityGraphSnapshot,
   CreativeGraphNode,
   CreativeGraphNodeKind,
   CreativeRelationEdge,
@@ -28,10 +26,6 @@ import type {
 } from '@neko/shared';
 import type { ICharacterWorkspaceIndex, ICreativeEntityGraph } from './types';
 import type { CrossModalDataProvider, CrossModalDataSnapshot } from './CrossModalDataProvider';
-import { getRootLogger } from '../utils/logger';
-
-const SNAPSHOT_VERSION = 1;
-const FLUSH_DELAY_MS = 1000;
 
 export class CreativeEntityGraphService implements ICreativeEntityGraph {
   private readonly disposables: vscode.Disposable[] = [];
@@ -41,14 +35,11 @@ export class CreativeEntityGraphService implements ICreativeEntityGraph {
   private nodes = new Map<string, CreativeGraphNode>();
   private edges: CreativeRelationEdge[] = [];
 
-  private dirty = false;
-  private flushTimer: ReturnType<typeof setTimeout> | undefined;
   private initPromise: Promise<void> | undefined;
 
   constructor(
     private readonly dataProvider: CrossModalDataProvider,
     private readonly characterIndex: ICharacterWorkspaceIndex,
-    private readonly graphPath?: string,
   ) {}
 
   async ensureInitialized(): Promise<void> {
@@ -73,13 +64,6 @@ export class CreativeEntityGraphService implements ICreativeEntityGraph {
   }
 
   dispose(): void {
-    if (this.flushTimer !== undefined) {
-      clearTimeout(this.flushTimer);
-      this.flushTimer = undefined;
-    }
-    if (this.dirty) {
-      void this.flush();
-    }
     this.onDidUpdateEmitter.dispose();
     for (const d of this.disposables) {
       d.dispose();
@@ -91,7 +75,6 @@ export class CreativeEntityGraphService implements ICreativeEntityGraph {
   // ---------------------------------------------------------------------------
 
   private async initialize(): Promise<void> {
-    await this.loadFromDisk();
     await Promise.all([
       this.characterIndex.ensureInitialized(),
       this.dataProvider.ensureInitialized(),
@@ -135,7 +118,6 @@ export class CreativeEntityGraphService implements ICreativeEntityGraph {
     this.buildGeneratedAssetNodesAndEdges(snapshot.generatedAssets);
     this.buildEntityAssetBindingEdges(snapshot.entityAssetBindings ?? []);
 
-    this.markDirty();
     this.onDidUpdateEmitter.fire();
   }
 
@@ -331,75 +313,6 @@ export class CreativeEntityGraphService implements ICreativeEntityGraph {
       provenance,
     });
   }
-
-  // ---------------------------------------------------------------------------
-  // Persistence
-  // ---------------------------------------------------------------------------
-
-  private markDirty(): void {
-    this.dirty = true;
-    if (this.flushTimer === undefined) {
-      this.flushTimer = setTimeout(() => {
-        this.flushTimer = undefined;
-        void this.flush();
-      }, FLUSH_DELAY_MS);
-    }
-  }
-
-  private async flush(): Promise<void> {
-    if (!this.graphPath) {
-      this.dirty = false;
-      return;
-    }
-
-    const snapshot: CreativeEntityGraphSnapshot = {
-      version: SNAPSHOT_VERSION,
-      nodes: [...this.nodes.values()],
-      edges: this.edges,
-    };
-
-    try {
-      // Ensure parent directory exists
-      const targetUri = vscode.Uri.file(this.graphPath);
-      const parentUri = vscode.Uri.file(this.graphPath.replace(/[/\\][^/\\]+$/, ''));
-      await vscode.workspace.fs.createDirectory(parentUri);
-
-      // Atomic write: write to .tmp then rename
-      const tmpUri = vscode.Uri.file(`${this.graphPath}.tmp`);
-      const encoded = new TextEncoder().encode(JSON.stringify(snapshot, null, 2));
-      await vscode.workspace.fs.writeFile(tmpUri, encoded);
-      await vscode.workspace.fs.rename(tmpUri, targetUri, { overwrite: true });
-      this.dirty = false;
-    } catch (error) {
-      getRootLogger().warn(
-        `CreativeEntityGraphService: failed to persist graph: ${formatError(error)}`,
-      );
-    }
-  }
-
-  private async loadFromDisk(): Promise<void> {
-    if (!this.graphPath) {
-      return;
-    }
-
-    try {
-      const uri = vscode.Uri.file(this.graphPath);
-      const raw = await vscode.workspace.fs.readFile(uri);
-      const data = JSON.parse(new TextDecoder().decode(raw)) as CreativeEntityGraphSnapshot;
-
-      if (data.version !== SNAPSHOT_VERSION) {
-        return;
-      }
-
-      this.nodes.clear();
-      for (const node of data.nodes) {
-        this.nodes.set(node.id, node);
-      }
-      this.edges = [...data.edges];
-    } catch {
-      // No snapshot on disk or corrupt — full rebuild will happen in initialize()
-    }
-  }
 }
 
 function toBindingProvenance(source: EntityAssetBindingSource): CreativeRelationProvenance {
@@ -415,8 +328,4 @@ function toBindingProvenance(source: EntityAssetBindingSource): CreativeRelation
     case 'canvas':
       return 'lineage';
   }
-}
-
-function formatError(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }

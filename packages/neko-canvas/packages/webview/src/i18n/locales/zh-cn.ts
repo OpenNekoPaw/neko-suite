@@ -544,6 +544,7 @@ export const zhCN = {
 
   // Loading
   loading: '加载画布中...',
+  'loadError.title': '无法打开 Canvas 项目',
 
   // Canvas
   'canvas.dropHint': '拖放文件到画布中添加',

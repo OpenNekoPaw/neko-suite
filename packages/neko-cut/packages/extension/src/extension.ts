@@ -12,6 +12,7 @@ import {
   setGlobalServices,
   setRootLogger,
   setErrorHandler,
+  handleError,
   getRootLogger,
 } from './base';
 import {
@@ -20,6 +21,7 @@ import {
   resolveLogLevelSetting,
   watchLogLevel,
   createVSCodeProjectFileIoAdapter,
+  registerOptionalAgentCapabilityProvider,
 } from '@neko/shared/vscode/extension';
 import { bootstrapCoreServices, logServicesStatus } from './bootstrap';
 import { VideoEditorProvider } from './editor/video/videoEditorProvider';
@@ -320,15 +322,11 @@ export async function activate(
     }),
   );
 
-  // Register Agent Capability Provider (P0-1: sub-package owns its tool definitions)
-  // This provides neko-cut's timeline tools to neko-agent via the discovery protocol.
-  // Falls back silently if neko-agent is not installed.
-  try {
-    const capabilityProvider = createNekoCutCapabilityProvider(api, timelineBridge);
-    void vscode.commands.executeCommand('neko.agent.registerCapabilities', capabilityProvider);
-  } catch {
-    // neko-agent not installed — capability registration silently skipped
-  }
+  void registerOptionalAgentCapabilityProvider(
+    createNekoCutCapabilityProvider(api, timelineBridge),
+  ).catch((error: unknown) => {
+    void handleError(error, { showToUser: false });
+  });
 
   await registerMarketInstallTargets(context);
 

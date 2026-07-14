@@ -171,7 +171,7 @@ extension → parser → types
 
 ## 验收标准
 
-1. ✅ `.fountain` / `.nks` / `.story` 文件有语法高亮
+1. ✅ `.fountain` / `.story` 文件有语法高亮（`.nks` 归 Sketch/Image）
 2. ✅ 大纲视图显示场景和章节结构
 3. ✅ 自动补全角色名和场景位置
 4. ✅ Cmd+Click 跳转到角色定义

@@ -29,9 +29,8 @@ import {
 import { selectLiveVisualPath, type LiveCompositorStatus } from './viewport/liveVisualPath';
 import { LiveLocalPreviewSurface } from './viewport/LiveLocalPreviewSurface';
 
-const canvasRecorder = new CanvasRecorder();
-
 export function App() {
+  const canvasRecorder = useMemo(() => new CanvasRecorder(), []);
   const viewportRef = useRef<HTMLDivElement>(null);
   const liveCanvasRef = useRef<LiveCompositorCanvasHandle>(null);
   const streamClientRef = useRef<H264StreamClient | null>(null);
@@ -56,6 +55,7 @@ export function App() {
     setRecordingState,
     setRecordingElapsed,
     setLastRecordingPath,
+    setLastRecordingRetained,
     setAvatarLoaded,
     setDeviceBinding,
     deviceBindings,
@@ -266,7 +266,7 @@ export function App() {
       setRecordingElapsed(0);
       vscode.postMessage({ type: 'startRecording', includeAudio, authority: 'local-preview' });
     },
-    [setRecordingState, setRecordingElapsed],
+    [canvasRecorder, setRecordingState, setRecordingElapsed],
   );
 
   /** Stop recording: stop canvas capture, send blob, notify extension host */
@@ -293,7 +293,15 @@ export function App() {
 
     // Tell extension host to stop audio recording
     vscode.postMessage({ type: 'stopRecording' });
-  }, [setRecordingState]);
+  }, [canvasRecorder, setRecordingState]);
+
+  useEffect(() => {
+    return () => {
+      if (canvasRecorder.isRecording) {
+        void canvasRecorder.stop();
+      }
+    };
+  }, [canvasRecorder]);
 
   // Expose handlers to TrackingPanel via store
   useEffect(() => {
@@ -336,6 +344,12 @@ export function App() {
         case 'recordingStopped':
           setRecordingState('idle');
           setLastRecordingPath(msg.filePath);
+          setLastRecordingRetained(false);
+          break;
+
+        case 'recordingPromoted':
+          setLastRecordingPath(msg.filePath);
+          setLastRecordingRetained(true);
           break;
 
         case 'recordingProgress':
@@ -369,6 +383,7 @@ export function App() {
     setRecordingState,
     setRecordingElapsed,
     setLastRecordingPath,
+    setLastRecordingRetained,
     setAvatarLoaded,
     setDeviceBinding,
   ]);
