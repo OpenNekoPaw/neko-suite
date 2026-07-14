@@ -47,6 +47,7 @@ const requiredLedgerEntryFields = [
 const excludedDirectories = new Set([
   '.git',
   '.turbo',
+  '.vscode-test',
   'coverage',
   'dist',
   'node_modules',
