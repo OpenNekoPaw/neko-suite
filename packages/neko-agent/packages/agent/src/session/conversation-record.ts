@@ -2,7 +2,7 @@
  * Conversation Record - Shared resume layer format
  *
  * Both Extension (Webview) and TUI/CLI can surface this format.
- * Journal + conversations-index.json is the source of truth.
+ * Journal events are authoritative; SQLite provides the rebuildable resume projection.
  */
 
 import type { ChatMessage } from '@neko/shared';
@@ -14,6 +14,11 @@ export interface ConversationMediaModelSelection {
   video?: string;
   audio?: string;
   music?: string;
+}
+
+export interface ConversationChatModelSelection {
+  providerId: string;
+  modelId: string;
 }
 
 /**
@@ -34,11 +39,14 @@ export interface ConversationRecord {
   source: ConversationSource;
   /** Optional: last-used media model selection for this conversation */
   mediaModelSelection?: ConversationMediaModelSelection;
+  /** Optional: last-used chat model selection for this conversation */
+  chatModelSelection?: ConversationChatModelSelection;
+  /** Optional catalog tags owned by the conversation metadata event. */
+  tags?: string[];
 }
 
 /**
- * Meta record stored in ~/.neko/conversations-index.json.
- * Contains routing and list metadata only; message history stays in Journal.
+ * Legacy metadata shape accepted only by the explicit conversation catalog migration.
  */
 export interface ConversationIndexMeta {
   conversationId: string;
@@ -53,8 +61,7 @@ export interface ConversationIndexMeta {
 }
 
 /**
- * Global conversations index file.
- * Tracks workDir-to-conversation routing plus per-conversation metadata.
+ * Legacy global index shape accepted only by migration and recovery diagnostics.
  */
 export interface ConversationsIndexFile {
   version: 1;

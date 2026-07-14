@@ -57,6 +57,7 @@ describe('conversation control runtime', () => {
 
   it('creates a conversation and refreshes list plus active conversation', async () => {
     effects.createConversation = vi.fn().mockReturnValue('conv-new');
+    effects.onConversationCreated = vi.fn();
 
     await expect(runNewConversationRuntime(effects)).resolves.toEqual({
       action: 'new-conversation',
@@ -64,6 +65,7 @@ describe('conversation control runtime', () => {
       conversationId: 'conv-new',
     });
     expect(effects.createConversation).toHaveBeenCalledTimes(1);
+    expect(effects.onConversationCreated).toHaveBeenCalledWith('conv-new');
     expect(refreshConversationList).toHaveBeenCalledTimes(1);
     expect(refreshActiveConversation).toHaveBeenCalledTimes(1);
   });

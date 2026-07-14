@@ -12,7 +12,6 @@ import type { IdcStage } from '@neko-agent/types';
 
 export interface ValidationRuntimeCoordinatorPort {
   readonly getCoordinator: () => IValidationCoordinator | null;
-  readonly isRecoveryGuidanceDisabled: () => boolean;
 }
 
 export interface ValidationRuntimeRecoveryPort {
@@ -139,11 +138,6 @@ export class ValidationRuntimeBridge {
     content: string | null,
     sourceRun?: { readonly id: string; readonly startedAt?: number } | null,
   ): void {
-    if (this._options.ports.validation.isRecoveryGuidanceDisabled() && content !== null) {
-      this._applyGuidanceSnapshot(null);
-      return;
-    }
-
     const trimmed = content?.trim();
     if (!trimmed) {
       this._applyGuidanceSnapshot(null);

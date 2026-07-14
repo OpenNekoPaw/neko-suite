@@ -102,6 +102,7 @@ import {
 import { projectMediaModelToolsFromMetadata } from '../tools/media-generation-tool-selection';
 import { stepToEvents, type StreamState } from './step-event-converter';
 import { classifyAgentStepSemantics } from './agent-step-semantics';
+import { backfillReadImagePerceptionResults } from './read-image-perception-backfill';
 
 import type {
   IAgentSession,
@@ -181,6 +182,7 @@ import {
 
 const logger = getLogger('AgentSession');
 const SESSION_SYSTEM_PROMPT_REFRESH_HOOK_NAME = 'session-system-prompt-refresh';
+const SESSION_READ_IMAGE_PERCEPTION_BACKFILL_HOOK_NAME = 'session-read-image-perception-backfill';
 
 function getAgentSessionLogger() {
   return getLogger('AgentSession');
@@ -352,13 +354,6 @@ export class AgentSession implements IAgentSession {
     }
   >();
 
-  /**
-   * Ablation marker (set when the session was constructed via
-   * applyAblationToggles). Session-side consumers: SkillInjectionCoordinator
-   * gate (via enableInjection) and dispose-time SkillService restore.
-   */
-  private _ablationMarker?: import('../experiment/apply-toggles').AblationMarkerHook;
-
   constructor(config: AgentSessionConfig) {
     this._config = config;
     this._executionMode = config.executionMode ?? 'auto';
@@ -394,8 +389,6 @@ export class AgentSession implements IAgentSession {
       ports: {
         validation: {
           getCoordinator: () => this._validationCoordinator,
-          isRecoveryGuidanceDisabled: () =>
-            this._ablationMarker?.disableAgentFirstRecoveryGuidance === true,
         },
         recovery: {
           getRecoveryPolicy: () => this._creativeProcessRecoveryPolicy,
@@ -478,9 +471,6 @@ export class AgentSession implements IAgentSession {
       },
     });
     this._refreshMemoryRuntime();
-    if (components.ablationMarker) {
-      this._ablationMarker = components.ablationMarker;
-    }
 
     // Journal writer for session persistence
     if (config.journalWriter) {
@@ -495,8 +485,6 @@ export class AgentSession implements IAgentSession {
 
     // SkillInjectionCoordinator requires closures over Session fields
     // (e.g. _permissionHooks changes on configure()), so created here.
-    // Ablation: when marker.disableSkillInjection is true, the coordinator's
-    // apply() short-circuits — discovery still works, injection does not.
     this._skillCoordinator = new SkillInjectionCoordinator({
       promptComposer: this._promptComposer,
       getPermissionHooks: () => this._permissionHooks,
@@ -504,11 +492,9 @@ export class AgentSession implements IAgentSession {
       toolSetActivator: this._toolInjectionManager,
       skillInjectionModule: this._skillInjectionModule,
       getLocale: () => this._config.locale ?? 'en',
-      ...(this._ablationMarker && {
-        enableInjection: !this._ablationMarker.disableSkillInjection,
-      }),
     });
     this._installSessionSystemPromptRefreshHook();
+    this._installReadImagePerceptionBackfillHook();
 
     // Stage tracking: when the caller supplies a skill registry + service,
     // spin up a StageTracker and auto-swap the persona Skill on each stage
@@ -907,6 +893,10 @@ export class AgentSession implements IAgentSession {
     this._syncSystemPrompt();
   }
 
+  getPromptCompositionProjection(): readonly import('../prompt').PromptCompositionFragmentProjection[] {
+    return this._promptComposer.projectComposition();
+  }
+
   getArtifactsForRun(runId?: string): readonly ArtifactRecord[] {
     const targetRunId = runId ?? this._getActiveRunId();
     if (!targetRunId) {
@@ -941,9 +931,7 @@ export class AgentSession implements IAgentSession {
       ...(activeRunId ? { runId: activeRunId } : {}),
     });
 
-    if (!this._ablationMarker?.disableAgentFirstToolEvidence) {
-      await Promise.all(result.evidence.map((evidence) => this._recordAgentEvidence(evidence)));
-    }
+    await Promise.all(result.evidence.map((evidence) => this._recordAgentEvidence(evidence)));
 
     await this._captureValidationCycle();
   }
@@ -1405,20 +1393,10 @@ export class AgentSession implements IAgentSession {
       allowedToolCount: projection.toolPolicy.allowedTools?.length ?? 0,
       modelOverride: projection.modelOverride?.model,
       diagnostics: projection.diagnostics,
-      injectionEnabled: this._ablationMarker?.disableSkillInjection !== true,
     });
 
     this._clearSkillLifecycleProjectionState();
     this._skillCoordinator.clearActive();
-
-    if (this._ablationMarker?.disableSkillInjection === true) {
-      this._syncSystemPrompt();
-      logger.debug('neko.agent.skill.lifecycle.projection.apply.skipped', {
-        reason: 'disabled-by-ablation',
-        durationMs: Date.now() - startTime,
-      });
-      return;
-    }
 
     const allowRules: string[] = [];
     const activatedToolSets: string[] = [];
@@ -1428,6 +1406,8 @@ export class AgentSession implements IAgentSession {
           id: section.id,
           layer: section.layer,
           content: section.content,
+          source: 'skill-lifecycle',
+          ...(section.version !== undefined ? { version: section.version } : {}),
           priority: section.priority,
         });
         this._lifecycleProjectionSectionIds.add(section.id);
@@ -1801,13 +1781,6 @@ export class AgentSession implements IAgentSession {
     this._disposed = true;
     this.cancel();
     this._isRunning = false;
-    // Ablation: restore SkillService discovery state if this session disabled
-    // it. SkillService is externally owned so we must un-flip to avoid leaking
-    // ablation state across sessions. Other ablation-driven state (ToolInjectionManager
-    // config, coordinator enableInjection flag) is session-local and dies with dispose.
-    if (this._ablationMarker?.disableSkillDiscovery && this._config.skillService) {
-      this._config.skillService.setDiscoveryEnabled(true);
-    }
     // Flush journal writer
     void this._journalWriter?.dispose();
     // Stage tracking: unsubscribe binding listener + clear tracker listeners.
@@ -2036,9 +2009,7 @@ export class AgentSession implements IAgentSession {
       this._config.validationCoordinatorFactory?.({
         eventBus: createValidationEventSubscriptionPort(this._eventBus),
         stageTracker: this._stageTracker,
-        workspace: this._ablationMarker?.disableProviderCardAutoEvolve
-          ? undefined
-          : createValidationWorkspacePort(this._config.workspace),
+        workspace: createValidationWorkspacePort(this._config.workspace),
         projectMemoryManager: this._config.projectMemoryManager,
         autoMemoryExtraction: this._config.autoMemoryExtraction,
         controlPolicy: this._config.validationControlPolicy,
@@ -2072,7 +2043,12 @@ export class AgentSession implements IAgentSession {
     baseHooks: import('@neko/shared').ExecutorHooks,
   ): import('@neko/shared').ExecutorHooks {
     const validationHooks = this._validationCoordinator?.getBeforeThinkHooks() ?? [];
-    return composeBeforeThinkHooks(baseHooks, validationHooks);
+    const withValidation = composeBeforeThinkHooks(baseHooks, validationHooks);
+    return {
+      ...withValidation,
+      name: withValidation.name ?? 'session-runner-hooks',
+      afterAct: async (results) => withValidation.afterAct?.(results),
+    };
   }
 
   private _refreshMemoryRuntime(): void {
@@ -2192,11 +2168,7 @@ export class AgentSession implements IAgentSession {
       if (toolReviewSignal) {
         this._validationCoordinator.observe(toolReviewSignal);
         toolReviewSignals += 1;
-        if (
-          'evidence' in toolReviewSignal &&
-          toolReviewSignal.evidence &&
-          !this._ablationMarker?.disableAgentFirstToolEvidence
-        ) {
+        if ('evidence' in toolReviewSignal && toolReviewSignal.evidence) {
           void this._recordAgentEvidence(toolReviewSignal.evidence);
         }
       }
@@ -2228,7 +2200,7 @@ export class AgentSession implements IAgentSession {
   private async _recordAgentEvidence(
     evidence: import('@neko/shared').PerceptionEvidence,
   ): Promise<void> {
-    if (!this._journalWriter || this._ablationMarker?.disableAgentFirst) {
+    if (!this._journalWriter) {
       return;
     }
 
@@ -2369,6 +2341,7 @@ export class AgentSession implements IAgentSession {
     this._permissionHooks = permissionHooks;
     this._executor = executor;
     this._installSessionSystemPromptRefreshHook();
+    this._installReadImagePerceptionBackfillHook();
 
     // Dual-flow: re-register the ReAct-loop runner on the fresh executor.
     if (this._runnerHooks) {
@@ -2388,6 +2361,27 @@ export class AgentSession implements IAgentSession {
         this._refreshExecutorContextSystemPrompt(context);
         return context;
       },
+    });
+  }
+
+  private _installReadImagePerceptionBackfillHook(): void {
+    if (!this._executor) {
+      return;
+    }
+
+    this._executor.removeHook(SESSION_READ_IMAGE_PERCEPTION_BACKFILL_HOOK_NAME);
+    this._executor.addHook({
+      name: SESSION_READ_IMAGE_PERCEPTION_BACKFILL_HOOK_NAME,
+      afterAct: async (results) =>
+        backfillReadImagePerceptionResults({
+          results,
+          perceptionPipeline: this._config.perceptionPipeline,
+          metadata: this._currentTurnPlanningContext?.metadata,
+          chatModel:
+            this._config.providerId && this._config.modelId
+              ? { providerId: this._config.providerId, modelId: this._config.modelId }
+              : undefined,
+        }),
     });
   }
 

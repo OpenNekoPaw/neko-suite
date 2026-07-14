@@ -1,7 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 import { JournalProjection } from '../journal-projection';
+import type { ConversationJournalMetadata } from '../conversation-journal-metadata';
+import { projectJournalHistoryWithToolContext } from '../history-hydration';
 import type { JournalReaderFsOps } from '../journal-reader';
-import type { JournalEntry } from '../journal-writer';
+import { JournalWriter, type JournalEntry } from '../journal-writer';
 
 function entriesToJsonl(entries: JournalEntry[]): string {
   return entries.map((entry) => JSON.stringify(entry)).join('\n') + '\n';
@@ -15,6 +17,244 @@ function createMockFsOps(contentByPath: Record<string, string>): JournalReaderFs
 }
 
 describe('JournalProjection', () => {
+  it('projects structured tool outcomes that Extension history hydration can resume', async () => {
+    const filePath = '/tmp/journals/conv-tool-result-resume.jsonl';
+    const projection = new JournalProjection(
+      '/tmp/journals',
+      createMockFsOps({
+        [filePath]: entriesToJsonl([
+          {
+            seq: 1,
+            ts: 1000,
+            type: 'event',
+            event: { type: 'user_message', content: 'Inspect the project' },
+          },
+          {
+            seq: 2,
+            ts: 1100,
+            type: 'event',
+            event: {
+              type: 'tool_call',
+              toolCall: { id: 'call-resume', name: 'GetContext', arguments: {} },
+            },
+          },
+          {
+            seq: 3,
+            ts: 1200,
+            type: 'event',
+            event: {
+              type: 'tool_result',
+              toolResult: {
+                toolCallId: 'call-resume',
+                success: true,
+                data: { activeSkill: null },
+              },
+            },
+          },
+        ]),
+      }),
+    );
+
+    const history = await projection.projectToHistory('conv-tool-result-resume');
+
+    expect(projectJournalHistoryWithToolContext(history)).toEqual([
+      { role: 'user', content: 'Inspect the project' },
+      {
+        role: 'assistant',
+        content: '',
+        toolCalls: [{ id: 'call-resume', name: 'GetContext', arguments: {} }],
+        toolResults: [{ callId: 'call-resume', success: true, data: { activeSkill: null } }],
+      },
+    ]);
+  });
+
+  it('preserves tool outcomes across scalar, null, absent, and failed Journal data', async () => {
+    const filePath = '/tmp/journals/conv-tool-result-shapes.jsonl';
+    const toolCalls = [
+      { id: 'call-string', name: 'Read', arguments: {} },
+      { id: 'call-null', name: 'Read', arguments: {} },
+      { id: 'call-absent', name: 'Read', arguments: {} },
+      { id: 'call-failed', name: 'Read', arguments: {} },
+    ];
+    const projection = new JournalProjection(
+      '/tmp/journals',
+      createMockFsOps({
+        [filePath]: entriesToJsonl([
+          {
+            seq: 1,
+            ts: 1000,
+            type: 'event',
+            event: { type: 'user_message', content: 'Read several resources' },
+          },
+          ...toolCalls.map((toolCall, index): JournalEntry => ({
+            seq: index + 2,
+            ts: 1100 + index,
+            type: 'event',
+            event: { type: 'tool_call', toolCall },
+          })),
+          {
+            seq: 6,
+            ts: 1200,
+            type: 'event',
+            event: {
+              type: 'tool_result',
+              toolResult: { toolCallId: 'call-string', success: true, data: 'plain text' },
+            },
+          },
+          {
+            seq: 7,
+            ts: 1201,
+            type: 'event',
+            event: {
+              type: 'tool_result',
+              toolResult: { toolCallId: 'call-null', success: true, data: null },
+            },
+          },
+          {
+            seq: 8,
+            ts: 1202,
+            type: 'event',
+            event: {
+              type: 'tool_result',
+              toolResult: { toolCallId: 'call-absent', success: true, data: undefined },
+            },
+          },
+          {
+            seq: 9,
+            ts: 1203,
+            type: 'event',
+            event: {
+              type: 'tool_result',
+              toolResult: {
+                toolCallId: 'call-failed',
+                success: false,
+                data: undefined,
+                error: 'resource unavailable',
+              },
+            },
+          },
+        ]),
+      }),
+    );
+
+    const history = await projection.projectToHistory('conv-tool-result-shapes');
+    const projected = projectJournalHistoryWithToolContext(history);
+
+    expect(projected[1]?.toolResults).toEqual([
+      { callId: 'call-string', success: true, data: 'plain text' },
+      { callId: 'call-null', success: true, data: null },
+      { callId: 'call-absent', success: true, data: null },
+      { callId: 'call-failed', success: false, data: null },
+    ]);
+  });
+
+  it('rebuilds complete conversation catalog metadata from a Journal metadata event', async () => {
+    const filePath = '/tmp/journals/conv-metadata.jsonl';
+    const written: string[] = [];
+    const writer = new JournalWriter({
+      filePath,
+      fsOps: {
+        appendFile: async (_path, data) => {
+          written.push(data);
+        },
+        mkdir: async () => undefined,
+      },
+    });
+    const initialMetadata = {
+      version: 1,
+      conversationId: 'conv-metadata',
+      journalId: 'conv-metadata',
+      workspaceId: '9b2de3b5-5f50-4be4-9551-71fb5b512489',
+      title: 'SQLite storage design',
+      source: 'vscode',
+      createdAt: 1_752_364_800_000,
+      updatedAt: 1_752_368_400_000,
+      messageCount: 4,
+      modelSelection: {
+        chat: { providerId: 'openai', modelId: 'gpt-5' },
+        media: { image: 'gpt-image-1' },
+      },
+      tags: ['storage', 'architecture'],
+      lifecycle: { state: 'active', deletedAt: null },
+    } as const;
+    await writer.appendConversationMetadata(initialMetadata);
+    await writer.appendConversationMetadata({
+      ...initialMetadata,
+      title: 'SQLite storage implementation',
+      updatedAt: 1_752_372_000_000,
+      messageCount: 6,
+    });
+    const projection = new JournalProjection(
+      '/tmp/journals',
+      createMockFsOps({ [filePath]: written.join('') }),
+    );
+
+    await expect(projection.projectToConversationMetadata('conv-metadata')).resolves.toEqual({
+      version: 1,
+      conversationId: 'conv-metadata',
+      journalId: 'conv-metadata',
+      workspaceId: '9b2de3b5-5f50-4be4-9551-71fb5b512489',
+      title: 'SQLite storage implementation',
+      source: 'vscode',
+      createdAt: 1_752_364_800_000,
+      updatedAt: 1_752_372_000_000,
+      messageCount: 6,
+      modelSelection: {
+        chat: { providerId: 'openai', modelId: 'gpt-5' },
+        media: { image: 'gpt-image-1' },
+      },
+      tags: ['storage', 'architecture'],
+      lifecycle: { state: 'active', deletedAt: null },
+    });
+    expect(JSON.parse(written[0]!).seq).toBe(0);
+    expect(written).toHaveLength(2);
+  });
+
+  it('fails visibly for unsupported metadata versions and conversation owner mismatch', async () => {
+    const unsupportedPath = '/tmp/journals/conv-unsupported.jsonl';
+    const mismatchPath = '/tmp/journals/conv-expected.jsonl';
+    const validShape: ConversationJournalMetadata = {
+      version: 1,
+      conversationId: 'conv-other',
+      journalId: 'conv-other',
+      workspaceId: null,
+      title: 'Other conversation',
+      source: 'import',
+      createdAt: 1_000,
+      updatedAt: 2_000,
+      messageCount: 1,
+      modelSelection: { chat: null, media: null },
+      tags: [],
+      lifecycle: { state: 'active', deletedAt: null },
+    };
+    const projection = new JournalProjection(
+      '/tmp/journals',
+      createMockFsOps({
+        [unsupportedPath]: `${JSON.stringify({
+          seq: 0,
+          ts: 2_000,
+          type: 'conversation_metadata',
+          conversationMetadata: { ...validShape, version: 2 },
+        })}\n`,
+        [mismatchPath]: entriesToJsonl([
+          {
+            seq: 0,
+            ts: 2_000,
+            type: 'conversation_metadata',
+            conversationMetadata: validShape,
+          },
+        ]),
+      }),
+    );
+
+    await expect(projection.projectToConversationMetadata('conv-unsupported')).rejects.toThrow(
+      'Unsupported Conversation Journal metadata version',
+    );
+    await expect(projection.projectToConversationMetadata('conv-expected')).rejects.toThrow(
+      'Conversation Journal metadata owner mismatch',
+    );
+  });
+
   it('projects user, assistant, and tool messages from journal events', async () => {
     const filePath = '/tmp/journals/conv-1.jsonl';
     const entries: JournalEntry[] = [
@@ -67,7 +307,11 @@ describe('JournalProjection', () => {
     expect(history[1]!.toolCalls?.[0]!.function.name).toBe('Read');
     expect(history[2]).toEqual({
       role: 'tool',
-      content: JSON.stringify({ name: 'neko' }),
+      content: JSON.stringify({
+        schema: 'neko.tool-result.v1',
+        success: true,
+        data: { name: 'neko' },
+      }),
       toolCallId: 'call-1',
     });
     expect(history[3]).toEqual({ role: 'assistant', content: 'Done.' });
@@ -135,7 +379,11 @@ describe('JournalProjection', () => {
       },
       {
         role: 'tool',
-        content: JSON.stringify({ ok: true }),
+        content: JSON.stringify({
+          schema: 'neko.tool-result.v1',
+          success: true,
+          data: { ok: true },
+        }),
         toolCallId: 'call-1',
       },
     ]);

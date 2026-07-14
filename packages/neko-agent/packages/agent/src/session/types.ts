@@ -339,15 +339,6 @@ export interface AgentSessionConfig {
   perceptionPipeline?: import('../perception').IPerceptionPipeline;
 
   /**
-   * Optional reference to the shared SkillService. When supplied, ablation
-   * toggles that control discovery (e.g. `skillDiscovery: false`) can flip
-   * the service's discovery state at session init and restore it on dispose.
-   * The initializer is the only consumer — agent runtime code should not
-   * reach through this field.
-   */
-  skillService?: import('../skill/skill-service').SkillService;
-
-  /**
    * Optional runtime ArtifactService.
    *
    * When provided, Draft / Plan / Task writes go through this service so
@@ -727,6 +718,9 @@ export interface IAgentSession {
    * composed system prompt immediately.
    */
   setPromptFragments(fragments: readonly PromptFragment[] | undefined): void;
+
+  /** Secret-free projection of the prompt fragments currently composed for the model. */
+  getPromptCompositionProjection(): readonly import('../prompt').PromptCompositionFragmentProjection[];
 
   /**
    * Get the known IDC artifacts bound to a run.

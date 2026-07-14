@@ -20,14 +20,12 @@ import { AgentExecutor } from '../executor';
 import type { Tool } from '@neko/shared';
 import { ConversationCompressor, MessageClassifier, CreativeSummarizer } from '../context';
 import { createExecutorHooks } from '../hooks';
-import { extractAblationMarker, type AblationMarkerHook } from '../experiment/apply-toggles';
 import { ToolGroupRegistry } from '../skill';
 import {
   ToolCategoryRegistry,
   ToolInjectionManager,
   createCoreMetaTools,
   createPerceptionTools,
-  DEFAULT_INJECTION_CONFIG,
   resolveToolGroupTier,
 } from '../tools';
 import { PerceiveTool } from '../perception';
@@ -98,11 +96,6 @@ export interface SessionComponents {
   // PR3e: sub-package prompt fragments projected into the L3 environment
   // layer (priority 70). Populated from config.promptFragments at init.
   subpackageFragmentsModule: SubpackageFragmentsModule;
-
-  // Ablation: extracted marker (if any) so downstream consumers (AgentSession,
-  // dispose chain) can honor skill-side flags without re-parsing config.hooks.
-  // undefined when the session was not produced via applyAblationToggles().
-  ablationMarker?: AblationMarkerHook;
 }
 
 /**
@@ -168,14 +161,6 @@ export function initializeSession(
   const toolGroupRegistry =
     (config.toolGroupRegistry as ToolGroupRegistry) ?? new ToolGroupRegistry();
 
-  // Ablation marker: extract once at the top level so skill-side flags
-  // (skillDiscovery / skillInjection / dynamicToolSets / toolInjection) can
-  // reach their enforcement points (ToolInjectionManager config, SkillService
-  // setter, SessionComponents for downstream AgentSession use).
-  // createConfiguredExecutor re-extracts from config.hooks on rebuild paths,
-  // so we do not mutate config.hooks here.
-  const ablationMarker = extractAblationMarker(config.hooks);
-
   // Step 3: Tool category registry — categorize tools by loading tier
   const toolCategoryRegistry =
     (config.toolCategoryRegistry as ToolCategoryRegistry) ?? new ToolCategoryRegistry();
@@ -198,7 +183,7 @@ export function initializeSession(
     }
   }
 
-  if (!ablationMarker?.disableAgentFirstToolEvidence && config.perceptionPipeline) {
+  if (config.perceptionPipeline) {
     const perceiveTool = new PerceiveTool({ pipeline: config.perceptionPipeline });
     if (!config.toolRegistry.get(perceiveTool.name)) {
       config.toolRegistry.register(perceiveTool);
@@ -206,29 +191,7 @@ export function initializeSession(
     toolCategoryRegistry.categorizeTool(perceiveTool.name, 'analysis', 'always');
   }
 
-  // Step 4: Tool injection manager — apply ablation overrides on top of
-  // DEFAULT_INJECTION_CONFIG. `allowDynamicActivation` false neutralizes
-  // ActivateToolSet/DeactivateToolSet meta tools; `injectionMode: 'always-only'`
-  // confines every turn to resident (always-layer) tools.
-  const toolInjectionConfig = {
-    ...DEFAULT_INJECTION_CONFIG,
-    ...(ablationMarker?.disableDynamicToolSets && { allowDynamicActivation: false }),
-    ...(ablationMarker?.toolInjectionMode && { injectionMode: ablationMarker.toolInjectionMode }),
-  };
-  const toolInjectionManager = new ToolInjectionManager(
-    toolCategoryRegistry,
-    toolGroupRegistry,
-    toolInjectionConfig,
-  );
-
-  // Ablation: skill discovery gate. SkillService is externally owned (shared
-  // across sessions), so we flip its state here and rely on AgentSession.dispose
-  // to restore. When no skillService is supplied (TUI / tests), the toggle is
-  // silently inert — the extension-side chat handler only calls discover() if
-  // it has a skillService anyway.
-  if (ablationMarker?.disableSkillDiscovery && config.skillService) {
-    config.skillService.setDiscoveryEnabled(false);
-  }
+  const toolInjectionManager = new ToolInjectionManager(toolCategoryRegistry, toolGroupRegistry);
 
   // Step 5: Register core meta tools (idempotent — shared registry survives across sessions)
   const metaTools = createCoreMetaTools(
@@ -243,24 +206,22 @@ export function initializeSession(
     toolCategoryRegistry.categorizeTool(tool.name, 'system', 'always');
   }
 
-  if (!ablationMarker?.disableAgentFirstToolEvidence) {
-    for (const tool of createPerceptionTools({
-      ...(config.perceptionClients?.transcribe && {
-        transcribeClient: config.perceptionClients.transcribe,
-      }),
-      ...(config.perceptionClients?.similarity && {
-        similarityClient: config.perceptionClients.similarity,
-      }),
-      ...(config.perceptionClients?.classify && {
-        classifyClient: config.perceptionClients.classify,
-      }),
-      ...(config.perceptionClients?.detectShots && {
-        detectShotsClient: config.perceptionClients.detectShots,
-      }),
-    })) {
-      if (!config.toolRegistry.get(tool.name)) {
-        config.toolRegistry.register(tool);
-      }
+  for (const tool of createPerceptionTools({
+    ...(config.perceptionClients?.transcribe && {
+      transcribeClient: config.perceptionClients.transcribe,
+    }),
+    ...(config.perceptionClients?.similarity && {
+      similarityClient: config.perceptionClients.similarity,
+    }),
+    ...(config.perceptionClients?.classify && {
+      classifyClient: config.perceptionClients.classify,
+    }),
+    ...(config.perceptionClients?.detectShots && {
+      detectShotsClient: config.perceptionClients.detectShots,
+    }),
+  })) {
+    if (!config.toolRegistry.get(tool.name)) {
+      config.toolRegistry.register(tool);
     }
   }
 
@@ -367,7 +328,6 @@ export function initializeSession(
     agentsMdModule,
     artifactSchemaModule,
     subpackageFragmentsModule,
-    ...(ablationMarker && { ablationMarker }),
   };
 }
 
@@ -423,32 +383,16 @@ export function createConfiguredExecutor(deps: CreateExecutorDeps): {
     onToolConfirmation,
   } = deps;
 
-  // When the caller came through applyAblationToggles, an AblationMarkerHook
-  // is prepended to config.hooks carrying disableHooks / disableCompression
-  // metadata. Extract it here so (a) the metadata flows
-  // into the factory where the filtering actually happens, and (b) the
-  // marker itself is removed from customHooks so it doesn't appear as a
-  // no-op in the final chain. Non-experiment paths see no marker and this
-  // block is entirely a no-op.
-  const ablationMarker = extractAblationMarker(config.hooks);
-  const customHooks = ablationMarker
-    ? config.hooks?.filter((h) => h !== ablationMarker)
-    : config.hooks;
-
   const { hooks, permissionHooks } = createExecutorHooks({
     compressor,
     permissionMode,
     onToolAskStarted: onToolConfirmation,
     settingsHookLoader: config.settingsHookLoader,
-    customHooks,
+    customHooks: config.hooks,
     onValidationWarning: config.onValidationWarning,
     onValidationError: config.onValidationError,
     traitsRegistry: config.traitsRegistry,
     readOnlyTools: collectRegisteredReadOnlyToolNames(config.toolRegistry),
-    ...(ablationMarker && {
-      disableHooks: ablationMarker.disableHooks,
-      disableCompression: ablationMarker.disableCompression,
-    }),
   });
 
   const executor = new AgentExecutor({

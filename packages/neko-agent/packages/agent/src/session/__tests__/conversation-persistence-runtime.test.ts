@@ -42,6 +42,53 @@ describe('ConversationPersistenceRuntime', () => {
     ]);
   });
 
+  it('keeps terminal durability while surfacing a stale catalog projection', async () => {
+    const cause = new Error('catalog locked');
+    const onWarning = vi.fn();
+    const runtime = new ConversationPersistenceRuntime({
+      workDir: '/repo',
+      storage: {
+        save: vi.fn(async () => ({
+          kind: 'authority-durable-projection-stale' as const,
+          diagnostic: {
+            code: 'metadata-stale-projection' as const,
+            operation: 'save' as const,
+            conversationId: 'conv-1',
+            authority: 'journal' as const,
+            rebuild: 'conversation-catalog' as const,
+            cause,
+          },
+        })),
+        delete: vi.fn(async () => undefined),
+      },
+      getConversation: () => ({
+        id: 'conv-1',
+        title: 'Task',
+        createdAt: 100,
+        updatedAt: 200,
+        messages: [{ id: 'msg-1', role: 'user', content: 'hello', timestamp: 1 }],
+      }),
+      onWarning,
+    });
+
+    await expect(runtime.persistConversation('conv-1')).resolves.toMatchObject({
+      kind: 'saved',
+      conversationId: 'conv-1',
+      projectionDiagnostic: {
+        code: 'metadata-stale-projection',
+        rebuild: 'conversation-catalog',
+      },
+    });
+    await expect(runtime.flush()).resolves.toMatchObject({ durable: true, diagnostics: [] });
+    expect(onWarning).toHaveBeenCalledWith(
+      expect.objectContaining({
+        code: 'projection-stale',
+        conversationId: 'conv-1',
+        error: cause,
+      }),
+    );
+  });
+
   it('skips when persistence prerequisites are missing', async () => {
     const storage: ConversationPersistenceRuntimeStorage = {
       save: vi.fn(async () => undefined),

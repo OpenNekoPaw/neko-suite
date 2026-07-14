@@ -17,6 +17,7 @@ export interface ConversationControlDisposable {
 
 export interface ConversationControlRuntimeEffects {
   createConversation?(): string;
+  onConversationCreated?(conversationId: string): void;
   switchConversation?(conversationId: string): boolean;
   deleteConversation?(
     conversationId: string,
@@ -97,6 +98,9 @@ export async function runNewConversationRuntime(
   effects: ConversationControlRuntimeEffects,
 ): Promise<ConversationControlRuntimeResult> {
   const conversationId = effects.createConversation?.();
+  if (conversationId !== undefined) {
+    effects.onConversationCreated?.(conversationId);
+  }
   effects.refreshConversationList?.();
   effects.refreshActiveConversation?.();
   return {

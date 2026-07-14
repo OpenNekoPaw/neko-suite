@@ -1,8 +1,12 @@
 import type { ConversationRecord } from './conversation-record';
+import type {
+  ConversationCatalogStaleDiagnostic,
+  ConversationStorageMutationResult,
+} from './conversation-resume-storage';
 
 export interface ConversationPersistenceStoragePort {
-  save(record: ConversationRecord): Promise<void>;
-  delete(conversationId: string): Promise<void>;
+  save(record: ConversationRecord): Promise<void | ConversationStorageMutationResult>;
+  delete(conversationId: string): Promise<void | ConversationStorageMutationResult>;
   flush?(): Promise<void>;
   dispose?(): void | Promise<void>;
 }
@@ -26,6 +30,7 @@ export type ConversationPersistenceOperationResult =
       readonly operation: ConversationPersistenceOperationKind;
       readonly conversationId: string;
       readonly revision: number;
+      readonly projectionDiagnostic?: ConversationCatalogStaleDiagnostic;
     }
   | {
       readonly kind: 'superseded';
@@ -376,11 +381,12 @@ export class ConversationPersistenceCoordinator {
       this.mutableMetrics.activeMutations,
     );
     let result: ConversationPersistenceOperationResult;
+    let mutationResult: void | ConversationStorageMutationResult;
     try {
       if (operation.kind === 'delete') {
-        await this.storage.delete(operation.conversationId);
+        mutationResult = await this.storage.delete(operation.conversationId);
       } else {
-        await this.storage.save(operation.record);
+        mutationResult = await this.storage.save(operation.record);
       }
     } catch (error: unknown) {
       result = this.failedOperationResult(operation, classifyFailure(error, 'write-failed'), error);
@@ -398,6 +404,9 @@ export class ConversationPersistenceCoordinator {
         operation: operation.kind,
         conversationId: operation.conversationId,
         revision: operation.revision,
+        ...(mutationResult?.kind === 'authority-durable-projection-stale'
+          ? { projectionDiagnostic: mutationResult.diagnostic }
+          : {}),
       };
     } catch (error: unknown) {
       result = this.failedOperationResult(operation, classifyFailure(error, 'flush-failed'), error);

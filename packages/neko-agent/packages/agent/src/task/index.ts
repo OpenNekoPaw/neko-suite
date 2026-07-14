@@ -136,41 +136,20 @@ export {
   type AgentTaskResultObservationRuntimeTaskManagerTerminalInput,
   type AgentTaskResultObservationTerminalOptions,
 } from './task-result-observation-runtime';
+export { MemoryTaskStorage } from './task-storage';
 export {
-  MemoryTaskStorage,
-  FileTaskStorage,
-  FileTaskStorageLoadError,
-  StateTaskStorage,
-  WorkspaceVisibleAgentTaskStorage,
-  createFileTaskStorage,
-  createFileWorkspaceVisibleAgentTaskStorage,
-  createStateTaskStorage,
-  getWorkspaceVisibleAgentTaskRecordsFilePath,
-  type FileTaskStorageOptions,
-  type StateTaskStorageAdapter,
-  type StateTaskStorageOptions,
-  type WorkspaceVisibleAgentTaskStorageOptions,
-} from './task-storage';
-export {
-  migrateLegacyTaskStorageContent,
-  migrateLegacyTaskStorageFile,
-  TaskStorageMigrationError,
-  type LegacyTaskStorageContentMigrationInput,
-  type LegacyTaskStorageContentMigrationResult,
-  type LegacyTaskStorageFileMigrationOptions,
-  type LegacyTaskStorageFileMigrationResult,
-  type TaskStorageMigrationFailureReason,
-} from './task-storage-migration';
+  SqliteTaskRecoveryStorage,
+  SqliteTaskStorage,
+  type SqliteTaskStorageOptions,
+} from './sqlite-task-storage';
 export {
   CLEANUP_TASK_STATUSES,
   DEFAULT_TASK_CLEANUP_INTERVAL_MS,
   DEFAULT_TASK_RETENTION_PERIOD_MS,
-  DEFAULT_TASK_STORAGE_KEY,
   RECOVERABLE_TASK_STATUSES,
   buildTaskStorageCleanupPlan,
   buildAgentTaskHostPrivateLeaseDiagnostic,
   createAgentTaskHostPrivateLease,
-  createWorkspaceVisibleAgentTaskRecord,
   filterRecoverableTasks,
   isRecoverableTask,
   isRecoverableTaskStatus,
@@ -180,20 +159,9 @@ export {
   type AgentTaskHostSurface,
   type AgentTaskLeaseControl,
   type AgentTaskLeaseDiagnostic,
-  type AgentTaskStorageScope,
   type TaskStorageCleanupPlan,
-  type WorkspaceVisibleAgentTaskRecord,
 } from './task-storage-policy';
-export {
-  MemoryTaskRecoveryStorage,
-  FileTaskRecoveryStorage,
-  StateTaskRecoveryStorage,
-  createFileRecoveryStorage,
-  createStateTaskRecoveryStorage,
-  type FileTaskRecoveryStorageOptions,
-  type StateTaskRecoveryStorageAdapter,
-  type StateTaskRecoveryStorageOptions,
-} from './task-recovery-storage';
+export { MemoryTaskRecoveryStorage } from './task-recovery-storage';
 
 // Re-export types from shared for convenience
 export type {

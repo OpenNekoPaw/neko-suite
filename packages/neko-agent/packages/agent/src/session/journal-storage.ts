@@ -9,6 +9,7 @@ import { JournalWriter } from './journal-writer';
 import type { JournalFsOps } from './journal-writer';
 import { JournalReader } from './journal-reader';
 import type { JournalReaderFsOps } from './journal-reader';
+import { JournalProjection } from './journal-projection';
 import * as path from 'path';
 import * as nodeFs from 'node:fs/promises';
 
@@ -102,6 +103,11 @@ export class JournalStorage {
       filePath: this.getJournalPath(conversationId),
       fsOps: this._fsOps,
     });
+  }
+
+  /** Create a projection over this storage's Journal directory. */
+  createProjection(): JournalProjection {
+    return new JournalProjection(this._baseDir, this._fsOps);
   }
 }
 

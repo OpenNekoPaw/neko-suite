@@ -3,6 +3,14 @@
  */
 
 export * from './types';
+export {
+  parseConversationJournalMetadata,
+  type ConversationJournalChatModelSelection,
+  type ConversationJournalLifecycle,
+  type ConversationJournalMetadata,
+  type ConversationJournalModelSelection,
+  type ConversationJournalSource,
+} from './conversation-journal-metadata';
 export * from './agent-session';
 export { createSkillCreationKind, encodeCreationKindSegment } from './creation-kind';
 export {
@@ -22,6 +30,7 @@ export type {
   ConversationIndexMeta,
   ConversationsIndexFile,
   ConversationSource,
+  ConversationChatModelSelection,
   ConversationMediaModelSelection,
 } from './conversation-record';
 export {
@@ -32,21 +41,31 @@ export {
 } from './conversation-id';
 export type { ConversationIdOptions, ParsedConversationId } from './conversation-id';
 export {
-  ConversationIndexStore,
-  type IConversationIndexStore,
-  type ConversationIndexStoreFsOps,
-  type ConversationIndexStoreOptions,
-} from './conversation-index-store';
+  SqliteConversationStorage,
+  type ConversationMetadataJournalWriter,
+  type SqliteConversationStorageOptions,
+} from './sqlite-conversation-storage';
 export {
-  FileConversationStorage,
-  createFileConversationStorage,
-  type FileConversationStorageOptions,
-} from './file-conversation-storage';
+  createNodeSqliteConversationStorage,
+  type CreateNodeSqliteConversationStorageOptions,
+  type NodeSqliteConversationStorageBinding,
+} from './node-sqlite-conversation-storage';
+export type {
+  ConversationCatalogStaleDiagnostic,
+  ConversationResumeStorage,
+  ConversationStorageMutationResult,
+} from './conversation-resume-storage';
+export {
+  migrateLegacyConversationCatalog,
+  type ConversationCatalogMigrationReport,
+  type ConversationCatalogMigrationUnrecoverable,
+} from './conversation-catalog-migration';
 export {
   ConversationManager,
   type AgentHistoryEntry,
   type CleanupPolicy,
   type Conversation,
+  type ConversationReconcileResult,
   type DeleteConversationOptions,
   type ConversationManagerOptions,
   type ConversationStorage,
@@ -75,6 +94,7 @@ export {
 export {
   formatToolResultContext,
   hydrateAgentHistoryWithToolResults,
+  projectJournalHistoryWithToolContext,
   type AgentHistoryToolCallContext,
   type AgentHistoryToolResultContext,
   type AgentHistoryWithToolContextMessage,
@@ -104,7 +124,6 @@ export {
 export {
   ConversationPersistenceRuntime,
   createConversationPersistenceRuntime,
-  createFileConversationPersistenceRuntime,
   type ConversationPersistenceRuntimeOptions,
   type ConversationPersistenceRuntimeQueueResult,
   type ConversationPersistenceRuntimeResult,

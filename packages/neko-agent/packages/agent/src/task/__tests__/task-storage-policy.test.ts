@@ -2,11 +2,9 @@ import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_TASK_CLEANUP_INTERVAL_MS,
   DEFAULT_TASK_RETENTION_PERIOD_MS,
-  DEFAULT_TASK_STORAGE_KEY,
   buildAgentTaskHostPrivateLeaseDiagnostic,
   buildTaskStorageCleanupPlan,
   createAgentTaskHostPrivateLease,
-  createWorkspaceVisibleAgentTaskRecord,
   filterRecoverableTasks,
   isRecoverableTaskStatus,
   isTaskCleanupCandidate,
@@ -28,7 +26,6 @@ function makeTask(id: string, status: TaskStatus, updatedAt: number): Serializab
 
 describe('task storage policy', () => {
   it('exposes default task persistence policy for host adapters', () => {
-    expect(DEFAULT_TASK_STORAGE_KEY).toBe('neko.agent.tasks');
     expect(DEFAULT_TASK_CLEANUP_INTERVAL_MS).toBe(60 * 60 * 1000);
     expect(DEFAULT_TASK_RETENTION_PERIOD_MS).toBe(7 * 24 * 60 * 60 * 1000);
   });
@@ -80,31 +77,7 @@ describe('task storage policy', () => {
     expect(plan.retained.map((task) => task.id)).toEqual(['old-running', 'fresh-completed']);
   });
 
-  it('classifies workspace-visible task records with a required workspace root', () => {
-    const task = makeTask('workspace-task', 'running', 100);
-
-    const record = createWorkspaceVisibleAgentTaskRecord({
-      workspaceRoot: ' /workspace ',
-      task,
-    });
-
-    expect(record).toEqual({
-      scope: 'workspace-visible',
-      workspaceRoot: '/workspace',
-      task,
-    });
-    expect(record.task).not.toBe(task);
-    expect(() =>
-      createWorkspaceVisibleAgentTaskRecord({ workspaceRoot: ' ', task }),
-    ).toThrow('Workspace-visible Agent task records require a workspace root');
-  });
-
   it('returns a host-private lease diagnostic when another surface asks for live controls', () => {
-    const task = makeTask('task-1', 'running', 100);
-    const record = createWorkspaceVisibleAgentTaskRecord({
-      workspaceRoot: '/workspace',
-      task,
-    });
     const lease = createAgentTaskHostPrivateLease({
       taskId: 'task-1',
       ownerSurface: 'extension',
@@ -113,7 +86,6 @@ describe('task storage policy', () => {
       controls: ['cancel', 'recover'],
     });
 
-    expect(record.task.id).toBe(lease.taskId);
     expect(lease).toEqual({
       scope: 'host-private',
       taskId: 'task-1',

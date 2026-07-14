@@ -7,6 +7,10 @@
 
 import type { ChildRunScope } from '@neko/shared';
 import type { AgentEvent, ExecutionMode, IJournalWriter } from './types';
+import {
+  parseConversationJournalMetadata,
+  type ConversationJournalMetadata,
+} from './conversation-journal-metadata';
 import { randomUUID } from 'node:crypto';
 
 // =============================================================================
@@ -37,18 +41,20 @@ export interface SubAgentRef {
 export interface JournalEntry {
   /** Stable entry identifier (generated when omitted) */
   eventId?: string;
-  /** Monotonically increasing sequence number */
+  /** Monotonically increasing session sequence, or 0 for conversation metadata */
   seq: number;
   /** Timestamp (ms) */
   ts: number;
   /** Entry type */
-  type: 'event' | 'snapshot' | 'subagent_ref';
+  type: 'event' | 'snapshot' | 'subagent_ref' | 'conversation_metadata';
   /** AgentEvent payload (when type='event') */
   event?: AgentEvent;
   /** State snapshot (when type='snapshot') */
   snapshot?: StateSnapshot;
   /** SubAgent sidechain ref (when type='subagent_ref') */
   subAgentRef?: SubAgentRef;
+  /** Rebuildable catalog metadata (when type='conversation_metadata') */
+  conversationMetadata?: ConversationJournalMetadata;
 }
 
 export interface JournalWriterOptions {
@@ -129,6 +135,17 @@ export class JournalWriter implements IJournalWriter {
   /** Append a SubAgent sidechain reference */
   async appendSubAgentRef(seq: number, ref: SubAgentRef): Promise<void> {
     await this.append({ seq, ts: Date.now(), type: 'subagent_ref', subAgentRef: ref });
+  }
+
+  /** Append catalog metadata without consuming the Agent session event sequence. */
+  async appendConversationMetadata(metadata: ConversationJournalMetadata): Promise<string> {
+    const validated = parseConversationJournalMetadata(metadata);
+    return this.append({
+      seq: 0,
+      ts: Date.now(),
+      type: 'conversation_metadata',
+      conversationMetadata: validated,
+    });
   }
 
   /** Flush pending writes */

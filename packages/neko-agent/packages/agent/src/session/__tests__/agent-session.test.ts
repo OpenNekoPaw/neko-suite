@@ -5,6 +5,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { Draft, ExecutionPlan, Task } from '@neko-agent/types';
 import { AgentSession } from '../agent-session';
+import { backfillReadImagePerceptionResults } from '../read-image-perception-backfill';
 import { PLAN_MODE_SYSTEM_REMINDER } from '../../permission/types';
 import { ToolRegistry } from '../../tools';
 import type { AgentSessionConfig, AgentEvent } from '../types';
@@ -41,7 +42,6 @@ import type {
   ResourceRef,
 } from '@neko/shared';
 import type { IJournalWriter } from '../types';
-import { applyAblationToggles } from '../../experiment/apply-toggles';
 import { ToolGroupRegistry } from '../../skill';
 import { createTableHeavyStreamFixture } from '../../../../../test-utils/src/fixtures';
 
@@ -385,6 +385,11 @@ function injectMockExecutor(session: AgentSession, steps: AgentStep[]) {
   if (typeof installRefreshHook === 'function') {
     installRefreshHook.call(session);
   }
+  const installReadImagePerceptionBackfillHook =
+    internals['_installReadImagePerceptionBackfillHook'];
+  if (typeof installReadImagePerceptionBackfillHook === 'function') {
+    installReadImagePerceptionBackfillHook.call(session);
+  }
   return mockExec;
 }
 
@@ -428,6 +433,33 @@ describe('AgentSession', () => {
     it('should default execution mode to auto', () => {
       const session = new AgentSession(config);
       expect(session.getExecutionMode()).toBe('auto');
+    });
+
+    it('exposes prompt composition metadata without hidden prompt bodies', () => {
+      const hiddenBase = 'SYSTEM_SECRET sk-session-hidden /Users/private/workspace';
+      const hiddenFragment = 'CAPABILITY_SECRET internal instructions';
+      const session = new AgentSession(
+        createConfig({
+          systemPrompt: hiddenBase,
+          promptFragments: [{ id: 'neko-test:secret-fragment', content: hiddenFragment }],
+        }),
+      );
+
+      const projection = session.getPromptCompositionProjection();
+      expect(projection).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ id: 'base', source: 'base' }),
+          expect.objectContaining({
+            id: 'fragment:neko-test:secret-fragment',
+            source: 'subpackage.fragments',
+          }),
+        ]),
+      );
+      const serialized = JSON.stringify(projection);
+      expect(serialized).not.toContain(hiddenBase);
+      expect(serialized).not.toContain(hiddenFragment);
+      expect(serialized).not.toContain('/Users/private');
+      expect(projection.every((fragment, order) => fragment.order === order)).toBe(true);
     });
 
     it('registers configured perception evidence tools without default prompt injection', () => {
@@ -573,43 +605,6 @@ describe('AgentSession', () => {
           }),
         }),
       );
-    });
-
-    it('does not register perception evidence tools when agent-first tool evidence is disabled', () => {
-      const toolRegistry = createMockToolRegistry();
-      new AgentSession(
-        applyAblationToggles(
-          createConfig({
-            toolRegistry,
-            perceptionClients: {
-              transcribe: {
-                perception: {
-                  transcribe: vi.fn(),
-                },
-              },
-              similarity: {
-                perception: {
-                  similarity: vi.fn(),
-                },
-              },
-              classify: {
-                perception: {
-                  classify: vi.fn(),
-                },
-              },
-            },
-          }),
-          { agentFirst: { toolEvidence: false } },
-        ),
-      );
-
-      const registeredNames = vi
-        .mocked(toolRegistry.register)
-        .mock.calls.map(([tool]) => tool.name);
-      expect(registeredNames).not.toContain(TOOL_NAMES_PERCEPTION.DESCRIBE_INPUT);
-      expect(registeredNames).not.toContain(TOOL_NAMES_PERCEPTION.AUDIO_TRANSCRIBE);
-      expect(registeredNames).not.toContain(TOOL_NAMES_PERCEPTION.IMAGE_SIMILARITY);
-      expect(registeredNames).not.toContain(TOOL_NAMES_PERCEPTION.IMAGE_CLASSIFY);
     });
   });
 
@@ -886,6 +881,318 @@ describe('AgentSession', () => {
           perceptionCards: [expect.objectContaining({ assetId: 'asset-1' })],
         }),
       );
+    });
+  });
+
+  describe('ReadImage perception backfill', () => {
+    it('installs the ReadImage perception backfill hook without stage tracking', () => {
+      const session = new AgentSession(createConfig());
+      const mockExec = injectMockExecutor(session, []);
+
+      expect(mockExec.getHook('session-read-image-perception-backfill')?.afterAct).toBeDefined();
+    });
+
+    it('adds configured image understanding evidence before tool results are observed', async () => {
+      const perceptionPipeline = {
+        perceive: vi.fn(async () => ({
+          card: {
+            version: 1 as const,
+            assetId: 'read-image-res-1',
+            modality: 'image' as const,
+            createdAt: 2,
+            layerStatus: {
+              layer0: 'complete' as const,
+              layer1: 'complete' as const,
+              layer2: 'skipped' as const,
+            },
+            structural: {
+              format: 'png',
+              mimeType: 'image/png',
+              byteSize: 10,
+              width: 64,
+              height: 64,
+            },
+            semantic: {
+              evidences: [
+                { kind: 'custom' as const, confidence: 0.9, value: { summary: 'A playful cat.' } },
+              ],
+            },
+          },
+        })),
+      };
+      const results: ToolResultWithMeta[] = [
+        {
+          callId: 'call-read-image',
+          name: 'ReadImage',
+          success: true,
+          data: { mode: 'metadata' },
+          perceptionCards: [
+            {
+              version: 1,
+              assetId: 'read-image-res-1',
+              modality: 'image',
+              createdAt: 1,
+              layerStatus: { layer0: 'complete', layer1: 'skipped', layer2: 'complete' },
+              structural: {
+                format: 'png',
+                mimeType: 'image/png',
+                byteSize: 10,
+                width: 64,
+                height: 64,
+              },
+              perceptual: {
+                thumbnailRef: {
+                  assetId: 'read-image-res-1',
+                  uri: '${WORKSPACE}/image.png',
+                  mimeType: 'image/png',
+                },
+              },
+            },
+          ],
+        },
+      ];
+
+      await backfillReadImagePerceptionResults({
+        results,
+        perceptionPipeline,
+        chatModel: { providerId: 'deepseek-chat', modelId: 'deepseek-v4-flash' },
+        metadata: {
+          understandingModels: {
+            image: { providerId: 'nekoapi-chat', modelId: 'gpt-5.5', category: 'llm' },
+          },
+        },
+      });
+
+      expect(perceptionPipeline.perceive).toHaveBeenCalledWith(
+        expect.objectContaining({
+          asset: {
+            assetId: 'read-image-res-1',
+            ref: expect.objectContaining({ assetId: 'read-image-res-1' }),
+          },
+          sourceToolCallId: 'call-read-image',
+          focus: 'visual',
+          understandingModels: {
+            image: { providerId: 'nekoapi-chat', modelId: 'gpt-5.5' },
+          },
+          policy: expect.objectContaining({ layers: [0, 1] }),
+        }),
+      );
+      expect(results[0]!.success).toBe(true);
+      expect(results[0]!.perceptionCards).toEqual([
+        expect.objectContaining({ layerStatus: expect.objectContaining({ layer1: 'skipped' }) }),
+        expect.objectContaining({ layerStatus: expect.objectContaining({ layer1: 'complete' }) }),
+      ]);
+    });
+
+    it('derives image perception targets from ReadImage metadata-only results', async () => {
+      const perceptionPipeline = {
+        perceive: vi.fn(async () => ({
+          card: {
+            version: 1 as const,
+            assetId: 'generated-asset-1',
+            modality: 'image' as const,
+            createdAt: 2,
+            layerStatus: {
+              layer0: 'complete' as const,
+              layer1: 'complete' as const,
+              layer2: 'skipped' as const,
+            },
+            structural: { format: 'png', mimeType: 'image/png', byteSize: 10 },
+            semantic: {
+              evidences: [
+                {
+                  kind: 'custom' as const,
+                  confidence: 0.9,
+                  value: { summary: 'A generated cat image.' },
+                },
+              ],
+            },
+          },
+        })),
+      };
+      const results: ToolResultWithMeta[] = [
+        {
+          callId: 'call-read-image',
+          name: 'ReadImage',
+          success: true,
+          data: {
+            mode: 'metadata',
+            images: [
+              {
+                label: 'generated-assets/cat.png',
+                mimeType: 'image/png',
+                resourceRef: {
+                  id: 'res-1',
+                  source: { kind: 'generated-asset', filePath: '/tmp/cat.png' },
+                  locator: { kind: 'generated-asset', assetId: 'generated-asset-1' },
+                },
+              },
+            ],
+          },
+        },
+      ];
+
+      await backfillReadImagePerceptionResults({
+        results,
+        perceptionPipeline,
+        chatModel: { providerId: 'deepseek-chat', modelId: 'deepseek-v4-flash' },
+        metadata: {
+          understandingModels: {
+            image: { providerId: 'nekoapi-chat', modelId: 'gpt-5.5' },
+          },
+        },
+      });
+
+      expect(perceptionPipeline.perceive).toHaveBeenCalledWith(
+        expect.objectContaining({
+          asset: {
+            assetId: 'generated-asset-1',
+            ref: expect.objectContaining({
+              assetId: 'generated-asset-1',
+              uri: '/tmp/cat.png',
+              mimeType: 'image/png',
+              resourceRef: expect.objectContaining({ id: 'res-1' }),
+            }),
+          },
+          sourceToolCallId: 'call-read-image',
+        }),
+      );
+      expect(results[0]!.perceptionCards).toEqual([
+        expect.objectContaining({ assetId: 'generated-asset-1' }),
+      ]);
+    });
+
+    it('skips ReadImage perception backfill when no different perception model is configured', async () => {
+      const perceptionPipeline = {
+        perceive: vi.fn(async () => ({
+          card: {
+            version: 1 as const,
+            assetId: 'generated-asset-1',
+            modality: 'image' as const,
+            createdAt: 2,
+            layerStatus: {
+              layer0: 'complete' as const,
+              layer1: 'complete' as const,
+              layer2: 'skipped' as const,
+            },
+            structural: { format: 'png', mimeType: 'image/png', byteSize: 10 },
+          },
+        })),
+      };
+      const results: ToolResultWithMeta[] = [
+        {
+          callId: 'call-read-image',
+          name: 'ReadImage',
+          success: true,
+          data: {
+            images: [
+              {
+                mimeType: 'image/png',
+                resourceRef: {
+                  id: 'res-1',
+                  source: { kind: 'generated-asset', filePath: '/tmp/cat.png' },
+                  locator: { kind: 'generated-asset', assetId: 'generated-asset-1' },
+                },
+              },
+            ],
+          },
+        },
+      ];
+
+      await backfillReadImagePerceptionResults({ results, perceptionPipeline });
+
+      expect(perceptionPipeline.perceive).not.toHaveBeenCalled();
+      expect(results[0]!.success).toBe(true);
+      expect(results[0]!.perceptionCards).toBeUndefined();
+    });
+
+    it('skips ReadImage perception backfill when chat and perception models match', async () => {
+      const perceptionPipeline = {
+        perceive: vi.fn(async () => ({ card: {} })),
+      };
+      const results: ToolResultWithMeta[] = [
+        {
+          callId: 'call-read-image',
+          name: 'ReadImage',
+          success: true,
+          data: {
+            images: [
+              {
+                mimeType: 'image/png',
+                resourceRef: {
+                  id: 'res-1',
+                  source: { kind: 'generated-asset', filePath: '/tmp/cat.png' },
+                  locator: { kind: 'generated-asset', assetId: 'generated-asset-1' },
+                },
+              },
+            ],
+          },
+        },
+      ];
+
+      await backfillReadImagePerceptionResults({
+        results,
+        perceptionPipeline,
+        chatModel: { providerId: 'nekoapi-chat', modelId: 'gpt-5.5' },
+        metadata: {
+          understandingModels: {
+            image: { providerId: 'nekoapi-chat', modelId: 'gpt-5.5' },
+          },
+        },
+      });
+
+      expect(perceptionPipeline.perceive).not.toHaveBeenCalled();
+      expect(results[0]!.success).toBe(true);
+      expect(results[0]!.perceptionCards).toBeUndefined();
+    });
+
+    it('keeps ReadImage successful when perception backfill fails', async () => {
+      const perceptionPipeline = {
+        perceive: vi.fn(async () => {
+          throw new Error('No content access provider supports this request.');
+        }),
+      };
+      const results: ToolResultWithMeta[] = [
+        {
+          callId: 'call-read-image',
+          name: 'ReadImage',
+          success: true,
+          data: {
+            images: [
+              {
+                mimeType: 'image/png',
+                resourceRef: {
+                  id: 'res-1',
+                  source: { kind: 'generated-asset', filePath: '/tmp/cat.png' },
+                  locator: { kind: 'generated-asset', assetId: 'generated-asset-1' },
+                },
+              },
+            ],
+          },
+        },
+      ];
+
+      await backfillReadImagePerceptionResults({
+        results,
+        perceptionPipeline,
+        chatModel: { providerId: 'deepseek-chat', modelId: 'deepseek-v4-flash' },
+        metadata: {
+          understandingModels: {
+            image: { providerId: 'nekoapi-chat', modelId: 'gpt-5.5' },
+          },
+        },
+      });
+
+      expect(results[0]!.success).toBe(true);
+      expect(results[0]!.error).toBeUndefined();
+      expect(results[0]!.backfillDiagnostics).toEqual([
+        expect.objectContaining({
+          path: 'call-read-image',
+          incoming: expect.objectContaining({
+            error: 'No content access provider supports this request.',
+          }),
+        }),
+      ]);
     });
   });
 
@@ -2343,47 +2650,6 @@ describe('AgentSession', () => {
       );
     });
 
-    it('does not inject feedback recovery guidance when recovery guidance is disabled', async () => {
-      const session = new AgentSession(
-        applyAblationToggles(
-          createConfig({
-            toolResultValidationAdapters: [createQualityReviewValidationAdapter()],
-          }),
-          {
-            agentFirst: { recoveryGuidance: false },
-          },
-        ),
-      );
-      injectMockExecutor(session, [
-        {
-          type: 'act',
-          content: 'Executed 1 tool(s)',
-          toolCalls: [{ id: 'call-qc', name: 'QualityCheck', arguments: {} }],
-          toolResults: [
-            {
-              callId: 'call-qc',
-              success: true,
-              data: createSessionQualityGateResult(),
-            } as ToolResultWithMeta,
-          ],
-          timestamp: 199,
-        },
-      ]);
-
-      await collectEvents(session.execute('check scene quality'));
-
-      expect(session.getValidationCycles()[0]?.actions).toEqual([
-        expect.objectContaining({ kind: 'set-guidance' }),
-      ]);
-      expect(
-        (
-          session as unknown as {
-            _validationGuidanceModule: { getContent(): string | null };
-          }
-        )._validationGuidanceModule.getContent(),
-      ).toBeNull();
-    });
-
     it('skips Agent-first evidence journaling when no context packet is active', async () => {
       const journalWriter = createMockJournalWriter();
       const session = new AgentSession(createConfig({ journalWriter }));
@@ -2610,58 +2876,6 @@ describe('AgentSession', () => {
           ],
         }),
       ]);
-    });
-
-    it('does not write provider card overrides when providerCardAutoEvolve is disabled', async () => {
-      const writes: Array<{ path: string; data: string }> = [];
-      const session = new AgentSession(
-        applyAblationToggles(
-          {
-            ...config,
-            workspace: {
-              root: '/workspace/demo',
-              fsOps: {
-                async appendFile(): Promise<void> {},
-                async mkdir(): Promise<void> {},
-                async writeFile(path: string, data: string): Promise<void> {
-                  writes.push({ path, data });
-                },
-              },
-            },
-          },
-          { providerCardAutoEvolve: false },
-        ),
-      );
-      injectMockExecutor(session, [
-        {
-          type: 'act',
-          content: 'Executed 1 tool(s)',
-          toolCalls: [{ id: 'call-img', name: 'GenerateImage', arguments: {} }],
-          toolResults: [
-            {
-              callId: 'call-img',
-              success: true,
-              data: {
-                taskId: 'image-task',
-                providerAdaptation: {
-                  mode: 'agentic',
-                  providerId: 'sdxl',
-                  extractedIntent: { styleFamily: 'anime' },
-                  adaptationMetadata: { riskFlags: ['agent-expression-context-only'] },
-                },
-              },
-              name: 'GenerateImage',
-            } as ToolResultWithMeta,
-          ],
-          timestamp: 350,
-        },
-      ]);
-
-      await collectEvents(session.execute('generate anime image'));
-      await new Promise((resolve) => setTimeout(resolve, 0));
-
-      expect(session.getValidationCycles()).toHaveLength(1);
-      expect(writes).toEqual([]);
     });
 
     it('injects feedback guidance into the next turn only, then clears it after consumption', async () => {

@@ -328,7 +328,9 @@ function flushPendingAssistant(
     message: {
       role: 'assistant',
       content: pendingAssistant.content,
-      reasoningContent: pendingAssistant.reasoningContent,
+      ...(pendingAssistant.reasoningContent
+        ? { reasoningContent: pendingAssistant.reasoningContent }
+        : {}),
       ...(pendingAssistant.toolCalls.length > 0 && {
         toolCalls: pendingAssistant.toolCalls,
       }),
@@ -384,35 +386,11 @@ function serializeToolResultMessageContent(
   const attachments = sanitizedFields.attachments;
   const perceptionCards = sanitizedFields.perceptionCards;
   const artifacts = sanitizedFields.artifacts;
-  const hasExtendedFields =
-    (attachments?.length ?? 0) > 0 ||
-    (perceptionCards?.length ?? 0) > 0 ||
-    (result.backfillDiagnostics?.length ?? 0) > 0 ||
-    (artifacts?.length ?? 0) > 0;
-
-  if (!result.success) {
-    if (!hasExtendedFields && data === undefined) {
-      return `Error: ${result.error ?? 'Unknown error'}`;
-    }
-    return stringifyToolResultContent({
-      schema: TOOL_RESULT_ENVELOPE_SCHEMA,
-      success: false,
-      error: result.error ?? 'Unknown error',
-      data,
-      attachments,
-      perceptionCards,
-      backfillDiagnostics: result.backfillDiagnostics,
-      artifacts,
-    });
-  }
-
-  if (!hasExtendedFields) {
-    return stringifyToolResultContent(data);
-  }
-
   return stringifyToolResultContent({
     schema: TOOL_RESULT_ENVELOPE_SCHEMA,
-    data,
+    success: result.success,
+    ...(!result.success ? { error: result.error ?? 'Unknown error' } : {}),
+    data: data === undefined ? null : data,
     attachments,
     perceptionCards,
     backfillDiagnostics: result.backfillDiagnostics,
@@ -458,7 +436,7 @@ function parseToolMessageResult(message: ChatMessage): BackfillableToolResult {
 
 interface SerializedToolResultEnvelope {
   readonly schema: typeof TOOL_RESULT_ENVELOPE_SCHEMA;
-  readonly success?: boolean;
+  readonly success: boolean;
   readonly data: unknown;
   readonly error?: string;
   readonly attachments?: readonly ToolResultAttachment[];

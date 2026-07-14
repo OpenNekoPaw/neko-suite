@@ -16,6 +16,10 @@ import { JournalReader } from './journal-reader';
 import type { JournalReaderFsOps } from './journal-reader';
 import type { AgentEventType } from './types';
 import type { JournalEntry } from './journal-writer';
+import {
+  parseConversationJournalMetadata,
+  type ConversationJournalMetadata,
+} from './conversation-journal-metadata';
 import { projectJournalEntriesToHistory, type ProjectedHistory } from './working-memory';
 
 export interface JournalProjectionOptions {
@@ -86,6 +90,9 @@ export interface IJournalProjection {
     options?: JournalProjectionOptions,
   ): Promise<ProjectedHistory>;
   projectToSummary(conversationId: string): Promise<ConversationSummary | null>;
+  projectToConversationMetadata(
+    conversationId: string,
+  ): Promise<ConversationJournalMetadata | null>;
   projectAgentFirstGraph(conversationId: string): Promise<AgentFirstProjectionSummary>;
   scanAgentFirstIntegrity(conversationId: string): Promise<AgentFirstIntegrityScanResult>;
   filterEvents(
@@ -136,6 +143,24 @@ export class JournalProjection implements IJournalProjection {
       messageCount: history.length,
       source: 'journal-projection',
     };
+  }
+
+  async projectToConversationMetadata(
+    conversationId: string,
+  ): Promise<ConversationJournalMetadata | null> {
+    const entries = await this._readEntries(conversationId);
+    let latest: ConversationJournalMetadata | null = null;
+    for (const entry of entries) {
+      if (entry.type !== 'conversation_metadata') continue;
+      const metadata = parseConversationJournalMetadata(entry.conversationMetadata);
+      if (metadata.conversationId !== conversationId) {
+        throw new Error(
+          `Conversation Journal metadata owner mismatch: expected ${conversationId}, received ${metadata.conversationId}.`,
+        );
+      }
+      latest = metadata;
+    }
+    return latest;
   }
 
   async projectAgentFirstGraph(conversationId: string): Promise<AgentFirstProjectionSummary> {

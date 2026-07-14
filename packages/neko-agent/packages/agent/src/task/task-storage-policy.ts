@@ -1,24 +1,16 @@
 import type { SerializableTask, TaskStatus } from '@neko/shared';
 
-export const DEFAULT_TASK_STORAGE_KEY = 'neko.agent.tasks';
 export const DEFAULT_TASK_CLEANUP_INTERVAL_MS = 60 * 60 * 1000;
 export const DEFAULT_TASK_RETENTION_PERIOD_MS = 7 * 24 * 60 * 60 * 1000;
 export const RECOVERABLE_TASK_STATUSES: readonly TaskStatus[] = ['pending', 'running'];
 export const CLEANUP_TASK_STATUSES: readonly TaskStatus[] = ['completed', 'failed', 'cancelled'];
 
-export type AgentTaskStorageScope = 'workspace-visible' | 'host-private';
 export type AgentTaskHostSurface = 'extension' | 'tui' | 'headless';
 export type AgentTaskLeaseControl = 'resume' | 'cancel' | 'attach' | 'recover';
 
 export interface TaskStorageCleanupPlan {
   readonly retained: SerializableTask[];
   readonly removed: SerializableTask[];
-}
-
-export interface WorkspaceVisibleAgentTaskRecord {
-  readonly scope: 'workspace-visible';
-  readonly workspaceRoot: string;
-  readonly task: SerializableTask;
 }
 
 export interface AgentTaskHostPrivateLease {
@@ -60,21 +52,6 @@ export function isTaskCleanupCandidate(
 
 export function filterRecoverableTasks(tasks: readonly SerializableTask[]): SerializableTask[] {
   return tasks.filter(isRecoverableTask).map((task) => ({ ...task }));
-}
-
-export function createWorkspaceVisibleAgentTaskRecord(input: {
-  readonly workspaceRoot: string;
-  readonly task: SerializableTask;
-}): WorkspaceVisibleAgentTaskRecord {
-  const workspaceRoot = input.workspaceRoot.trim();
-  if (!workspaceRoot) {
-    throw new Error('Workspace-visible Agent task records require a workspace root');
-  }
-  return {
-    scope: 'workspace-visible',
-    workspaceRoot,
-    task: { ...input.task },
-  };
 }
 
 export function createAgentTaskHostPrivateLease(input: {

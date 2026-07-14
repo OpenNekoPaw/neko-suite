@@ -293,6 +293,7 @@ CORRUPTED LINE
           toolCallId: 'tc-1',
           content: JSON.stringify({
             schema: 'neko.tool-result.v1',
+            success: true,
             data: {
               taskId: 'task-1',
               status: 'completed',
@@ -366,7 +367,7 @@ CORRUPTED LINE
           perceptionCards: [expect.objectContaining({ assetId: 'asset-1' })],
         }),
       );
-      expect(content.success).toBeUndefined();
+      expect(content.success).toBe(true);
       expect(content.error).toBeUndefined();
     });
 
@@ -499,6 +500,41 @@ CORRUPTED LINE
       expect(state!.lastSeq).toBe(5);
     });
 
+    it('does not let conversation metadata consume the Agent session sequence', async () => {
+      const entries: JournalEntry[] = [
+        { seq: 5, ts: 1000, type: 'event', event: { type: 'text', content: 'before' } },
+        {
+          seq: 0,
+          ts: 1500,
+          type: 'conversation_metadata',
+          conversationMetadata: {
+            version: 1,
+            conversationId: 'conv-1',
+            journalId: 'conv-1',
+            workspaceId: null,
+            title: 'Conversation metadata',
+            source: 'tui',
+            createdAt: 1000,
+            updatedAt: 1500,
+            messageCount: 1,
+            modelSelection: { chat: null, media: null },
+            tags: [],
+            lifecycle: { state: 'active', deletedAt: null },
+          },
+        },
+        { seq: 6, ts: 2000, type: 'event', event: { type: 'text', content: 'after' } },
+      ];
+      const reader = new JournalReader({
+        filePath: '/tmp/test.jsonl',
+        fsOps: createMockFsOps(entriesToJsonl(entries)),
+      });
+
+      const state = await reader.readSessionState();
+
+      expect(state?.lastSeq).toBe(6);
+      expect(state?.history.map((message) => message.content)).toEqual(['before', 'after']);
+    });
+
     it('should handle tool result errors', async () => {
       const entries: JournalEntry[] = [
         {
@@ -525,7 +561,14 @@ CORRUPTED LINE
       const state = await reader.readSessionState();
       const toolMsg = state!.history[1]!;
       expect(toolMsg.role).toBe('tool');
-      expect(toolMsg.content).toContain('Error: Not found');
+      expect(toolMsg.content).toBe(
+        JSON.stringify({
+          schema: 'neko.tool-result.v1',
+          success: false,
+          error: 'Not found',
+          data: null,
+        }),
+      );
     });
 
     it('should skip non-history events', async () => {

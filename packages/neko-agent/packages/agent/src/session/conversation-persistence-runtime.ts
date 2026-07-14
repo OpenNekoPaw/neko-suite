@@ -1,10 +1,15 @@
-import type { ConversationRecord, ConversationSource } from './conversation-record';
+import type {
+  ConversationChatModelSelection,
+  ConversationMediaModelSelection,
+  ConversationSource,
+} from './conversation-record';
+import type { ConversationCatalogStaleDiagnostic } from './conversation-resume-storage';
 import {
   buildConversationRecordSavePlan,
   type ConversationRecordProjectionConversation,
   type ConversationRecordSavePlan,
 } from './conversation-record-projector';
-import { createFileConversationStorage } from './file-conversation-storage';
+import { RetiredAgentMetadataStoreError } from '../retired-metadata-store';
 import {
   ConversationPersistenceCoordinator,
   type ConversationPersistenceCoordinatorMetrics,
@@ -19,7 +24,7 @@ import {
 export interface ConversationPersistenceRuntimeStorage extends ConversationPersistenceStoragePort {}
 
 export interface ConversationPersistenceRuntimeWarning {
-  code: 'save-failed' | 'delete-failed';
+  code: 'save-failed' | 'delete-failed' | 'projection-stale';
   conversationId: string;
   error: unknown;
   diagnostic?: ConversationPersistenceDiagnostic;
@@ -33,6 +38,8 @@ export interface ConversationPersistenceRuntimeOptions {
   getConversation: (
     conversationId: string,
   ) => ConversationRecordProjectionConversation | null | undefined;
+  getChatModelSelection?: (conversationId: string) => ConversationChatModelSelection | undefined;
+  getMediaModelSelection?: (conversationId: string) => ConversationMediaModelSelection | undefined;
   onWarning?: (warning: ConversationPersistenceRuntimeWarning) => void;
 }
 
@@ -46,11 +53,13 @@ export type ConversationPersistenceRuntimeResult =
       kind: 'saved';
       conversationId: string;
       revision: number;
+      projectionDiagnostic?: ConversationCatalogStaleDiagnostic;
     }
   | {
       kind: 'deleted';
       conversationId: string;
       revision: number;
+      projectionDiagnostic?: ConversationCatalogStaleDiagnostic;
     }
   | {
       kind: 'failed';
@@ -143,11 +152,22 @@ export class ConversationPersistenceRuntime {
   }
 
   private buildSavePlan(conversationId: string): ConversationRecordSavePlan {
-    return buildConversationRecordSavePlan({
+    const plan = buildConversationRecordSavePlan({
       conversation: this.options.getConversation(conversationId),
       workDir: this.options.workDir,
       source: this.options.source,
     });
+    if (plan.kind === 'skip') return plan;
+    const chatModelSelection = this.options.getChatModelSelection?.(conversationId);
+    const mediaModelSelection = this.options.getMediaModelSelection?.(conversationId);
+    return {
+      kind: 'save',
+      record: {
+        ...plan.record,
+        ...(chatModelSelection ? { chatModelSelection: { ...chatModelSelection } } : {}),
+        ...(mediaModelSelection ? { mediaModelSelection: { ...mediaModelSelection } } : {}),
+      },
+    };
   }
 
   private queueDelete(conversationId: string): ConversationPersistenceRuntimeQueueResult {
@@ -165,9 +185,13 @@ export class ConversationPersistenceRuntime {
   ): Promise<ConversationPersistenceRuntimeResult> {
     const result = await submission.completion;
     if (result.kind === 'written') {
+      this.reportProjectionDiagnostic(result, conversationId);
+      const projection = result.projectionDiagnostic
+        ? { projectionDiagnostic: result.projectionDiagnostic }
+        : {};
       return result.operation === 'delete'
-        ? { kind: 'deleted', conversationId, revision: result.revision }
-        : { kind: 'saved', conversationId, revision: result.revision };
+        ? { kind: 'deleted', conversationId, revision: result.revision, ...projection }
+        : { kind: 'saved', conversationId, revision: result.revision, ...projection };
     }
     if (result.kind === 'failed') {
       return { kind: 'failed', conversationId, diagnostic: result.diagnostic };
@@ -184,13 +208,28 @@ export class ConversationPersistenceRuntime {
     code: ConversationPersistenceRuntimeWarning['code'],
   ): void {
     void completion.then((result) => {
-      if (result.kind !== 'failed') return;
-      this.options.onWarning?.({
-        code,
-        conversationId,
-        error: result.diagnostic.error,
-        diagnostic: result.diagnostic,
-      });
+      if (result.kind === 'written') {
+        this.reportProjectionDiagnostic(result, conversationId);
+      } else if (result.kind === 'failed') {
+        this.options.onWarning?.({
+          code,
+          conversationId,
+          error: result.diagnostic.error,
+          diagnostic: result.diagnostic,
+        });
+      }
+    });
+  }
+
+  private reportProjectionDiagnostic(
+    result: Extract<ConversationPersistenceOperationResult, { kind: 'written' }>,
+    conversationId: string,
+  ): void {
+    if (!result.projectionDiagnostic) return;
+    this.options.onWarning?.({
+      code: 'projection-stale',
+      conversationId,
+      error: result.projectionDiagnostic.cause,
     });
   }
 }
@@ -202,13 +241,9 @@ export function createConversationPersistenceRuntime(
 }
 
 export function createFileConversationPersistenceRuntime(
-  options: Omit<ConversationPersistenceRuntimeOptions, 'storage' | 'workDir'> & {
+  _options: Omit<ConversationPersistenceRuntimeOptions, 'storage' | 'workDir'> & {
     workspaceRoot: string;
   },
 ): ConversationPersistenceRuntime {
-  return createConversationPersistenceRuntime({
-    ...options,
-    workDir: options.workspaceRoot,
-    storage: createFileConversationStorage(options.workspaceRoot),
-  });
+  throw new RetiredAgentMetadataStoreError('conversation-file-storage');
 }

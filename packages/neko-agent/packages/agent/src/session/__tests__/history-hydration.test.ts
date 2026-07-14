@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { formatToolResultContext, hydrateAgentHistoryWithToolResults } from '../history-hydration';
+import {
+  formatToolResultContext,
+  hydrateAgentHistoryWithToolResults,
+  projectJournalHistoryWithToolContext,
+} from '../history-hydration';
 
 describe('history hydration', () => {
   it('hydrates assistant tool results as user context messages', () => {
@@ -51,4 +55,39 @@ describe('history hydration', () => {
     ).toBe('[Tool Result for call-circular]: Failed\n{}');
   });
 
+  it('folds Journal tool messages back into assistant tool context for Extension resume', () => {
+    expect(
+      projectJournalHistoryWithToolContext([
+        { role: 'user', content: 'Read the project' },
+        {
+          role: 'assistant',
+          content: 'Inspecting.',
+          toolCalls: [
+            {
+              id: 'call-1',
+              type: 'function',
+              function: { name: 'Read', arguments: '{"path":"README.md"}' },
+            },
+          ],
+        },
+        {
+          role: 'tool',
+          toolCallId: 'call-1',
+          content: JSON.stringify({
+            schema: 'neko.tool-result.v1',
+            success: true,
+            data: { title: 'Neko Suite' },
+          }),
+        },
+      ]),
+    ).toEqual([
+      { role: 'user', content: 'Read the project' },
+      {
+        role: 'assistant',
+        content: 'Inspecting.',
+        toolCalls: [{ id: 'call-1', name: 'Read', arguments: { path: 'README.md' } }],
+        toolResults: [{ callId: 'call-1', success: true, data: { title: 'Neko Suite' } }],
+      },
+    ]);
+  });
 });

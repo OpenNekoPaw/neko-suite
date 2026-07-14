@@ -1,8 +1,6 @@
 /**
- * ConversationIndexStore - Persistent metadata index for resume/recovery.
- *
- * Stores workDir -> conversationIds and per-conversation metadata in
- * ~/.neko/conversations-index.json. Message history remains in Journal.
+ * Retired whole-file conversation metadata store.
+ * Normal runtime construction is poisoned after the SQLite catalog cutover.
  */
 
 import type {
@@ -11,6 +9,7 @@ import type {
   ConversationMediaModelSelection,
 } from './conversation-record';
 import { getLogger } from '../utils/logger';
+import { RetiredAgentMetadataStoreError } from '../retired-metadata-store';
 import {
   assertJsonFileRevisionCurrent,
   createJsonFileWriteMetadata,
@@ -59,6 +58,7 @@ export class ConversationIndexStore implements IConversationIndexStore {
   private _saveTimer?: ReturnType<typeof setTimeout>;
 
   constructor(options: ConversationIndexStoreOptions) {
+    throw new RetiredAgentMetadataStoreError('conversation-index-json');
     this._options = options;
     this._writerId = options.writerId ?? createJsonFileWriterId('conversation-index');
     this._now = options.now ?? (() => Date.now());

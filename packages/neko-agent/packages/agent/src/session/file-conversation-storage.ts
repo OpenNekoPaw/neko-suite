@@ -1,6 +1,5 @@
 /**
- * FileConversationStorage - Resume storage backed by conversations index +
- * Journal projection.
+ * Retired conversation resume storage backed by a whole-file JSON index.
  */
 
 import type { ConversationRecord, ConversationIndexMeta } from './conversation-record';
@@ -8,9 +7,11 @@ import type { ConversationSummary, IJournalProjection } from './journal-projecti
 import { JournalProjection } from './journal-projection';
 import { ConversationIndexStore, type IConversationIndexStore } from './conversation-index-store';
 import { getLogger } from '../utils/logger';
+import { RetiredAgentMetadataStoreError } from '../retired-metadata-store';
 import * as nodeFs from 'node:fs';
 import * as nodePath from 'node:path';
 import * as nodeOs from 'node:os';
+import type { ConversationResumeStorage } from './conversation-resume-storage';
 
 const logger = getLogger('FileConversationStorage');
 
@@ -21,7 +22,7 @@ export interface FileConversationStorageOptions {
   readFile: (path: string) => Promise<string>;
   writeFile: (path: string, content: string) => Promise<void>;
   exists: (path: string) => Promise<boolean>;
-  /** Primary metadata index path: ~/.neko/conversations-index.json */
+  /** Retired metadata index path accepted only to emit a diagnostic. */
   indexFilePath: string;
   workDir: string;
   journalProjection?: IJournalProjection;
@@ -29,16 +30,16 @@ export interface FileConversationStorageOptions {
 }
 
 /**
- * Persistent conversation storage with Journal as the primary history source.
- * Writes only metadata into the global conversations index.
+ * Normal runtime construction is poisoned after the SQLite catalog cutover.
  */
-export class FileConversationStorage {
+export class FileConversationStorage implements ConversationResumeStorage {
   private readonly _options: FileConversationStorageOptions;
   private readonly _indexStore: IConversationIndexStore;
   private readonly _cache = new Map<string, ConversationRecord>();
   private _initialized = false;
 
   constructor(options: FileConversationStorageOptions) {
+    throw new RetiredAgentMetadataStoreError('conversation-file-storage');
     this._options = options;
     this._indexStore =
       options.indexStore ??
@@ -84,6 +85,14 @@ export class FileConversationStorage {
     }
 
     return records.sort((a, b) => b.updatedAt - a.updatedAt);
+  }
+
+  async search(text: string): Promise<ConversationRecord[]> {
+    const normalized = text.trim().toLocaleLowerCase();
+    const records = await this.list();
+    return normalized
+      ? records.filter((record) => record.title.toLocaleLowerCase().includes(normalized))
+      : records;
   }
 
   async delete(id: string): Promise<void> {
@@ -221,8 +230,7 @@ function cloneRecord(record: ConversationRecord): ConversationRecord {
 }
 
 /**
- * Create a FileConversationStorage for the given workDir.
- * Runtime defaults to Journal + conversations-index.json only.
+ * Retired factory retained only to emit a fail-visible diagnostic.
  */
 export function createFileConversationStorage(workDir: string): FileConversationStorage {
   const indexFilePath = nodePath.join(nodeOs.homedir(), '.neko', 'conversations-index.json');

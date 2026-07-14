@@ -186,4 +186,39 @@ describe('ConversationManager', () => {
     expect(manager.get(emptyId)).toBeUndefined();
     expect(manager.getActiveId()).toBe(keptId);
   });
+
+  it('reconciles external durable records without replacing Host-owned active empty state', () => {
+    const manager = new ConversationManager(undefined, undefined, {
+      generateId: () => 'local-empty',
+    });
+    manager.hydrate([conversation('existing', 'Old title', 1)], 'existing');
+    manager.create();
+
+    expect(
+      manager.reconcileHydrated([
+        conversation('existing', 'Updated externally', 2),
+        conversation('external', 'Created externally', 2),
+      ]),
+    ).toEqual({ upsertedIds: ['existing', 'external'], removedIds: [] });
+    expect(manager.get('existing')?.title).toBe('Updated externally');
+    expect(manager.getActiveId()).toBe('local-empty');
+
+    expect(manager.reconcileHydrated([conversation('external', 'Created externally', 2)])).toEqual({
+      upsertedIds: [],
+      removedIds: ['existing'],
+    });
+    expect(manager.get('existing')).toBeUndefined();
+    expect(manager.get('local-empty')).toBeDefined();
+    expect(manager.getActiveId()).toBe('local-empty');
+  });
 });
+
+function conversation(id: string, title: string, updatedAt: number) {
+  return {
+    id,
+    title,
+    messages: [{ id: `${id}-message`, role: 'user' as const, content: title, timestamp: 1 }],
+    createdAt: 1,
+    updatedAt,
+  };
+}

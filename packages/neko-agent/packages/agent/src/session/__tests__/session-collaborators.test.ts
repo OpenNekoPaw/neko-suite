@@ -211,7 +211,6 @@ describe('session runtime collaborators', () => {
       ports: {
         validation: {
           getCoordinator: () => coordinator,
-          isRecoveryGuidanceDisabled: () => false,
         },
         recovery: {
           getRecoveryPolicy: () => createControlPlane(),
@@ -272,7 +271,6 @@ describe('session runtime collaborators', () => {
       ports: {
         validation: {
           getCoordinator: () => coordinator,
-          isRecoveryGuidanceDisabled: () => false,
         },
         recovery: {
           getRecoveryPolicy: () => createControlPlane(),
@@ -770,7 +768,9 @@ class TestFeedbackCoordinator implements AgentValidationCoordinator {
   }
 }
 
-function createTestFeedbackCoordinator(cycle: AgentValidationCycle | null): TestFeedbackCoordinator {
+function createTestFeedbackCoordinator(
+  cycle: AgentValidationCycle | null,
+): TestFeedbackCoordinator {
   return new TestFeedbackCoordinator(cycle);
 }
 

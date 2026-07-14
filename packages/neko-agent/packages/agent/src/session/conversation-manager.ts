@@ -35,6 +35,11 @@ export interface DeleteConversationOptions {
   activateNext?: boolean;
 }
 
+export interface ConversationReconcileResult {
+  readonly upsertedIds: readonly string[];
+  readonly removedIds: readonly string[];
+}
+
 export type AgentHistoryEntry = AgentHistoryWithToolContextMessage;
 
 const DEFAULT_CLEANUP_POLICY: CleanupPolicy = {
@@ -100,6 +105,57 @@ export class ConversationManager {
 
   list(): Conversation[] {
     return Array.from(this.conversations.values()).sort((a, b) => b.updatedAt - a.updatedAt);
+  }
+
+  hydrate(conversations: readonly Conversation[], activeId: string | null = null): void {
+    const hydrated = new Map<string, Conversation>();
+    for (const conversation of conversations) {
+      if (hydrated.has(conversation.id)) {
+        throw new Error(`Conversation hydration contains duplicate id ${conversation.id}.`);
+      }
+      hydrated.set(conversation.id, {
+        ...conversation,
+        messages: conversation.messages.map((message) => ({ ...message })),
+      });
+    }
+    if (activeId !== null && !hydrated.has(activeId)) {
+      throw new Error(`Conversation hydration active id does not exist: ${activeId}.`);
+    }
+    this.conversations = hydrated;
+    this.activeId = activeId;
+    this.dirtyConversations.clear();
+  }
+
+  reconcileHydrated(conversations: readonly Conversation[]): ConversationReconcileResult {
+    const incoming = new Map<string, Conversation>();
+    for (const conversation of conversations) {
+      if (incoming.has(conversation.id)) {
+        throw new Error(`Conversation reconciliation contains duplicate id ${conversation.id}.`);
+      }
+      incoming.set(conversation.id, cloneConversation(conversation));
+    }
+
+    const upsertedIds: string[] = [];
+    for (const [id, conversation] of incoming) {
+      const current = this.conversations.get(id);
+      if (!current || conversation.updatedAt > current.updatedAt) {
+        this.conversations.set(id, conversation);
+        this.dirtyConversations.delete(id);
+        upsertedIds.push(id);
+      }
+    }
+
+    const removedIds: string[] = [];
+    for (const [id, conversation] of this.conversations) {
+      if (incoming.has(id) || conversation.messages.length === 0) continue;
+      this.conversations.delete(id);
+      this.dirtyConversations.delete(id);
+      removedIds.push(id);
+    }
+    if (this.activeId !== null && !this.conversations.has(this.activeId)) {
+      this.activeId = this.list()[0]?.id ?? null;
+    }
+    return { upsertedIds, removedIds };
   }
 
   addMessage(id: string, message: Message): void {
@@ -372,6 +428,13 @@ export class ConversationManager {
       this.persist();
     }
   }
+}
+
+function cloneConversation(conversation: Conversation): Conversation {
+  return {
+    ...conversation,
+    messages: conversation.messages.map((message) => ({ ...message })),
+  };
 }
 
 function estimateMessageTokenCount(content: string): number {
