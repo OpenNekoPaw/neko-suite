@@ -1,12 +1,6 @@
 import type { KnipConfig } from 'knip';
 
 const config: KnipConfig = {
-  entry: [
-    'scripts/check-3d-route-a-boundaries.mjs',
-    'scripts/check-canvas-playback-boundary.mjs',
-    'scripts/compile-ts-vsix.mjs',
-    'scripts/scene-render-diagnostics.mjs',
-  ],
   exclude: [
     // Type-only exports in app code create too much noise for this monorepo.
     // We keep knip focused on runtime dead code and dependency drift.
@@ -15,8 +9,6 @@ const config: KnipConfig = {
   ignore: [
     // Skills are runtime CLI scripts, not imported modules
     'skills/**',
-    // Agent eval scripts are developer CLIs invoked directly from docs and PR evidence.
-    'scripts/agent-eval/*.mjs',
   ],
   ignoreBinaries: [
     // Root package scripts invoke this local CI wrapper directly.
@@ -64,6 +56,20 @@ const config: KnipConfig = {
   },
 
   workspaces: {
+    '.': {
+      entry: [
+        'scripts/agent-eval/ablation/run.mjs',
+        'scripts/agent-eval/all-suite-dry-run.mjs',
+        'scripts/agent-eval/canvas-json-check.mjs',
+        'scripts/agent-eval/ci-run.mjs',
+        'scripts/agent-eval/protocol-smoke.mjs',
+        'scripts/agent-eval/validators/file-validator-cli.mjs',
+        'scripts/check-3d-route-a-boundaries.mjs',
+        'scripts/check-canvas-playback-boundary.mjs',
+        'scripts/compile-ts-vsix.mjs',
+        'scripts/scene-render-diagnostics.mjs',
+      ],
+    },
     // ── Layer 0: Library packages ──────────────────────
     'packages/neko-types': {
       // Knip auto-detects entries from package.json exports

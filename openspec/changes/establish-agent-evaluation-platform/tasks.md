@@ -67,3 +67,4 @@
 - [x] 7.3 Add Skill-content boundary tests preventing runtime tool/protocol/authoring instructions from returning to builtin/custom/Codex evaluation methodology where applicable.
 - [x] 7.4 Run focused TUI/debug tests, `pnpm test:agent:eval`, all-suite dry-run, affected package tests/builds, `pnpm check:agent-boundaries`, `pnpm check:legacy-debt`, `pnpm check:unused`, `pnpm check:quality` and strict OpenSpec validation.
 - [x] 7.5 Run `neko-quality-review`, record L3/L4 risks, real Evaluation commands/report locations/model identities/costs, blocked suites, unexecuted cases and remaining rollout risk.
+- [x] 7.6 Declare every directly executed Evaluation CLI and public validator as an explicit unused-code-analysis entry, and prove the platform adds no unused file or dependency finding.
