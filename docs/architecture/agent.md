@@ -396,11 +396,18 @@ Evaluation 是横切审阅面，不是默认 IDC 阶段，也不是独立 workfl
 
 开发期 Agent evaluation 是仓库脚本能力，不是 Agent 产品能力或独立的 CLI 业务编排：
 
-- `packages/neko-agent` 只提供通用的 `debug automation --stdio` 控制面和事实投影；session、输入队列、Skill 生命周期、任务观察和产物投影必须继续走 canonical TUI runtime。
-- `scripts/agent-eval` 拥有 manifest、场景编排、controller/judge、确定性断言、post-check、报告和退出码；不得把这些职责重新放回 `cli-tui`、Agent capability 或 runtime Skill。
-- debug automation 只能增加对本地开发自动化普遍有用的控制或可观察事实，不能暴露 evaluation-specific pass/fail、rubric 或报告概念。
-- Agent 行为验收必须断言 canonical path、禁止 fallback 的证据和 assertion-level 结果；只看最终文本、mock-only 或 direct turn injection 不能替代真实路径证据。
-- 原始运行产物保留在本地忽略目录；需要进入 OpenSpec、PR 或发布记录时，提交经过脱敏的命令、case id、证据摘要、失败分类和残余风险。
+- `packages/neko-agent` 只提供通用 debug automation 控制面和中立事实投影；session、输入队列、Skill 生命周期、运行配置、任务观察和产物投影必须继续走 canonical TUI runtime。每条 controller 消息都进入 TUI input queue，不得 direct-import Agent turn runner 或建立第二套 `AgentSession` assembly。
+- `scripts/agent-eval` 是唯一平台 owner，拥有 `reuse | update | create | excluded` authoring 决策、严格 v2 suite/scenario、fixture、controller、hard assertion、artifact check、Judge、baseline/comparison、报告和退出码；不得把这些职责放回 `cli-tui`、Agent capability 或 runtime Skill。
+- 每项行为先定义 user behavior、canonical path、forbidden fallback、observable evidence、expected result/failure，再编写 prompt。缺失 facts 或公开 validator 时 Evaluation 必须 blocked，不能退化成最终文本、metadata 或人工假设。
+- debug automation 只能增加本地开发自动化普遍需要的 typed facts：Skill/Prompt fragment、effective runtime/model config、Tool/task/continuation、artifact、diagnostic、usage/timing/retry 和 dropped count。不得暴露 suite、case、variant、assertion、rubric、score、baseline、optimizer、pass/fail 或 report 概念，也不得投影 hidden prompt body 和 credential。
+- Skill suite 使用 portable name 与 Host-owned `source + provenance + rootId + relativePath + fingerprint` 确定被测开发快照。同名不同来源/位置是不同 Host identity；Market package id、semver、发布、安装和分发历史不属于 Evaluation 身份。
+- runtime/model profile 只表达产品 canonical TUI 已支持的 session-scoped immutable 配置，并同时记录 requested/effective identity 与 digest。Evaluation 不添加测试专用 feature flag；消融由外部平台比较隔离配置或 revision/build。
+- Ablation 是 `scripts/agent-eval` 的 suite mode，不是独立 validation utility。配置消融复用上述 profile；实现消融使用 detached revision/worktree/build。两者都调用同一个 TUI driver 和 TUI App session owner，禁止产品 CLI experiment command、direct `AgentSession` runner、marker/no-op branch、alias 或第二套报告事实来源。
+- Skill 实现消融在同一个 Host identity 下记录不同 package fingerprint 与显式 development checkpoint；revision、patch、build recipe 和 executable identity 只存在于 Evaluation 报告，不进入 TUI facts。blind Judge 只看到不含 variant fingerprint 的稳定 Host identity。接受本地开发候选不等于 Market 版本或发布。
+- Evaluation 报告分离三个证据面：hard gates 证明 Skill/Tool/model/config、process、format/schema、artifact、permission、canonical path 和 no-fallback correctness；latency/token/cost/iteration/Tool/retry/task 只描述执行效率；领域 validator 或 suite-owned blind Judge 才能从真实模型输出评价相关性、语义完整性、约束满足、推理、具体性、一致性及适用的创作/审美质量。格式或 hard-gate 通过不得生成 content-quality score，也不得被描述为模型质量提升。
+- Judge 只读取 allowlisted evidence，并且不能覆盖 hard-gate 失败。`hard-gates-only` 明确表示内容质量未评估；ablation 的 scenario rubric 必须与 indexed case 完全匹配，只有真实 Judge 样本可以产生 quality distribution/delta。重复采样保留全部样本，baseline 或 Judge policy 维度不一致时返回 non-comparable。
+- 每次真实运行输出 versioned result、evidence、artifact manifest、quality report，并在执行时增加 Judge、aggregate 或 baseline diff。原始产物保留在 gitignored `reports/agent-eval/`；本地按 14 天策略由开发者清理，trusted CI artifact 自动保留 14 天。OpenSpec/PR 只提交脱敏 summary 和稳定 evidence refs。
+- 默认 PR CI 只执行 key-free harness 与 all-suite dry-run。真实 focused/nightly 只在可信 push、schedule 或手动触发环境运行；fork PR 无 secret 路径。缺 credentials、network、quota、model、config 或 fixture 时返回明确 infrastructure blocked/fail，不使用 mock 或 fallback 伪造验收。
 
 | Recovery signal  | 含义                                      | 约束                            |
 | ---------------- | ----------------------------------------- | ------------------------------- |

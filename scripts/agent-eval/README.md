@@ -1,222 +1,298 @@
-# Agent Eval Developer Scripts
+# Agent Evaluation Developer Platform
 
-These scripts are developer tooling for real Agent behavior acceptance through
-`neko debug automation --stdio`. They do not implement Agent, Canvas, media,
-Skill, EPUB, provider, or TUI business logic.
+This directory owns development-time evaluation for real Neko Agent behavior. It
+drives the canonical TUI runtime through debug automation; it is not an Agent
+product capability, a runtime Skill, or a second `AgentSession` assembly.
 
-## Boundaries
+## Ownership Boundary
 
-- Target Agent turns are submitted through the debug automation protocol.
-- Controller and judge model calls, when added by eval manifests, must use the
-  configured external provider/API endpoints.
-- Mock providers and eval-only fake business tools do not count as Agent
-  behavior acceptance.
-- Protocol parser, invalid request, stdio framing, and timeout classification
-  tests may remain key-free.
-- Controller or judge API unavailability is infrastructure fail.
-- Bad controller prompts or bad target behavior are case fail.
+- `packages/neko-agent` owns the TUI App/session lifecycle, input queue, runtime
+  configuration, Skill lifecycle, Tool/task execution, artifact projection, and
+  evaluation-neutral debug facts.
+- `scripts/agent-eval` owns authoring decisions, suites, fixtures, controllers,
+  hard assertions, artifact checks, Judges, comparisons, reports, and exit codes.
+- Every real controller message enters the TUI input queue. Direct Agent turn
+  imports, mock providers, and evaluation-only business tools are not acceptance
+  evidence.
+- Debug facts may expose bounded runtime identities, hashes, states, diagnostics,
+  usage, and dropped counts. They must not expose suite, case, score, baseline,
+  optimizer, or pass/fail concepts.
+- Skill suites bind the portable Skill name to the Host-owned source,
+  provenance, root, relative location, and package fingerprint. Market package
+  versions, publication state, and install history are outside this platform.
 
-## Test Case Design
+## Directory Layout
 
-Use [`test-cases.md`](./test-cases.md) as the source for eval case categories,
-required evidence, manifest shape, and quality rubric. It covers single prompts,
-message queues, closed-loop feedback, async/concurrent/iterative tasks, Skill
-activation/triggering, and model/provider/profile binding.
+```text
+scripts/agent-eval/
+  authoring/            change-to-suite selection
+  ablation/             focused config and isolated implementation matrices
+  comparison/           baseline and randomized comparison
+  fixtures/             isolated workspace preparation
+  judge/                allowlisted external Judge adapters
+  reports/              redaction, attribution, and report writers
+  runner/               TUI controller, hard gates, artifact checks
+  schemas/              strict v2 contracts and retention policy
+  shared-fixtures/      committed synthetic workspaces
+  suites/
+    skills/             Skill-owned suites and index
+    agent-runtime/      Prompt/runtime/workflow suites and index
+    coverage-index.json coverage and v1 migration ledger
+```
 
-Use [`.codex/skills/neko-agent-evaluation/SKILL.md`](../../.codex/skills/neko-agent-evaluation/SKILL.md)
-to decide whether a change requires evaluation and to define canonical-path,
-forbidden-fallback, observability, and residual-risk evidence.
+Suite discovery is index-backed and strict. Unknown versions, fields, case
+kinds, assertion evaluators, setup operations, paths, or references fail before
+the TUI is spawned. Flat v1 manifests and `--manifest` execution are removed.
 
-## Development Gate
+## Authoring Workflow
 
-Run the key-free harness tests after changing this directory, scenario
-manifests, the debug automation protocol, or exported fact contracts:
+Before writing prompts, record one decision for each changed Agent behavior:
+`reuse`, `update`, `create`, or `excluded`. Use
+`authoring/change-selector.mjs` to map changed Prompt, Skill, Tool, model,
+session, task/recovery, TUI fact, and evaluation-platform paths to the owning
+suite. Unmapped behavior is a coverage error, not a reason to choose a default
+suite.
+
+Every decision and scenario starts with an evidence contract:
+
+1. user-visible behavior;
+2. canonical runtime path;
+3. forbidden fallback;
+4. observable runtime or artifact evidence;
+5. expected result;
+6. expected fail-visible behavior.
+
+Then classify the coverage delta across `canonical`, `paraphrase`, `boundary`,
+`failure`, `workflow`, `artifact`, `quality`, `regression`, and `holdout`.
+Mark every omitted group not applicable with a reason. Use
+[`test-cases.md`](./test-cases.md) for the authoring checklist and supported v2
+catalog. The executable schema in [`schemas/contracts.mjs`](./schemas/contracts.mjs)
+remains authoritative.
+
+Prefer the smallest evidence set that proves both the result and the path:
+
+- deterministic hard gates for activation/injection, model/config identity,
+  Tool/task/process state, structured output, artifacts, permissions, and
+  no-fallback;
+- owning-domain validators for durable files and media quality;
+- an external Judge only for subjective quality after hard gates pass.
+
+Keep three result planes separate:
+
+- **correctness**: deterministic path, configuration, activation, permission,
+  format/schema, artifact, and no-fallback hard gates;
+- **execution efficiency**: latency, token, cost, iteration, Tool, retry, and
+  task metrics;
+- **output content quality**: relevance, semantic completeness, constraint
+  satisfaction, reasoning, specificity, consistency, and applicable creative
+  or aesthetic quality scored from real model output by a suite-owned rubric,
+  owning validator, or blind Judge.
+
+Passing hard gates does not make content quality available. `hard-gates-only`
+means content quality was not evaluated. An ablation `scenario-rubric` must
+exactly match the selected scenario rubric; only retained Judge samples may
+produce `qualityMean`. Never map field matches, pass rate, latency, tokens, or
+cost into a content-quality score or a model-quality improvement claim.
+
+Missing observability blocks the case. Do not replace it with final-answer text,
+metadata, a mock, or an assumption.
+
+## Commands
+
+Run the key-free harness, schema, protocol, report, and all-suite validation:
 
 ```bash
 pnpm test:agent:eval
 ```
 
-This command runs in `pnpm ci:local` and GitHub CI. It validates harness and
-protocol behavior; it does not replace a real TUI Agent case. Only assertions
-with evaluators actually executed by the current runner count as passed.
-Metadata printed by `--dry-run`, a zero exit code, or a non-empty final answer
-must not be reported as complete scenario acceptance on their own.
+The all-suite dry-run can also be invoked directly:
 
-## Executable Scenario Evidence
+```bash
+node scripts/agent-eval/all-suite-dry-run.mjs
+```
 
-`protocol-smoke.mjs` validates the selected case before spawning the TUI. Unknown
-case kinds, assertion kinds, setup operations, and post-check kinds are
-configuration errors rather than ignored metadata.
-
-The script-owned scenario runtime currently supports:
-
-- contained workspace fixtures: `remove-path`, `write-file`;
-- runtime/final-answer/task/continuation/Skill/tool-call assertions;
-- deterministic structured `tool-call-succeeded` and `tool-call-failed`
-  matching against `turns[].toolCalls[]`;
-- contained `file-exists` and `file-absent` checks plus `canvas-json` checks.
-
-Fixture writes and removals are restricted to relative paths below the selected
-`cwd`, reject traversal and symlink crossings, and should still be run only in a
-dedicated evaluation workspace. Successful output includes separate `setup`,
-`evaluation.assertions`, `evaluation.postChecks`, and raw `facts` evidence.
-
-## Exit Codes
-
-- `0`: runner-supported checks passed
-- `1`: case fail
-- `2`: infrastructure fail
-- `3`: manifest/config invalid
-
-## Protocol Smoke
-
-Run a single prompt through the local developer automation protocol:
+Validate one indexed v2 case without starting provider-backed behavior:
 
 ```bash
 node scripts/agent-eval/protocol-smoke.mjs \
-  --cwd "$HOME/Git/neko-test" \
-  --prompt "Generate a cat playing image and analyze the image content"
-```
-
-By default the script starts `./packages/neko-agent/neko debug automation --stdio`.
-Override it with `NEKO_DEBUG_COMMAND` when testing an unbundled CLI:
-
-```bash
-NEKO_DEBUG_COMMAND="./node_modules/.bin/tsx packages/neko-agent/packages/cli-tui/src/cli.tsx" \
-node scripts/agent-eval/protocol-smoke.mjs --cwd /tmp/neko-test --prompt "hello"
-```
-
-## Portable Skill Creation Scenarios
-
-Native portable Skill creation acceptance cases are defined in:
-
-```bash
-scripts/agent-eval/scenarios/portable-skill-creation.scenarios.json
-```
-
-They cover canonical project creation, invalid Skill rejection, resource-path
-traversal rejection, existing-target conflict, `.agents/skills` path evidence,
-absence of a canonical root `manifest.json`, and unchanged poisoned
-`.neko/skills` input. The manifest uses a dedicated temporary workspace at
-`/tmp/neko-agent-portable-skill-eval`.
-
-Validate any case without starting a provider-backed Agent:
-
-```bash
-node scripts/agent-eval/protocol-smoke.mjs \
-  --manifest scripts/agent-eval/scenarios/portable-skill-creation.scenarios.json \
-  --case native-create-project-skill \
+  --suite skill.storyboard \
+  --case canonical-two-shot-storyboard \
   --dry-run
 ```
 
-Run the real focused case through TUI debug automation by removing `--dry-run`.
-Provider credentials and an available chat model are required for real Agent
-behavior acceptance.
-
-## Creative Workflow Scenarios
-
-The initial creative workflow eval scenario manifest is:
-
-```bash
-scripts/agent-eval/scenarios/creative-workflows.scenarios.json
-```
-
-Dry-run a case to validate manifest parsing and environment interpolation without
-starting Agent behavior acceptance:
+Run the same real case through the canonical TUI by removing `--dry-run`:
 
 ```bash
 node scripts/agent-eval/protocol-smoke.mjs \
-  --manifest scripts/agent-eval/scenarios/creative-workflows.scenarios.json \
-  --case cat-play-image-analysis \
-  --dry-run
+  --suite skill.storyboard \
+  --case canonical-two-shot-storyboard
 ```
 
-Run the cat image generation, image analysis, and conditional regeneration case through debug automation:
+Use `--report-root <relative-or-absolute-directory>` only when the default
+gitignored `reports/agent-eval/` root is unsuitable. `--run-id` is available for
+stable local correlation. A direct `--cwd` plus `--prompt` protocol smoke is a
+diagnostic surface; it does not provide suite-level acceptance evidence.
+
+Run trusted focused selection by suite or changed revision range:
 
 ```bash
-node scripts/agent-eval/protocol-smoke.mjs \
-  --manifest scripts/agent-eval/scenarios/creative-workflows.scenarios.json \
-  --case cat-play-image-analysis
+node scripts/agent-eval/ci-run.mjs --mode focused --suite skill.storyboard
+node scripts/agent-eval/ci-run.mjs \
+  --mode focused \
+  --base-sha <base-sha> \
+  --head-sha <head-sha>
 ```
 
-The EPUB cases use `${A}` as the asset root. Export it before running:
+Run the configured repeated nightly matrix:
 
 ```bash
-export A="$HOME/Git/neko-test"
+node scripts/agent-eval/ci-run.mjs --mode nightly --repetitions 3
 ```
 
-Run the BLAME storyboard-to-Canvas case:
+Validate a focused ablation plan without starting the TUI or creating a
+worktree:
 
 ```bash
-node scripts/agent-eval/protocol-smoke.mjs \
-  --manifest scripts/agent-eval/scenarios/creative-workflows.scenarios.json \
-  --case blame-epub-storyboard-to-canvas
+node scripts/agent-eval/ablation/run.mjs --plan thinking-budget --dry-run
+node scripts/agent-eval/ablation/run.mjs --plan creation-persona-guidance --dry-run
 ```
 
-This case validates EPUB image analysis, storyboard table generation, and a
-Canvas handoff. After the Agent run, run `canvas-json-check.mjs` against the
-Canvas JSON file generated in `$HOME/Git/neko-test`.
+Run the same plans against real targets by removing `--dry-run`. Configuration
+variants select only declared suite runtime/model profiles. Implementation
+variants create detached Git worktrees, verify source/patch/build-recipe
+fingerprints, build separate TUI executables, run the same indexed case, and
+clean every worktree on success, failure, or timeout. This external command is
+the ablation entrypoint; do not add an Agent Skill, product `neko experiment`
+alias, direct `AgentSession` runner, or Evaluation-only runtime flag.
 
-Run the lamp-god animation planning case:
+The former product `neko experiment` command and Agent experiment exports were
+removed. Existing developer scripts must migrate to `ablation/run.mjs`; there is
+no compatibility alias. Old `.neko/experiments` output is rebuildable local
+developer data and is not imported as an acceptance baseline.
 
-```bash
-node scripts/agent-eval/protocol-smoke.mjs \
-  --manifest scripts/agent-eval/scenarios/creative-workflows.scenarios.json \
-  --case lamp-god-epub-animation-plan
+Trusted real runs require an available provider credential environment variable,
+network/model access, and `~/.neko/config.toml`. Missing credentials or config
+produce `infrastructure-blocked` with exit code 2; the runner does not substitute
+a mock or default success. Cases with a content rubric also require
+`NEKO_AGENT_EVAL_JUDGE_ENDPOINT` and `NEKO_AGENT_EVAL_JUDGE_API_KEY`; the Judge
+identity and sampling policy are declared by the owning suite.
+
+## Outcomes and Reports
+
+Process exit codes are:
+
+| Code | Meaning                                                            |
+| ---- | ------------------------------------------------------------------ |
+| `0`  | all executed hard gates and enabled quality stages passed          |
+| `1`  | target behavior failed, regressed, or was non-comparable           |
+| `2`  | evaluation infrastructure failed or was blocked                    |
+| `3`  | suite, scenario, selection, or effective configuration was invalid |
+
+Each sample writes under
+`reports/agent-eval/<suite-id>/<case-id>/<run-id>/`:
+
+- `result.json`: outcome, identities, effective configuration, hard-gate
+  results, usage, report locations, skipped stages, and residual risk;
+- `evidence.json`: redacted runtime facts and evidence-linked gate results;
+- `artifact-manifest.json`: stable artifacts and validator evidence;
+- `quality-report.md`: human-readable interpretation;
+- `summary.json`: shareable allowlisted summary;
+- `judge.json` and `baseline-diff.json` only when those stages execute;
+- `aggregate.json` for repeated samples.
+- `ablation/<plan-id>/<run-id>/variant-delta.json` for a focused matrix; it
+  references standard sample reports and adds external config/build identity
+  plus variant deltas rather than defining a second sample result schema.
+
+Repeated aggregates include every sample, hard-gate totals, token/cost
+availability, mean/p50/p95 latency, iterations, Tool success/failure, retries,
+task terminal counts, and applicable real-output content-quality distribution.
+The ablation delta records content quality as `not-evaluated`, `unavailable`, or
+`available` with its rubric reference. Correctness and infrastructure outcomes
+dominate efficiency and quality deltas. Missing effective config,
+identical implementation executables, or policy drift is not comparable.
+
+Interpret the assertion rows before the overall exit code. A correct-looking
+answer still fails when canonical-path evidence is absent, a forbidden fallback
+participated, facts were truncated, the effective model/config differs, or a
+durable artifact cannot be validated. Judge scores are supplemental and cannot
+override a failed hard gate. `non-comparable` is not an improvement or a pass.
+
+## Skill and Prompt Optimization Debug Functional
+
+Optimization is an evidence consumer layered on the Evaluation platform. It is
+not a second runner, product capability, Agent Skill, Dashboard action, or
+automatic repository mutation path. The canonical implementation is under
+`scripts/agent-eval/optimization/` and reuses v2 reports, suite discovery,
+implementation ablation targets, the TUI runner, Judge adapters, and randomized
+comparison.
+
+The lifecycle is:
+
+```text
+reported -> proposed -> approved/rejected
+approved -> OpenSpec application -> evaluated
+evaluated -> accepted/rejected
 ```
 
-For the Canvas case, follow the Agent run with `canvas-json-check.mjs` against
-the Canvas JSON file created by the workflow.
+`schemas/optimization-contracts.mjs` defines strict plan, candidate, handoff,
+approval, decision, holdout-selection and development-history contracts. Plans
+retain report ids, sanitized evidence refs, observed failure, suspected owner,
+confidence, missing evidence, expected content improvement, risks, bounded
+budgets and the required matrix. Tool/Capability, runtime/session, provider,
+artifact and Evaluation infrastructure ownership returns a handoff or blocker
+rather than a Prompt patch.
 
-## Canvas JSON Check
+Candidate artifacts are written outside canonical Skill/Prompt paths. The patch
+is restricted to the approved target and fingerprinted independently as an
+artifact; base and candidate Skill snapshot identities remain the Host-computed
+package fingerprints. Approval binds target identity, both Skill fingerprints,
+file/section scope, budget and matrix. Any change invalidates approval.
+Application produces an `openspec-apply-required` handoff and never edits or
+commits canonical content itself.
 
-Use this as a deterministic existence/format/content check after an Agent run
-that is expected to create a Canvas JSON file:
+Development history is sanitized repository metadata under
+`quality/skill-development-history/`, not portable package content. It appends
+immutable baseline, candidate, evaluated, accepted, rejected and superseded
+checkpoints only for explicit development/Evaluation events. Same-name sources
+remain distinct, and rename/move continuity requires an explicit lineage
+record. Market owns package id, semver, publication, installation and
+distribution; optimization history must not create or update them.
 
-```bash
-node scripts/agent-eval/canvas-json-check.mjs \
-  --file "$HOME/Git/neko-test/path/to/canvas.json" \
-  --expect storyboard \
-  --expect nodes
-```
+The approved matrix resolves optimizer-visible development cases, a protected
+regression set, and a content-addressed holdout policy. Holdout case ids and
+inputs are loaded only after the candidate and approval are frozen. This policy
+is an overfitting control, not a security boundary. Baseline and candidate run
+as isolated implementation targets with identical fixture, runtime/model,
+sampling, budget, validator and Judge policies. Comparative Judge evidence is
+randomized and excludes checkpoint labels, report/revision/build identities,
+fingerprints and repository diffs.
 
-This checks file existence, JSON parseability, and expected content in the JSON
-string. It does not inspect Canvas Webview memory.
+Acceptance reads real output-content Judge distributions separately from hard
+gates and efficiency metrics. Hard-gate, holdout or protected-regression
+failure rejects the candidate regardless of average score. Missing Judge
+samples or policy drift is non-comparable. Infrastructure recovery may retry an
+unchanged candidate within budget; behavior failures are retained and cannot be
+rerun into success. Every final decision records blind order references,
+holdout/regression reports, approver, usage/cost availability and residual
+bias/overfitting risk.
 
-## TUI Markdown Rendering Scenarios
+## CI and Retention
 
-Focused normalized Markdown/TUI cases are defined in:
+Default pull-request CI runs `pnpm test:agent:eval` without provider secrets.
+The dedicated functional workflow runs only on trusted `main` pushes, schedules,
+or manual dispatch; it does not use `pull_request` or `pull_request_target`, so
+fork pull requests cannot reach evaluation credentials. Focused runs select
+affected suites; nightly runs retain every repetition instead of selecting the
+best sample.
 
-```bash
-scripts/agent-eval/scenarios/tui-markdown-rendering.scenarios.json
-```
+Raw reports are gitignored. The local retention policy is 14 days and requires
+developer cleanup; trusted-CI artifacts enforce 14-day retention. Before a
+summary or approved baseline is committed or shared, remove
+credentials, hidden prompt bodies, raw provider configuration, unauthorized
+content, machine-specific absolute user paths, cache/runtime handles, and raw
+logs. Preserve stable suite/case/run ids, target identity/fingerprint, model and
+configuration identity, fixture digest, assertion evidence refs, artifact refs,
+usage/cost availability, blocked stages, and residual risk.
 
-They cover mixed CommonMark/GFM, aligned and ragged tables, escaped pipes, multiline code, CJK/emoji/combining text, incomplete table/fence streaming, terminal resize, and provider-authored ESC/CSI/OSC/BEL/C0/C1 payloads.
-
-The TUI debug automation contract exposes generally useful Markdown path facts under `session.facts.markdown`:
-
-- `pathEvents`: bounded canonical-path events such as `session-created`, `source-updated`, `document-projected`, `layout-created` and `session-finalized`;
-- `droppedPathEventCount`: overflow evidence; runner assertions fail when facts are incomplete.
-
-`terminal.resize` is a general automation control with integer `columns`/`rows` in `1..1000`; it updates the TUI terminal-size store for the selected debug session. Scenario manifests may declare ordered `terminalResizes` after Agent idle.
-
-`markdown-path-events` is runner-owned assertion semantics, not an eval-specific runtime pass/fail field. It can require events for the same Markdown key, require observed viewport widths, and prove those widths reflow the same document revision.
-
-Validate the manifest/case and protocol without a provider:
-
-```bash
-node scripts/agent-eval/protocol-smoke.mjs \
-  --manifest scripts/agent-eval/scenarios/tui-markdown-rendering.scenarios.json \
-  --case mixed-gfm-unicode-resize \
-  --dry-run
-```
-
-Run the real focused Agent/provider case by removing `--dry-run`:
-
-```bash
-node scripts/agent-eval/protocol-smoke.mjs \
-  --manifest scripts/agent-eval/scenarios/tui-markdown-rendering.scenarios.json \
-  --case mixed-gfm-unicode-resize
-```
-
-`pnpm test:agent:eval` and dry-run validation are key-free harness evidence only. They must not be reported as provider/model behavior acceptance. A real case requires available provider/model credentials and network/controller access; blockers and residual risk must be recorded explicitly.
+Key-free tests and dry-runs prove the harness and committed suite contracts only.
+They must never be reported as real provider/model Agent behavior acceptance.

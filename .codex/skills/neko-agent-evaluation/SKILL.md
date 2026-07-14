@@ -1,185 +1,220 @@
 ---
 name: neko-agent-evaluation
-description: Plan, create, validate, run, and analyze script-driven evaluations for Neko Agent behavior changes. Use when work affects prompts, Skills, capability or tool routing, provider/model selection, AgentSession workflows, asynchronous tasks, validation/recovery, or TUI Agent event projection; also use when asked to add an Agent evaluation, verify a real Agent path, or provide Agent evaluation evidence for OpenSpec, review, or release readiness.
+description: Plan, create, validate, run, and analyze script-driven evaluations and evidence-based Skill/Prompt optimization for Neko Agent behavior changes. Use when work affects prompts, Skills, capability or tool routing, provider/model selection, AgentSession workflows, asynchronous tasks, validation/recovery, or TUI Agent event projection; also use when asked to add an Agent evaluation, verify a real Agent path, analyze a Skill/Prompt quality defect, or provide Agent evaluation evidence for OpenSpec, review, or release readiness.
 ---
 
 # Neko Agent Evaluation
 
-Create path-level evidence for real Neko Agent behavior through the repository's script-driven evaluation system.
+Produce path-level evidence for real Neko Agent behavior through the repository's
+external Evaluation platform.
 
-## Preserve the Boundary
+## Preserve Ownership
 
 Treat Neko Agent as the system under test:
 
-- Keep evaluation manifests, scenario orchestration, assertions, judges, and reports under `scripts/agent-eval`.
-- Drive the real TUI and `AgentSession` through the generic debug automation interface exposed by Neko Agent.
-- Do not add or restore a `neko eval` command.
-- Do not register evaluation authoring or execution as a normal Neko Agent Skill or runtime capability.
-- Extend the debug interface only with generally useful control or observable facts. Do not add evaluation-specific pass/fail concepts to it.
+- Keep authoring decisions, suites, fixtures, orchestration, assertions, Judges,
+  comparisons, and reports in the repository Evaluation platform.
+- Drive the complete TUI session owner and input path. Do not import a turn runner,
+  create another session assembly, or count mock behavior as acceptance.
+- Keep runtime observability neutral. Add a generally useful runtime fact or
+  control only when the owning contract lacks evidence required beyond
+  Evaluation.
+- Do not register Evaluation authoring or execution as an Agent Skill, product
+  capability, or alternate CLI workflow.
+- Keep Market identity, versioning, publication, installation, and distribution
+  outside Evaluation. Skill targets use portable identity plus the Host-owned
+  source/location projection and content fingerprint.
 
-Use these sources of truth before editing:
-
-- `AGENTS.md`
-- `openspec/project.md`
-- `docs/architecture/agent.md`
-- `scripts/agent-eval/README.md`
-- `scripts/agent-eval/test-cases.md`
-- the current runner, tests, scenario manifests, and debug automation fact contracts
-
-Trust current executable code over historical OpenSpec completion marks or reports when they disagree.
+Before acting, read the relevant OpenSpec artifacts, Agent architecture, current
+Evaluation developer documentation, changed runtime code, existing indexed
+suites, and executable runner tests. Current code and strict suite discovery are
+authoritative when historical reports disagree.
 
 ## Decide Whether Evaluation Is Required
 
-Require a focused Agent evaluation when the change can alter model-driven runtime behavior, including:
+Require focused real behavior evidence when a change can affect:
 
-- prompt or Skill behavior;
-- capability/tool registration, injection, routing, or schema;
-- provider, model, or profile selection;
-- multi-turn, queue, resume, asynchronous-task, or recovery behavior;
-- runtime evidence projected to TUI or other Agent hosts.
+- Prompt composition or Skill selection, injection, method, or output;
+- capability/Tool registration, routing, validation, result handling, or
+  permissions;
+- provider, model, profile, or effective runtime configuration;
+- multi-turn sessions, queues, continuation, asynchronous tasks, cancellation,
+  resume, recovery, or artifact delivery;
+- runtime evidence projected to TUI or another Agent host.
 
-Prefer deterministic unit or contract tests when the change is limited to pure parsing, schema validation, or non-Agent logic. Use the appropriate Webview, Extension, Engine, or package validation instead of inventing an Agent evaluation for unrelated changes.
+Use deterministic tests instead when a change is limited to pure parsing,
+strict schema validation, or unrelated non-Agent logic. An exclusion must name
+the deterministic validation and explain why real Agent behavior cannot change.
 
-## Workflow
+## Authoring Decision
 
-### 1. Inspect the Change
+For every affected behavior, choose exactly one disposition:
 
-Read the relevant OpenSpec artifacts, changed files, tests, and existing scenarios. Identify:
+- `reuse`: an existing suite already proves the changed contract;
+- `update`: the owner remains correct but cases, evidence, fixtures, or profiles
+  must change;
+- `create`: no suite owns the behavior and a new target-scoped suite is needed;
+- `excluded`: deterministic non-Agent validation is sufficient.
 
-- user-visible behavior;
-- the canonical runtime path that must execute;
-- forbidden legacy or fallback paths;
-- expected success and fail-visible behavior;
-- external providers, fixtures, credentials, or local assets required by the case.
+Use the repository change-to-suite mapping before choosing. Do not assign an
+unmapped path to a convenient default suite. Record the user-visible behavior,
+target owner, selected suite, coverage delta, and rationale in the active
+change or its Evaluation evidence.
 
-For a new feature, plan evaluation evidence before implementation is complete so missing observability is discovered early.
+For a Skill target, distinguish same-named project, personal, builtin, plugin,
+and Marketplace sources through the full Host identity. Bind the case to the
+Host-computed package fingerprint for the tested development snapshot. Do not
+invent Skill semver or derive identity from an active selection.
 
-### 2. Define Evidence Before Prompts
+## Define Evidence Before Prompts
 
-For each case, write down:
+For each case, state:
 
 1. user behavior;
-2. canonical path;
-3. observable runtime evidence;
+2. canonical runtime path;
+3. observable runtime or artifact evidence;
 4. forbidden fallback;
 5. expected result;
-6. expected failure behavior.
+6. expected fail-visible behavior.
 
-Prefer path evidence such as capability/tool calls, Skill activation, task lifecycle, model identity, diagnostics, artifact refs, and source provenance. Do not use final-answer text as the sole proof that a feature path executed.
+Evidence should prove activation/injection, effective model/configuration,
+Tool/task/process state, durable artifact identity, diagnostics, and source
+provenance as applicable. A final answer is evidence of output, not proof of the
+path that produced it.
 
-### 3. Audit Debug Observability
+Audit current runtime facts and public validators before accepting the case. If
+required evidence is unavailable, identify the minimal neutral observability
+gap and report the case blocked. Do not substitute metadata, weak text matching,
+manual assumptions, or silent fallback.
 
-Inspect the current debug automation facts and controls. Confirm that every proposed assertion can be proven from exported facts or a deterministic post-check.
+## Select Focused Coverage
 
-If evidence is missing:
+Start with the smallest set that can reject an incorrect implementation:
 
-- identify the minimal generic debug fact or control required;
-- add it to the owning runtime boundary only when the task includes that work;
-- otherwise report the evaluation as blocked by missing evidence.
+- one canonical positive case proving the new path;
+- one boundary or failure case proving unavailable, invalid, denied, disabled,
+  or wrong-target states cannot return success;
+- artifact, workflow, quality, regression, paraphrase, or holdout cases only
+  where the behavior requires them.
 
-Do not replace missing runtime evidence with a weak text assertion, silent fallback, or manual assumption.
+Artifact-producing changes need durable identity and owning-validator evidence.
+Prompt and Skill changes should cover trigger paraphrases and adjacent negative
+requests. Workflow changes should prove ordering and terminal state. Prelaunch
+replacements should poison or explicitly reject the old path.
 
-### 4. Inspect Runner Support
+Use deterministic hard gates for path, configuration, process, format,
+permission, artifact, and no-fallback behavior. Use an owning-domain validator
+for real artifact quality. Use a Judge only for subjective quality after hard
+gates pass; it cannot repair or override a deterministic failure.
 
-Read the current runner and assertion tests before choosing case kinds or assertions. Do not infer support from manifest examples, documentation, or historical reports alone.
+Configuration variants must correspond to real session-scoped product settings
+and be proven from effective runtime evidence. Do not add Evaluation-only flags.
+When an ablation removes an implementation rather than changing a supported
+setting, compare isolated revisions or builds through the external platform.
 
-An assertion is usable only when the runner has an executable evaluator for it. Unknown, metadata-only, or unsupported assertions must fail validation rather than appearing in a passing report.
+## Validate and Run
 
-### 5. Design Focused Cases
+Follow the progressive validation and execution workflow documented by the
+Evaluation platform:
 
-Create the smallest set that proves the feature:
+1. validate key-free schemas, runner semantics, assertions, reports, and every
+   indexed suite;
+2. validate the selected case without provider-backed behavior;
+3. run the same focused case through the real TUI when credentials, network,
+   model access, configuration, and fixtures are available;
+4. use repeated samples when making stability or quality claims.
 
-- one positive case proving the new canonical path;
-- one negative or fail-visible case proving unavailable, invalid, denied, or disabled states cannot return success;
-- additional sequence, queue, cancellation, artifact, or quality cases only when required by the feature.
+Concrete commands, suite/scenario fields, controller operations, assertion
+kinds, and report file layouts belong in the platform developer documentation,
+not in this Skill.
 
-Use deterministic assertions for facts, schemas, formats, references, permissions, tasks, models, and artifacts. Use an LLM judge only for subjective quality. A judge must not substitute for deterministic path evidence.
+## Interpret Evidence
 
-For prelaunch replacements, poison or explicitly assert against retained legacy paths so a fallback cannot make the new case pass.
+Read assertion-level evidence before the overall outcome. Confirm:
 
-### 6. Create or Update the Scenario
+- requested and effective target/model/configuration identities match;
+- canonical-path evidence is complete and bounded fact collections did not drop
+  required observations;
+- forbidden Skills, Tools, models, adapters, legacy fields, and fallbacks did
+  not participate;
+- task/process state reached the expected terminal condition;
+- durable artifacts exist under stable identities and passed owning validators;
+- Judge input was allowlisted and its score remains supplemental;
+- baseline inputs are comparable before describing improvement;
+- every repetition is retained and cost availability is explicit.
 
-Keep committed scenario definitions under `scripts/agent-eval/scenarios`. Reuse the canonical schema and existing fixtures. Use relative paths or environment-backed paths instead of committing developer-specific absolute paths, credentials, or secrets.
+Separate target behavior failure, Evaluation infrastructure failure,
+configuration invalidity, and non-comparability. Failure attribution is a
+hypothesis unless evidence proves the owning layer; record confidence and
+missing evidence instead of presenting guesses as root cause.
 
-When the required driver or assertion does not exist, update the canonical script runner and its focused key-free tests before relying on the new scenario. Do not create a second orchestration path in Neko Agent or another CLI command.
+## Optimize From Evidence
 
-### 7. Validate Progressively
+Optimize Prompt or Skill content only after Evaluation evidence identifies an
+observed content-quality failure and supports its owner. Preserve the observed
+failure, suspected owner, confidence, evidence references, and missing evidence
+as separate facts. Route Capability or Tool, runtime or session, provider,
+artifact, and Evaluation infrastructure defects to their canonical owners;
+do not compensate for them with Prompt wording. Treat Prompt routing as
+optimizable only when independent evidence confirms Prompt ownership.
 
-Run the smallest reliable checks first:
+For a Skill, bind every development state to its complete Host identity and
+Host-computed package fingerprint. Keep same-named project, personal, builtin,
+plugin, and Marketplace sources distinct. Record only explicit baseline,
+candidate, evaluated, accepted, rejected, or superseded checkpoints; do not
+turn ordinary file saves into versions. Carry continuity across a rename or
+move only through explicit lineage. Keep this development history outside the
+portable Skill package, and keep package versions, publication, installation,
+and distribution in Market ownership.
 
-```bash
-pnpm test:agent:eval
-```
+Produce a reviewable plan and candidate artifact without changing canonical
+content. Require explicit human approval bound to the identity, base and
+candidate fingerprints, scope, budget, and protected Evaluation matrix. Apply
+an approved candidate through the normal repository change workflow, then
+compare isolated baseline and candidate targets with matching policies. Hide
+candidate identity from comparative Judges and from optimizer-hidden holdouts.
 
-Validate the selected manifest case without starting real Agent behavior when the current runner supports dry-run:
+Accept a candidate only when canonical path hard gates, holdout cases, protected
+regressions, and real output-content quality evidence all pass. Formatting,
+latency, token use, cost, or a favorable visible-case average cannot override a
+protected failure. Stop at candidate, iteration, time, token, cost, or
+no-improvement limits, and never retry a behavior failure into success. Record
+accepted and rejected outcomes with their evidence and remaining bias or
+overfitting risk; local acceptance is not Market publication.
 
-```bash
-node scripts/agent-eval/protocol-smoke.mjs \
-  --manifest scripts/agent-eval/scenarios/<suite>.scenarios.json \
-  --case <case-id> \
-  --dry-run
-```
+## Record Residual Risk
 
-Then run the focused real case through TUI debug automation when credentials, network, models, and fixtures are available:
+Record the suite/case/run, real execution attempted, target and model identities,
+path and no-fallback evidence, artifact evidence, quality stage, report location,
+usage/cost availability, blocked or skipped cases, and remaining risk.
 
-```bash
-node scripts/agent-eval/protocol-smoke.mjs \
-  --manifest scripts/agent-eval/scenarios/<suite>.scenarios.json \
-  --case <case-id>
-```
-
-Treat current runner behavior as authoritative. If it only checks generic completion, do not claim that richer manifest assertions passed.
-
-### 8. Analyze and Record Evidence
-
-Review assertion-level evidence, not only process exit code or final output. Record:
-
-- manifest and case id;
-- command executed;
-- selected provider/model when relevant;
-- canonical path evidence;
-- negative/no-fallback evidence;
-- deterministic assertion results;
-- judge identity and rubric when used;
-- result/report location;
-- skipped validation, reason, and residual risk.
-
-Classify target behavior or rubric failures as case failures, unavailable evaluation infrastructure as infrastructure failures, and invalid or unsupported manifests as configuration failures.
-
-## Hard Rules
-
-- Never revive `neko eval` or add an alias that silently delegates to scripts.
-- Never duplicate Agent session orchestration inside an evaluation command or Neko Agent capability.
-- Never accept mock-only or result-only evidence as real Agent behavior acceptance.
-- Never mark metadata-only assertions as executed.
-- Never let a judge read hidden prompts, secrets, internal logs, or source material outside the evaluation-produced evidence projection.
-- Never let a good final answer hide an unexecuted canonical path or a successful fallback.
-- Never expose credentials or secret-bearing configuration in manifests or reports.
-
-## Coordination with Quality Review
-
-Use this skill to produce Agent evaluation evidence. Use `neko-quality-review` to review whether the evidence and broader repository quality gates are sufficient. Keep the detailed evaluation workflow here rather than duplicating it in the general quality-review skill.
+Key-free validation, dry-run selection, mock output, direct turn injection, a
+good final answer, or a single Judge score are not real Agent behavior
+acceptance. When infrastructure is unavailable, preserve the exact blocker and
+the behavior still unverified.
 
 ## Output Format
-
-Report work in this shape:
 
 ```text
 Evaluation Scope
 - Change/feature:
-- Why evaluation is or is not required:
-- Canonical path:
-- Forbidden fallback:
+- Decision and owning suite:
+- Why real Evaluation is or is not required:
+- Canonical path and forbidden fallback:
 
 Cases
-- Created or updated:
-- Assertions and evidence:
-- Missing observability or unsupported runner features:
+- Reused, updated, created, or excluded:
+- Evidence and coverage:
+- Missing observability:
 
 Verification
-- Ran:
-- Passed/failed:
-- Not run and reason:
+- Key-free validation:
+- Real cases and reports:
+- Blocked or unexecuted cases:
+
+Interpretation
+- Result and quality comparison:
+- Confirmed failures vs attribution hypotheses:
 
 Residual Risk
 - ...
