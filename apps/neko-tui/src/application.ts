@@ -1,4 +1,4 @@
-import { runCliEntrypoint } from '@neko/cli/terminal';
+import { runCliEntrypoint } from './tui/cli';
 
 export const NEKO_TUI_APPLICATION_ID = 'neko-tui';
 

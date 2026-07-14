@@ -9,7 +9,6 @@ export default defineConfig({
   target: 'node24',
   outDir: 'dist',
   noExternal: [
-    '@neko/cli',
     '@neko-agent/types',
     '@neko/agent',
     '@neko/ai-sdk',
