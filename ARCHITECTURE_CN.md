@@ -86,7 +86,7 @@ TypeScript 可以编排、展示、请求和校验，但不应重写引擎已经
 
 ## Agent 工作流
 
-Agent 遵循 Draft / Plan / Apply 稳定工作流。
+Agent 通过普通 session / turn / ReAct 对话循环读取当前证据、选择 Tool、观察结果并决定下一步。固定 IDC stage/run/persona 与 Draft / Plan / Apply runtime 不属于 canonical path；`executionMode` 只控制计划和执行权限。
 
 关键不变量：
 
@@ -94,7 +94,8 @@ Agent 遵循 Draft / Plan / Apply 稳定工作流。
 - Approval、Policy、Memory、Runtime、Schema、Evaluator、Prompt 是分离的控制平面。
 - 高成本或不可逆动作必须有审批路径。
 - Agent 工具通过包能力和共享契约工作，不直接耦合 Webview。
-- 生成媒体和项目事实必须重新接地到资产、实体记忆或搜索索引，才能成为持久上下文。
+- `brief.md`、`plan.md` 和 TODO 是可选的用户内容或进度投影，不拥有执行状态，也不证明交付完成。
+- 生成文件通过实际文件、`ResourceRef`、digest 和 lineage 成为可直接使用的结果；`.nk*` 项目事实与 revision 由 owning package 管理，资产入库只在用户明确要求时发生。
 
 ## 创作数据流
 

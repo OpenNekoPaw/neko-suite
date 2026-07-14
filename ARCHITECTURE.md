@@ -85,7 +85,7 @@ Every Webview must obey these constraints:
 
 ## Agent Workflow
 
-The Agent follows a stable Draft / Plan / Apply workflow.
+The Agent uses the ordinary session / turn / ReAct conversation loop to read current evidence, select Tools, observe results, and decide the next action. Fixed IDC stage/run/persona and Draft / Plan / Apply runtimes are not canonical paths; `executionMode` only controls planning and execution permissions.
 
 Key invariants:
 
@@ -93,7 +93,8 @@ Key invariants:
 - Approval, policy, memory, runtime, schema, evaluator, and prompt concerns are separate control planes.
 - High-cost or irreversible actions require an approval path.
 - Agent tools operate through package capabilities and shared contracts, not direct Webview coupling.
-- Generated media and project facts must be grounded back into project assets, entity memory, or search indexes before they become durable context.
+- `brief.md`, `plan.md`, and TODOs are optional user content or progress projections; they do not own execution state or prove delivery.
+- Generated files are directly usable results identified by the actual file, `ResourceRef`, digest, and lineage. Owning packages retain `.nk*` project facts and revisions, and asset-library promotion occurs only when explicitly requested.
 
 ## Creative Data Flow
 
