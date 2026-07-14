@@ -152,8 +152,8 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm check:local-metadata-runtimes -- --probe-bun
       - run: pnpm --dir packages/neko-types exec vitest run src/vscode/extension/__tests__/node-sqlite-local-metadata-store.test.ts
-      - run: pnpm --dir packages/neko-agent/packages/cli-tui test:sqlite:bun
-      - run: pnpm --dir packages/neko-agent/packages/cli-tui build
+      - run: pnpm --filter @neko/app-tui test:sqlite:bun
+      - run: pnpm --filter @neko/app-tui build
 
   # ── TypeScript: Tests ──────────────────────
   test-ts:
@@ -388,15 +388,17 @@ jobs:
             node scripts/read-package-group.mjs extensionPack
           } | while IFS= read -r pkg; do
             [ -n "$pkg" ] || continue
-            if [ -d "packages/$pkg" ]; then
-              echo "📦 Packaging $pkg..."
-              rm -f packages/$pkg/*.vsix
-              (cd "packages/$pkg" && npx @vscode/vsce package --no-dependencies --allow-missing-repository)
-              if ! compgen -G "packages/$pkg/*.vsix" > /dev/null; then
-                echo "::error::Packaging $pkg did not produce a new VSIX artifact."
+            pkg_path="$pkg"
+            if [[ "$pkg_path" != */* ]]; then pkg_path="packages/$pkg_path"; fi
+            if [ -d "$pkg_path" ]; then
+              echo "📦 Packaging $pkg_path..."
+              rm -f "$pkg_path"/*.vsix
+              (cd "$pkg_path" && npx @vscode/vsce package --no-dependencies --allow-missing-repository)
+              if ! compgen -G "$pkg_path/*.vsix" > /dev/null; then
+                echo "::error::Packaging $pkg_path did not produce a new VSIX artifact."
                 exit 1
               fi
-              cp -f packages/$pkg/*.vsix vsix-artifacts/
+              cp -f "$pkg_path"/*.vsix vsix-artifacts/
             fi
           done
 

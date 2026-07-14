@@ -1,6 +1,6 @@
 import { join } from 'node:path';
 import type { InstalledPackage } from '@neko/shared';
-import { createTuiMarketStorage } from '../../../../../../neko-agent/packages/cli-tui/src/host/tui-market-storage';
+import { createTuiMarketStorage } from '../../../apps/neko-tui/src/tui/host/tui-market-storage';
 
 const homedir = process.env['NEKO_SQLITE_TEST_HOME'];
 if (!homedir) throw new Error('NEKO_SQLITE_TEST_HOME is required');

@@ -103,9 +103,9 @@ function implementationPlan() {
         sourceFingerprint: index === 0 ? HASH_A : HASH_B,
         buildRecipeFingerprint: HASH_C,
         buildCommands: [
-          { command: 'pnpm', args: ['--filter', '@neko/agent-cli', 'build'], timeoutMs: 600000 },
+          { command: 'pnpm', args: ['--filter', '@neko/app-tui', 'build'], timeoutMs: 600000 },
         ],
-        executablePath: 'packages/neko-agent/neko',
+        executablePath: 'apps/neko-tui/dist/main.js',
         launchCommand: { command: 'node', args: ['{executable}'] },
       },
       expectedPath: ['isolated worktree', 'isolated TUI build', 'TUI debug automation'],
@@ -218,18 +218,12 @@ describe('ablation authoring contracts', () => {
     const gatesOnly = configurationPlan();
     expect(validateAblationQualityContract(gatesOnly, selection())).toEqual(gatesOnly);
     expect(() =>
-      validateAblationQualityContract(
-        gatesOnly,
-        selection('rubrics/storyboard-quality.json'),
-      ),
+      validateAblationQualityContract(gatesOnly, selection('rubrics/storyboard-quality.json')),
     ).toThrow('hard-gates-only quality cannot select scenario rubric');
 
     const judged = implementationPlan();
     expect(
-      validateAblationQualityContract(
-        judged,
-        selection('rubrics/storyboard-quality.json'),
-      ),
+      validateAblationQualityContract(judged, selection('rubrics/storyboard-quality.json')),
     ).toEqual(judged);
     expect(() => validateAblationQualityContract(judged, selection())).toThrow(
       'is not enabled by scenario',

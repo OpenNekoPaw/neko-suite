@@ -50,19 +50,43 @@ describe('Agent Evaluation change-to-suite selector', () => {
         'packages/neko-agent/packages/platform/src/llm/adapter/openai-adapter.ts',
         'packages/neko-agent/packages/agent/src/session/agent-session.ts',
         'packages/neko-agent/packages/agent/src/task/task-runtime.ts',
-        'packages/neko-agent/packages/cli-tui/src/core/debug-automation/types.ts',
+        'apps/neko-tui/src/tui/core/debug-automation/types.ts',
         'scripts/agent-eval/schemas/contracts.mjs',
       ]),
     ).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ behaviorId: 'portable-skill-content', suiteId: 'skill.storyboard' }),
-        expect.objectContaining({ behaviorId: 'prompt-composition', suiteId: 'agent-runtime.prompt-composition' }),
-        expect.objectContaining({ behaviorId: 'capability-tool-routing', suiteId: 'agent-runtime.perception-routing' }),
-        expect.objectContaining({ behaviorId: 'provider-model-routing', suiteId: 'agent-runtime.model-binding' }),
-        expect.objectContaining({ behaviorId: 'session-workflows', suiteId: 'agent-runtime.workflow-controller' }),
-        expect.objectContaining({ behaviorId: 'task-recovery', suiteId: 'agent-runtime.workflow-controller' }),
-        expect.objectContaining({ behaviorId: 'tui-debug-facts', suiteId: 'agent-runtime.single-message-tui' }),
-        expect.objectContaining({ behaviorId: 'evaluation-platform', suiteId: 'agent-runtime.evaluation-platform' }),
+        expect.objectContaining({
+          behaviorId: 'portable-skill-content',
+          suiteId: 'skill.storyboard',
+        }),
+        expect.objectContaining({
+          behaviorId: 'prompt-composition',
+          suiteId: 'agent-runtime.prompt-composition',
+        }),
+        expect.objectContaining({
+          behaviorId: 'capability-tool-routing',
+          suiteId: 'agent-runtime.perception-routing',
+        }),
+        expect.objectContaining({
+          behaviorId: 'provider-model-routing',
+          suiteId: 'agent-runtime.model-binding',
+        }),
+        expect.objectContaining({
+          behaviorId: 'session-workflows',
+          suiteId: 'agent-runtime.workflow-controller',
+        }),
+        expect.objectContaining({
+          behaviorId: 'task-recovery',
+          suiteId: 'agent-runtime.workflow-controller',
+        }),
+        expect.objectContaining({
+          behaviorId: 'tui-debug-facts',
+          suiteId: 'agent-runtime.single-message-tui',
+        }),
+        expect.objectContaining({
+          behaviorId: 'evaluation-platform',
+          suiteId: 'agent-runtime.evaluation-platform',
+        }),
       ]),
     );
   });

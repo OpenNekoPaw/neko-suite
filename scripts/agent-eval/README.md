@@ -6,7 +6,7 @@ product capability, a runtime Skill, or a second `AgentSession` assembly.
 
 ## Ownership Boundary
 
-- `packages/neko-agent` owns the TUI App/session lifecycle, input queue, runtime
+- `apps/neko-tui` owns the TUI App/session lifecycle, input queue, runtime
   configuration, Skill lifecycle, Tool/task execution, artifact projection, and
   evaluation-neutral debug facts.
 - `scripts/agent-eval` owns authoring decisions, suites, fixtures, controllers,

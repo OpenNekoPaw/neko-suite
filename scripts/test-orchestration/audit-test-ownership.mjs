@@ -8,9 +8,16 @@ const configPath = join(repoRoot, 'quality/test-ownership.json');
 
 export async function auditTestOwnership(options = {}) {
   const root = options.repoRoot ?? repoRoot;
-  const config = options.config ?? JSON.parse(await readFile(resolve(root, 'quality/test-ownership.json'), 'utf8'));
+  const config =
+    options.config ??
+    JSON.parse(await readFile(resolve(root, 'quality/test-ownership.json'), 'utf8'));
   validateConfig(config);
-  const packages = await discoverPackages(resolve(root, 'packages'), root);
+  const packages = (
+    await Promise.all([
+      discoverPackages(resolve(root, 'apps'), root),
+      discoverPackages(resolve(root, 'packages'), root),
+    ])
+  ).flat();
   const packageByPath = new Map(packages.map((workspace) => [workspace.path, workspace]));
   const sourceBearing = packages.filter((workspace) => workspace.sourceFiles.length > 0);
   const entryByPath = new Map(config.workspaces.map((entry) => [entry.path, entry]));
@@ -70,7 +77,9 @@ export async function auditTestOwnership(options = {}) {
     errors,
   };
   if (!result.ok && options.throwOnError !== false) {
-    throw new Error(`Test ownership audit failed:\n${errors.map((error) => `- ${error}`).join('\n')}`);
+    throw new Error(
+      `Test ownership audit failed:\n${errors.map((error) => `- ${error}`).join('\n')}`,
+    );
   }
   return result;
 }
@@ -84,8 +93,14 @@ function validateConfig(config) {
   }
   for (const [index, entry] of config.workspaces.entries()) {
     const allowed = new Set([
-      'path', 'owner', 'mode', 'sourceScope', 'testScope', 'rationale',
-      'validationAlternative', 'closingCondition',
+      'path',
+      'owner',
+      'mode',
+      'sourceScope',
+      'testScope',
+      'rationale',
+      'validationAlternative',
+      'closingCondition',
     ]);
     const unknown = Object.keys(entry).filter((key) => !allowed.has(key));
     if (unknown.length > 0) {
@@ -104,15 +119,17 @@ function validateConfig(config) {
 
 async function discoverPackages(packagesRoot, root) {
   const packageJsonPaths = await findPackageJsonFiles(packagesRoot, 0);
-  return Promise.all(packageJsonPaths.map(async (packageJsonPath) => {
-    const workspaceRoot = dirname(packageJsonPath);
-    const sourceRoot = join(workspaceRoot, 'src');
-    return {
-      path: normalizePath(relative(root, workspaceRoot)),
-      packageJson: JSON.parse(await readFile(packageJsonPath, 'utf8')),
-      sourceFiles: await findSourceFiles(sourceRoot).catch(() => []),
-    };
-  }));
+  return Promise.all(
+    packageJsonPaths.map(async (packageJsonPath) => {
+      const workspaceRoot = dirname(packageJsonPath);
+      const sourceRoot = join(workspaceRoot, 'src');
+      return {
+        path: normalizePath(relative(root, workspaceRoot)),
+        packageJson: JSON.parse(await readFile(packageJsonPath, 'utf8')),
+        sourceFiles: await findSourceFiles(sourceRoot).catch(() => []),
+      };
+    }),
+  );
 }
 
 async function findPackageJsonFiles(root, depth) {
@@ -123,7 +140,7 @@ async function findPackageJsonFiles(root, depth) {
     if (entry.name === 'node_modules' || entry.name === 'dist' || entry.name === 'out') continue;
     const path = join(root, entry.name);
     if (entry.isFile() && entry.name === 'package.json') files.push(path);
-    else if (entry.isDirectory()) files.push(...await findPackageJsonFiles(path, depth + 1));
+    else if (entry.isDirectory()) files.push(...(await findPackageJsonFiles(path, depth + 1)));
   }
   return files;
 }
@@ -133,8 +150,13 @@ async function findSourceFiles(root) {
   const files = [];
   for (const entry of entries) {
     const path = join(root, entry.name);
-    if (entry.isDirectory()) files.push(...await findSourceFiles(path));
-    else if (entry.isFile() && /\.[cm]?[jt]sx?$/u.test(entry.name) && !/\.(?:test|spec)\.[cm]?[jt]sx?$/u.test(entry.name)) files.push(path);
+    if (entry.isDirectory()) files.push(...(await findSourceFiles(path)));
+    else if (
+      entry.isFile() &&
+      /\.[cm]?[jt]sx?$/u.test(entry.name) &&
+      !/\.(?:test|spec)\.[cm]?[jt]sx?$/u.test(entry.name)
+    )
+      files.push(path);
   }
   return files;
 }

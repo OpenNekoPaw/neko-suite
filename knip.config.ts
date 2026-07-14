@@ -72,6 +72,7 @@ const config: KnipConfig = {
         'scripts/check-canvas-playback-boundary.mjs',
         'scripts/compile-ts-vsix.mjs',
         'scripts/scene-render-diagnostics.mjs',
+        'scripts/test-orchestration/fixtures/*.ts',
         'scripts/webview-functional/*.test.mjs',
       ],
     },
@@ -92,7 +93,12 @@ const config: KnipConfig = {
     'packages/neko-preview': {},
     'packages/neko-assets': {},
     'packages/neko-engine': {
-      ignore: ['packages/engine-*/**', 'packages/host-napi/**', 'packages/host-cli/**', 'packages/runtime-*/**'], // Rust packages, skip
+      ignore: [
+        'packages/engine-*/**',
+        'packages/host-napi/**',
+        'packages/host-cli/**',
+        'packages/runtime-*/**',
+      ], // Rust packages, skip
     },
 
     // ── Extension sub-packages ────────────────────────
@@ -133,10 +139,9 @@ const config: KnipConfig = {
         'xlsx',
       ],
     },
-    'packages/neko-agent/packages/cli-tui': {
-      entry: ['build-neko.ts'],
+    'apps/neko-tui': {
       // Knip's Bun plugin treats `bun test <file>` as a directory project root.
-      // The dedicated Bun adapter suite is exercised by the package/CI script.
+      // The dedicated Bun adapter suite is exercised by the application/CI script.
       bun: false,
     },
     'packages/neko-agent/packages/webview': {
@@ -151,10 +156,7 @@ const config: KnipConfig = {
     'packages/neko-agent/test-utils': {},
     'packages/neko-canvas/packages/extension': {},
     'packages/neko-canvas/packages/webview': {
-      entry: [
-        'src/main.tsx',
-        'src/preview/narrativePreviewMediaRuntime.ts',
-      ],
+      entry: ['src/main.tsx', 'src/preview/narrativePreviewMediaRuntime.ts'],
       ignore: [
         // Barrel exports
         'src/types/index.ts',
@@ -223,8 +225,8 @@ const config: KnipConfig = {
     'packages/neko-puppet': {},
     'packages/neko-puppet/packages/extension': {},
     'packages/neko-puppet/packages/webview': {},
-    'packages/neko-suite': {
-      // Meta package with only documentation
+    'apps/neko-vscode': {
+      // Pure Extension Pack product manifest with no runtime source.
       entry: ['package.json'],
     },
     'packages/neko-auth': {

@@ -456,7 +456,7 @@ describe('SqliteConversationStorage', () => {
 
     const bunFixture = fileURLToPath(
       new URL(
-        '../../../../cli-tui/src/host/__tests__/fixtures/bun-conversation-storage-roundtrip.ts',
+        '../../../../../../../scripts/test-orchestration/fixtures/bun-tui-conversation-storage-roundtrip.ts',
         import.meta.url,
       ),
     );

@@ -95,7 +95,7 @@
         "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-puppet",
         "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-audio",
         "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-dashboard",
-        "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-suite"
+        "--extensionDevelopmentPath=${workspaceFolder}/apps/neko-vscode"
       ],
       "outFiles": ["${workspaceFolder}/packages/*/dist/**/*.js"],
       "preLaunchTask": "build:release"
@@ -122,7 +122,7 @@
         "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-dashboard",
         "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-live",
         "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-model",
-        "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-suite",
+        "--extensionDevelopmentPath=${workspaceFolder}/apps/neko-vscode",
         "${workspaceFolder}/../neko-test"
       ],
       "outFiles": ["${workspaceFolder}/packages/*/dist/**/*.js"],

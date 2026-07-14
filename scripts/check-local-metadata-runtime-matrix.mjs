@@ -114,16 +114,16 @@ export async function validateLocalMetadataRuntimeMatrix({ probeBun = false } = 
     }
   }
 
-  const cliPackage = await readFile(
-    join(packageRoot, 'neko-agent', 'packages', 'cli-tui', 'package.json'),
+  const tuiPackage = await readFile(
+    join(repositoryRoot, 'apps', 'neko-tui', 'package.json'),
     'utf8',
   );
-  const cliBuild = await readFile(
-    join(packageRoot, 'neko-agent', 'packages', 'cli-tui', 'tsup.config.ts'),
+  const tuiBuild = await readFile(
+    join(repositoryRoot, 'apps', 'neko-tui', 'tsup.config.ts'),
     'utf8',
   );
-  if (!cliPackage.includes('--target=node24') || !cliBuild.includes("target: 'node24'")) {
-    errors.push('Node CLI bundle targets must be node24');
+  if (!tuiPackage.includes('"node": ">=24.0.0"') || !tuiBuild.includes("target: 'node24'")) {
+    errors.push('Neko TUI runtime and bundle targets must be node24');
   }
 
   if (!isVersionAtLeast(process.versions.node, minimumNode)) {

@@ -1,82 +1,53 @@
 import { validateAuthoringDecision } from '../schemas/contracts.mjs';
 
 const RULES = Object.freeze([
-  rule(
-    'evaluation-platform',
-    'agent-runtime.evaluation-platform',
-    ['scripts/agent-eval/', '.codex/skills/neko-agent-evaluation/'],
-  ),
-  rule(
-    'tui-debug-facts',
-    'agent-runtime.single-message-tui',
-    ['packages/neko-agent/packages/cli-tui/src/core/debug-automation/'],
-  ),
+  rule('evaluation-platform', 'agent-runtime.evaluation-platform', [
+    'scripts/agent-eval/',
+    '.codex/skills/neko-agent-evaluation/',
+  ]),
+  rule('tui-debug-facts', 'agent-runtime.single-message-tui', [
+    'apps/neko-tui/src/tui/core/debug-automation/',
+  ]),
   regexRule(
     'portable-skill-content',
     (match) => `skill.${match[1]}`,
     /^(?:\.codex|\.agents)\/skills\/([a-z0-9][a-z0-9._-]*)\//u,
   ),
-  rule(
-    'prompt-composition',
-    'agent-runtime.prompt-composition',
-    ['packages/neko-agent/packages/agent/src/prompt/'],
-  ),
-  rule(
-    'skill-runtime',
-    'agent-runtime.skill-runtime',
-    [
-      'packages/neko-agent/packages/agent/src/skill/',
-      'packages/neko-agent/packages/platform/src/skill/',
-      'packages/neko-skills/src/builtins/',
-    ],
-  ),
-  rule(
-    'capability-tool-routing',
-    'agent-runtime.perception-routing',
-    [
-      'packages/neko-agent/packages/agent/src/tools/',
-      'packages/neko-agent/packages/extension/src/tools/',
-      'packages/neko-agent/packages/platform/src/capability/',
-      'packages/neko-agent/packages/platform/src/service/shared-service-adapter.ts',
-      'packages/neko-agent/packages/agent-types/src/capability',
-    ],
-  ),
-  rule(
-    'provider-model-routing',
-    'agent-runtime.model-binding',
-    [
-      'packages/neko-agent/packages/agent/src/provider/',
-      'packages/neko-agent/packages/platform/src/llm/',
-      'packages/neko-agent/packages/platform/src/config/',
-      'packages/neko-agent/packages/ai-sdk/src/',
-    ],
-  ),
-  rule(
-    'session-workflows',
-    'agent-runtime.workflow-controller',
-    [
-      'packages/neko-agent/packages/agent/src/session/',
-      'packages/neko-agent/packages/cli-tui/src/hooks/useAgentSession',
-    ],
-  ),
-  rule(
-    'task-recovery',
-    'agent-runtime.workflow-controller',
-    [
-      'packages/neko-agent/packages/agent/src/task/',
-      'packages/neko-agent/packages/agent/src/runtime/continuation',
-      'packages/neko-agent/packages/agent-types/src/agent-message-queue',
-    ],
-  ),
-  rule(
-    'tui-event-projection',
-    'agent-runtime.stream-delivery',
-    [
-      'packages/neko-agent/packages/cli-tui/src/core/timeline-',
-      'packages/neko-agent/packages/cli-tui/src/markdown/',
-      'packages/neko-agent/packages/cli-tui/src/core/markdown',
-    ],
-  ),
+  rule('prompt-composition', 'agent-runtime.prompt-composition', [
+    'packages/neko-agent/packages/agent/src/prompt/',
+  ]),
+  rule('skill-runtime', 'agent-runtime.skill-runtime', [
+    'packages/neko-agent/packages/agent/src/skill/',
+    'packages/neko-agent/packages/platform/src/skill/',
+    'packages/neko-skills/src/builtins/',
+  ]),
+  rule('capability-tool-routing', 'agent-runtime.perception-routing', [
+    'packages/neko-agent/packages/agent/src/tools/',
+    'packages/neko-agent/packages/extension/src/tools/',
+    'packages/neko-agent/packages/platform/src/capability/',
+    'packages/neko-agent/packages/platform/src/service/shared-service-adapter.ts',
+    'packages/neko-agent/packages/agent-types/src/capability',
+  ]),
+  rule('provider-model-routing', 'agent-runtime.model-binding', [
+    'packages/neko-agent/packages/agent/src/provider/',
+    'packages/neko-agent/packages/platform/src/llm/',
+    'packages/neko-agent/packages/platform/src/config/',
+    'packages/neko-agent/packages/ai-sdk/src/',
+  ]),
+  rule('session-workflows', 'agent-runtime.workflow-controller', [
+    'packages/neko-agent/packages/agent/src/session/',
+    'apps/neko-tui/src/tui/hooks/useAgentSession',
+  ]),
+  rule('task-recovery', 'agent-runtime.workflow-controller', [
+    'packages/neko-agent/packages/agent/src/task/',
+    'packages/neko-agent/packages/agent/src/runtime/continuation',
+    'packages/neko-agent/packages/agent-types/src/agent-message-queue',
+  ]),
+  rule('tui-event-projection', 'agent-runtime.stream-delivery', [
+    'apps/neko-tui/src/tui/core/timeline-',
+    'apps/neko-tui/src/tui/markdown/',
+    'apps/neko-tui/src/tui/core/markdown',
+  ]),
 ]);
 
 export function selectEvaluationCoverage(changedPaths) {
@@ -117,7 +88,7 @@ export function isAgentEvaluationRelevantPath(rawPath) {
     path.startsWith('packages/neko-skills/src/builtins/') ||
     path.startsWith('packages/neko-agent/packages/agent/src/') ||
     path.startsWith('packages/neko-agent/packages/ai-sdk/src/') ||
-    path.startsWith('packages/neko-agent/packages/cli-tui/src/') ||
+    path.startsWith('apps/neko-tui/src/tui/') ||
     path.startsWith('packages/neko-agent/packages/extension/src/tools/') ||
     path.startsWith('packages/neko-agent/packages/platform/src/') ||
     path.startsWith('scripts/agent-eval/')

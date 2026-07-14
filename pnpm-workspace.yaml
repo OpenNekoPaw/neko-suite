@@ -3,6 +3,7 @@ packages:
   - packages/*
   - packages/neko-audio/packages/*
   - packages/neko-agent/packages/*
+  - packages/neko-agent/test-utils
   - packages/neko-assets/packages/*
   - packages/neko-canvas/packages/*
   - packages/neko-dashboard/packages/*

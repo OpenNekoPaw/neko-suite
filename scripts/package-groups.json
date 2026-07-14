@@ -1,5 +1,5 @@
 {
-  "extensionPack": "neko-suite",
+  "extensionPack": "apps/neko-vscode",
   "packages": {
     "buildRelease": [
       "neko-engine",

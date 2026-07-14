@@ -13,6 +13,15 @@ export function findApplicationBoundaryViolations(file, content) {
   const imports = collectStaticModuleSpecifiers(content);
 
   for (const specifier of imports) {
+    if (specifier === '@neko/cli' || specifier.startsWith('@neko/cli/')) {
+      findings.push({
+        ruleId: 'retired-tui-package-import-must-not-exist',
+        file: normalizedFile,
+        specifier,
+        message: 'Neko TUI source is owned by apps/neko-tui; @neko/cli is retired.',
+      });
+    }
+
     if (normalizedFile.startsWith('packages/') && reachesApplication(specifier)) {
       findings.push({
         ruleId: 'packages-must-not-depend-on-applications',
@@ -28,7 +37,8 @@ export function findApplicationBoundaryViolations(file, content) {
         ruleId: 'applications-use-public-package-entries',
         file: normalizedFile,
         specifier,
-        message: 'Applications must use package exports instead of relative imports into packages/.',
+        message:
+          'Applications must use package exports instead of relative imports into packages/.',
       });
     }
     if (isInternalPackageSpecifier(specifier)) {
@@ -36,7 +46,8 @@ export function findApplicationBoundaryViolations(file, content) {
         ruleId: 'applications-must-not-import-feature-internals',
         file: normalizedFile,
         specifier,
-        message: 'Applications must consume documented public package entries, not src/internal paths.',
+        message:
+          'Applications must consume documented public package entries, not src/internal paths.',
       });
     }
     if (reachesAnotherApplication(normalizedFile, specifier)) {
@@ -44,7 +55,8 @@ export function findApplicationBoundaryViolations(file, content) {
         ruleId: 'applications-must-not-import-other-applications',
         file: normalizedFile,
         specifier,
-        message: 'Application composition roots must communicate through shared contracts, not imports.',
+        message:
+          'Application composition roots must communicate through shared contracts, not imports.',
       });
     }
   }
@@ -61,9 +73,7 @@ export function runApplicationBoundaryCheck(root = repoRoot) {
     for (const file of walk(absoluteRoot)) {
       checkedFiles += 1;
       const relativeFile = normalizePath(relative(root, file));
-      findings.push(
-        ...findApplicationBoundaryViolations(relativeFile, readFileSync(file, 'utf8')),
-      );
+      findings.push(...findApplicationBoundaryViolations(relativeFile, readFileSync(file, 'utf8')));
     }
   }
   findings.push(...findRetiredProductSurfaceViolations(discoverProductSurfaces(root)));
@@ -77,6 +87,35 @@ export function findRetiredProductSurfaceViolations(snapshot) {
       ruleId: 'retired-desktop-package-must-not-exist',
       file: 'packages/neko-desktop',
       message: 'The retired Desktop product package must not be restored.',
+    });
+  }
+  if (snapshot.directories.includes('packages/neko-suite')) {
+    findings.push({
+      ruleId: 'retired-vscode-product-package-must-not-exist',
+      file: 'packages/neko-suite',
+      message: 'The Neko for VSCode product must be owned only by apps/neko-vscode.',
+    });
+  }
+  if (snapshot.directories.includes('packages/neko-agent/packages/cli-tui')) {
+    findings.push({
+      ruleId: 'retired-tui-package-must-not-exist',
+      file: 'packages/neko-agent/packages/cli-tui',
+      message: 'The complete Neko TUI host composition must be owned by apps/neko-tui.',
+    });
+  }
+  if (snapshot.files?.includes('packages/neko-agent/neko')) {
+    findings.push({
+      ruleId: 'retired-agent-package-executable-must-not-exist',
+      file: 'packages/neko-agent/neko',
+      message: 'The TUI executable must be built only by apps/neko-tui.',
+    });
+  }
+  for (const manifest of snapshot.retiredTuiDependencies ?? []) {
+    findings.push({
+      ruleId: 'retired-tui-package-dependency-must-not-exist',
+      file: manifest,
+      specifier: '@neko/cli',
+      message: 'Workspace manifests must depend on public Agent/runtime owners, not @neko/cli.',
     });
   }
   if (snapshot.directories.includes('apps/neko-studio')) {
@@ -112,9 +151,14 @@ function discoverProductSurfaces(root) {
   const packageJson = JSON.parse(readFileSync(resolve(root, 'package.json'), 'utf8'));
   const scenarioRoot = resolve(root, 'scripts/webview-functional/scenarios');
   return {
-    directories: ['packages/neko-desktop', 'apps/neko-studio'].filter((path) =>
-      existsSync(resolve(root, path)),
-    ),
+    directories: [
+      'packages/neko-desktop',
+      'packages/neko-suite',
+      'packages/neko-agent/packages/cli-tui',
+      'apps/neko-studio',
+    ].filter((path) => existsSync(resolve(root, path))),
+    files: ['packages/neko-agent/neko'].filter((path) => existsSync(resolve(root, path))),
+    retiredTuiDependencies: findDependencyManifests(root, '@neko/cli'),
     rootScripts: Object.keys(packageJson.scripts ?? {}),
     functionalScenarios: existsSync(scenarioRoot)
       ? [...walkScenarioFiles(scenarioRoot)].map((path) =>
@@ -122,6 +166,40 @@ function discoverProductSurfaces(root) {
         )
       : [],
   };
+}
+
+function findDependencyManifests(root, dependencyName) {
+  const manifests = [];
+  for (const sourceRoot of ['apps', 'packages']) {
+    const absoluteRoot = resolve(root, sourceRoot);
+    if (!existsSync(absoluteRoot)) continue;
+    for (const manifestPath of walkPackageManifests(absoluteRoot)) {
+      const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
+      const dependencyMaps = [
+        manifest.dependencies,
+        manifest.devDependencies,
+        manifest.optionalDependencies,
+        manifest.peerDependencies,
+      ];
+      if (dependencyMaps.some((dependencies) => dependencies?.[dependencyName])) {
+        manifests.push(normalizePath(relative(root, manifestPath)));
+      }
+    }
+  }
+  return manifests.sort();
+}
+
+function* walkPackageManifests(root) {
+  for (const entry of readdirSync(root, { withFileTypes: true })) {
+    if (entry.name === 'node_modules' || entry.name === 'dist' || entry.name === 'coverage')
+      continue;
+    const path = join(root, entry.name);
+    if (entry.isDirectory()) {
+      yield* walkPackageManifests(path);
+    } else if (entry.isFile() && entry.name === 'package.json') {
+      yield path;
+    }
+  }
 }
 
 function* walkScenarioFiles(root) {
@@ -175,7 +253,8 @@ function reachesAnotherApplication(file, specifier) {
 
 function* walk(root) {
   for (const entry of readdirSync(root, { withFileTypes: true })) {
-    if (entry.name === 'node_modules' || entry.name === 'dist' || entry.name === 'coverage') continue;
+    if (entry.name === 'node_modules' || entry.name === 'dist' || entry.name === 'coverage')
+      continue;
     const path = join(root, entry.name);
     if (entry.isDirectory()) {
       yield* walk(path);
@@ -226,6 +305,12 @@ function runSelfTest() {
       content: "import { start } from '../../apps/neko-tui/src/main';\n",
       expected: ['applications-must-not-import-other-applications'],
     },
+    {
+      name: 'retired tui package import fails',
+      file: 'apps/neko-tui/src/main.ts',
+      content: "import { run } from '@neko/cli/terminal';\n",
+      expected: ['retired-tui-package-import-must-not-exist'],
+    },
   ];
   const failures = [];
   for (const testCase of cases) {
@@ -237,12 +322,23 @@ function runSelfTest() {
     }
   }
   const retiredProductFindings = findRetiredProductSurfaceViolations({
-    directories: ['packages/neko-desktop', 'apps/neko-studio'],
+    directories: [
+      'packages/neko-desktop',
+      'packages/neko-suite',
+      'packages/neko-agent/packages/cli-tui',
+      'apps/neko-studio',
+    ],
+    files: ['packages/neko-agent/neko'],
+    retiredTuiDependencies: ['apps/legacy/package.json'],
     rootScripts: ['build:desktop', 'test'],
     functionalScenarios: ['desktop/startup.p0.scenario.json', 'home/startup.p0.scenario.json'],
   }).map((finding) => finding.ruleId);
   const expectedRetiredProductFindings = [
     'retired-desktop-package-must-not-exist',
+    'retired-vscode-product-package-must-not-exist',
+    'retired-tui-package-must-not-exist',
+    'retired-agent-package-executable-must-not-exist',
+    'retired-tui-package-dependency-must-not-exist',
     'studio-must-not-be-productized',
     'retired-desktop-script-must-not-exist',
     'retired-desktop-scenario-must-not-exist',
@@ -259,7 +355,9 @@ function runSelfTest() {
 
 const isMain = process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
 if (isMain) {
-  const result = process.argv.includes('--self-test') ? runSelfTest() : runApplicationBoundaryCheck();
+  const result = process.argv.includes('--self-test')
+    ? runSelfTest()
+    : runApplicationBoundaryCheck();
   const output = `${JSON.stringify(result, null, 2)}\n`;
   if (result.status === 'failed') {
     process.stderr.write(output);

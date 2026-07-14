@@ -98,10 +98,11 @@ async function runV2Sample(selection, options = {}) {
   let judgeResult;
   let judgeDiagnostic;
   try {
-    const command =
-      options.debugCommand ?? options.env?.NEKO_DEBUG_COMMAND ?? './packages/neko-agent/neko';
+    const configuredDebugCommand = options.debugCommand ?? options.env?.NEKO_DEBUG_COMMAND;
+    const command = configuredDebugCommand ?? process.execPath;
     const commandArgs = [
-      ...(options.debugCommandArgsPrefix ?? []),
+      ...(options.debugCommandArgsPrefix ??
+        (configuredDebugCommand ? [] : ['apps/neko-tui/dist/main.js'])),
       'debug',
       'automation',
       '--stdio',
@@ -110,7 +111,7 @@ async function runV2Sample(selection, options = {}) {
     ];
     const child = (options.spawn ?? nodeSpawn)(command, commandArgs, {
       cwd: options.cwd ?? process.cwd(),
-      shell: options.debugCommand === undefined,
+      shell: configuredDebugCommand !== undefined,
       stdio: ['pipe', 'pipe', 'inherit'],
     });
     try {

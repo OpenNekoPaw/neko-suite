@@ -35,11 +35,11 @@ describe('ablation Evaluation ownership boundary', () => {
     expect(agentRoot).not.toMatch(/from ['"]\.\/experiment/u);
     expect(agentRoot).not.toContain('ExperimentRunner');
 
-    const cliSource = await fs.readFile(
-      join(REPO_ROOT, 'packages/neko-agent/packages/cli-tui/src/cli.tsx'),
-      'utf8',
-    );
-    expect(cliSource).not.toMatch(/\.command\(['"]experiment['"]\)/u);
-    expect(cliSource).not.toMatch(/core\/experiment/u);
+    const tuiSource = await fs.readFile(join(REPO_ROOT, 'apps/neko-tui/src/tui/cli.tsx'), 'utf8');
+    expect(tuiSource).not.toMatch(/\.command\(['"]experiment['"]\)/u);
+    expect(tuiSource).not.toMatch(/core\/experiment/u);
+    await expect(
+      fs.access(join(REPO_ROOT, 'packages/neko-agent/packages/cli-tui')),
+    ).rejects.toThrow();
   });
 });

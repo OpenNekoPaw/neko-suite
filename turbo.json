@@ -73,13 +73,8 @@
       "outputs": ["dist/**", "out/**"],
       "cache": true
     },
-    "@neko/cli#build:exe": {
-      "dependsOn": ["@neko/agent#build", "@neko/shared#build"],
-      "outputs": ["../../neko"],
-      "cache": true
-    },
     "neko-agent#compile": {
-      "dependsOn": ["neko-engine#compile", "neko-tools#compile", "@neko/cli#build:exe"],
+      "dependsOn": ["neko-engine#compile", "neko-tools#compile"],
       "outputs": ["dist/**", "out/**"],
       "cache": true
     },

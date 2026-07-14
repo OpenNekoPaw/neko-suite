@@ -35,7 +35,10 @@ describe('Market local metadata Host parity', () => {
     await extension.dispose();
 
     const bunFixture = fileURLToPath(
-      new URL('./fixtures/bun-market-installation-parity.ts', import.meta.url),
+      new URL(
+        '../../../../../../scripts/test-orchestration/fixtures/bun-tui-market-installation-parity.ts',
+        import.meta.url,
+      ),
     );
     await execFileAsync('bun', [bunFixture], {
       env: { ...process.env, NEKO_SQLITE_TEST_HOME: homedir },

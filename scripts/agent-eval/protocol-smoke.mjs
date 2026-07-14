@@ -51,12 +51,24 @@ export async function main(argv = process.argv.slice(2), io = defaultIo()) {
     return EXIT_CONFIG_INVALID;
   }
 
-  const command = io.env.NEKO_DEBUG_COMMAND ?? './packages/neko-agent/neko';
-  const child = io.spawn(command, ['debug', 'automation', '--stdio', '-C', args.cwd], {
-    cwd: io.cwd(),
-    shell: true,
-    stdio: ['pipe', 'pipe', 'inherit'],
-  });
+  const configuredDebugCommand = io.env.NEKO_DEBUG_COMMAND;
+  const command = configuredDebugCommand ?? process.execPath;
+  const child = io.spawn(
+    command,
+    [
+      ...(configuredDebugCommand ? [] : ['apps/neko-tui/dist/main.js']),
+      'debug',
+      'automation',
+      '--stdio',
+      '-C',
+      args.cwd,
+    ],
+    {
+      cwd: io.cwd(),
+      shell: configuredDebugCommand !== undefined,
+      stdio: ['pipe', 'pipe', 'inherit'],
+    },
+  );
 
   const responses = createDebugResponseReader(child.stdout);
 

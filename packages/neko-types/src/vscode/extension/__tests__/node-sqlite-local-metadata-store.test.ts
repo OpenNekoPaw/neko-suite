@@ -475,14 +475,11 @@ describe('node:sqlite local metadata store', () => {
     const bunFixture = join(
       process.cwd(),
       '..',
-      'neko-agent',
-      'packages',
-      'cli-tui',
-      'src',
-      'host',
-      '__tests__',
+      '..',
+      'scripts',
+      'test-orchestration',
       'fixtures',
-      'bun-sqlite-roundtrip.ts',
+      'bun-tui-sqlite-roundtrip.ts',
     );
     await execFileAsync('bun', [bunFixture], {
       env: { ...process.env, NEKO_SQLITE_TEST_HOME: homedir },
