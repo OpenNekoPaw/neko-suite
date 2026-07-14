@@ -8,12 +8,9 @@ import {
   builtinToolGroups,
   CREATIVE_MEDIA_PROFILES,
   CREATIVE_MEDIA_WORKFLOW_STAGES,
-  creationPersonaSkill,
-  executionPersonaSkill,
   getBuiltinSkills,
   getCanonicalCreativeMediaSkills,
   imageSkill,
-  iterationPersonaSkill,
   mediaProductionSkill,
   mediaQualityReviewSkill,
   normalizeBuiltinSkillLocale,
@@ -24,9 +21,6 @@ import {
 } from './index';
 
 const localizedBuiltinPromptNames = [
-  'creation-persona',
-  'execution-persona',
-  'iteration-persona',
   'skill-creator',
   'storyboard',
   'image',
@@ -323,6 +317,81 @@ describe('@neko/skills builtins', () => {
     }
   });
 
+  it('guides evidence-first creator review and actionable creative work units', () => {
+    const content = mediaProductionSkill.content;
+
+    expect(content).toContain('observed facts, Agent interpretation, creator decisions');
+    expect(content).toContain('optional `brief.md`');
+    expect(content).toContain('optional living `plan.md`');
+    expect(content).toContain('trigger and skip conditions');
+    expect(content).toContain('capability intent');
+    expect(content).toContain('acceptance evidence');
+    expect(content).toContain('failure or degraded branch');
+    expect(content).toContain('Editing Markdown does not execute it');
+    expect(content).toContain(
+      'A simple low-risk operation may proceed without creating planning files',
+    );
+    expect(content).toContain('Reuse current Storyboards');
+    expect(content).toContain('renewed creator approval');
+    expect(content).toContain('`blocked`, `degraded`, or `partial`');
+  });
+
+  it.each([
+    ['comic', ['page', 'panel', 'reading-order', 'dialogue', 'character appearance']],
+    ['screenplay', ['scene headings', 'action', 'dialogue', 'location', 'timing intent']],
+    [
+      'novel',
+      [
+        'chapter or scene boundaries',
+        'point of view',
+        'narration',
+        'dialogue',
+        'adaptation omissions',
+      ],
+    ],
+    [
+      'illustration',
+      ['visible composition', 'subjects', 'layers', 'palette', 'spatial relationships'],
+    ],
+  ] as const)('grounds %s planning in source-specific evidence', (_source, evidenceTerms) => {
+    for (const term of evidenceTerms) {
+      expect(mediaProductionSkill.content).toContain(term);
+    }
+  });
+
+  it('reuses current Storyboard and project evidence instead of forcing document creation', () => {
+    const content = mediaProductionSkill.content;
+
+    expect(content).toContain('Existing Storyboards and projects use their current revision');
+    expect(content).toContain('owned shots or timeline state');
+    expect(content).toContain('mark it skipped or reused rather than rebuilding it');
+    expect(content).toContain(
+      'A simple low-risk operation may proceed without creating planning files',
+    );
+    expect(content).not.toContain('must create `brief.md`');
+    expect(content).not.toContain('must create `plan.md`');
+  });
+
+  it('keeps creative plan guidance free of executable workflow state and Tool protocol', () => {
+    const content = mediaProductionSkill.content;
+    const forbidden = [
+      'workflowNodeId',
+      'operationSchema',
+      'toolCallId',
+      'pollingInterval',
+      'Webview',
+      'stageTracking',
+      'ExecutionPlan',
+      'GenerateImage',
+      'ReadDocument',
+    ];
+
+    for (const token of forbidden) {
+      expect(content).not.toContain(token);
+    }
+    expect(mediaProductionSkill.allowedTools).toBeUndefined();
+  });
+
   it('owns all non-runtime builtin skill and tool group definitions', () => {
     expect(scriptGenerationSkill.name).toBe('script-generation');
     expect(storyboardSkill.name).toBe('storyboard');
@@ -331,11 +400,12 @@ describe('@neko/skills builtins', () => {
     expect(mediaProductionSkill.name).toBe('media-production');
     expect(mediaQualityReviewSkill.name).toBe('media-quality-review');
     expect(mediaQualityReviewSkill.allowedTools).toContain(TOOL_NAMES_PERCEPTION.PERCEIVE);
-    expect(creationPersonaSkill.name).toBe('creation-persona');
-    expect(executionPersonaSkill.name).toBe('execution-persona');
-    expect(iterationPersonaSkill.name).toBe('iteration-persona');
 
     expect(builtinToolGroups.map((group) => group.name)).toContain('perception-evidence');
+    expect(builtinToolGroups.map((group) => group.name)).not.toContain('plan-mode');
+    expect(builtinToolGroups.flatMap((group) => group.tools)).not.toEqual(
+      expect.arrayContaining(['EnterPlanMode', 'ExitPlanMode']),
+    );
     expect(builtinToolGroups.find((group) => group.name === 'media-qa')?.tools).toEqual([
       'QualityCheck',
     ]);
@@ -353,30 +423,6 @@ describe('@neko/skills builtins', () => {
       getBuiltinSkills({ locale: 'zh-CN' }).find((skill) => skill.name === 'script-generation')
         ?.content,
     ).not.toContain('Fountain Syntax Reference');
-    expect(
-      getBuiltinSkills({ locale: 'zh-CN' }).find((skill) => skill.name === 'creation-persona')
-        ?.content,
-    ).toContain('创作文档契约');
-    expect(
-      getBuiltinSkills({ locale: 'zh-CN' }).find((skill) => skill.name === 'creation-persona')
-        ?.content,
-    ).not.toContain('Creation document contract');
-    expect(
-      getBuiltinSkills({ locale: 'zh-CN' }).find((skill) => skill.name === 'execution-persona')
-        ?.content,
-    ).toContain('系统操作员');
-    expect(
-      getBuiltinSkills({ locale: 'zh-CN' }).find((skill) => skill.name === 'execution-persona')
-        ?.content,
-    ).not.toContain('System Operator');
-    expect(
-      getBuiltinSkills({ locale: 'zh-CN' }).find((skill) => skill.name === 'iteration-persona')
-        ?.content,
-    ).toContain('一致性迭代');
-    expect(
-      getBuiltinSkills({ locale: 'zh-CN' }).find((skill) => skill.name === 'iteration-persona')
-        ?.content,
-    ).not.toContain('Consistency Iterator');
     expect(
       getBuiltinSkills({ locale: 'zh-CN' }).find((skill) => skill.name === 'video-editing')
         ?.content,
@@ -417,7 +463,6 @@ describe('@neko/skills builtins', () => {
     );
     expect(builtinSkillLocales['media-production']?.['zh-cn']?.name).toBe('媒体制作');
     expect(builtinSkillLocales['media-quality-review']?.['zh-cn']?.name).toBe('媒体质量审查');
-    expect(builtinSkillLocales['creation-persona']?.['zh-cn']?.description).toContain('共创伙伴');
   });
 
   it('keeps localized markdown-backed builtin prompts structurally aligned', () => {

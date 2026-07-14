@@ -73,6 +73,7 @@ export interface TuiDebugAutomationSessionCreateParams {
 }
 
 export interface TuiDebugAutomationSessionRuntimeConfig {
+  readonly executionMode?: 'auto' | 'ask' | 'plan';
   readonly temperature?: number;
   readonly maxTokens?: number;
   readonly thinkingBudget?: number;
@@ -182,6 +183,10 @@ export interface TuiDebugAutomationTurnSummary {
   readonly displayKind?: Message['displayKind'];
   readonly metadata?: AgentContinuationMetadata;
   readonly content: string;
+  readonly todos: readonly {
+    readonly content: string;
+    readonly status: 'pending' | 'in_progress' | 'completed' | 'blocked';
+  }[];
   readonly isError?: boolean;
   readonly toolCalls: readonly TuiDebugAutomationToolCallSummary[];
   readonly timeline: readonly TuiDebugAutomationTimelineRowSummary[];

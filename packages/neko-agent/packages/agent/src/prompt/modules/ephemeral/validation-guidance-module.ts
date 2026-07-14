@@ -21,7 +21,7 @@ export class ValidationGuidanceModule implements PromptModule {
     requires: [],
     priority: 45,
     cost: 'free',
-    dependsOn: ['artifact.schema'],
+    dependsOn: [],
   };
 
   private _content: string | null = null;

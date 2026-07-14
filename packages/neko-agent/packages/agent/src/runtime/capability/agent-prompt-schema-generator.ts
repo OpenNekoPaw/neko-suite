@@ -55,16 +55,6 @@ function buildPromptSections(
     },
   ];
 
-  const workflowSection = renderWorkflowSection(context);
-  if (workflowSection) {
-    sections.push({
-      id: 'creation:idc-profile',
-      layer: 'schema',
-      content: workflowSection,
-      priority: 95,
-    });
-  }
-
   const profileProjectionSection = renderProfileProjectionSection(context);
   if (profileProjectionSection) {
     sections.push({
@@ -206,12 +196,7 @@ function createSchemaBundle(
 
 function resolveToolAllowlist(context: PromptGenerationContext): readonly string[] {
   const injected = context.injectedCapabilities?.allowedTools ?? [];
-  const nodeAllowed = context.creation?.allowedToolNames;
-  const source =
-    nodeAllowed && nodeAllowed.length > 0
-      ? injected.filter((toolName) => nodeAllowed.includes(toolName))
-      : injected;
-  return Array.from(new Set(source)).sort((left, right) => left.localeCompare(right));
+  return Array.from(new Set(injected)).sort((left, right) => left.localeCompare(right));
 }
 
 function resolveToolSchemas(
@@ -268,26 +253,13 @@ function resolveStructuredOutputSchemas(
     return [];
   }
 
-  const purposes = context.requestedSchemaPurposes ?? inferSchemaPurposes(context);
+  const purposes = context.requestedSchemaPurposes ?? [];
   return purposes.map((purpose) => createStructuredSchema(purpose, context));
-}
-
-function inferSchemaPurposes(context: PromptGenerationContext): readonly GeneratedSchemaPurpose[] {
-  switch (context.creation?.stage) {
-    case 'draft':
-      return ['idc-draft'];
-    case 'plan':
-      return ['idc-plan'];
-    case 'apply':
-      return ['idc-apply'];
-    default:
-      return context.creation?.stage ? ['creation-stage-output'] : [];
-  }
 }
 
 function createStructuredSchema(
   purpose: GeneratedSchemaPurpose,
-  context: PromptGenerationContext,
+  _context: PromptGenerationContext,
 ): GeneratedStructuredSchema {
   return {
     id: `schema:${purpose}`,
@@ -298,9 +270,6 @@ function createStructuredSchema(
       additionalProperties: false,
       properties: {
         kind: { const: purpose },
-        creationId: { type: 'string' },
-        iterationId: { type: 'string' },
-        stageId: { type: 'string' },
         summary: { type: 'string' },
         artifacts: {
           type: 'array',
@@ -324,39 +293,8 @@ function createStructuredSchema(
         },
       },
       required: ['kind', 'summary'],
-      metadata: {
-        creationId: context.creation?.creationId,
-        iterationId: context.creation?.iterationId,
-        stageId: context.creation?.stage,
-        legacyTrace: context.creation?.legacyTrace,
-      },
     },
   };
-}
-
-function renderWorkflowSection(context: PromptGenerationContext): string | null {
-  const creation = context.creation;
-  if (!creation) return null;
-
-  const lines = [
-    '## Creation Profile Guidance',
-    `- Plan mode: ${creation.planMode ? 'enabled' : 'disabled'}`,
-    creation.profileId ? `- Creation profile: ${creation.profileId}` : null,
-    creation.stage ? `- Creation stage: ${creation.stage}` : null,
-    creation.creationId ? `- Creation id: ${creation.creationId}` : null,
-    creation.iterationId ? `- Iteration id: ${creation.iterationId}` : null,
-    creation.legacyTrace?.workflowNodeId
-      ? `- Legacy trace node: ${creation.legacyTrace.workflowNodeId}`
-      : null,
-  ].filter((line): line is string => Boolean(line));
-
-  if (creation.planMode) {
-    lines.push(
-      '- Follow creation profile guidance: Draft clarifies intent, Plan decomposes work, Apply executes verified changes.',
-    );
-  }
-
-  return lines.join('\n');
 }
 
 function renderProfileProjectionSection(context: PromptGenerationContext): string | null {
@@ -453,12 +391,12 @@ function formatEvidenceSummary(evidence: AgentMultimodalEvidenceRef): string {
 }
 
 function renderStructuredSchemaHint(context: PromptGenerationContext): string | null {
-  const purposes = context.requestedSchemaPurposes ?? inferSchemaPurposes(context);
+  const purposes = context.requestedSchemaPurposes ?? [];
   if (purposes.length === 0) return null;
   return [
     '## Structured Output Contract',
     `- Expected schema purposes: ${purposes.join(', ')}`,
-    '- Return machine-readable JSON when a creation stage explicitly asks for a structured artifact.',
+    '- Return machine-readable JSON only when the active runtime contract requests it.',
   ].join('\n');
 }
 

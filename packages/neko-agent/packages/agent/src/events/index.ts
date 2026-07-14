@@ -7,11 +7,12 @@
 
 export {
   createEventBus,
-  CREATION_CHANNELS,
-  EXECUTION_CHANNELS,
+  AGENT_RUNTIME_CHANNELS,
   type IEventBus,
-  type DualFlowChannel,
-  type DualFlowEvent,
+  type AgentRuntimeChannel,
+  type AgentRuntimeEvent,
+  type AgentEventBusChannel,
+  type AgentEventBusEvent,
   type ChannelListener,
   type AnyListener,
 } from './event-bus';

@@ -58,11 +58,6 @@ export interface ExtensionSlashCommandSettingsSource {
   executionMode?: string | null;
 }
 
-export interface ExtensionSlashCommandPlanModeSource {
-  isEnabled(conversationId: string): boolean;
-  toggle(conversationId: string): boolean;
-}
-
 export interface ExtensionSlashCommandContextManager {
   getTokenCount(conversationId: string): number;
   compress(conversationId: string): Promise<void>;
@@ -73,7 +68,7 @@ export interface ExtensionSlashCommandRuntimeDeps {
   conversations: ExtensionSlashCommandConversationSource;
   skills?: ExtensionSlashCommandSkillSource;
   settings?: ExtensionSlashCommandSettingsSource;
-  planMode?: ExtensionSlashCommandPlanModeSource;
+  updateExecutionMode?(conversationId: string, mode: 'auto' | 'ask' | 'plan'): void;
   contextManager?: ExtensionSlashCommandContextManager;
 }
 
@@ -195,10 +190,7 @@ function createExtensionSlashCommandContext(
       create: () => deps.conversations.create(),
       clearCurrent: () => deps.conversations.clearCurrent(conversationId),
     },
-    planMode: {
-      isEnabled: () => deps.planMode?.isEnabled(conversationId) ?? false,
-      toggle: () => deps.planMode?.toggle(conversationId) ?? false,
-    },
+    updateExecutionMode: (mode) => deps.updateExecutionMode?.(conversationId, mode),
     contextManager: {
       getTokenCount: (id: string) => deps.contextManager?.getTokenCount(id) ?? 0,
       compress: async (id: string) => {
@@ -223,9 +215,7 @@ function dispatchBuiltinSlashCommandResult(
 
   const effectPlan = buildExtensionCommandHostEffectPlan({
     result,
-    isPlanMode: deps.planMode?.isEnabled(input.conversationId) ?? false,
     ...(input.conversationId ? { activeConversationId: input.conversationId } : {}),
-    ...(input.args !== undefined ? { rawArgs: input.args } : {}),
   });
 
   const before = executeHostEffects(effectPlan.beforeResult, effects);

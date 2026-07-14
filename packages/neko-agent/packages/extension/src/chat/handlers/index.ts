@@ -8,7 +8,6 @@
 export { TaskHandler, type TaskHandlerDeps } from './taskHandler';
 export { SkillHandler, type SkillHandlerDeps } from './skillHandler';
 export { FileOperationHandler, type FileOperationHandlerDeps } from './fileOperationHandler';
-export { PlanModeHandler, type PlanModeHandlerDeps } from './planModeHandler';
 export { SettingsHandler, type SettingsHandlerDeps } from './settingsHandler';
 export { ContextHandler, type ContextHandlerDeps } from './contextHandler';
 export { SlashCommandHandler, type SlashCommandHandlerDeps } from './slashCommandHandler';

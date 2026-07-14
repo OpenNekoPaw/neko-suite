@@ -28,21 +28,18 @@ export const CREATION_PROFILE_RECOVERY_POLICIES = [
   'ask-user',
 ] as const;
 
-export type CreationProfileApprovalPolicy =
-  (typeof CREATION_PROFILE_APPROVAL_POLICIES)[number];
+export type CreationProfileApprovalPolicy = (typeof CREATION_PROFILE_APPROVAL_POLICIES)[number];
 
 export type CreationProfileReviewPolicy = (typeof CREATION_PROFILE_REVIEW_POLICIES)[number];
 
 export type CreationProfileRecoveryPolicy = (typeof CREATION_PROFILE_RECOVERY_POLICIES)[number];
 
-export interface CreationProfileDescriptor
-  extends AgentProfileIdentity<'creation', string> {
+export interface CreationProfileDescriptor extends AgentProfileIdentity<'creation', string> {
   readonly title?: string;
   readonly description?: string;
   readonly defaultStageId: string;
   readonly stages: readonly CreationProfileStageDescriptor[];
   readonly transitions?: readonly CreationProfileTransitionDescriptor[];
-  readonly stagePersonas?: readonly CreationProfileStagePersonaBinding[];
   readonly approvalPolicy?: CreationProfileApprovalPolicyDescriptor;
   readonly reviewPolicy?: CreationProfileReviewPolicyDescriptor;
   readonly recoveryPolicy?: CreationProfileRecoveryPolicyDescriptor;
@@ -67,12 +64,6 @@ export interface CreationProfileTransitionDescriptor {
   readonly description?: string;
 }
 
-export interface CreationProfileStagePersonaBinding {
-  readonly stageId: string;
-  readonly skillId: string;
-  readonly required?: boolean;
-}
-
 export interface CreationProfileApprovalPolicyDescriptor {
   readonly policy: CreationProfileApprovalPolicy;
   readonly stageIds?: readonly string[];
@@ -95,10 +86,7 @@ export interface CreationProfileLifecycleConstraint {
   readonly constraintId: string;
   readonly stageIds?: readonly string[];
   readonly kind:
-    | 'requires-approval'
-    | 'requires-review'
-    | 'requires-user-input'
-    | 'blocks-side-effects';
+    'requires-approval' | 'requires-review' | 'requires-user-input' | 'blocks-side-effects';
   readonly message?: string;
 }
 
@@ -129,7 +117,10 @@ export function validateCreationProfileDescriptor(
     return toAgentProfileValidationResult(diagnostics);
   }
 
-  if (typeof descriptor['defaultStageId'] !== 'string' || descriptor['defaultStageId'].length === 0) {
+  if (
+    typeof descriptor['defaultStageId'] !== 'string' ||
+    descriptor['defaultStageId'].length === 0
+  ) {
     diagnostics.push(
       createAgentProfileDiagnostic({
         severity: 'error',
@@ -214,8 +205,13 @@ export function validateCreationProfileDescriptor(
     );
   }
 
-  validateStageReferences(descriptor, 'transitions', ['fromStageId', 'toStageId'], stageIds, diagnostics);
-  validateStageReferences(descriptor, 'stagePersonas', ['stageId'], stageIds, diagnostics);
+  validateStageReferences(
+    descriptor,
+    'transitions',
+    ['fromStageId', 'toStageId'],
+    stageIds,
+    diagnostics,
+  );
 
   return toAgentProfileValidationResult(diagnostics);
 }

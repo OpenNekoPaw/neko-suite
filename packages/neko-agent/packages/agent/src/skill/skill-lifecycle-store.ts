@@ -30,10 +30,9 @@ export interface SkillLifecycleStoreOptions {
 
 export interface SkillLifecycleExpireInput {
   readonly conversationId: string;
-  readonly reason: 'turn-ended' | 'stage-exited' | 'prompt-chain-ended' | 'inactive';
+  readonly reason: 'turn-ended' | 'prompt-chain-ended' | 'inactive';
   readonly turnId?: string;
   readonly runId?: string;
-  readonly stage?: string;
   readonly currentTurn?: number;
 }
 
@@ -172,12 +171,6 @@ function shouldExpire(record: SkillLifecycleRecord, input: SkillLifecycleExpireI
   switch (input.reason) {
     case 'turn-ended':
       return record.lifetime.kind === 'turn' && record.lifetime.turnId === input.turnId;
-    case 'stage-exited':
-      return (
-        record.lifetime.kind === 'creation-stage' &&
-        record.lifetime.runId === input.runId &&
-        record.lifetime.stage === input.stage
-      );
     case 'prompt-chain-ended':
       return record.lifetime.kind === 'prompt-chain' && record.lifetime.runId === input.runId;
     case 'inactive':
@@ -202,10 +195,6 @@ function isSameLifecycleLifetime(
       return right.kind === 'turn' && left.turnId === right.turnId;
     case 'conversation':
       return right.kind === 'conversation';
-    case 'creation-stage':
-      return (
-        right.kind === 'creation-stage' && left.runId === right.runId && left.stage === right.stage
-      );
     case 'prompt-chain':
       return right.kind === 'prompt-chain' && left.runId === right.runId;
     case 'inactivity':

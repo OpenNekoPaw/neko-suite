@@ -20,9 +20,3 @@ export {
   type ProviderExpressionConceptDecision,
   type IProviderCardProjectRouter,
 } from './validation-coordinator';
-
-export {
-  ArtifactObservationHooks,
-  createArtifactObservationHooks,
-  type ArtifactObservationHooksConfig,
-} from './artifact-validation-observation-hooks';

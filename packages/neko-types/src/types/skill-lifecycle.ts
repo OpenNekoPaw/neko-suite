@@ -12,32 +12,25 @@ import type { RelatedSkill, SkillInjection, SkillMediaWorkflowHint, SkillSource 
 import type { SkillProvenance } from './portable-skill';
 
 export type SkillLifecycleSlot =
-  'stagePersona' | 'domainSkill' | 'referenceSkill' | 'ephemeralSkill' | 'promptChainSkill';
+  'domainSkill' | 'referenceSkill' | 'ephemeralSkill' | 'promptChainSkill';
 
 export type SkillLifecycleOwner = 'user' | 'agent' | 'creation-profile' | 'runtime';
 
 export type SkillLifecycleRecordStatus = 'active' | 'expiring' | 'expired' | 'blocked';
 
-export type SkillLifecycleActivationSource =
-  'explicit-user' | 'explicit-agent' | 'creation-stage' | 'runtime-expiry';
+export type SkillLifecycleActivationSource = 'explicit-user' | 'explicit-agent' | 'runtime-expiry';
 
 export type SkillLifecycleDeactivationActor = 'user' | 'agent' | 'runtime';
 
 export type SkillLifecycleDeactivationReason =
-  | 'explicit-clear'
-  | 'turn-ended'
-  | 'stage-exited'
-  | 'prompt-chain-ended'
-  | 'inactive'
-  | 'conflict-resolution';
+  'explicit-clear' | 'turn-ended' | 'prompt-chain-ended' | 'inactive' | 'conflict-resolution';
 
 export type SkillLifecycleConflictStrategy = 'replace' | 'merge' | 'reject' | 'ask';
 
 export type SkillLifecycleToolPolicyMode =
   'unrestricted' | 'allowlist' | 'intersection' | 'conflict';
 
-export type SkillLifecycleModelOverrideSource =
-  'stagePersona' | 'domainSkill' | 'promptChainSkill' | 'runtime';
+export type SkillLifecycleModelOverrideSource = 'domainSkill' | 'promptChainSkill' | 'runtime';
 
 export type SkillLifecycleDiagnosticCode =
   | 'unknown-slot'
@@ -56,12 +49,6 @@ export type SkillLifecycleDiagnosticCode =
   | 'stale-record'
   | 'legacy-skill-alias';
 
-/**
- * Local mirror of the built-in creation stages used by @neko-agent/types. Kept in Layer 0 as
- * a structural union to avoid a shared -> agent-types dependency.
- */
-export type SkillLifecycleCreationStage = 'draft' | 'plan' | 'apply';
-
 export interface SkillLifecycleTurnLifetime {
   readonly kind: 'turn';
   readonly turnId: string;
@@ -70,12 +57,6 @@ export interface SkillLifecycleTurnLifetime {
 export interface SkillLifecycleConversationLifetime {
   readonly kind: 'conversation';
   readonly untilCleared: true;
-}
-
-export interface SkillLifecycleCreationStageLifetime {
-  readonly kind: 'creation-stage';
-  readonly runId: string;
-  readonly stage: SkillLifecycleCreationStage;
 }
 
 export interface SkillLifecyclePromptChainLifetime {
@@ -91,7 +72,6 @@ export interface SkillLifecycleInactivityLifetime {
 export type SkillLifecycleLifetime =
   | SkillLifecycleTurnLifetime
   | SkillLifecycleConversationLifetime
-  | SkillLifecycleCreationStageLifetime
   | SkillLifecyclePromptChainLifetime
   | SkillLifecycleInactivityLifetime;
 

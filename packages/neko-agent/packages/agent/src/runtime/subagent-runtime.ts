@@ -21,8 +21,8 @@ import {
 import type { AgentSessionConfig } from '../session/types';
 import { createAgentSessionWithRuntime } from './session/session-config-projection';
 import { summarizeAgentEventProgress } from './turn/message-runtime';
-import { createNodeArtifactStore } from '../artifact/node-artifact-store';
-import type { IArtifactStore, ICapabilityRuntime, IValidationLoop } from './types';
+import { createNodeWorkspaceRuntimeStore } from './session/node-workspace-runtime-store';
+import type { ICapabilityRuntime, IValidationLoop, IWorkspaceRuntimeStore } from './types';
 import type { WorkspaceFileIgnoreRules } from '../input/workspace-ignore';
 import type { SupportedLocale } from '@neko/shared/i18n';
 
@@ -49,7 +49,7 @@ export interface AgentSubAgentRuntimeRegistration {
   readonly promptFragments?: readonly PromptFragment[];
   readonly toolCategoryRegistry?: IToolCategoryRegistry;
   readonly operationToolAdapterRegistry?: IOperationToolAdapterRegistry;
-  readonly artifactStore?: IArtifactStore;
+  readonly workspaceStore?: IWorkspaceRuntimeStore;
   readonly validationLoop?: IValidationLoop;
   readonly perceptionClients?: AgentSessionConfig['perceptionClients'];
 }
@@ -212,9 +212,9 @@ export class SubAgentRuntimeCoordinator {
                 ? { operationToolAdapterRegistry: runtime.operationToolAdapterRegistry }
                 : {}),
             },
-            artifactStore:
-              runtime.artifactStore ??
-              createNodeArtifactStore({
+            workspaceStore:
+              runtime.workspaceStore ??
+              createNodeWorkspaceRuntimeStore({
                 ...(runtime.workspaceRoot ? { workspaceRoot: runtime.workspaceRoot } : {}),
               }),
             ...(runtime.validationLoop ? { validationLoop: runtime.validationLoop } : {}),

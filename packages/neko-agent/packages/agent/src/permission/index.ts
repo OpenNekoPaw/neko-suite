@@ -17,7 +17,6 @@ export type {
   ToolConfirmationRequest,
   ToolConfirmationResponse,
   ConfirmToolCallback,
-  PlanFileResult,
 } from './types';
 
 // Constants
@@ -26,7 +25,6 @@ export {
   READ_ONLY_MCP_PREFIXES,
   DEFAULT_PERMISSION_CONFIG,
   PLAN_MODE_SYSTEM_REMINDER,
-  PLAN_FILE_PATH,
 } from './types';
 
 // Tool Traits Registry
@@ -40,7 +38,7 @@ export {
   matchesPattern,
   isInPatternList,
   isReadOnlyTool,
-  isPlanFileWrite,
+  isPlanMarkdownWrite,
 } from './rule-matcher';
 
 // Permission Manager Interface

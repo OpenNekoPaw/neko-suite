@@ -36,8 +36,6 @@ const BUILTIN_FORK_ACTIONS: NonNullable<SkillCatalogPolicy['actions']> = [
   { id: 'fork', targetSource: 'personal' },
 ];
 
-const PERSONA_SKILL_NAMES = new Set(['creation-persona', 'execution-persona', 'iteration-persona']);
-
 const BUILTIN_CATALOG_OVERRIDES: Readonly<Record<string, SkillCatalogPolicy>> = {
   storyboard: createPrimaryBuiltinCatalog(),
   image: createPrimaryBuiltinCatalog(),
@@ -208,15 +206,6 @@ function requireEditableFileSkillSource(source: Skill['source']): 'project' | 'p
 }
 
 function createBuiltinCatalog(skill: Skill): SkillCatalogPolicy {
-  if (PERSONA_SKILL_NAMES.has(skill.name)) {
-    return {
-      role: 'persona',
-      visibility: 'hidden',
-      editable: false,
-      actions: ['run'],
-    };
-  }
-
   const override = BUILTIN_CATALOG_OVERRIDES[skill.name];
   if (override) {
     return override;

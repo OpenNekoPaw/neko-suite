@@ -17,8 +17,6 @@ describe('conversation control runtime', () => {
   let removeAgent: ReturnType<typeof vi.fn>;
   let clearAgentState: ReturnType<typeof vi.fn>;
   let clearAgentHistory: ReturnType<typeof vi.fn>;
-  let clearPromptMode: ReturnType<typeof vi.fn>;
-  let clearAllPromptModes: ReturnType<typeof vi.fn>;
   let cancelAgent: ReturnType<typeof vi.fn>;
   let updateConversationMessages: ReturnType<typeof vi.fn>;
 
@@ -29,8 +27,6 @@ describe('conversation control runtime', () => {
     removeAgent = vi.fn();
     clearAgentState = vi.fn();
     clearAgentHistory = vi.fn();
-    clearPromptMode = vi.fn();
-    clearAllPromptModes = vi.fn();
     cancelAgent = vi.fn();
     updateConversationMessages = vi.fn();
     effects = {
@@ -40,8 +36,6 @@ describe('conversation control runtime', () => {
       removeAgent,
       clearAgentState,
       clearAgentHistory,
-      clearPromptMode,
-      clearAllPromptModes,
       cancelAgent,
       updateConversationMessages,
       now: () => 1234,
@@ -77,7 +71,6 @@ describe('conversation control runtime', () => {
 
     expect(removeAgent).toHaveBeenCalledWith('conv-1');
     expect(clearAgentState).toHaveBeenCalledWith('conv-1');
-    expect(clearPromptMode).toHaveBeenCalledWith('conv-1');
     expect(effects.deleteConversation).toHaveBeenCalledWith('conv-1', { activateNext: true });
     expect(refreshConversationList).toHaveBeenCalledTimes(1);
     expect(refreshActiveConversation).toHaveBeenCalledTimes(1);
@@ -114,23 +107,10 @@ describe('conversation control runtime', () => {
     expect(removeAgent).toHaveBeenCalledWith('conv-2');
     expect(clearAgentState).toHaveBeenCalledWith('conv-1');
     expect(clearAgentState).toHaveBeenCalledWith('conv-2');
-    expect(clearAllPromptModes).toHaveBeenCalledTimes(1);
-    expect(clearPromptMode).not.toHaveBeenCalled();
     expect(effects.clearConversations).toHaveBeenCalledTimes(1);
     expect(refreshConversationList).toHaveBeenCalledTimes(1);
     expect(postMessage).toHaveBeenCalledWith({ type: 'historyCleared', conversationId: 'conv-1' });
     expect(postMessage).toHaveBeenCalledWith({ type: 'historyCleared', conversationId: 'conv-2' });
-  });
-
-  it('falls back to per-conversation prompt mode cleanup when clearAll is unavailable', async () => {
-    effects.listConversationIds = vi.fn().mockReturnValue(['conv-1', 'conv-2']);
-    effects.clearConversations = vi.fn();
-    delete effects.clearAllPromptModes;
-
-    await runClearAllConversationsRuntime(effects);
-
-    expect(clearPromptMode).toHaveBeenCalledWith('conv-1');
-    expect(clearPromptMode).toHaveBeenCalledWith('conv-2');
   });
 
   it('waits for a running agent to stop before posting cancellation', async () => {

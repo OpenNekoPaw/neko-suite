@@ -361,8 +361,6 @@ export class SkillInjectionCoordinator {
    */
   private _buildMinimalCtx(activeSkillName: string): PromptContext {
     return freezePromptContext({
-      runId: null,
-      stage: null,
       locale: this._deps.getLocale?.() ?? 'en',
       projectPath: '',
       activeSkillName,

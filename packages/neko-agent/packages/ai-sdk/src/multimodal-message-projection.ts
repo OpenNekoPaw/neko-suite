@@ -236,12 +236,14 @@ export async function projectPerceptionCardToContentParts(
   if (card.modality === 'image' && providerModalities.image) {
     const imageRef = selectImagePerceptualRef(card);
     if (!imageRef) {
-      diagnostics.push({
-        code: 'asset-ref-missing',
-        assetId: card.assetId,
-        modality: 'image',
-        message: 'Image perception card does not include a provider-loadable asset reference.',
-      });
+      if (card.layerStatus.layer2 !== 'skipped') {
+        diagnostics.push({
+          code: 'asset-ref-missing',
+          assetId: card.assetId,
+          modality: 'image',
+          message: 'Image perception card does not include a provider-loadable asset reference.',
+        });
+      }
     } else if (!options.assetLoader) {
       diagnostics.push({
         code: 'asset-loader-missing',
@@ -278,12 +280,14 @@ export async function projectPerceptionCardToContentParts(
   if (card.modality === 'video' && providerModalities.video) {
     const videoRef = selectVideoPerceptualRef(card);
     if (!videoRef) {
-      diagnostics.push({
-        code: 'asset-ref-missing',
-        assetId: card.assetId,
-        modality: 'video',
-        message: 'Video perception card does not include a provider-loadable asset reference.',
-      });
+      if (card.layerStatus.layer2 !== 'skipped') {
+        diagnostics.push({
+          code: 'asset-ref-missing',
+          assetId: card.assetId,
+          modality: 'video',
+          message: 'Video perception card does not include a provider-loadable asset reference.',
+        });
+      }
     } else if (!options.assetLoader) {
       diagnostics.push({
         code: 'asset-loader-missing',

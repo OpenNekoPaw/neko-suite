@@ -6,8 +6,6 @@
  * Scenarios cover:
  *  - default EN base, no skill active
  *  - default ZH base, no skill active
- *  - EN base with creation-persona skill active
- *  - EN base with execution-persona skill active
  *  - Plan mode EN
  *
  * When expected changes happen (e.g. Stage C strips identity from base), update
@@ -20,51 +18,11 @@ import {
   BUILTIN_DEFAULT_PROMPT_ZH,
   BUILTIN_PLAN_PROMPT_EN,
 } from '../builtin-prompts';
-import { ArtifactSchemaModule } from '../modules/schema/artifact-schema-module';
 import { SubpackageFragmentsModule } from '../modules/environment/subpackage-fragments-module';
-import { freezePromptContext } from '../context';
-
-const creationPersonaSkill = {
-  name: 'creation-persona',
-  content: [
-    '# Creation Persona',
-    '',
-    '## Observation',
-    'Inspect user intent and available evidence before selecting a creative workflow.',
-    '',
-    '## Rationale',
-    'Explain why the selected workflow fits the current task.',
-  ].join('\n'),
-};
-
-const executionPersonaSkill = {
-  name: 'execution-persona',
-  content: [
-    '# Execution Persona',
-    '',
-    '## Observation',
-    'Track concrete operation evidence while executing the approved plan.',
-    '',
-    '## Recovery Guidance',
-    'When execution fails, summarize the failing operation and next recovery step.',
-  ].join('\n'),
-};
 
 function composeBaseOnly(base: string): string {
   const composer = new SystemPromptComposer();
   composer.setBase(base);
-  return composer.compose();
-}
-
-function composeBaseWithSkill(base: string, skillName: string, skillContent: string): string {
-  const composer = new SystemPromptComposer();
-  composer.setBase(base);
-  composer.setSection({
-    id: `skill:${skillName}`,
-    layer: 'skill',
-    content: skillContent,
-    priority: 50,
-  });
   return composer.compose();
 }
 
@@ -103,10 +61,11 @@ describe('prompt golden snapshots', () => {
       expect(prompt).toMatch(
         /do not claim generated, written, exported, sent, or completed output|不得把预期内容描述成已完成结果/,
       );
-      expect(prompt).toMatch(/domain node JSON|领域节点 JSON/);
+      expect(prompt).toMatch(/do not stop after presenting a plan|不得在给出计划后停止/);
       expect(prompt).toMatch(
-        /must not override a domain skill's output contract|不能覆盖领域 Skill 的输出契约/,
+        /actual files, generated assets, project revisions, or Quality evidence|实际文件、生成资产、项目 revision 或 Quality 证据/,
       );
+      expect(prompt).toMatch(/domain node JSON|领域节点 JSON/);
       expect(prompt).toContain('Webview URI');
       expect(prompt).toContain('blob URL');
       expect(prompt).toContain('Engine token');
@@ -127,66 +86,6 @@ describe('prompt golden snapshots', () => {
 
   it('plan mode EN base', () => {
     expect(composeBaseOnly(BUILTIN_PLAN_PROMPT_EN)).toMatchSnapshot();
-  });
-
-  it('EN base + creation-persona active', () => {
-    expect(
-      composeBaseWithSkill(
-        BUILTIN_DEFAULT_PROMPT_EN,
-        creationPersonaSkill.name,
-        creationPersonaSkill.content,
-      ),
-    ).toMatchSnapshot();
-  });
-
-  it('EN base + execution-persona active', () => {
-    expect(
-      composeBaseWithSkill(
-        BUILTIN_DEFAULT_PROMPT_EN,
-        executionPersonaSkill.name,
-        executionPersonaSkill.content,
-      ),
-    ).toMatchSnapshot();
-  });
-
-  // PR3c: creation-persona + ArtifactSchemaModule combined. Proves the
-  // schema extraction is content-equivalent to the pre-PR3c monolithic
-  // persona (the schema section now lives on the schema layer between
-  // base and skill, the persona covers only creative behaviour).
-  it('EN base + creation-persona + schema layer (runId=tiktok-001)', () => {
-    const composer = new SystemPromptComposer();
-    composer.setBase(BUILTIN_DEFAULT_PROMPT_EN);
-
-    // Schema layer injected by ArtifactSchemaModule (simulated — at
-    // runtime the session-level wiring in PR3d will drive this).
-    const schemaModule = new ArtifactSchemaModule();
-    const ctx = freezePromptContext({
-      runId: 'tiktok-001',
-      stage: null,
-      locale: 'en',
-      projectPath: '',
-      activeSkillName: null,
-      activeTools: [],
-    });
-    const schemaSections = schemaModule.renderSync(ctx) ?? [];
-    for (const s of schemaSections) {
-      composer.setSection({
-        id: s.sectionId,
-        layer: s.layer,
-        content: s.content,
-        priority: s.priority ?? 50,
-      });
-    }
-
-    // Skill layer: creation-persona post-extraction (no schema inline).
-    composer.setSection({
-      id: `skill:${creationPersonaSkill.name}`,
-      layer: 'skill',
-      content: creationPersonaSkill.content,
-      priority: 50,
-    });
-
-    expect(composer.compose()).toMatchSnapshot();
   });
 
   // PR3e: sub-package PromptFragments from AgentCapabilityProvider.

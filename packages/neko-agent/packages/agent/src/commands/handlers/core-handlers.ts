@@ -16,7 +16,7 @@ export const handleHelp: CommandHandler = () => ({
 
 /** Build the Extension-owned status read model without terminal prose. */
 export function generateExtensionStatusData(context: CommandContext): Record<string, unknown> {
-  const { config, skillService, conversations, planMode, contextManager } = context;
+  const { config, skillService, conversations, contextManager } = context;
   const activeConversationId = conversations?.getActiveId();
   const tokenCount =
     activeConversationId && contextManager ? contextManager.getTokenCount(activeConversationId) : 0;
@@ -29,7 +29,6 @@ export function generateExtensionStatusData(context: CommandContext): Record<str
     messageCount: conversations?.getActiveMessageCount?.() ?? 0,
     tokenCount,
     activeSkill: skillService?.getActiveSkill()?.name,
-    planMode: planMode?.isEnabled() ?? false,
     executionMode: config?.executionMode ?? 'normal',
   };
 }

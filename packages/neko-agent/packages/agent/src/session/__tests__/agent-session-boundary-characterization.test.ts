@@ -1,25 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
-import {
-  createTool,
-  type AgentValidationCoordinator,
-  type AgentValidationCycle,
-  type AgentValidationEvaluationContext,
-  type AgentValidationMemoryExtractionInput,
-  type AgentValidationMemoryExtractionOutcome,
-  type IService,
-  type StreamChunk,
-} from '@neko/shared';
-import type { Draft, ExecutionPlan, Task } from '@neko-agent/types';
+import * as fs from 'node:fs/promises';
+import * as path from 'node:path';
+import { createTool, type IService, type StreamChunk } from '@neko/shared';
 import { AgentSession } from '../agent-session';
 import type { AgentEvent, AgentSessionConfig, ExecutionMode, IJournalWriter } from '../types';
 import { ToolRegistry } from '../../tools/tool-registry';
-import type {
-  AnyArtifactRecord,
-  ArtifactObservedInput,
-  ArtifactRecord,
-  ArtifactWriteInput,
-  IArtifactService,
-} from '../../artifact/artifact-service';
+import { createCoreTools } from '../../tools/core/core-tools';
 
 async function collect<T>(iterable: AsyncIterable<T>): Promise<T[]> {
   const values: T[] = [];
@@ -96,6 +82,46 @@ async function* streamToolCall(): AsyncIterable<StreamChunk> {
   };
 }
 
+async function* streamCurrentPlanReads(): AsyncIterable<StreamChunk> {
+  for (const [id, filePath] of [
+    ['call-plan', 'plan.md'],
+    ['call-source', 'story.md'],
+  ] as const) {
+    yield {
+      type: 'tool_call',
+      toolCall: {
+        id,
+        type: 'function',
+        function: { name: 'Read', arguments: JSON.stringify({ file_path: filePath }) },
+      },
+    };
+  }
+  yield {
+    type: 'done',
+    finishReason: 'tool_calls',
+    usage: { promptTokens: 2, completionTokens: 1, totalTokens: 3 },
+  };
+}
+
+async function* streamCurrentRenderCall(): AsyncIterable<StreamChunk> {
+  yield {
+    type: 'tool_call',
+    toolCall: {
+      id: 'call-render',
+      type: 'function',
+      function: {
+        name: 'RenderShot',
+        arguments: JSON.stringify({ shotId: 'shot-1', source: 'story.md' }),
+      },
+    },
+  };
+  yield {
+    type: 'done',
+    finishReason: 'tool_calls',
+    usage: { promptTokens: 2, completionTokens: 1, totalTokens: 3 },
+  };
+}
+
 async function* streamEmptyResponse(): AsyncIterable<StreamChunk> {
   yield {
     type: 'done',
@@ -117,10 +143,11 @@ function createConfig(overrides: Partial<AgentSessionConfig> = {}): AgentSession
 
 function readCompressorTokenThreshold(session: AgentSession): number {
   return (
-    (session as unknown as Record<string, { getConfig: () => { triggers: { tokenThreshold: number } } }>)[
-      '_compressor'
-    ]
-  ).getConfig().triggers.tokenThreshold;
+    session as unknown as Record<
+      string,
+      { getConfig: () => { triggers: { tokenThreshold: number } } }
+    >
+  )['_compressor'].getConfig().triggers.tokenThreshold;
 }
 
 class CapturingJournalWriter implements IJournalWriter {
@@ -148,190 +175,6 @@ class CapturingJournalWriter implements IJournalWriter {
   );
   readonly flush = vi.fn(async () => {});
   readonly dispose = vi.fn(async () => {});
-}
-
-class MemoryArtifactService implements IArtifactService {
-  readonly records = new Map<string, Map<AnyArtifactRecord['kind'], AnyArtifactRecord>>();
-  readonly creationIdsByRun = new Map<string, string>();
-  readonly restore = vi.fn(async () => []);
-  readonly flush = vi.fn(async () => {});
-  readonly dispose = vi.fn(async () => {});
-
-  write(input: ArtifactWriteInput<'draft'>): Promise<ArtifactRecord<'draft'>>;
-  write(input: ArtifactWriteInput<'plan'>): Promise<ArtifactRecord<'plan'>>;
-  write(input: ArtifactWriteInput<'task'>): Promise<ArtifactRecord<'task'>>;
-  async write(input: ArtifactWriteInput): Promise<AnyArtifactRecord> {
-    switch (input.kind) {
-      case 'draft':
-        return this.writeDraft(input.runId, input.value as Draft);
-      case 'plan':
-        return this.writePlan(input.runId, input.value as ExecutionPlan);
-      case 'task':
-        return this.writeTask(input.runId, input.value as Task);
-    }
-  }
-
-  async writeDraft(runId: string, draft: Draft): Promise<ArtifactRecord<'draft'>> {
-    const creationId = this.creationIdForRun(runId, draft.id);
-    return this.remember({
-      kind: 'draft',
-      runId,
-      artifactId: draft.id,
-      path: `neko/creations/${creationId}/brief.md`,
-      updatedAt: draft.updatedAt,
-      content: draft.title,
-      value: draft,
-    });
-  }
-
-  async writePlan(runId: string, plan: ExecutionPlan): Promise<ArtifactRecord<'plan'>> {
-    const creationId = this.creationIdForRun(runId, plan.draftId);
-    return this.remember({
-      kind: 'plan',
-      runId,
-      artifactId: plan.id,
-      path: `neko/creations/${creationId}/plan.md`,
-      updatedAt: plan.updatedAt,
-      content: plan.title,
-      value: plan,
-    });
-  }
-
-  async writeTask(runId: string, task: Task): Promise<ArtifactRecord<'task'>> {
-    const creationId = this.creationIdForRun(runId, task.id);
-    return this.remember({
-      kind: 'task',
-      runId,
-      artifactId: task.id,
-      path: `neko/creations/${creationId}/checklist.md`,
-      updatedAt: task.updatedAt,
-      content: task.id,
-      value: task,
-    });
-  }
-
-  ingestObservedArtifact(input: ArtifactObservedInput<'draft'>): ArtifactRecord<'draft'>;
-  ingestObservedArtifact(input: ArtifactObservedInput<'plan'>): ArtifactRecord<'plan'>;
-  ingestObservedArtifact(input: ArtifactObservedInput<'task'>): ArtifactRecord<'task'>;
-  ingestObservedArtifact(input: ArtifactObservedInput): AnyArtifactRecord {
-    const now = Date.now();
-    switch (input.kind) {
-      case 'draft':
-        return this.remember({
-          kind: 'draft',
-          runId: input.runId,
-          artifactId: `draft-${input.runId}`,
-          path: input.path,
-          updatedAt: now,
-          content: input.content,
-          value: createDraft(`draft-${input.runId}`, now),
-        });
-      case 'plan':
-        return this.remember({
-          kind: 'plan',
-          runId: input.runId,
-          artifactId: `plan-${input.runId}`,
-          path: input.path,
-          updatedAt: now,
-          content: input.content,
-          value: createPlan(`plan-${input.runId}`, now),
-        });
-      case 'task':
-        return this.remember({
-          kind: 'task',
-          runId: input.runId,
-          artifactId: `task-${input.runId}`,
-          path: input.path,
-          updatedAt: now,
-          content: input.content,
-          value: createTask(`task-${input.runId}`, now),
-        });
-    }
-  }
-
-  getByRunId(runId: string, kind: 'draft'): ArtifactRecord<'draft'> | null;
-  getByRunId(runId: string, kind: 'plan'): ArtifactRecord<'plan'> | null;
-  getByRunId(runId: string, kind: 'task'): ArtifactRecord<'task'> | null;
-  getByRunId(runId: string, kind: AnyArtifactRecord['kind']): AnyArtifactRecord | null {
-    return this.records.get(runId)?.get(kind) ?? null;
-  }
-
-  listRunIds(): readonly string[] {
-    return Array.from(this.records.keys());
-  }
-
-  listByRunId(runId: string): readonly AnyArtifactRecord[] {
-    return Array.from(this.records.get(runId)?.values() ?? []);
-  }
-
-  getCreationIdByRunId(runId: string): string | null {
-    return this.creationIdsByRun.get(runId) ?? null;
-  }
-
-  private remember<T extends AnyArtifactRecord>(record: T): T {
-    const creationId = extractCreationId(record.path);
-    if (creationId) {
-      this.creationIdsByRun.set(record.runId, creationId);
-    }
-    const byKind = this.records.get(record.runId) ?? new Map();
-    byKind.set(record.kind, record);
-    this.records.set(record.runId, byKind);
-    return record;
-  }
-
-  private creationIdForRun(runId: string, seed: string): string {
-    const existing = this.creationIdsByRun.get(runId);
-    if (existing) {
-      return existing;
-    }
-    const creationId = `creation-${seed}`;
-    this.creationIdsByRun.set(runId, creationId);
-    return creationId;
-  }
-}
-
-function extractCreationId(path: string): string | null {
-  const match = /(?:^|\/)neko\/creations\/([^/]+)\//.exec(path);
-  return match?.[1] ?? null;
-}
-
-class OneShotFeedbackCoordinator implements AgentValidationCoordinator {
-  private used = false;
-  readonly observe = vi.fn();
-  readonly dispose = vi.fn();
-  readonly getBeforeThinkHooks = () => [];
-  readonly getSignalHistory = () => [];
-  readonly getDecisionHistory = () => [];
-  readonly getActionHistory = () => [];
-  readonly extractMemory = async (
-    _input: AgentValidationMemoryExtractionInput,
-  ): Promise<AgentValidationMemoryExtractionOutcome> => ({
-    kind: 'skipped',
-    timestamp: 100,
-    sourceEventIds: [],
-    reason: 'disabled',
-  });
-
-  evaluatePending(context: AgentValidationEvaluationContext = {}): AgentValidationCycle | null {
-    if (this.used) {
-      return null;
-    }
-    this.used = true;
-    return {
-      timestamp: 100,
-      currentStage: context.currentStage,
-      activeRunId: context.activeRunId,
-      signals: [],
-      decisions: [{ action: 'continue', reason: 'no-actionable-signal' }],
-      actions: [
-        {
-          kind: 'set-guidance',
-          guidance: '- Retry with a smaller edit.',
-          signalKinds: ['tool-failure'],
-        },
-      ],
-    };
-  }
 }
 
 describe('AgentSession boundary characterization', () => {
@@ -364,7 +207,6 @@ describe('AgentSession boundary characterization', () => {
     const session = new AgentSession(
       createConfig({
         journalWriter,
-        stageTracking: { guardian: false },
       }),
     );
 
@@ -383,13 +225,11 @@ describe('AgentSession boundary characterization', () => {
     expect(session.getHistory().map((message) => message.role)).toEqual(
       expect.arrayContaining(['system', 'user', 'assistant']),
     );
-    expect(session.getCurrentStage()).toBe('apply');
-
     session.dispose();
     expect(journalWriter.dispose).toHaveBeenCalledTimes(1);
   });
 
-  it('preserves tool confirmation flow in ask mode', async () => {
+  it('routes ask-mode tool confirmation through the ordinary approval engine', async () => {
     const registry = new ToolRegistry();
     const execute = vi.fn(async () => ({ success: true, data: { path: 'out.txt' } }));
     registry.register(
@@ -413,15 +253,123 @@ describe('AgentSession boundary characterization', () => {
 
     const events = await collect(session.execute('write it'));
 
-    expect(onConfirmTool).toHaveBeenCalledWith(
-      expect.objectContaining({
-        toolCall: expect.objectContaining({ id: 'call-write', name: 'WriteFile' }),
-      }),
-    );
+    expect(onConfirmTool).not.toHaveBeenCalled();
     expect(execute).toHaveBeenCalledTimes(1);
     expect(events).toEqual(expect.arrayContaining([expect.objectContaining({ type: 'done' })]));
     expect(session.getPendingConfirmations()).toEqual([]);
     session.dispose();
+  });
+
+  it('continues by re-reading current Markdown and resolving the current Tool implementation', async () => {
+    const fixtureRoot = path.resolve(
+      process.cwd(),
+      '.test-workspaces',
+      `agent-native-plan-continuation-${process.pid}`,
+    );
+    await fs.rm(fixtureRoot, { recursive: true, force: true });
+    await fs.mkdir(path.join(fixtureRoot, 'neko', 'generated', 'video'), { recursive: true });
+    await fs.writeFile(path.join(fixtureRoot, 'plan.md'), '# Approved plan\nOLD UNIT\n', 'utf-8');
+    await fs.writeFile(path.join(fixtureRoot, 'story.md'), '# Story\nOLD SOURCE\n', 'utf-8');
+
+    try {
+      // Creator edits remain ordinary files. Continue must observe these current
+      // contents instead of replaying content captured when approval occurred.
+      await fs.writeFile(
+        path.join(fixtureRoot, 'plan.md'),
+        '# Approved plan\nCURRENT PLAN UNIT: render shot-1\n',
+        'utf-8',
+      );
+      await fs.writeFile(
+        path.join(fixtureRoot, 'story.md'),
+        '# Story\nCURRENT SOURCE: Rin enters the station.\n',
+        'utf-8',
+      );
+
+      const registry = new ToolRegistry();
+      for (const tool of createCoreTools({ defaultCwd: fixtureRoot })) registry.register(tool);
+      const staleExecute = vi.fn(async () => ({
+        success: true,
+        data: { implementation: 'stale' },
+      }));
+      registry.register(
+        createTool({
+          name: 'RenderShot',
+          description: 'Render one approved shot',
+          category: 'media',
+          parameters: {
+            type: 'object',
+            properties: { shotId: { type: 'string' }, source: { type: 'string' } },
+            required: ['shotId', 'source'],
+          },
+          execute: staleExecute,
+        }),
+      );
+      const currentExecute = vi.fn(async () => {
+        const outputPath = path.join(fixtureRoot, 'neko', 'generated', 'video', 'shot-1.mp4');
+        await fs.writeFile(outputPath, 'rendered-current-tool', 'utf-8');
+        return {
+          success: true,
+          data: { implementation: 'current', path: 'neko/generated/video/shot-1.mp4' },
+        };
+      });
+      registry.register(
+        createTool({
+          name: 'RenderShot',
+          description: 'Render one approved shot with current capability',
+          category: 'media',
+          parameters: {
+            type: 'object',
+            properties: { shotId: { type: 'string' }, source: { type: 'string' } },
+            required: ['shotId', 'source'],
+          },
+          execute: currentExecute,
+        }),
+      );
+
+      let serviceCall = 0;
+      let messagesBeforeRender = '';
+      const service: IService = {
+        chat: async () => {
+          throw new Error('chat() is not used');
+        },
+        chatStream: (messages) => {
+          serviceCall += 1;
+          if (serviceCall === 1) return streamCurrentPlanReads();
+          if (serviceCall === 2) {
+            messagesBeforeRender = JSON.stringify(messages);
+            return streamCurrentRenderCall();
+          }
+          return streamText('Delivered neko/generated/video/shot-1.mp4');
+        },
+        embed: async () => ({ embeddings: [] }),
+      };
+      const journalWriter = new CapturingJournalWriter();
+      const session = new AgentSession(
+        createConfig({
+          service,
+          toolRegistry: registry,
+          journalWriter,
+          executionMode: 'auto',
+          onConfirmTool: async () => true,
+          maxIterations: 4,
+        }),
+      );
+
+      const events = await collect(session.execute('Continue the approved current plan.'));
+
+      expect(messagesBeforeRender).toContain('CURRENT PLAN UNIT: render shot-1');
+      expect(messagesBeforeRender).toContain('CURRENT SOURCE: Rin enters the station.');
+      expect(staleExecute).not.toHaveBeenCalled();
+      expect(currentExecute).toHaveBeenCalledOnce();
+      expect(
+        await fs.readFile(path.join(fixtureRoot, 'neko/generated/video/shot-1.mp4'), 'utf-8'),
+      ).toBe('rendered-current-tool');
+      expect(events).toEqual(expect.arrayContaining([expect.objectContaining({ type: 'done' })]));
+      expect(journalWriter.events.some((event) => 'stage' in event)).toBe(false);
+      session.dispose();
+    } finally {
+      await fs.rm(fixtureRoot, { recursive: true, force: true });
+    }
   });
 
   it('preserves context compression through the public session API', async () => {
@@ -470,76 +418,4 @@ describe('AgentSession boundary characterization', () => {
     expect((session as unknown as { _config: AgentSessionConfig })._config.maxTokens).toBe(8192);
     session.dispose();
   });
-
-  it('preserves artifact write, restore visibility, feedback guidance, and flush behavior', async () => {
-    const artifactService = new MemoryArtifactService();
-    const validationCoordinator = new OneShotFeedbackCoordinator();
-    const session = new AgentSession(
-      createConfig({
-        artifactService,
-        validationCoordinator,
-        stageTracking: { guardian: false },
-      }),
-    );
-    const draft = createDraft('draft-1', 100);
-    const plan = createPlan('plan-1', 101);
-    const task = createTask('task-1', 102);
-
-    const legacyTrace = { runId: 'legacy-trace-artifact' };
-    await session.writeDraftArtifact(draft, legacyTrace);
-    await session.writePlanArtifact(plan, legacyTrace);
-    await session.writeTaskArtifact(task, legacyTrace);
-    await session.flushWorkspaceSink();
-
-    const artifactRunIds = session.listArtifactRunIds();
-    expect(artifactRunIds).toHaveLength(1);
-    expect(session.getArtifactsForRun(artifactRunIds[0]!).map((record) => record.kind)).toEqual([
-      'draft',
-      'plan',
-      'task',
-    ]);
-
-    await collect(session.execute('apply feedback guidance'));
-
-    expect(session.getValidationCycles()).toHaveLength(1);
-    expect(String(session.getHistory()[0]?.content)).toContain('Retry with a smaller edit');
-    session.dispose();
-    expect(artifactService.dispose).toHaveBeenCalledTimes(1);
-    expect(validationCoordinator.dispose).toHaveBeenCalledTimes(1);
-  });
 });
-
-function createDraft(id: string, now: number): Draft {
-  return {
-    id,
-    title: 'Test Draft',
-    status: 'draft',
-    domain: 'agent',
-    createdAt: now,
-    updatedAt: now,
-    intent: 'intent',
-    approach: 'approach',
-    artifact: 'artifact',
-  };
-}
-
-function createPlan(id: string, now: number): ExecutionPlan {
-  return {
-    id,
-    draftId: 'draft-1',
-    title: 'Test Plan',
-    status: 'ready',
-    createdAt: now,
-    updatedAt: now,
-    steps: [],
-  };
-}
-
-function createTask(id: string, now: number): Task {
-  return {
-    id,
-    createdAt: now,
-    updatedAt: now,
-    items: [{ id: 'task-item-1', content: 'Do work', status: 'pending' }],
-  };
-}

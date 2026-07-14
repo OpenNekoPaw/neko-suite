@@ -140,6 +140,38 @@ describe('node content access runtime path variables', () => {
     expect(Buffer.from(result.bytes ?? []).toString('utf8')).toBe('generated-image-bytes');
     expect(Object.keys((await manifestStore.load()).entries)).toHaveLength(0);
   });
+
+  it('loads pathless generated ResourceRefs through the owning asset resolver', async () => {
+    const workDir = createTempDir();
+    const generatedPath = path.join(workDir, 'neko/generated/image/asset-2.png');
+    const imageBytes = Buffer.from('indexed-generated-image-bytes');
+    fs.mkdirSync(path.dirname(generatedPath), { recursive: true });
+    fs.writeFileSync(generatedPath, imageBytes);
+    const manifestStore = createMemoryManifestStore();
+    const runtime = createNodeContentAccessRuntime({
+      host: createNodeWorkspaceContentHostAdapter({ workDir }),
+      resourceCacheManifestStore: manifestStore,
+      resolveGeneratedAsset: async (ref) =>
+        ref.source.kind === 'generated-asset' && ref.source.generatedAssetId === 'asset-2'
+          ? { path: generatedPath, mimeType: 'image/png' }
+          : undefined,
+    });
+    const resourceRef = createGeneratedAssetResourceRef({
+      assetId: 'asset-2',
+      mimeType: 'image/png',
+    });
+
+    const result = await runtime.loadProviderAsset({
+      caller: 'perception-asset-loader',
+      source: resourceRef,
+      preferredTarget: 'bytes',
+    });
+
+    expect(result.status).toBe('ready');
+    expect(result.mimeType).toBe('image/png');
+    expect(Buffer.from(result.bytes ?? []).toString('utf8')).toBe('indexed-generated-image-bytes');
+    expect(Object.keys((await manifestStore.load()).entries)).toHaveLength(0);
+  });
 });
 
 function createTempDir(): string {

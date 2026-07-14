@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { AgentBackgroundTask, SubAgentWorkItem } from '@neko-agent/types';
 import {
   isTaskWorkItem,
+  projectAgentWorkItemsToTodo,
   projectBackgroundTaskToWorkItem,
   projectBackgroundTasksToWorkItems,
   projectMediaTaskToBackgroundTask,
@@ -236,6 +237,106 @@ describe('work-item-projector', () => {
         runMode: 'background',
         modelTier: 'fast',
       },
+    });
+  });
+
+  it('projects bounded near-term TODO rows without copying task step graphs', () => {
+    const running = projectBackgroundTaskToWorkItem({
+      conversationId: 'conv-1',
+      task: {
+        ...createBackgroundTask('task-running', 'Render current shot'),
+        status: 'processing',
+        progress: 40,
+        steps: [
+          { id: 'shot-1', name: 'Shot 1', status: 'running' },
+          { id: 'shot-2', name: 'Shot 2', status: 'running' },
+        ],
+      },
+    });
+    const blocked = projectBackgroundTaskToWorkItem({
+      conversationId: 'conv-1',
+      task: {
+        ...createBackgroundTask('task-blocked', 'Render blocked shot'),
+        status: 'failed',
+        error: 'Missing reference',
+      },
+    });
+    const pending = projectBackgroundTaskToWorkItem({
+      conversationId: 'conv-1',
+      task: { ...createBackgroundTask('task-pending', 'Prepare audio'), status: 'queued' },
+    });
+    const completedWithoutResult = projectBackgroundTaskToWorkItem({
+      conversationId: 'conv-1',
+      task: createBackgroundTask('task-completed', 'Inspect source'),
+    });
+    const otherConversation = projectBackgroundTaskToWorkItem({
+      conversationId: 'conv-2',
+      task: createBackgroundTask('task-other', 'Unrelated'),
+    });
+
+    const projection = projectAgentWorkItemsToTodo({
+      conversationId: 'conv-1',
+      items: [completedWithoutResult, pending, otherConversation, blocked, running],
+      maxItems: 4,
+    });
+
+    expect(projection).toEqual([
+      expect.objectContaining({
+        content: 'Render current shot',
+        status: 'in_progress',
+        sourceWorkItemId: 'task-running',
+      }),
+      expect.objectContaining({ content: 'Render blocked shot', status: 'blocked' }),
+      expect.objectContaining({ content: 'Prepare audio', status: 'pending' }),
+      expect.objectContaining({ content: 'Inspect source', status: 'completed' }),
+    ]);
+    expect(projection).toHaveLength(4);
+    expect(projection.filter((item) => item.sourceWorkItemId === running.id)).toHaveLength(1);
+    expect(projection.some((item) => item.content === 'Shot 1')).toBe(false);
+    expect(completedWithoutResult.result).toBeUndefined();
+  });
+
+  it('keeps TODO projection disposable and rejects invalid bounds', () => {
+    const source = projectBackgroundTaskToWorkItem({
+      conversationId: 'conv-1',
+      task: { ...createBackgroundTask('task-1', 'Generate frame'), status: 'processing' },
+    });
+    const input = { conversationId: 'conv-1', items: [source] } as const;
+
+    const first = projectAgentWorkItemsToTodo(input);
+    const rebuilt = projectAgentWorkItemsToTodo(input);
+
+    expect(rebuilt).toEqual(first);
+    expect(rebuilt).not.toBe(first);
+    expect(source.status).toBe('processing');
+    expect(() => projectAgentWorkItemsToTodo({ ...input, maxItems: 0 })).toThrow(
+      'TODO projection limit must be a positive safe integer',
+    );
+  });
+
+  it('bounds TODO projection and exposes at most one in-progress item', () => {
+    const items = Array.from({ length: 8 }, (_, index) =>
+      projectBackgroundTaskToWorkItem({
+        conversationId: 'conv-1',
+        task: {
+          ...createBackgroundTask(`task-${index}`, `Render shot ${index}`),
+          status: 'processing',
+          updatedAt: new Date(Date.UTC(2026, 0, 1, 0, 0, index)).toISOString(),
+        },
+      }),
+    );
+
+    const projection = projectAgentWorkItemsToTodo({
+      conversationId: 'conv-1',
+      items,
+    });
+
+    expect(projection).toHaveLength(6);
+    expect(projection.filter((item) => item.status === 'in_progress')).toHaveLength(1);
+    expect(projection.filter((item) => item.status === 'pending')).toHaveLength(5);
+    expect(projection[0]).toMatchObject({
+      content: 'Render shot 7',
+      status: 'in_progress',
     });
   });
 });

@@ -24,7 +24,6 @@ import type {
   AgentTaskResultObservation,
   AgentTaskResultDeliveryPolicy,
 } from '@neko/shared';
-import type { ArtifactWatcherFactory } from '../runtime/types';
 import type { ToolTraitsRegistry } from '../permission/tool-traits-registry';
 import type {
   PerceptionClassifyClient,
@@ -257,9 +256,8 @@ export interface AgentSessionConfig {
    * Optional host/skill-owned validation coordinator factory.
    *
    * AgentSession calls this only after its generic runtime ports
-   * (EventBus/StageTracker/project memory) are available. This keeps concrete
-   * validation policies outside Agent core while allowing skills to subscribe to
-   * agent-owned runtime events through stable shared ports.
+   * (workspace/project memory) are available. This keeps concrete validation
+   * policies outside Agent core.
    */
   validationCoordinatorFactory?: import('@neko/shared').AgentValidationCoordinatorFactory;
 
@@ -275,13 +273,6 @@ export interface AgentSessionConfig {
    * generic validation signals. Domain packages own concrete adapter rules.
    */
   toolResultValidationAdapters?: readonly import('@neko/shared').AgentToolResultValidationAdapter[];
-
-  /**
-   * Optional creative-process recovery provider. It only receives validation
-   * decisions and may return stage guidance; it must not execute tools or
-   * mutate project state.
-   */
-  creativeProcessRecoveryPolicy?: import('@neko/shared').AgentCreativeProcessRecoveryPolicy;
 
   /**
    * Optional skill/host-owned technical recovery chain factory.
@@ -339,36 +330,6 @@ export interface AgentSessionConfig {
   perceptionPipeline?: import('../perception').IPerceptionPipeline;
 
   /**
-   * Optional runtime ArtifactService.
-   *
-   * When provided, Draft / Plan / Task writes go through this service so
-   * session callers, runtime bootstrap, and host surfaces share the same
-   * artifact persistence + run-binding entrypoint. When omitted but
-   * `workspace.fsOps.writeFile` exists, AgentSession may bootstrap a default
-   * workspace-backed service.
-   */
-  artifactService?: import('../artifact/artifact-service').IArtifactService;
-
-  /**
-   * Optional runtime artifact watcher factory.
-   *
-   * When supplied, AgentSession delegates draft/plan/task watch bootstrap to
-   * the runtime artifact plane instead of directly instantiating the default
-   * node-backed watcher. Hosts should normally provide this through the
-   * unified runtime bootstrap (`IArtifactStore.createArtifactWatcher`).
-   */
-  artifactWatcherFactory?: ArtifactWatcherFactory;
-
-  /**
-   * Optional staged-creation task projection adapter.
-   *
-   * When provided, Task artifacts are mirrored into the shared task plane
-   * (for example TaskManager-backed UI surfaces) so checklist progress no
-   * longer lives only inside markdown artifacts or retired artifact indexes.
-   */
-  creationTaskProjection?: import('../task').ICreationTaskProjection;
-
-  /**
    * JSONL journal writer for session event persistence.
    * When provided, all non-streaming events are appended to a JSONL file
    * for crash recovery and session replay.
@@ -388,43 +349,6 @@ export interface AgentSessionConfig {
    * Without this, auto mode unconditionally allows (backward compatible).
    */
   traitsRegistry?: ToolTraitsRegistry;
-
-  /**
-   * Optional built-in IDC profile guidance.
-   *
-   * When provided, AgentSession enables StageTracker, ApprovalEngine,
-   * StageGuardian, and optional persona Skill projection on top of the normal
-   * Agent ReAct loop. This is prompt/stage guidance only; it does not create a
-   * separate workflow, run store, or creation runtime.
-   */
-  stageTracking?: {
-    /**
-     * Optional source for persona Skills. Must be paired with
-     * `skillService`; when omitted, stage projection still runs but stage changes do
-     * not swap persona prompts.
-     */
-    skillRegistry?: import('@neko/shared').ISkillRegistry;
-    /**
-     * Optional injector for persona Skills. Must be paired with
-     * `skillRegistry`; when omitted, stage projection still runs but persona binding is
-     * skipped.
-     */
-    skillService?: import('../skill/skill-service').SkillService;
-    /**
-     * Skill lifecycle projection for stage persona records.
-     * When supplied, stage persona activation writes lifecycle records instead
-     * of mutating the single active injection adapter slot.
-     */
-    skillLifecycleRuntime?: import('../skill/skill-lifecycle-runtime').SkillLifecycleRuntime;
-    /** Initial built-in IDC profile stage (default: none — tracker stays uninitialised). */
-    initialStage?: import('@neko-agent/types').IdcStage;
-    /**
-     * Optional StageGuardian configuration (ADR §5.4, §6.5). When
-     * omitted the guardian uses defaults (ordered-entry enforcement on,
-     * timeout disabled). Set `enabled: false` to skip installing it.
-     */
-    guardian?: false | import('../skill/stage-guardian').StageGuardianConfig;
-  };
 
   /**
    * Workspace persistence (ADR §7.4). When supplied, AgentSession creates a
@@ -461,7 +385,6 @@ export type AgentEventType =
   | 'compaction' // Working-memory compaction summary written to journal
   | 'compaction_failed' // Compaction attempt failed and tripped/advanced circuit state
   | 'memory_extraction' // Semantic memory extraction/write pipeline event
-  | 'validation.stage_transition_requested' // Creative-process recovery requested retry/regress/restart guidance
   | 'agent.observation.created' // Agent-first multimodal observation recorded
   | 'agent.evidence.attached' // Optional evidence attached to an observation/rationale
   | 'agent.rationale.created' // Agent decision rationale recorded
@@ -593,15 +516,6 @@ export interface AgentEvent {
     writeStatus: 'pending' | 'written' | 'rejected-by-user' | 'dedup';
   };
 
-  /** Creative-process recovery transition request event */
-  validationStageTransition?: {
-    timestamp: number;
-    activeRunId?: string;
-    currentStageId?: string;
-    decision: import('@neko/shared').AgentValidationDecision;
-    guidance: import('@neko/shared').AgentStageTransitionGuidance;
-  };
-
   /** Agent-first multimodal observation event */
   agentObservation?: import('@neko/shared').AgentObservation;
 
@@ -701,12 +615,6 @@ export interface IAgentSession {
    */
   setExecutionModeWithIntent(mode: ExecutionMode, intent: AgentCapabilityActivationIntent): void;
 
-  /** Snapshot of semantic StageGuardian diagnostics raised during this session. */
-  getStageGuardianIssues(): readonly import('../skill').StageGuardianIssue[];
-
-  /** Subscribe to semantic StageGuardian diagnostics. */
-  onStageGuardianIssue(listener: import('../skill').StageGuardianListener): () => void;
-
   /**
    * Wire an ISkillProvider into the meta tools.
    * Called by the extension layer after the skill system is initialized.
@@ -723,19 +631,6 @@ export interface IAgentSession {
   getPromptCompositionProjection(): readonly import('../prompt').PromptCompositionFragmentProjection[];
 
   /**
-   * Get the known IDC artifacts bound to a run.
-   * Defaults to the active run when `runId` is omitted.
-   */
-  getArtifactsForRun(
-    runId?: string,
-  ): readonly import('../artifact/artifact-service').ArtifactRecord[];
-
-  /**
-   * List run ids that currently have persisted Draft / Plan / Task artifacts.
-   */
-  listArtifactRunIds(): readonly string[];
-
-  /**
    * Recent validation coordination cycles assembled from artifact observation,
    * self-evaluation scheduling, and memory extraction.
    */
@@ -745,30 +640,6 @@ export interface IAgentSession {
    * Get the injected OperationTool adapter registry, if this host provides one.
    */
   getOperationToolAdapterRegistry(): IOperationToolAdapterRegistry | null;
-
-  /**
-   * Persist a Draft artifact through the unified runtime artifact service.
-   */
-  writeDraftArtifact(
-    draft: import('@neko-agent/types').Draft,
-    options?: { runId?: string },
-  ): Promise<import('../artifact/artifact-service').ArtifactRecord<'draft'>>;
-
-  /**
-   * Persist an ExecutionPlan artifact through the unified runtime artifact service.
-   */
-  writePlanArtifact(
-    plan: import('@neko-agent/types').ExecutionPlan,
-    options?: { runId?: string },
-  ): Promise<import('../artifact/artifact-service').ArtifactRecord<'plan'>>;
-
-  /**
-   * Persist a Task artifact through the unified runtime artifact service.
-   */
-  writeTaskArtifact(
-    task: import('@neko-agent/types').Task,
-    options?: { runId?: string },
-  ): Promise<import('../artifact/artifact-service').ArtifactRecord<'task'>>;
 
   // ---------------------------------------------------------------------------
   // Execution

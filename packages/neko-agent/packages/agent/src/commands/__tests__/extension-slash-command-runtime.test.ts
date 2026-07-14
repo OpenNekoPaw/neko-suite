@@ -230,10 +230,7 @@ function createDeps(): ExtensionSlashCommandRuntimeDeps {
       model: 'claude-3',
       executionMode: 'auto',
     },
-    planMode: {
-      isEnabled: vi.fn(() => false),
-      toggle: vi.fn(() => false),
-    },
+    updateExecutionMode: vi.fn(),
     contextManager: {
       getTokenCount: vi.fn(() => 100),
       compress: vi.fn(),

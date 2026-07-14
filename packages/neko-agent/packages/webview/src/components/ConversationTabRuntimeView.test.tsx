@@ -163,7 +163,6 @@ function createSettings(): SettingsState {
     temperature: 0.2,
     maxTokens: 8192,
     executionMode: 'ask',
-    promptMode: 'default',
     chatModelOptions: [],
     modelGroups: [],
     ssoSession: null,

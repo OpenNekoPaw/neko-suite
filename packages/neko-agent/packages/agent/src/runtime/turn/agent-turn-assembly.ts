@@ -1,6 +1,5 @@
 import type {
   AgentLlmConfig,
-  AgentLegacyCreationTrace,
   AgentMediaModelSelections,
   MediaUnderstandingModelSelections,
   AgentModelSlots,
@@ -64,14 +63,15 @@ export interface AgentTurnConversationHost<THistoryMessage> {
 
 export interface AgentTurnRuntimeServices<THistoryMessage> {
   readonly conversations: AgentTurnConversationHost<THistoryMessage>;
-  readonly getBaseSystemPrompt: (conversationId: string) => string;
-  readonly isPlanMode: (conversationId: string) => boolean;
+  readonly getBaseSystemPrompt: (
+    conversationId: string,
+    executionMode: 'auto' | 'ask' | 'plan',
+  ) => string;
   readonly getActiveSkillState?: (conversationId: string) => AgentTurnActiveSkillState | undefined;
   readonly getSkillLifecycleProjection?: (
     conversationId: string,
   ) => SkillLifecycleProjection | undefined;
   readonly taskManager?: IRuntimeTaskManager;
-  readonly legacyTrace?: AgentLegacyCreationTrace;
 }
 
 export interface AgentTurnActiveSkillState {
@@ -266,7 +266,6 @@ export function buildAgentTurnRuntimeInput<
       },
     },
     getBaseSystemPrompt: input.runtime.getBaseSystemPrompt,
-    isPlanMode: input.runtime.isPlanMode,
     ...contextAdapters,
     processStream: input.host.processStream,
     ensureSubAgentEventSubscription: input.host.ensureSubAgentEventSubscription,
@@ -278,7 +277,6 @@ export function buildAgentTurnRuntimeInput<
     generateMessageId: input.host.generateMessageId,
     now: input.host.now,
     ...(input.runtime.taskManager ? { taskManager: input.runtime.taskManager } : {}),
-    ...(input.runtime.legacyTrace ? { legacyTrace: input.runtime.legacyTrace } : {}),
   };
 }
 

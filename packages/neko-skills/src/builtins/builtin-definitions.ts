@@ -15,9 +15,6 @@ import {
   storyboardSkill,
   videoSkill,
 } from './creative-media';
-import { creationPersonaSkill, getCreationPersonaSkill } from './creation-persona';
-import { executionPersonaSkill, getExecutionPersonaSkill } from './execution-persona';
-import { getIterationPersonaSkill, iterationPersonaSkill } from './iteration-persona';
 import { getSkillCreatorSkill, skillCreatorSkill } from './skill-creator';
 import type { BuiltinSkillOptions, LocalizedBuiltinSkillContent } from './builtin-skill-content';
 import { localizeBuiltinSkill } from './builtin-skill-content';
@@ -43,10 +40,6 @@ export {
   type CreativeMediaWorkflowStageDescriptor,
 } from './creative-media';
 
-// Creation stage persona skills (docs/architecture/agent-unified-workflow.md §4)
-export { creationPersonaSkill, getCreationPersonaSkill } from './creation-persona';
-export { executionPersonaSkill, getExecutionPersonaSkill } from './execution-persona';
-export { getIterationPersonaSkill, iterationPersonaSkill } from './iteration-persona';
 export { getSkillCreatorSkill, skillCreatorSkill } from './skill-creator';
 
 // =============================================================================
@@ -920,9 +913,6 @@ export function getScriptToTimelineSkill(locale?: string): Skill {
  * not reusable domain guidance.
  */
 export const builtinSkills: Skill[] = [
-  creationPersonaSkill,
-  executionPersonaSkill,
-  iterationPersonaSkill,
   skillCreatorSkill,
   storyboardSkill,
   imageSkill,
@@ -940,9 +930,6 @@ export const builtinSkills: Skill[] = [
 
 export function getBuiltinSkills(options: BuiltinSkillOptions = {}): Skill[] {
   const skills = [
-    getCreationPersonaSkill(options.locale),
-    getExecutionPersonaSkill(options.locale),
-    getIterationPersonaSkill(options.locale),
     getSkillCreatorSkill(options.locale),
     ...getCanonicalCreativeMediaSkills(options.locale),
     getSceneToMusicSkill(options.locale),

@@ -44,7 +44,6 @@ export interface AgentToolResultFeedbackAdapter {
   createSignal(input: AgentToolResultFeedbackAdapterInput): AgentToolReviewFeedbackSignal | null;
 }
 
-export type AgentStageId = string;
 export type AgentArtifactKind = string;
 
 export interface AgentArtifactValidationIssue {
@@ -62,18 +61,6 @@ export interface AgentArtifactInvalidEvent {
   readonly path: string;
   readonly issues: readonly AgentArtifactValidationIssue[];
   readonly at: number;
-}
-
-export interface AgentEventSubscriptionPort {
-  on(channel: string, listener: (event: AgentArtifactInvalidEvent) => void): () => void;
-}
-
-export interface AgentStageExitEvent {
-  readonly stage: AgentStageId;
-}
-
-export interface AgentStageTrackerPort {
-  onExited(listener: (event: AgentStageExitEvent) => void): () => void;
 }
 
 export interface AgentFeedbackMemoryExtractionInput {
@@ -103,8 +90,7 @@ export interface AgentFeedbackMemoryExtractionResult {
 }
 
 export type AgentFeedbackMemoryExtractionOutcome =
-  | AgentFeedbackMemoryExtractionSkipped
-  | AgentFeedbackMemoryExtractionResult;
+  AgentFeedbackMemoryExtractionSkipped | AgentFeedbackMemoryExtractionResult;
 
 export interface AgentProviderExpressionConceptDecision {
   readonly concept: string;
@@ -121,11 +107,6 @@ export type AgentFeedbackSignal =
       readonly artifactKind: AgentArtifactKind;
       readonly path: string;
       readonly issues: readonly AgentArtifactValidationIssue[];
-    }
-  | {
-      readonly kind: 'self-evaluation-requested';
-      readonly observedAt: number;
-      readonly stage: 'apply';
     }
   | {
       readonly kind: 'tool-failure';
@@ -182,11 +163,6 @@ export type AgentFeedbackDecision =
       readonly artifactKind: AgentArtifactKind;
       readonly path: string;
       readonly issueCount: number;
-    }
-  | {
-      readonly action: 'self-evaluate';
-      readonly signalKind: 'self-evaluation-requested';
-      readonly stage: 'apply';
     }
   | {
       readonly action: 'repair';
@@ -286,7 +262,6 @@ export type AgentFeedbackFlowAction =
     };
 
 export interface AgentFeedbackEvaluationContext {
-  readonly currentStage?: AgentStageId | null;
   readonly activeRunId?: string | null;
 }
 
@@ -295,7 +270,6 @@ export interface AgentFeedbackCycle {
   readonly signals: readonly AgentFeedbackSignal[];
   readonly decisions: readonly AgentFeedbackDecision[];
   readonly actions: readonly AgentFeedbackFlowAction[];
-  readonly currentStage?: AgentStageId | null;
   readonly activeRunId?: string | null;
 }
 
@@ -332,8 +306,6 @@ export interface AgentFeedbackCoordinator {
 }
 
 export interface AgentFeedbackCoordinatorFactoryInput {
-  readonly eventBus?: AgentEventSubscriptionPort | null;
-  readonly stageTracker?: AgentStageTrackerPort | null;
   readonly workspace?: AgentFeedbackWorkspacePort;
   readonly projectMemoryManager?: IProjectMemoryManager;
   readonly autoMemoryExtraction?: boolean;
@@ -354,33 +326,6 @@ export interface AgentFeedbackWorkspacePort {
 export type AgentFeedbackCoordinatorFactory = (
   input: AgentFeedbackCoordinatorFactoryInput,
 ) => AgentFeedbackCoordinator;
-
-export type AgentStageTransitionAction = 'retry-stage' | 'regress-to' | 'restart-run';
-
-export interface AgentStageTransitionGuidance {
-  readonly transitionAction: AgentStageTransitionAction;
-  readonly decisionAction: AgentFeedbackDecision['action'];
-  readonly fromStageId?: string;
-  readonly toStageId?: string;
-  readonly reason: string;
-  readonly requiresUserApproval: boolean;
-}
-
-export interface AgentControlPlaneDecisionInput {
-  readonly currentStageId?: string;
-  readonly decision: AgentFeedbackDecision;
-}
-
-export interface AgentControlPlaneDecision {
-  readonly input: AgentControlPlaneDecisionInput;
-  readonly guidance: AgentStageTransitionGuidance | null;
-  readonly createdAt: number;
-}
-
-export interface AgentControlPlane {
-  advise(input: AgentControlPlaneDecisionInput): AgentControlPlaneDecision;
-  getDecisionHistory(): readonly AgentControlPlaneDecision[];
-}
 
 export type AgentToolReviewValidationSignal = AgentToolReviewFeedbackSignal;
 export type AgentToolResultValidationAdapterInput = AgentToolResultFeedbackAdapterInput;
@@ -411,6 +356,3 @@ export interface AgentValidationLoopConfig {
   readonly validationCoordinatorFactory?: AgentValidationCoordinatorFactory;
   readonly toolResultValidationAdapters?: readonly AgentToolResultValidationAdapter[];
 }
-export type AgentCreativeProcessRecoveryDecisionInput = AgentControlPlaneDecisionInput;
-export type AgentCreativeProcessRecoveryDecision = AgentControlPlaneDecision;
-export type AgentCreativeProcessRecoveryPolicy = AgentControlPlane;

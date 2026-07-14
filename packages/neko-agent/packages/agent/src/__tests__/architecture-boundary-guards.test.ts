@@ -204,7 +204,6 @@ describe('agent architecture boundary guards', () => {
   it('keeps runtime collaborators independent from VSCode, React, Webview, and Extension modules', () => {
     const sourceFiles = [
       ...listFiles(join(agentSrc, 'runtime')),
-      join(agentSrc, 'session/session-artifact-facade.ts'),
       join(agentSrc, 'session/validation-runtime-bridge.ts'),
       join(agentSrc, 'session/prompt-runtime-facade.ts'),
     ]
@@ -1210,13 +1209,12 @@ describe('agent architecture boundary guards', () => {
   });
 
   it('keeps legacy idc metadata out of Agent creation guidance parsing', () => {
-    const sourceFiles = [
-      join(agentSrc, 'session/creation-turn-planning.ts'),
-      join(agentSrc, 'session/creation-execution-metadata.ts'),
-    ].map((file) => ({
-      relativePath: relative(repoRoot, file).replace(/\\/g, '/'),
-      source: stripTypeScriptComments(readFileSync(file, 'utf-8')),
-    }));
+    const sourceFiles = listFiles(join(agentSrc, 'session'))
+      .filter((file) => file.endsWith('.ts') && !isTestFile(file))
+      .map((file) => ({
+        relativePath: relative(repoRoot, file).replace(/\\/g, '/'),
+        source: stripTypeScriptComments(readFileSync(file, 'utf-8')),
+      }));
 
     const violations = sourceFiles.flatMap(({ relativePath, source }) =>
       [/metadata\[['"]idc['"]\]/, /\bagentCreation\s*\?\?\s*metadata\[['"]idc['"]\]/]
@@ -1278,6 +1276,136 @@ describe('agent architecture boundary guards', () => {
     );
 
     expect(violations).toEqual([]);
+  });
+
+  it('poisons fixed creative Workflow runtimes and executable prompt-chain plan schemas', () => {
+    const legacyFixedWorkflowFiles = new Set([
+      'packages/agent/src/index.ts',
+      'packages/agent/src/media-production/early-stage-orchestrator.ts',
+      'packages/agent/src/media-production/index.ts',
+    ]);
+    const sourceFiles = [
+      ...listFiles(agentSrc),
+      ...listFiles(agentTypesSrc),
+      ...listFiles(extensionSrc),
+      ...listFiles(webviewSrc),
+    ]
+      .filter((file) => file.endsWith('.ts') || file.endsWith('.tsx'))
+      .filter((file) => !isTestFile(file))
+      .map((file) => ({
+        relativePath: relative(repoRoot, file).replace(/\\/g, '/'),
+        source: stripTypeScriptComments(readFileSync(file, 'utf-8')),
+      }))
+      .filter(({ relativePath }) => !relativePath.endsWith('architecture-boundary-guards.test.ts'));
+
+    const workflowRuntimePatterns = [
+      /\bI?WorkflowRuntime\b/,
+      /\bCreativeWorkflowRuntime\b/,
+      /\bWorkflowRun\b/,
+      /\bWorkflowNode\b/,
+      /\bWorkflowTransition\b/,
+      /\bFixedCreativeStageExecutor\b/,
+      /\bCreativeStageExecutor\b/,
+    ];
+    const runtimeViolations = sourceFiles.flatMap(({ relativePath, source }) =>
+      workflowRuntimePatterns
+        .filter((pattern) => pattern.test(source))
+        .map((pattern) => `${relativePath} matches ${pattern}`),
+    );
+
+    const fixedStageViolations = sourceFiles.flatMap(({ relativePath, source }) => {
+      if (legacyFixedWorkflowFiles.has(relativePath)) {
+        return [];
+      }
+      return [/\bMediaProductionStageExecutorPort\b/, /\bMEDIA_PRODUCTION_STAGE_IDS\b/]
+        .filter((pattern) => pattern.test(source))
+        .map((pattern) => `${relativePath} matches ${pattern}`);
+    });
+
+    const promptChainPlanPatterns = [
+      /\bAgentPromptChainExecutablePlan\b/,
+      /\bPromptChain(?:Executable)?Plan\b/,
+      /\bPromptChain(?:Node|Transition|Executor|Runtime|Schema)\b/,
+      /\bpromptChain(?:Executable)?Plan\??\s*:/,
+      /\bpromptChain(?:Nodes|Transitions|RetryPolicy|ToolSchema)\??\s*:/,
+    ];
+    const promptChainViolations = sourceFiles.flatMap(({ relativePath, source }) =>
+      promptChainPlanPatterns
+        .filter((pattern) => pattern.test(source))
+        .map((pattern) => `${relativePath} matches ${pattern}`),
+    );
+
+    const forbiddenFiles = [
+      'packages/agent/src/runtime/workflow-runtime.ts',
+      'packages/agent/src/runtime/creative-workflow-runtime.ts',
+      'packages/agent/src/workflow/workflow-runtime.ts',
+      'packages/agent-types/src/prompt-chain-executable-plan.ts',
+      'packages/agent-types/src/prompt-chain-workflow.ts',
+    ].filter((file) => existsSync(join(repoRoot, file)));
+
+    expect([
+      ...runtimeViolations,
+      ...fixedStageViolations,
+      ...promptChainViolations,
+      ...forbiddenFiles,
+    ]).toEqual([]);
+  });
+
+  it('poisons retired IDC stage, persona, run, and executable-plan runtime paths', () => {
+    const nekoSkillsSrc = join(workspaceRoot, 'packages/neko-skills/src');
+    const productionFiles = [
+      ...listFiles(agentSrc),
+      ...listFiles(agentTypesSrc),
+      ...listFiles(extensionSrc),
+      ...listFiles(webviewSrc),
+      ...listFiles(tuiSrc),
+      ...listFiles(nekoSkillsSrc),
+    ]
+      .filter((file) => (file.endsWith('.ts') || file.endsWith('.tsx')) && !isTestFile(file))
+      .map((file) => ({
+        relativePath: relative(workspaceRoot, file).replace(/\\/g, '/'),
+        source: stripTypeScriptComments(readFileSync(file, 'utf-8')),
+      }))
+      .filter(({ relativePath }) => !relativePath.endsWith('architecture-boundary-guards.test.ts'));
+
+    const forbiddenFiles = [
+      join(agentTypesSrc, 'stage.ts'),
+      join(agentTypesSrc, 'draft.ts'),
+      join(agentTypesSrc, 'execution-plan.ts'),
+      join(agentSrc, 'executor/stage-dispatcher.ts'),
+      join(agentSrc, 'skill/activation/stage-activation-matrix.ts'),
+      join(agentSrc, 'skill/activation/stage-planner.ts'),
+      join(agentSrc, 'skill/activation/stage-registry.ts'),
+      join(agentSrc, 'skill/stage-guardian.ts'),
+      join(agentSrc, 'skill/stage-persona-binding.ts'),
+      join(agentSrc, 'skill/stage-tracker.ts'),
+      join(nekoSkillsSrc, 'builtins/creation-persona.ts'),
+      join(nekoSkillsSrc, 'builtins/execution-persona.ts'),
+      join(nekoSkillsSrc, 'builtins/iteration-persona.ts'),
+    ]
+      .filter((file) => existsSync(file))
+      .map((file) => relative(workspaceRoot, file).replace(/\\/g, '/'));
+
+    const forbiddenRuntimePatterns = [
+      /\bIdcStage\b/,
+      /\bStageActivationDecision\b/,
+      /\bStagePersonaBinding\b/,
+      /\bStageTracker\b/,
+      /\bStageGuardian\b/,
+      /\bstageTracking\??\s*:/,
+      /\b(?:create|restore|resume|start)Idc(?:Run)?\b/i,
+      /['"]stagePersona['"]/,
+      /['"]creation-stage['"]/,
+      /['"]EnterPlanMode['"]/,
+      /['"]ExitPlanMode['"]/,
+    ];
+    const runtimeViolations = productionFiles.flatMap(({ relativePath, source }) =>
+      forbiddenRuntimePatterns
+        .filter((pattern) => pattern.test(source))
+        .map((pattern) => `${relativePath} matches ${pattern}`),
+    );
+
+    expect([...forbiddenFiles, ...runtimeViolations]).toEqual([]);
   });
 
   it('keeps Agent-native creation as prompt/profile guidance, not a parallel runtime or state store', () => {
@@ -1357,15 +1485,13 @@ describe('agent architecture boundary guards', () => {
   });
 
   it('keeps production task projection names creation-native outside explicit legacy trace files', () => {
-    const allowedLegacyFiles = new Set(['packages/agent/src/task/creation-projected-task.ts']);
     const sourceFiles = [...listFiles(join(packageRoot, 'agent-types/src')), ...listFiles(agentSrc)]
       .filter((file) => file.endsWith('.ts') || file.endsWith('.tsx'))
       .filter((file) => !isTestFile(file))
       .map((file) => ({
         relativePath: relative(repoRoot, file).replace(/\\/g, '/'),
         source: stripTypeScriptComments(readFileSync(file, 'utf-8')),
-      }))
-      .filter(({ relativePath }) => !allowedLegacyFiles.has(relativePath));
+      }));
 
     const violations = sourceFiles.flatMap(({ relativePath, source }) => {
       const patterns = [
@@ -1429,20 +1555,14 @@ const allowedAgentSessionFieldNames = new Set([
   '_promptContextProvider',
   '_skillInjectionModule',
   '_agentsMdModule',
-  '_artifactSchemaModule',
   '_subpackageFragmentsModule',
+  '_executionToolRegistry',
   '_skillCoordinator',
   '_lifecycleProjectionSectionIds',
   '_lifecycleProjectionAllowRules',
   '_lifecycleProjectionToolGuard',
   '_lifecycleProjectionActivatedToolSets',
-  '_stageTracker',
-  '_stagePersonaBinding',
-  '_stageGuardian',
   '_activeTurnId',
-  '_activeRunId',
-  '_activeRunStartedAt',
-  '_reactRunnerState',
   '_reactLoopBaseHooks',
   '_runnerHooks',
   '_eventBus',
@@ -1450,12 +1570,9 @@ const allowedAgentSessionFieldNames = new Set([
   '_eventSink',
   '_auditsSink',
   '_stepsSink',
-  '_artifactWatcher',
-  '_artifactFacade',
   '_validationRuntime',
   '_promptRuntime',
   '_validationCoordinator',
-  '_creativeProcessRecoveryPolicy',
   '_operationToolAdapterRegistry',
   '_preferencesReady',
   '_preferencesWarnings',
@@ -1475,7 +1592,7 @@ const allowedAgentSessionFieldNames = new Set([
   '_journalSeq',
   '_taskResultObservationEntries',
   '_streamState',
-  '_currentTurnPlanningContext',
+  '_currentTurnContext',
   '_memoryRecall',
   '_pendingConfirmations',
 ]);

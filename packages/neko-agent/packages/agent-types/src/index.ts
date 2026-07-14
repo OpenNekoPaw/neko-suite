@@ -117,7 +117,6 @@ export {
   createAgentHostRouteCoverageDiagnostics,
 } from './agent-host-runtime-adapter';
 export type { EnabledStateRecord } from './enabled-state';
-export type { AgentLegacyCreationTrace } from './legacy-trace';
 export type {
   AgentPromptChainCheckpointObservation,
   AgentPromptChainCompletedObservation,
@@ -213,6 +212,8 @@ export type {
   AgentMediaTaskError,
   AgentMediaTaskOutput,
   AgentMediaTaskView,
+  AgentTodoProjectionItem,
+  AgentTodoProjectionStatus,
   AgentWorkItem,
   AgentWorkItemBase,
   AgentWorkItemKind,
@@ -243,7 +244,6 @@ export type {
   AgentCapabilityTelemetryEventKind,
   AgentCapabilityTelemetryReason,
   AgentCapabilityTelemetrySnapshot,
-  AgentCapabilityCreationStageRequirement,
   AgentCapabilityPromptChainFragmentContribution,
   AgentArtifactExecutionCapabilityContribution,
   AgentArtifactFacetsContribution,
@@ -340,7 +340,6 @@ export type {
   GeneratedSchemaPurpose,
   GeneratedStructuredSchema,
   PromptGenerationContext,
-  PromptGenerationCreationContext,
   PromptGenerationProviderCapabilities,
   PromptSchemaProviderToolMode,
   PromptSchemaStructuredOutputMode,
@@ -373,12 +372,14 @@ export {
   isTaskWorkItem,
   projectBackgroundTaskToWorkItem,
   projectBackgroundTasksToWorkItems,
+  projectAgentWorkItemsToTodo,
   projectMediaTaskToBackgroundTask,
   projectMediaTaskToWorkItem,
   projectSubAgentEventToWorkItem,
   toSubAgentWorkItemStatus,
   type ProjectBackgroundTaskWorkItemInput,
   type ProjectBackgroundTasksWorkItemsInput,
+  type ProjectAgentWorkItemsToTodoInput,
   type ProjectMediaTaskWorkItemInput,
 } from './work-item-projector';
 export {
@@ -390,12 +391,6 @@ export {
   VIDEO_GENERATION_TOOLS,
   getToolSummary,
 } from './tool-summary';
-export {
-  updatePlanStatusInMessages,
-  updatePlanStepInMessages,
-  type PlanMessageUpdateResult,
-  type PlanStepMessageUpdate,
-} from './plan-message-updater';
 export type {
   AgentTurnTimelineAppendOperation,
   AgentTurnTimelineAssistantTextItem,
@@ -521,14 +516,9 @@ export type {
   PluginCommandsMessage,
   PluginsAvailable,
   PluginsAvailableMessage,
-  PlanActionWebviewMessage,
-  PlanStatusUpdateMessage,
-  PlanStepActionWebviewMessage,
-  PlanStepStatusUpdateMessage,
   PrefillInputMessage,
   ProjectionEndpointDiscoverRequest,
   ProjectionEndpointReadyMessage,
-  PromptModeChangedMessage,
   ProviderMutationResultMessage,
   ProjectFileMentionInfo,
   ProjectFilesWebviewMessage,
@@ -544,7 +534,6 @@ export type {
   SearchProjectFilesWebviewMessage,
   SendMessageWebviewMessage,
   SendToPluginWebviewMessage,
-  SetPromptModeWebviewMessage,
   RevealDocumentLocatorWebviewMessage,
   SettingsDataMessage,
   SettingsUpdatedMessage,
@@ -637,9 +626,6 @@ export {
   getBuiltinSlashCommand,
 } from './builtin-slash-command';
 
-// Plan (parsed plan-mode markdown — agent / extension / webview share)
-export type { Plan, PlanStep, PlanStatus } from './plan';
-
 // Provider
 export type { ConfiguredProvider } from './provider';
 
@@ -649,32 +635,6 @@ export { DEFAULT_SETTINGS } from './settings';
 
 // Agent phase
 export type { AgentPhase, AgentState } from './phase';
-
-// IDC three-stage model (agent-unified-workflow.md §4)
-// Renamed 2026-04-22: specify/plan/tasks/implement → draft/plan/apply
-export type {
-  IdcStage,
-  StageSet,
-  StageActivationDecision,
-  StageActivationRoundSummary,
-  StageSkipReason,
-  StageTaskShape,
-  Paradigm,
-} from './stage';
-
-// Task primitive (Plan-stage user-visible checklist — renamed from TodoList 2026-04-22)
-export type { TaskStatus, TaskStatusCamel, TaskItem, Task } from './task';
-
-// Draft — Draft-stage artifact (ADR §5.2, §7.5; renamed from Proposal 2026-04-22)
-export type { Draft, DraftStatus } from './draft';
-
-// ExecutionPlan — Plan-stage artifact (ADR §4.2, §5, §7.5)
-export type {
-  ExecutionPlan,
-  ExecutionPlanStatus,
-  ExecutionPlanStep,
-  ExecutionPlanStepStatus,
-} from './execution-plan';
 
 // UserPreferences — approval governance input (ADR §9.3)
 export type {
@@ -692,42 +652,6 @@ export type {
   CapabilityKindToolLike,
 } from './capability-kind';
 
-// Creation / Execution event namespaces (P2 W5 — ADR §9.2 split)
-export type {
-  CreationChannel,
-  CreationEvent,
-  CreationRunStartedEvent,
-  CreationMilestoneEvent,
-  CreationDraftPresentedEvent,
-  CreationReviewDecidedEvent,
-  CreationStatusUpdatedEvent,
-  CreationRunEndedEvent,
-  ReviewDecision,
-} from './creation-events';
-export { CREATION_CHANNELS } from './creation-events';
-
-export type {
-  ExecutionChannel,
-  ExecutionEvent,
-  ExecutionRoundActivationDecidedEvent,
-  ExecutionPlanProducedEvent,
-  ExecutionTaskUpdatedEvent,
-  ExecutionApproveDecidedEvent,
-  ExecutionApplyCommittedEvent,
-  ExecutionStepCompletedEvent,
-  ExecutionAutohealEvent,
-  ExecutionAutohealL1RetryEvent,
-  ExecutionAutohealL2DegradeEvent,
-  ExecutionAutohealL3SubstituteEvent,
-  ExecutionAutohealL4TriggeredEvent,
-  ExecutionAutohealL5EscalatedEvent,
-  ExecutionQualityEvaluatedEvent,
-  ExecutionArtifactWrittenEvent,
-  ExecutionArtifactInvalidEvent,
-  ArtifactKind,
-} from './execution-events';
-export { EXECUTION_CHANNELS } from './execution-events';
-
 // UI types
 export type {
   CreativeAiConversationProjection,
@@ -739,7 +663,6 @@ export type {
   OpenTab,
   TabState,
   TabType,
-  PromptMode,
   SessionMode,
   MediaUnderstandingCategory,
   MediaUnderstandingPurpose,

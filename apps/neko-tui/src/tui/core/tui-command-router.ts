@@ -2435,7 +2435,6 @@ function parseSkillClearTarget(
 
 function parseLifecycleSlot(value: string): SkillLifecycleSlot | null {
   switch (value) {
-    case 'stagePersona':
     case 'domainSkill':
     case 'referenceSkill':
     case 'ephemeralSkill':

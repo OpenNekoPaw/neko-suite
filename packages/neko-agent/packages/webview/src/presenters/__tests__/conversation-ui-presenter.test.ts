@@ -192,10 +192,6 @@ describe('conversation UI presenter', () => {
           },
         ],
       ]),
-      promptModeByConversation: new Map([
-        ['conv-a', 'plan'],
-        ['conv-b', 'default'],
-      ]),
       activeSkillByConversation: new Map([
         ['conv-a', activeSkillA],
         ['conv-b', activeSkillB],
@@ -235,7 +231,6 @@ describe('conversation UI presenter', () => {
         queuedMessageCount: 1,
         queuedMessages: [queuedB],
       },
-      promptMode: 'default',
       skill: {
         activeSkill: activeSkillB,
         activationProgress: [activationB],

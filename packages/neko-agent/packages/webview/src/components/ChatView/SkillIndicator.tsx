@@ -126,14 +126,6 @@ function projectSkillLifecycleToken(
   return label === key ? token : label;
 }
 
-function projectSkillLockedReason(t: SkillTranslation, reason: string): string {
-  const key = SKILL_LOCKED_REASON_KEY_BY_MESSAGE[reason];
-  if (!key) return reason;
-  const label = t(key);
-  return label === key ? reason : label;
+function projectSkillLockedReason(_t: SkillTranslation, reason: string): string {
+  return reason;
 }
-
-const SKILL_LOCKED_REASON_KEY_BY_MESSAGE: Record<string, string> = {
-  'Creation stage persona is cleared when its owning stage exits':
-    'chat.skill.lockedReason.creationStagePersonaStageExit',
-};

@@ -3,7 +3,7 @@
  *
  * Responsibilities:
  *   - Tab-owned render state (input, attachments, generation, menus)
- *   - Behavior hooks: useChatActions, usePlanActions, useSkillActions, useSlashCommands
+ *   - Behavior hooks: useChatActions, useSkillActions, useSlashCommands
  *   - Model derivation (allModels, availableModels, mediaModels)
  *   - Keyboard shortcuts
  *   - Pre-intercept handler (externalMessage, prefillInput, injectContext, ambientCanvasUpdate)
@@ -23,7 +23,6 @@ import {
 import type { AgentContextPayload, ChatModelOption } from '@neko/shared';
 import {
   ShellExecutionMode,
-  PromptMode,
   SessionMode,
   AgentState,
   type ConversationKind,
@@ -58,13 +57,7 @@ import type { AgentWorkItem } from '@/components/AgentWorkItem';
 import type { BoundActiveSkillIndicator } from '@/handlers';
 import type { ActivationProgressTimeline } from '@/presenters/activation-progress-presenter';
 import { projectTrailingMention } from '@/components/ChatView/InputArea/mention-input';
-import {
-  useChatActions,
-  type PendingSendInput,
-  usePlanActions,
-  useSkillActions,
-  useSlashCommands,
-} from '@/hooks';
+import { useChatActions, type PendingSendInput, useSkillActions, useSlashCommands } from '@/hooks';
 import { useKeyboardShortcuts, COMMON_SHORTCUTS } from '@/hooks/useKeyboardShortcuts';
 import {
   projectChatWorkspaceModelState,
@@ -200,7 +193,6 @@ export function ChatWorkspace({
   const selectedModel = tabState.selectedModel;
   const mediaModelSelection = tabState.mediaModelSelection;
   const executionMode = tabState.executionMode;
-  const promptMode = tabState.promptMode;
   const queuedEdit = tabState.queuedEdit;
   const latestSessionDiagnostic = tabState.diagnostics.at(-1) ?? null;
   const attachedFiles = [...tabState.attachedFiles];
@@ -630,8 +622,6 @@ export function ChatWorkspace({
     return () => window.removeEventListener('message', listener);
   }, []);
 
-  const planActions = usePlanActions({ activeConversationId: sessionMutationConversationId });
-
   const skillActions = useSkillActions({
     activeConversationId: sessionMutationConversationId,
     activeSkill,
@@ -692,12 +682,6 @@ export function ChatWorkspace({
     if (!sessionMutationConversationId) return;
     updateTabRenderState({ executionMode: mode });
     AgentHostMessages.updateSettings({ executionMode: mode }, sessionMutationConversationId);
-  };
-
-  const handlePromptModeChange = (mode: PromptMode) => {
-    if (!sessionMutationConversationId) return;
-    updateTabRenderState({ promptMode: mode, promptModeInitialized: true });
-    AgentHostMessages.setPromptMode(mode, sessionMutationConversationId);
   };
 
   const handleMediaModelSelect = useCallback(
@@ -778,8 +762,6 @@ export function ChatWorkspace({
       onMediaUnderstandingModelSelect={handleMediaUnderstandingModelSelect}
       executionMode={executionMode}
       onExecutionModeChange={handleExecutionModeChange}
-      promptMode={promptMode}
-      onPromptModeChange={handlePromptModeChange}
       contextTokenCount={contextTokenCount}
       maxContextTokens={selectedEffectiveInputBudget}
       outputTokenCap={selectedOutputTokenCap}
@@ -882,11 +864,6 @@ export function ChatWorkspace({
         focusRequestTarget={focus.target}
         focusRequestRevision={focus.requestRevision}
         agentState={agentState}
-        onApprovePlanStep={planActions.handleApprovePlanStep}
-        onRejectPlanStep={planActions.handleRejectPlanStep}
-        onModifyPlanStep={planActions.handleModifyPlanStep}
-        onApproveAllPlanSteps={planActions.handleApproveAllPlanSteps}
-        onRejectAllPlanSteps={planActions.handleRejectAllPlanSteps}
       />
     </InputAreaProvider>
   );

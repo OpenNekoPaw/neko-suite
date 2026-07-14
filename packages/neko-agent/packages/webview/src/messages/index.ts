@@ -361,70 +361,6 @@ export const AgentHostMessages = {
   },
 
   // ==========================================================================
-  // Plan Review Operations
-  // ==========================================================================
-
-  /**
-   * Approve a single step in a plan
-   * @param planId - The plan ID
-   * @param stepId - The step ID to approve
-   * @param conversationId - The conversation ID
-   */
-  approvePlanStep: (planId: string, stepId: string, conversationId: string) => {
-    postConversationMessage({ type: 'planStepApprove', planId, stepId, conversationId });
-  },
-
-  /**
-   * Reject a single step in a plan
-   * @param planId - The plan ID
-   * @param stepId - The step ID to reject
-   * @param conversationId - The conversation ID
-   */
-  rejectPlanStep: (planId: string, stepId: string, conversationId: string) => {
-    postConversationMessage({ type: 'planStepReject', planId, stepId, conversationId });
-  },
-
-  /**
-   * Modify a step's description in a plan
-   * @param planId - The plan ID
-   * @param stepId - The step ID to modify
-   * @param newDescription - The new description for the step
-   * @param conversationId - The conversation ID
-   */
-  modifyPlanStep: (
-    planId: string,
-    stepId: string,
-    newDescription: string,
-    conversationId: string,
-  ) => {
-    postConversationMessage({
-      type: 'planStepModify',
-      planId,
-      stepId,
-      newDescription,
-      conversationId,
-    });
-  },
-
-  /**
-   * Approve all pending steps in a plan (approve entire plan)
-   * @param planId - The plan ID
-   * @param conversationId - The conversation ID
-   */
-  approveAllPlanSteps: (planId: string, conversationId: string) => {
-    postConversationMessage({ type: 'planApprove', planId, conversationId });
-  },
-
-  /**
-   * Reject all pending steps in a plan (reject entire plan)
-   * @param planId - The plan ID
-   * @param conversationId - The conversation ID
-   */
-  rejectAllPlanSteps: (planId: string, conversationId: string) => {
-    postConversationMessage({ type: 'planReject', planId, conversationId });
-  },
-
-  // ==========================================================================
   // Tab State Operations
   // ==========================================================================
 
@@ -492,22 +428,6 @@ export const AgentHostMessages = {
   /** Reveal an asset entity in the asset library view. */
   revealAsset: (assetId: string) => {
     postWebviewMessage({ type: 'revealAsset', assetId });
-  },
-
-  // ==========================================================================
-  // Prompt Mode
-  // ==========================================================================
-
-  /**
-   * Set prompt mode (default or plan)
-   * @param mode - The mode to set
-   */
-  setPromptMode: (mode: 'default' | 'plan', conversationId: string) => {
-    postConversationMessage({ type: 'setPromptMode', mode, conversationId });
-  },
-
-  getPromptMode: (conversationId: string) => {
-    postConversationMessage({ type: 'getPromptMode', conversationId });
   },
 
   /**

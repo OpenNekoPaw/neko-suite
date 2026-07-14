@@ -65,39 +65,6 @@ export {
   type SkillActivationIssueCode,
 } from './subpackage-guard';
 
-// Stage Tracker (creation stage transitions — replaces FlowSwitcher)
-export {
-  StageTracker,
-  createStageTracker,
-  type StageTrackerConfig,
-  type StageEnteredEvent,
-  type StageExitedEvent,
-  type StageEnteredListener,
-  type StageExitedListener,
-} from './stage-tracker';
-
-// Stage Persona Binding (StageTracker ↔ Coordinator persona swap —
-// replaces FlowBinding).
-export {
-  createStagePersonaBinding,
-  defaultSkillNameForStage,
-  CREATION_PERSONA_SKILL_NAME,
-  EXECUTION_PERSONA_SKILL_NAME,
-  type IStagePersonaBinding,
-  type StagePersonaBindingDeps,
-} from './stage-persona-binding';
-
-// Stage Guardian — non-blocking inspector alongside StageTracker
-// (ADR §5.4, §6.5).
-export {
-  createStageGuardian,
-  type IStageGuardian,
-  type StageGuardianConfig,
-  type StageGuardianIssue,
-  type StageGuardianIssueCode,
-  type StageGuardianListener,
-} from './stage-guardian';
-
 // ToolGroup Registry
 export { ToolGroupRegistry, createToolGroupRegistry } from './tool-group-registry';
 

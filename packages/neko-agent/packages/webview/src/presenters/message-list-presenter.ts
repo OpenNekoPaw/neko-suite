@@ -261,8 +261,6 @@ function estimateContentBlockHeight(block: ContentBlock): number {
       return 100;
     case 'code_diff':
       return 200;
-    case 'plan':
-      return 150;
     case 'composite':
       return 220;
     case 'canvas_lifecycle':

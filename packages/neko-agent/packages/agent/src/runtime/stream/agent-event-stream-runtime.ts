@@ -152,7 +152,6 @@ export class AgentEventStreamRuntimeProcessor<TSourceTask = unknown, TDeliveryPl
         conversationId: input.conversationId,
         messageId: streamingMessageId,
         event,
-        plan: stateUpdate.plan,
       });
       for (const message of messages) {
         if (message.type === 'streamComplete') {
@@ -406,7 +405,6 @@ function readBackgroundTaskRunLease(
     event.toolResult?.metadata,
     dataRecord,
     isRecord(dataRecord?.['trace']) ? dataRecord['trace'] : undefined,
-    isRecord(dataRecord?.['legacyTrace']) ? dataRecord['legacyTrace'] : undefined,
   ];
 
   for (const candidate of candidateRecords) {

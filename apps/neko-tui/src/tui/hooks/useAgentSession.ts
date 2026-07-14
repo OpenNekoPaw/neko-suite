@@ -11,14 +11,12 @@ import {
   MCPManager,
   createAllMCPTools,
   createMcpToolCreationOptionsForExternalResearch,
-  createPlanModeCreationMetadata,
   createSkillService,
   createNodeSkillLoader,
   ToolRegistry,
   createSystemPromptBuilder,
   createInputProcessor,
   createFileAgentWorkspaceRuntimeStateRuntime,
-  mergeCreationExecutionMetadata,
   ProviderCardRegistry,
   type AgentSessionConfig,
   type IAgentSession,
@@ -74,7 +72,6 @@ import type { CLIConfig } from '../core/types';
 import type { SupportedLocale } from '@neko/shared/i18n';
 import type { AgentTerminalPresentationContext } from '../presentation/context';
 import type { AgentTerminalMessageKey } from '../presentation/terminal-messages';
-import { presentStageGuardianIssue } from '../presentation/stage-guardian-presentation';
 import { presentQueueCommand } from '../presentation/work-queue-presentation';
 import {
   presentMediaBackgroundDiagnostic,
@@ -393,7 +390,6 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
   const mediaDeliveryHostRef = useRef<NodeMediaTaskDeliveryHost | null>(null);
   const generatedAssetIndexRef = useRef<GeneratedAssetIndex | null>(null);
   const taskTerminalUnsubscribeRef = useRef<(() => void) | null>(null);
-  const stageGuardianUnsubscribeRef = useRef<(() => void) | null>(null);
   const capabilityLoadResultRef = useRef<TuiCapabilityLoaderResult | null>(null);
   const conversationStorageRef = useRef<ConversationResumeStorage | null>(null);
   const conversationStorageBindingRef = useRef<TuiSqliteConversationStorageBinding | null>(null);
@@ -609,8 +605,6 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
     const disposeResources = (projectState: boolean): void => {
       taskTerminalUnsubscribeRef.current?.();
       taskTerminalUnsubscribeRef.current = null;
-      stageGuardianUnsubscribeRef.current?.();
-      stageGuardianUnsubscribeRef.current = null;
       taskResultObservationRuntimeRef.current?.dispose();
       taskResultObservationRuntimeRef.current = null;
       mediaDeliveryHostRef.current?.dispose();
@@ -645,6 +639,7 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
         isReadyRef.current = false;
         setIsReady(false);
         setCapabilityRevision((revision) => revision + 1);
+        stores.agent.getState().setExecutionMode(config.executionMode);
         const effectiveModel = config.model;
 
         // 1. MCP Manager
@@ -834,7 +829,7 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
         const executionMode = stores.agent.getState().executionMode;
         const basePromptBuilder = createSystemPromptBuilder({
           locale: promptDomainLocale,
-          mode: executionMode === 'plan' ? 'plan' : 'default',
+          executionMode,
         });
         const systemPrompt = buildSystemPromptWithContext(basePromptBuilder, {
           ...config,
@@ -880,7 +875,7 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
           capabilityRuntime: runtimeConfig.capabilityRuntime,
           getCapabilityPromptFragments: () => capabilityLoadResult.promptFragments,
           creationGuidance: runtimeConfig.creationGuidance,
-          artifactStore: runtimeConfig.artifactStore,
+          workspaceStore: runtimeConfig.workspaceStore,
           validationLoop: runtimeConfig.validationLoop,
           ...(perceptionPipeline ? { getPerceptionPipeline: () => perceptionPipeline } : {}),
           projectMemoryFilePath: memoryFilePath,
@@ -904,12 +899,6 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
         promptBuilderRef.current = runtimeSession.promptBuilder;
 
         sessionRef.current = session;
-        stageGuardianUnsubscribeRef.current?.();
-        stageGuardianUnsubscribeRef.current = session.onStageGuardianIssue((issue) => {
-          stores.conversation
-            .getState()
-            .addSystemMessage(presentStageGuardianIssue(issue, presentation));
-        });
         if (resumeRecord) {
           session.loadHistory(resumeRecord.messages, resumeRecord.messageEventIds);
           stores.conversation
@@ -1139,13 +1128,9 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
       }
       syncWorkspaceRuntimeState({ status: 'running', phase: 'thinking' });
 
-      const creationMetadata = mergeCreationExecutionMetadata(
-        session.getExecutionMode() === 'plan' ? createPlanModeCreationMetadata() : undefined,
-        options.metadata,
-      );
       const currentConfig = config;
       const metadata = mergeTuiMediaModelMetadata(
-        creationMetadata,
+        options.metadata,
         currentConfig.defaultMediaModels,
         currentConfig.chatModel?.providerId ?? currentConfig.provider,
         listChatModelOptions(currentConfig.workDir),
@@ -1333,9 +1318,6 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
         await executePrompt(prompt, { metadata: executionOverrides?.metadata, source: 'user' });
         await releaseRuntimeQueuedPrompts();
 
-        if (stores.agent.getState().executionMode === 'plan') {
-          stores.ui.getState().showPlanReview();
-        }
       } catch (error) {
         const err = error instanceof Error ? error : new Error(String(error));
         stores.agent.getState().setError(err);
@@ -1716,7 +1698,7 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
       const config = stores.config.getState().config;
       const builder = createSystemPromptBuilder({
         locale: promptDomainLocale,
-        mode: mode === 'plan' ? 'plan' : 'default',
+        executionMode: mode,
       });
       // Reuse previously loaded AGENTS.md via sync rebuild
       if (promptBuilderRef.current) {

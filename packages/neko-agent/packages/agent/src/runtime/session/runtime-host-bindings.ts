@@ -22,10 +22,10 @@ import type {
 import type { ProviderExpressionTargetConfig } from '../turn/message-runtime';
 import type { SubAgentRuntimeCoordinator } from '../subagent-runtime';
 import type {
-  IArtifactStore,
   ICapabilityRuntime,
   ICreationGuidanceRuntime,
   IValidationLoop,
+  IWorkspaceRuntimeStore,
 } from '../types';
 import type { ModelTierResolver, SpecializedAgentPreset } from '../../subagent';
 import type { WorkspaceFileIgnoreRules } from '../../input/workspace-ignore';
@@ -69,7 +69,7 @@ export interface AgentRuntimeSessionAssemblyInput extends AgentRuntimeHostBindin
   readonly providerExpressionTargets?: readonly ProviderExpressionTargetConfig[];
   readonly toolCategoryRegistry?: IToolCategoryRegistry;
   readonly creationGuidance?: ICreationGuidanceRuntime;
-  readonly artifactStore?: IArtifactStore;
+  readonly workspaceStore?: IWorkspaceRuntimeStore;
   readonly validationLoop?: IValidationLoop;
   readonly projectMemoryFilePath?: string;
   readonly personalPath?: string;
@@ -170,7 +170,7 @@ export function buildAgentRuntimeSessionFactoryConfig(
     capabilityPromptFragments,
     toolCategoryRegistry: input.toolCategoryRegistry,
     creationGuidance: input.creationGuidance,
-    artifactStore: input.artifactStore,
+    workspaceStore: input.workspaceStore,
     validationLoop: input.validationLoop,
     projectMemoryFilePath: input.projectMemoryFilePath,
     personalPath: input.personalPath,

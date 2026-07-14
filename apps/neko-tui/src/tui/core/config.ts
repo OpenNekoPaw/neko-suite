@@ -210,6 +210,7 @@ export function loadConfig(
       mcpServers,
       externalResearch: effectiveConfig.externalResearch,
       outputFormat: overrides.outputFormat ?? DEFAULT_CLI_CONFIG.outputFormat,
+      executionMode: overrides.executionMode ?? effectiveConfig.executionMode,
       thinkingBudget,
       ...(overrides.contextSettings ? { contextSettings: overrides.contextSettings } : {}),
     };

@@ -4,14 +4,7 @@ import {
   type Message,
   type ToolCall,
 } from '@neko-agent/types';
-import type { Plan, PlanStatus } from '@neko-agent/types';
 import { type AgentWorkItem } from '@neko-agent/types';
-export {
-  updatePlanStatusInMessages,
-  updatePlanStepInMessages,
-  type PlanMessageUpdateResult,
-  type PlanStepMessageUpdate,
-} from '@neko-agent/types';
 import {
   extractSubAgentWorkItemIds,
   projectBackgroundTaskToolResultToWorkItem,
@@ -47,7 +40,6 @@ export interface ToolResultMessageProjectionInput {
   attachments?: readonly import('@neko/shared').ToolResultAttachment[];
   perceptionCards?: readonly import('@neko/shared').PerceptionCard[];
   backfillDiagnostics?: readonly import('@neko/shared').ToolResultBackfillDiagnostic[];
-  plan?: Plan;
   artifacts?: readonly AgentArtifactTransferPayload[];
   now?: () => number;
 }
@@ -217,7 +209,6 @@ export function projectToolResultIntoMessages(
     };
   }
 
-  const timestamp = input.now?.() ?? Date.now();
   let updated = false;
   let resolvedTargetMessageId: string | undefined;
   const messages = input.messages.map((message, index) => {
@@ -227,21 +218,9 @@ export function projectToolResultIntoMessages(
     resolvedTargetMessageId = message.id;
     const contentBlocks = updateToolResultContentBlocks(message.contentBlocks ?? [], input);
     const nextWorkItemIds = mergeOptionalIds(message.workItemIds, workItemIdsFromResult);
-    const contentBlocksWithPlan = input.plan
-      ? [
-          ...contentBlocks,
-          {
-            id: `block-plan-${input.plan.id}`,
-            type: 'plan',
-            timestamp,
-            plan: input.plan,
-          } satisfies ContentBlock,
-        ]
-      : contentBlocks;
-
     return {
       ...message,
-      contentBlocks: contentBlocksWithPlan,
+      contentBlocks,
       workItemIds: nextWorkItemIds,
     };
   });
@@ -571,21 +550,6 @@ export function projectMessageCancelledIntoMessages(
     streamingMessageId: null,
     isThinking: false,
   };
-}
-
-export function toPlanStatus(value: unknown): PlanStatus | null {
-  switch (value) {
-    case 'pending':
-    case 'in-progress':
-    case 'completed':
-    case 'failed':
-    case 'approved':
-    case 'rejected':
-    case 'modified':
-      return value;
-    default:
-      return null;
-  }
 }
 
 function addToolCallBlock(

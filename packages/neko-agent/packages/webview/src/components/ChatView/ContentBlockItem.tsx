@@ -1,7 +1,7 @@
 /**
  * ContentBlockItem - Individual content block renderer
  *
- * Renders a single content block (thinking, text, tool_call, code_diff, plan)
+ * Renders a single content block (thinking, text, tool_call, code_diff, composite)
  * as an independent visual unit in the message list.
  */
 
@@ -14,7 +14,6 @@ import {
 } from '@neko-agent/types';
 import { ToolCallDisplay, ToolCallGroupDisplay } from '@/components/ChatView/ToolCallDisplay';
 import { DiffBlock } from '@/components/ChatView/DiffBlock';
-import { PlanReview } from '@/components/ChatView/PlanReview';
 import { RichContentRenderer } from '@/components/ChatView/RichContent';
 import { MarkdownRenderer, ThinkingBlock } from '@/components/ChatView/MessageContent';
 import { MessageAvatar } from '@/components/ChatView/MessageAvatar';
@@ -34,14 +33,7 @@ import {
   formatCanvasLifecycleStatus,
   type ChatTranslation,
 } from '@/presenters/canvas-lifecycle-localization-presenter';
-import {
-  CodeIcon,
-  EditIcon,
-  FileIcon,
-  InfoIcon,
-  PackageIcon,
-  SettingsIcon,
-} from '@neko/shared/icons';
+import { EditIcon, FileIcon, InfoIcon, PackageIcon, SettingsIcon } from '@neko/shared/icons';
 import {
   projectContentBlockUi,
   type ContentBlockHeaderIconKind,
@@ -90,7 +82,6 @@ const blockHeaderIconByKind: Record<ContentBlockHeaderIconKind, string> = {
   response: 'response',
   tool: 'tool',
   edit: 'edit',
-  plan: 'plan',
   composite: '[]',
 };
 
@@ -200,8 +191,6 @@ function ContentBlockHeaderIcon({
       return <SettingsIcon className={className} />;
     case 'edit':
       return <EditIcon className={className} />;
-    case 'plan':
-      return <CodeIcon className={className} />;
     case '[]':
       return <PackageIcon className={className} />;
   }
@@ -216,16 +205,7 @@ function renderBlockContent(
   messageId: string,
   callbacks: Pick<
     import('@/components/ChatView/MessageActionsContext').MessageActionsContextValue,
-    | 'onAcceptDiff'
-    | 'onRejectDiff'
-    | 'onApprovePlanStep'
-    | 'onRejectPlanStep'
-    | 'onModifyPlanStep'
-    | 'onApproveAllPlanSteps'
-    | 'onRejectAllPlanSteps'
-    | 'pluginsAvailable'
-    | 'contextChips'
-    | 'ambientNodes'
+    'onAcceptDiff' | 'onRejectDiff' | 'pluginsAvailable' | 'contextChips' | 'ambientNodes'
   >,
   t: ChatTranslation,
   workItemIds?: string[],
@@ -342,44 +322,6 @@ function renderBlockContent(
           />
         </div>
       );
-
-    case 'plan': {
-      const {
-        onApprovePlanStep,
-        onRejectPlanStep,
-        onModifyPlanStep,
-        onApproveAllPlanSteps,
-        onRejectAllPlanSteps,
-      } = callbacks;
-      return (
-        <div className="w-full">
-          <PlanReview
-            plan={projection.plan}
-            onApproveStep={
-              onApprovePlanStep
-                ? (stepId) => onApprovePlanStep(projection.plan.id, stepId)
-                : undefined
-            }
-            onRejectStep={
-              onRejectPlanStep
-                ? (stepId) => onRejectPlanStep(projection.plan.id, stepId)
-                : undefined
-            }
-            onModifyStep={
-              onModifyPlanStep
-                ? (stepId, desc) => onModifyPlanStep(projection.plan.id, stepId, desc)
-                : undefined
-            }
-            onApproveAll={
-              onApproveAllPlanSteps ? () => onApproveAllPlanSteps(projection.plan.id) : undefined
-            }
-            onRejectAll={
-              onRejectAllPlanSteps ? () => onRejectAllPlanSteps(projection.plan.id) : undefined
-            }
-          />
-        </div>
-      );
-    }
 
     case 'composite':
       return (

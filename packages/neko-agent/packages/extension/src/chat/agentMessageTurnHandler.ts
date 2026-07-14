@@ -108,8 +108,10 @@ export class AgentMessageTurnHandler {
     private readonly _conversations: ConversationBridge,
     private readonly _agentManager: IAgentManager | undefined,
     private readonly _editorRegistry: IEditorRegistry | undefined,
-    private readonly _getSystemPrompt: (conversationId: string) => string,
-    private readonly _isPlanMode: (conversationId: string) => boolean = () => false,
+    private readonly _getSystemPrompt: (
+      conversationId: string,
+      executionMode: 'auto' | 'ask' | 'plan',
+    ) => string,
     private readonly _platform?: Platform,
     private readonly _taskManager?: IRuntimeTaskManager,
     private readonly _getActiveSkillState?: (
@@ -180,7 +182,6 @@ export class AgentMessageTurnHandler {
       agentManager: this._agentManager,
       editorRegistry: this._editorRegistry,
       getSystemPrompt: this._getSystemPrompt,
-      isPlanMode: this._isPlanMode,
       platform: this._platform,
       taskManager: this._taskManager,
       getActiveSkillState: this._getActiveSkillState,

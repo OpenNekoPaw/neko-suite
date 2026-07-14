@@ -323,6 +323,7 @@ describe('loadConfig', () => {
       temperature: 0.55,
       maxTokens: 1024,
       thinkingBudget: 512,
+      executionMode: 'plan',
     };
 
     const config = loadConfig('/tmp/project');
@@ -332,6 +333,7 @@ describe('loadConfig', () => {
     expect(config.temperature).toBe(0.55);
     expect(config.maxTokens).toBe(1024);
     expect(config.thinkingBudget).toBe(512);
+    expect(config.executionMode).toBe('plan');
     expect(config.defaultMediaModels).toEqual({
       image: 'local:local-image',
       video: undefined,

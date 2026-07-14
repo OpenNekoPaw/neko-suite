@@ -98,7 +98,6 @@ function AppContent({
   const stores = useTuiConversationStores();
   const pendingApproval = useTuiUIStore((s) => s.pendingApproval);
   const pendingSelection = useTuiUIStore((s) => s.pendingSelection);
-  const pendingPlanReview = useTuiUIStore((s) => s.pendingPlanReview);
   const [referenceSuggestions, setReferenceSuggestions] = useState<
     readonly InputSuggestionOption[]
   >([]);
@@ -310,48 +309,6 @@ function AppContent({
     }
   }, [pendingApproval, confirmTool]);
 
-  // Plan review: execute → switch to auto and re-submit the plan
-  const handlePlanReviewExecute = useCallback(async () => {
-    stores.ui.getState().dismissPlanReview();
-    updateMode('auto');
-    await submit('Execute the plan above.');
-  }, [stores, updateMode, submit]);
-
-  const handlePlanReviewDismiss = useCallback(() => {
-    stores.ui.getState().dismissPlanReview();
-  }, [stores]);
-
-  // Build plan review selection menu items (shown when pendingPlanReview is true)
-  const planReviewSelection = pendingPlanReview
-    ? {
-        title: terminal.presentation.t('agent.terminal.planReview.title'),
-        items: [
-          {
-            id: 'execute',
-            label: terminal.presentation.t('agent.terminal.planReview.execute.label'),
-            description: terminal.presentation.t('agent.terminal.planReview.execute.description'),
-          },
-          {
-            id: 'modify',
-            label: terminal.presentation.t('agent.terminal.planReview.modify.label'),
-            description: terminal.presentation.t('agent.terminal.planReview.modify.description'),
-          },
-          {
-            id: 'cancel',
-            label: terminal.presentation.t('agent.terminal.planReview.cancel.label'),
-            description: terminal.presentation.t('agent.terminal.planReview.cancel.description'),
-          },
-        ],
-        resolve: (selectedId: string | null) => {
-          if (selectedId === 'execute') {
-            void handlePlanReviewExecute();
-          } else {
-            handlePlanReviewDismiss();
-          }
-        },
-      }
-    : null;
-
   const handleQueueSendNext = useCallback(
     (queueItemId: string) => {
       try {
@@ -430,7 +387,7 @@ function AppContent({
     [cancelQueuedMessage, getMessageQueueSnapshot, terminal.presentation],
   );
 
-  const inputDisabled = !!pendingSelection || pendingPlanReview;
+  const inputDisabled = !!pendingSelection;
   const skillSuggestions = createTuiSkillInvocationCatalog(
     getSkillService()
       ?.registry.listSkills()
@@ -466,9 +423,6 @@ function AppContent({
 
         {/* Selection menu — shows for /model, /skill etc. */}
         {pendingSelection ? <SelectionMenu selection={pendingSelection} /> : null}
-
-        {/* Plan review menu — shows after plan-mode execution completes */}
-        {planReviewSelection ? <SelectionMenu selection={planReviewSelection} /> : null}
 
         {/* Pending next-turn messages stay outside the conversation transcript. */}
         <ErrorBoundary label="MessageQueuePanel">

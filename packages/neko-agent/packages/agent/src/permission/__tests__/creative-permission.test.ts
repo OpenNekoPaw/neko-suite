@@ -296,8 +296,20 @@ describe('PermissionRuleMatcher - plan mode with injected domain tools', () => {
     const matcher = new PermissionRuleMatcher(makePlanConfig());
     expect(matcher.check(makeToolCall('Read')).decision).toBe('allow');
     expect(matcher.check(makeToolCall('ReadDocument')).decision).toBe('allow');
+    expect(matcher.check(makeToolCall('ReadImage')).decision).toBe('allow');
     expect(matcher.check(makeToolCall('Glob')).decision).toBe('allow');
     expect(matcher.check(makeToolCall('Grep')).decision).toBe('allow');
+  });
+
+  it('allows ordinary Markdown writes while leaving path authorization to the file Tool', () => {
+    const matcher = new PermissionRuleMatcher(makePlanConfig());
+
+    expect(
+      matcher.check(makeToolCall('Write', { file_path: 'docs/creator-review.md' })).decision,
+    ).toBe('allow');
+    expect(matcher.check(makeToolCall('Edit', { path: 'plans/animation-plan.MD' })).decision).toBe(
+      'allow',
+    );
   });
 
   it('denies generation tools in plan mode', () => {
@@ -307,10 +319,27 @@ describe('PermissionRuleMatcher - plan mode with injected domain tools', () => {
     expect(matcher.check(makeToolCall('Bash', { command: 'ls' })).decision).toBe('deny');
   });
 
-  it('denies write tools in plan mode', () => {
+  it('denies non-Markdown writes in plan mode', () => {
     const matcher = new PermissionRuleMatcher(makePlanConfig());
     expect(matcher.check(makeToolCall('Write', { file_path: 'test.ts' })).decision).toBe('deny');
     expect(matcher.check(makeToolCall('Edit', { file_path: 'test.ts' })).decision).toBe('deny');
+  });
+
+  it('denies mutation, delivery, background execution, and Skill lifecycle Tools', () => {
+    const matcher = new PermissionRuleMatcher(makePlanConfig());
+    const deniedTools = [
+      'MutateProject',
+      'ImportAsset',
+      'ExportVideo',
+      'PublishDeliverable',
+      'Task',
+      'ActivateSkill',
+      'DeactivateSkill',
+    ];
+
+    for (const toolName of deniedTools) {
+      expect(matcher.check(makeToolCall(toolName)).decision, toolName).toBe('deny');
+    }
   });
 });
 

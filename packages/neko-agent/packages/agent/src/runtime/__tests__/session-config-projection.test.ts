@@ -15,8 +15,6 @@ describe('buildAgentSessionConfigWithRuntime', () => {
       flush: vi.fn(),
       dispose: vi.fn(),
     };
-    const artifactService = { kind: 'artifact-service' } as never;
-    const artifactWatcherFactory = vi.fn(() => ({ start: vi.fn(), dispose: vi.fn() }));
     const createJournalWriter = vi.fn(() => journalWriter);
     const promptFragments: readonly PromptFragment[] = [
       { id: 'canvas:guide', content: 'Canvas guidance' },
@@ -30,7 +28,6 @@ describe('buildAgentSessionConfigWithRuntime', () => {
     const projectMemoryManager = { kind: 'project-memory' } as never;
     const validationCoordinator = { kind: 'validation-coordinator' } as never;
     const validationCoordinatorFactory = vi.fn(() => validationCoordinator);
-    const creativeProcessRecoveryPolicy = { kind: 'creative-process-recovery-policy' } as never;
     const autohealChainFactory: AgentAutohealChainFactory = vi.fn(() => ({
       run: vi.fn(async (): Promise<AutohealOutcome> => ({ resolution: 'pass', level: 1 })),
     }));
@@ -38,19 +35,12 @@ describe('buildAgentSessionConfigWithRuntime', () => {
       list: vi.fn(() => []),
     } as unknown as IOperationToolAdapterRegistry;
     const contentAccessRuntime = { resolve: vi.fn() } as never;
-    const creationTaskProjection = { kind: 'creation-task-projection' } as never;
 
     const runtime: AgentRuntimeConfig = {
       creationGuidance: {
-        stageTracking: {
-          initialStage: 'draft',
-          guardian: false,
-        },
-        creationTaskProjection,
-        creativeProcessRecoveryPolicy,
         autohealChainFactory,
       },
-      artifactStore: {
+      workspaceStore: {
         workspace: {
           root: '/workspace/demo',
           fsOps: {
@@ -60,8 +50,6 @@ describe('buildAgentSessionConfigWithRuntime', () => {
           },
           globalPreferencesPath: '/home/demo/.neko/preferences.md',
         },
-        artifactService,
-        createArtifactWatcher: artifactWatcherFactory,
         createJournalWriter,
       },
       capabilityRuntime: {
@@ -93,34 +81,19 @@ describe('buildAgentSessionConfigWithRuntime', () => {
       runtime,
     });
 
-    expect(config.stageTracking).toEqual(
-      expect.objectContaining({
-        initialStage: 'draft',
-        guardian: false,
-        skillRegistry,
-        skillService,
-        skillLifecycleRuntime,
-      }),
-    );
-    expect(config.creationTaskProjection).toBe(creationTaskProjection);
     expect(config.workspace).toEqual(
       expect.objectContaining({
         root: '/workspace/demo',
         globalPreferencesPath: '/home/demo/.neko/preferences.md',
       }),
     );
-    expect(config.artifactService).toBe(artifactService);
-    expect(config.artifactWatcherFactory).toBe(artifactWatcherFactory);
     expect(config.promptFragments).toBe(promptFragments);
     expect(config.toolGroupRegistry).toBe(toolGroupRegistry);
     expect(config.toolCategoryRegistry).toBe(toolCategoryRegistry);
     expect(config.providerCardRegistry).toBe(providerCardRegistry);
-    expect(config.stageTracking?.skillService).toBe(skillService);
-    expect(config.stageTracking?.skillLifecycleRuntime).toBe(skillLifecycleRuntime);
     expect(config.projectMemoryManager).toBe(projectMemoryManager);
     expect(config.validationCoordinator).toBe(validationCoordinator);
     expect(config.validationCoordinatorFactory).toBe(validationCoordinatorFactory);
-    expect(config.creativeProcessRecoveryPolicy).toBe(creativeProcessRecoveryPolicy);
     expect(config.autohealChainFactory).toBe(autohealChainFactory);
     expect(config.operationToolAdapterRegistry).toBe(operationToolAdapterRegistry);
     expect(config.contentAccessRuntime).toBe(contentAccessRuntime);
@@ -138,10 +111,6 @@ describe('buildAgentSessionConfigWithRuntime', () => {
       flush: vi.fn(),
       dispose: vi.fn(),
     };
-    const explicitArtifactService = { kind: 'explicit-artifact-service' } as never;
-    const runtimeArtifactService = { kind: 'runtime-artifact-service' } as never;
-    const explicitArtifactWatcherFactory = vi.fn();
-    const runtimeArtifactWatcherFactory = vi.fn();
     const createJournalWriter = vi.fn();
 
     const config = buildAgentSessionConfigWithRuntime({
@@ -150,11 +119,6 @@ describe('buildAgentSessionConfigWithRuntime', () => {
       systemPrompt: 'system',
       conversationId: 'conv-2',
       journalWriter: explicitJournalWriter as never,
-      artifactService: explicitArtifactService,
-      artifactWatcherFactory: explicitArtifactWatcherFactory,
-      stageTracking: {
-        initialStage: 'apply',
-      },
       workspace: {
         root: '/explicit/workspace',
         fsOps: {
@@ -164,13 +128,7 @@ describe('buildAgentSessionConfigWithRuntime', () => {
       },
       promptFragments: [{ id: 'explicit:fragment', content: 'Explicit fragment' }],
       runtime: {
-        creationGuidance: {
-          stageTracking: {
-            initialStage: 'draft',
-            guardian: false,
-          },
-        },
-        artifactStore: {
+        workspaceStore: {
           workspace: {
             root: '/runtime/workspace',
             fsOps: {
@@ -178,8 +136,6 @@ describe('buildAgentSessionConfigWithRuntime', () => {
               mkdir: vi.fn(),
             },
           },
-          artifactService: runtimeArtifactService,
-          createArtifactWatcher: runtimeArtifactWatcherFactory,
           createJournalWriter,
         },
         validationLoop: {
@@ -189,15 +145,7 @@ describe('buildAgentSessionConfigWithRuntime', () => {
       compactLogging: true,
     });
 
-    expect(config.stageTracking).toEqual(
-      expect.objectContaining({
-        initialStage: 'apply',
-        guardian: false,
-      }),
-    );
     expect(config.workspace?.root).toBe('/explicit/workspace');
-    expect(config.artifactService).toBe(explicitArtifactService);
-    expect(config.artifactWatcherFactory).toBe(explicitArtifactWatcherFactory);
     expect(config.promptFragments).toEqual([
       { id: 'explicit:fragment', content: 'Explicit fragment' },
     ]);
@@ -233,7 +181,7 @@ describe('buildAgentSessionConfigWithRuntime', () => {
       toolRegistry: {} as never,
       systemPrompt: 'system',
       runtime: {
-        artifactStore: {
+        workspaceStore: {
           createJournalWriter,
         },
       },

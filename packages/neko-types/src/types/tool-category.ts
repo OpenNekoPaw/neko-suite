@@ -192,7 +192,6 @@ export const DEFAULT_TOOL_CATEGORIES: ToolCategoryInfo[] = [
  *
  * - core-system: Read, ReadDocument, ReadImage, ListDirectory, Glob, Grep
  * - file-editing: Write, Edit, CreateDirectory, DeleteFile
- * - plan-mode: EnterPlanMode, ExitPlanMode
  * - meta-tools: CreateSkill, ActivateSkill, DeactivateSkill, GetContext
  */
 export const CORE_TOOLS = [
@@ -208,8 +207,6 @@ export const CORE_TOOLS = [
   'CreateDirectory',
   'DeleteFile',
   // plan-mode (resident)
-  'EnterPlanMode',
-  'ExitPlanMode',
   // meta-tools (resident)
   'CreateSkill',
   'ActivateSkill',

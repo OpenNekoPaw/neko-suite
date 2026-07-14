@@ -90,7 +90,6 @@ describe('agent-capability-injection-runtime', () => {
       promptChainFragments: [{ id: '' }],
       hostRequirements: [{ host: 'vscode' }],
       permissionRequirements: [{ scope: '' }],
-      creationStageRequirements: [{}],
     });
 
     expect(runtime.getDiagnostics('registration').map((item) => item.reason)).toEqual([
@@ -102,7 +101,6 @@ describe('agent-capability-injection-runtime', () => {
       'missing-required-field',
       'missing-required-field',
       'missing-required-field',
-      'empty-creation-stage-requirement',
     ]);
     expect(
       validateCapabilityContribution({
@@ -746,19 +744,9 @@ describe('agent-capability-injection-runtime', () => {
     ]);
   });
 
-  it('skips injection by creation stage and permission policy before prompt/tool injection', () => {
+  it('skips injection by permission policy before prompt/tool injection', () => {
     const runtime = createAgentCapabilityInjectionRuntime();
     runtime.registerMany([
-      {
-        identity: {
-          id: 'skill:apply-only',
-          source: 'market',
-          sourceId: '@neko/apply-only',
-          trustLevel: 'community',
-        },
-        creationStageRequirements: [{ stageIds: ['apply'] }],
-        promptFragments: [{ id: 'apply', content: 'apply prompt' }],
-      },
       {
         identity: {
           id: 'skill:write',
@@ -783,20 +771,15 @@ describe('agent-capability-injection-runtime', () => {
 
     const skipped = runtime.inject({
       host: 'vscode',
-      creationStageId: 'draft',
       permissionPolicy: { allowedScopes: ['workspace.write'] },
     });
 
     expect(skipped.contributions.map((item) => item.identity.id)).toEqual(['skill:write']);
     expect(skipped.allowedTools).toEqual(['write_file']);
-    expect(skipped.diagnostics.map((item) => item.reason)).toEqual([
-      'creation-stage-requirement',
-      'permission-policy',
-    ]);
+    expect(skipped.diagnostics.map((item) => item.reason)).toEqual(['permission-policy']);
 
     const approved = runtime.inject({
       host: 'vscode',
-      creationStageId: 'apply',
       permissionPolicy: {
         allowedScopes: ['workspace.write', 'workspace.delete'],
         allowIrreversible: true,
@@ -804,7 +787,6 @@ describe('agent-capability-injection-runtime', () => {
     });
 
     expect(approved.contributions.map((item) => item.identity.id)).toEqual([
-      'skill:apply-only',
       'skill:write',
       'skill:delete',
     ]);

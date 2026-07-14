@@ -447,7 +447,6 @@ function createContextHarness(options: ContextHarnessOptions = {}): ContextHarne
     setSettings: noopDispatch(),
     hydrateConversationSettings: () => undefined,
     updateSettings: () => undefined,
-    setPromptModeForConversation: () => undefined,
     setAgentState: noopDispatch(),
     conversationAgentStateRef: ref(new Map()),
     forceAgentStateUpdate: () => undefined,

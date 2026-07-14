@@ -35,9 +35,6 @@ function createMockContext(overrides?: Partial<CommandContext>): CommandContext 
       create: vi.fn(),
       clearCurrent: vi.fn(),
     },
-    planMode: {
-      isEnabled: vi.fn(() => false),
-    },
     contextManager: {
       getTokenCount: vi.fn(() => 1500),
     },
@@ -57,7 +54,6 @@ describe('generateExtensionStatusData', () => {
       messageCount: 3,
       tokenCount: 1500,
       activeSkill: undefined,
-      planMode: false,
       executionMode: 'auto',
     });
   });

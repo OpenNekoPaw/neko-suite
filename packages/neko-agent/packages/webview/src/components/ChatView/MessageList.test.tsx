@@ -449,15 +449,14 @@ describe('MessageList auto-scroll lifecycle', () => {
           streamingMessageId={null}
           activeConversationId="conv-1"
           activeSkillNotice={{
-            skillName: 'creation-persona',
+            skillName: 'style-reference',
             records: [
               {
                 id: 'record-1',
-                skillName: 'creation-persona',
-                slot: 'stagePersona',
-                owner: 'creation-profile',
-                clearable: false,
-                lockedReason: 'Creation stage persona is cleared when its owning stage exits',
+                skillName: 'style-reference',
+                slot: 'referenceSkill',
+                owner: 'agent',
+                clearable: true,
               },
             ],
           }}
@@ -466,16 +465,9 @@ describe('MessageList auto-scroll lifecycle', () => {
       'zh-cn',
     );
 
-    expect(screen.getByText('阶段人设').getAttribute('title')).toBe('stagePersona');
-    expect(screen.getByText('创作 Profile').getAttribute('title')).toBe('creation-profile');
-    expect(screen.getByText('随所属创作阶段退出自动清理').getAttribute('title')).toBe(
-      'Creation stage persona is cleared when its owning stage exits',
-    );
-    expect(screen.queryByText('stagePersona')).toBeNull();
-    expect(screen.queryByText('creation-profile')).toBeNull();
-    expect(
-      screen.queryByText('Creation stage persona is cleared when its owning stage exits'),
-    ).toBeNull();
+    expect(screen.getByText('参考技能').getAttribute('title')).toBe('referenceSkill');
+    expect(screen.getByText('Agent').getAttribute('title')).toBe('agent');
+    expect(screen.queryByText('referenceSkill')).toBeNull();
   });
 
   it('does not render activation progress as a standalone row above messages', () => {

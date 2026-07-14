@@ -1,5 +1,3 @@
-import type { AgentLegacyCreationTrace } from './legacy-trace';
-
 export type AgentMediaModality =
   'text' | 'image' | 'video' | 'audio' | 'document' | 'data' | 'mixed';
 
@@ -23,7 +21,6 @@ export interface AgentMultimodalEvidenceRef {
   readonly artifactId?: string;
   readonly perceptionInputId?: string;
   readonly conversationId?: string;
-  readonly legacyTrace?: AgentLegacyCreationTrace;
   readonly taskId?: string;
   readonly toolCallId?: string;
   readonly sourceArtifactId?: string;
@@ -37,7 +34,6 @@ export type AgentMultimodalEvidenceWithheldReason =
 
 export interface AgentMultimodalPacketLinkage {
   readonly conversationId?: string;
-  readonly legacyTrace?: AgentLegacyCreationTrace;
 }
 
 export interface AgentToolModalityDeclaration {
@@ -56,7 +52,6 @@ export interface AgentGeneratedArtifactProjection {
   readonly mimeType?: string;
   readonly metadata?: AgentMediaMetadata & Record<string, unknown>;
   readonly conversationId?: string;
-  readonly legacyTrace?: AgentLegacyCreationTrace;
   readonly taskId?: string;
   readonly toolCallId?: string;
 }

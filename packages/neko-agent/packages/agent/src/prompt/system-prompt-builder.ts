@@ -28,7 +28,7 @@ import * as path from 'path';
 import type {
   ISystemPromptBuilder,
   SystemPromptBuilderConfig,
-  PromptMode,
+  PromptExecutionMode,
   PromptLocale,
   AgentsSource,
   AgentsLoadResult,
@@ -55,7 +55,7 @@ const CONFIG_DIR = '.neko';
  */
 export class SystemPromptBuilder implements ISystemPromptBuilder {
   private _locale: PromptLocale;
-  private _mode: PromptMode;
+  private _executionMode: PromptExecutionMode;
   private _customDefaultPrompt?: string;
   private _customPlanPrompt?: string;
   private _agentsContent: string | null = null;
@@ -63,7 +63,7 @@ export class SystemPromptBuilder implements ISystemPromptBuilder {
 
   constructor(config: SystemPromptBuilderConfig = {}) {
     this._locale = this._normalizeLocale(config.locale);
-    this._mode = config.mode ?? 'default';
+    this._executionMode = config.executionMode ?? 'ask';
     this._customDefaultPrompt = config.customDefaultPrompt;
     this._customPlanPrompt = config.customPlanPrompt;
   }
@@ -80,21 +80,12 @@ export class SystemPromptBuilder implements ISystemPromptBuilder {
     return this._locale;
   }
 
-  setMode(mode: PromptMode): void {
-    this._mode = mode;
+  setExecutionMode(mode: PromptExecutionMode): void {
+    this._executionMode = mode;
   }
 
-  getMode(): PromptMode {
-    return this._mode;
-  }
-
-  togglePlanMode(): PromptMode {
-    this._mode = this._mode === 'plan' ? 'default' : 'plan';
-    return this._mode;
-  }
-
-  isPlanMode(): boolean {
-    return this._mode === 'plan';
+  getExecutionMode(): PromptExecutionMode {
+    return this._executionMode;
   }
 
   // ---------------------------------------------------------------------------
@@ -151,11 +142,11 @@ export class SystemPromptBuilder implements ISystemPromptBuilder {
   // ---------------------------------------------------------------------------
 
   build(): string {
-    return this._buildForMode(this._mode);
+    return this._buildForExecutionMode(this._executionMode);
   }
 
-  buildForMode(mode: PromptMode): string {
-    return this._buildForMode(mode);
+  buildForExecutionMode(mode: PromptExecutionMode): string {
+    return this._buildForExecutionMode(mode);
   }
 
   buildWithSkill(skillPrompt: string): string {
@@ -175,11 +166,11 @@ export class SystemPromptBuilder implements ISystemPromptBuilder {
    * {@link buildAgentsOverlay}.
    *
    * Introduced in PR3b alongside the AGENTS.md overlay pattern. `build()` and
-   * `buildForMode()` now share this same non-replacing base semantics so the
+   * `buildForExecutionMode()` share this same non-replacing base semantics so the
    * base protocol stays visible even when the user supplies AGENTS.md.
    */
   buildBaseOnly(): string {
-    if (this._mode === 'plan') {
+    if (this._executionMode === 'plan') {
       return this._getPlanPrompt();
     }
     return this._getDefaultPrompt();
@@ -223,7 +214,7 @@ export class SystemPromptBuilder implements ISystemPromptBuilder {
     return BUILTIN_PROMPTS[key];
   }
 
-  private _buildForMode(mode: PromptMode): string {
+  private _buildForExecutionMode(mode: PromptExecutionMode): string {
     if (mode === 'plan') {
       return this._getPlanPrompt();
     }

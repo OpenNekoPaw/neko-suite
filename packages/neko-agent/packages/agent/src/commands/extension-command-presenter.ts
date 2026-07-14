@@ -63,13 +63,7 @@ export type ExtensionCommandHostEffect =
   | { type: 'postHistoryCleared'; conversationId: string }
   | { type: 'refreshConversationList' }
   | { type: 'refreshActiveConversation' }
-  | { type: 'sendTasks'; conversationId: string }
-  | {
-      type: 'executePlanPrompt';
-      conversationId: string;
-      messageText: string;
-      sessionMode: 'agent';
-    };
+  | { type: 'sendTasks'; conversationId: string };
 
 export interface ExtensionCommandHostEffectPlan {
   beforeResult: ExtensionCommandHostEffect[];
@@ -79,8 +73,6 @@ export interface ExtensionCommandHostEffectPlan {
 export interface BuildExtensionCommandHostEffectPlanInput {
   result: CommandResult;
   activeConversationId?: string;
-  isPlanMode: boolean;
-  rawArgs?: string;
 }
 
 const OUTPUT_SUPPRESSED_ACTIONS = new Set([
@@ -184,19 +176,6 @@ export function buildExtensionCommandConversationSummaries(
   }));
 }
 
-export function shouldExecutePlanPromptAfterToggle(input: {
-  result: CommandResult;
-  isPlanMode: boolean;
-  rawArgs?: string;
-}): boolean {
-  return (
-    input.result.action === 'togglePlanMode' &&
-    input.isPlanMode &&
-    typeof input.rawArgs === 'string' &&
-    input.rawArgs.trim().length > 0
-  );
-}
-
 export function buildExtensionCommandHostEffectPlan(
   input: BuildExtensionCommandHostEffectPlanInput,
 ): ExtensionCommandHostEffectPlan {
@@ -224,22 +203,6 @@ export function buildExtensionCommandHostEffectPlan(
     beforeResult.push({
       type: 'sendTasks',
       conversationId: input.activeConversationId,
-    });
-  }
-
-  if (
-    input.activeConversationId &&
-    shouldExecutePlanPromptAfterToggle({
-      result: input.result,
-      isPlanMode: input.isPlanMode,
-      rawArgs: input.rawArgs,
-    })
-  ) {
-    afterResult.push({
-      type: 'executePlanPrompt',
-      conversationId: input.activeConversationId,
-      messageText: input.rawArgs?.trim() ?? '',
-      sessionMode: 'agent',
     });
   }
 

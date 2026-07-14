@@ -126,7 +126,7 @@ export interface ToolCallState {
  */
 export interface TodoItem {
   readonly content: string;
-  status: 'pending' | 'in_progress' | 'completed' | 'failed';
+  status: 'pending' | 'in_progress' | 'completed' | 'blocked';
 }
 
 /**

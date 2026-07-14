@@ -8,7 +8,6 @@ import type {
   ChildRunScope,
   TaskRunScope,
 } from '@neko/shared';
-import type { AgentLegacyCreationTrace } from './legacy-trace';
 export type AgentWorkItemTaskStatus =
   'queued' | 'processing' | 'completed' | 'failed' | 'cancelled';
 
@@ -55,10 +54,25 @@ export interface AgentBackgroundTask {
 
 export type AgentWorkItemKind = 'media-task' | 'tool-background-task' | 'subagent';
 
+/**
+ * Derived, bounded near-term progress shown alongside a conversation.
+ *
+ * This is deliberately not a Task, plan, project, recovery, or completion
+ * record. The owning AgentWorkItem and its Task/result remain authoritative.
+ */
+export type AgentTodoProjectionStatus = 'pending' | 'in_progress' | 'completed' | 'blocked';
+
+export interface AgentTodoProjectionItem {
+  readonly id: string;
+  readonly content: string;
+  readonly status: AgentTodoProjectionStatus;
+  readonly sourceWorkItemId: string;
+  readonly sourceKind: AgentWorkItemKind;
+}
+
 export interface AgentWorkItemBase {
   id: string;
   conversationId: string;
-  legacyTrace?: AgentLegacyCreationTrace;
   kind: AgentWorkItemKind;
   parentMessageId: string | null;
   parentToolCallId: string | null;

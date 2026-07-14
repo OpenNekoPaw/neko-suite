@@ -377,13 +377,10 @@ export function combineMultimodalContextPackets(
       ...(options.userAnnotation ? { userAnnotation: options.userAnnotation } : {}),
     },
     createdAt,
-    ...(options.conversationId ||
-    options.legacyTrace ||
-    (options.evidenceRefs && options.evidenceRefs.length > 0)
+    ...(options.conversationId || (options.evidenceRefs && options.evidenceRefs.length > 0)
       ? {
           metadata: {
             ...(options.conversationId ? { conversationId: options.conversationId } : {}),
-            ...(options.legacyTrace ? { legacyTrace: options.legacyTrace } : {}),
             ...(options.evidenceRefs ? { evidenceRefs: options.evidenceRefs } : {}),
           },
         }
@@ -443,7 +440,6 @@ export function buildTurnMultimodalContextPacket(
     ],
     {
       conversationId: input.conversationId,
-      legacyTrace: input.legacyTrace,
       evidenceRefs,
       userAnnotation: input.message,
       createdAt,
@@ -540,7 +536,6 @@ export function projectGeneratedArtifactReference(
         metadata: {
           generatedArtifactId: input.id,
           ...(input.conversationId ? { conversationId: input.conversationId } : {}),
-          ...(input.legacyTrace ? { legacyTrace: input.legacyTrace } : {}),
           ...(input.taskId ? { taskId: input.taskId } : {}),
           ...(input.toolCallId ? { toolCallId: input.toolCallId } : {}),
           ...(input.metadata ?? {}),
@@ -705,7 +700,6 @@ function createFeedbackFromAttachment(
     uri: attachment.path,
     ...(attachment.mimeType ? { mimeType: attachment.mimeType } : {}),
     ...(input.conversationId ? { conversationId: input.conversationId } : {}),
-    ...(input.legacyTrace ? { legacyTrace: input.legacyTrace } : {}),
     ...(input.taskId ? { taskId: input.taskId } : {}),
     toolCallId: input.toolCallId,
     metadata: {
@@ -726,7 +720,6 @@ function createFeedbackFromAttachment(
       sourceArtifactId: artifact.id,
       perceptionInputId: `input-feedback-evidence-${artifactId}`,
       ...(input.conversationId ? { conversationId: input.conversationId } : {}),
-      ...(input.legacyTrace ? { legacyTrace: input.legacyTrace } : {}),
       ...(input.taskId ? { taskId: input.taskId } : {}),
       toolCallId: input.toolCallId,
       metadata: {
@@ -790,7 +783,6 @@ function normalizeArtifactCandidate(
     uri,
     ...(readString(candidate['mimeType']) ? { mimeType: readString(candidate['mimeType']) } : {}),
     ...(input.conversationId ? { conversationId: input.conversationId } : {}),
-    ...(input.legacyTrace ? { legacyTrace: input.legacyTrace } : {}),
     ...(input.taskId ? { taskId: input.taskId } : {}),
     toolCallId: input.toolCallId,
     metadata: {
@@ -819,7 +811,6 @@ function normalizeEvidenceCandidate(
     perceptionInputId:
       readString(record['perceptionInputId']) ?? `input-feedback-${stableIdPart(artifact.id)}`,
     ...(input.conversationId ? { conversationId: input.conversationId } : {}),
-    ...(input.legacyTrace ? { legacyTrace: input.legacyTrace } : {}),
     ...(input.taskId ? { taskId: input.taskId } : {}),
     toolCallId: input.toolCallId,
     metadata: readMetadata(record['metadata']),

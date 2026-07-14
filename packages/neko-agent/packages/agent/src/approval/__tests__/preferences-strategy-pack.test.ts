@@ -95,7 +95,7 @@ describe('preferencesStrategyPack — alwaysApprove → escalate', () => {
         ...createPreferencesStrategyPacks(
           prefs({
             alwaysApprove: [
-              { kind: 'channel', value: 'draft-review', source: 'channel:draft-review' },
+              { kind: 'channel', value: 'creator-review', source: 'channel:creator-review' },
             ],
           }),
         ),
@@ -104,7 +104,16 @@ describe('preferencesStrategyPack — alwaysApprove → escalate', () => {
     });
     const res = await engine.evaluate(
       makeRequest({
-        channel: 'draft-review',
+        channel: 'creator-review',
+        binding: {
+          contentDigest: 'sha256:creator-review',
+          target: 'creator decision',
+          criticalInputIds: ['conversation:current'],
+          creativeScope: ['proposal'],
+          costRiskCeiling: 'none',
+          mutationScope: ['none'],
+          deliveryBoundary: 'none',
+        },
         paradigm: 'declarative',
         subject: { kind: 'proposal:x', label: 'x', idempotent: true, destructive: false },
       }),

@@ -1,18 +1,16 @@
 import {
   ToolGroupRegistry,
-  createTaskManagerCreationTaskProjection,
   type IRuntimeTaskManager,
   type SkillLifecycleRuntime,
   type SkillService,
 } from '@neko/agent';
 import {
   createAgentCapabilityRuntimeRegistries,
-  createNodeArtifactStore,
+  createNodeWorkspaceRuntimeStore,
   type AgentRuntimeConfig,
 } from '@neko/agent/runtime';
 import {
   createAutohealChain,
-  createDefaultCreativeProcessRecoveryPolicy,
   createValidationCoordinatorFactory,
   createQualityReviewValidationAdapter,
   registerBuiltinToolGroups,
@@ -67,18 +65,6 @@ export function createCliAgentRuntime(config: CliAgentRuntimeConfig): AgentRunti
   return {
     creationGuidance: {
       autohealChainFactory: createAutohealChain,
-      creativeProcessRecoveryPolicy: createDefaultCreativeProcessRecoveryPolicy(),
-      ...(skillService || skillLifecycleRuntime
-        ? {
-            stageTracking: {
-              ...(skillService ? { skillService, skillRegistry: skillService.registry } : {}),
-              ...(skillLifecycleRuntime ? { skillLifecycleRuntime } : {}),
-            },
-          }
-        : {}),
-      creationTaskProjection: createTaskManagerCreationTaskProjection({
-        store: config.taskManager,
-      }),
     },
     capabilityRuntime: {
       ...(skillService
@@ -95,7 +81,7 @@ export function createCliAgentRuntime(config: CliAgentRuntimeConfig): AgentRunti
       ...(providerExpressionProfileRegistry ? { providerExpressionProfileRegistry } : {}),
       ...(config.promptFragments !== undefined ? { promptFragments: config.promptFragments } : {}),
     },
-    artifactStore: createNodeArtifactStore({ workspaceRoot: config.workspaceRoot }),
+    workspaceStore: createNodeWorkspaceRuntimeStore({ workspaceRoot: config.workspaceRoot }),
     validationLoop: {
       ...(config.projectMemoryManager ? { projectMemoryManager: config.projectMemoryManager } : {}),
       validationCoordinatorFactory: createValidationCoordinatorFactory(),

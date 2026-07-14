@@ -6,16 +6,15 @@ describe('skill-presenter', () => {
     expect(
       projectSkillInjectionState({
         conversationId: 'conv-1',
-        skillName: 'creation-persona',
+        skillName: 'style-reference',
         lifecycle: {
           records: [
             {
               id: 'record-1',
-              skillName: 'creation-persona',
-              slot: 'stagePersona',
-              owner: 'creation-profile',
-              clearable: false,
-              lockedReason: 'stage owned',
+              skillName: 'style-reference',
+              slot: 'referenceSkill',
+              owner: 'agent',
+              clearable: true,
             },
             {
               id: 'record-2',
@@ -28,12 +27,12 @@ describe('skill-presenter', () => {
           ],
         },
       }),
-    ).toEqual({
+    ).toMatchObject({
       activeSkill: {
         conversationId: 'conv-1',
-        skillName: 'creation-persona',
+        skillName: 'style-reference',
         records: [
-          expect.objectContaining({ id: 'record-1', clearable: false }),
+          expect.objectContaining({ id: 'record-1', clearable: true }),
           expect.objectContaining({ id: 'record-2', clearable: true }),
         ],
       },

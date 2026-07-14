@@ -13,7 +13,6 @@ import type {
   AgentCapabilityTelemetryEventKind,
   AgentCapabilityTelemetryReason,
   AgentCapabilityTelemetrySnapshot,
-  AgentCapabilityCreationStageRequirement,
   AgentCapabilityPromptChainFragmentContribution,
   AgentInjectedCapabilitySet,
 } from '@neko-agent/types';
@@ -40,7 +39,6 @@ export interface NormalizeSkillCapabilityInput {
   readonly version?: string;
   readonly hostRequirements?: readonly AgentCapabilityHostRequirement[];
   readonly permissionRequirements?: readonly AgentCapabilityPermissionRequirement[];
-  readonly creationStageRequirements?: readonly AgentCapabilityCreationStageRequirement[];
 }
 
 export interface NormalizeSkillScanGroupInput {
@@ -129,9 +127,6 @@ export function normalizeSkillCapability(
     ...(input.hostRequirements ? { hostRequirements: input.hostRequirements } : {}),
     ...(input.permissionRequirements
       ? { permissionRequirements: input.permissionRequirements }
-      : {}),
-    ...(input.creationStageRequirements
-      ? { creationStageRequirements: input.creationStageRequirements }
       : {}),
     promptFragments: skill.content ? [promptFragment] : [],
     allowedTools: skill.allowedTools ?? [],
@@ -261,17 +256,6 @@ export function validateCapabilityContribution(
       requirement.scope,
       'permissionRequirements.scope',
     );
-  }
-  for (const requirement of contribution.creationStageRequirements ?? []) {
-    if ((requirement.profileIds?.length ?? 0) === 0 && (requirement.stageIds?.length ?? 0) === 0) {
-      diagnostics.push(
-        validationDiagnostic(
-          contributionId,
-          'empty-creation-stage-requirement',
-          'creationStageRequirements',
-        ),
-      );
-    }
   }
   validateArtifactFacets(contribution, diagnostics);
 
@@ -543,12 +527,6 @@ function getInjectionSkipReason(
     return {
       reason: 'host-requirement',
       message: 'Capability contribution does not support the current host.',
-    };
-  }
-  if (!isCreationStageSupported(contribution.creationStageRequirements, context)) {
-    return {
-      reason: 'creation-stage-requirement',
-      message: 'Capability contribution does not support the current creation stage.',
     };
   }
   if (!isPermissionAllowed(contribution, context)) {
@@ -1325,25 +1303,6 @@ function isHostSupported(
   return requirements.some((requirement) => requirement.host === host || requirement.optional);
 }
 
-function isCreationStageSupported(
-  requirements: readonly AgentCapabilityCreationStageRequirement[] | undefined,
-  context: AgentCapabilityInjectionContext,
-): boolean {
-  if (!requirements || requirements.length === 0) return true;
-  return requirements.some(
-    (requirement) =>
-      includesWhenPresent(requirement.profileIds, context.creationProfileId) &&
-      includesWhenPresent(requirement.stageIds, context.creationStageId),
-  );
-}
-
-function includesWhenPresent(
-  values: readonly string[] | undefined,
-  value: string | undefined,
-): boolean {
-  return !values || values.length === 0 || (value !== undefined && values.includes(value));
-}
-
 function isPermissionAllowed(
   contribution: AgentCapabilityContribution,
   context: AgentCapabilityInjectionContext,
@@ -1405,7 +1364,6 @@ function readContributionUsedFields(contribution: AgentCapabilityContribution): 
   if (contribution.description) fields.push('description');
   if (contribution.hostRequirements?.length) fields.push('hostRequirements');
   if (contribution.permissionRequirements?.length) fields.push('permissionRequirements');
-  if (contribution.creationStageRequirements?.length) fields.push('creationStageRequirements');
   if (contribution.promptFragments?.length) fields.push('promptFragments');
   if (contribution.allowedTools?.length) fields.push('allowedTools');
   if (contribution.slashCommands?.length) fields.push('slashCommands');
@@ -1447,7 +1405,6 @@ function toTelemetryReason(reason: string): AgentCapabilityTelemetryReason {
   switch (reason) {
     case 'host-requirement':
     case 'trust-policy':
-    case 'creation-stage-requirement':
     case 'permission-policy':
     case 'active-skill':
     case 'disabled':

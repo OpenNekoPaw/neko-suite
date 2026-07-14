@@ -1,5 +1,4 @@
 import type { CanvasLifecycleBlockData, CodeDiff, ContentBlock, ToolCall } from '@neko-agent/types';
-import type { Plan } from '@neko-agent/types';
 import {
   projectCompositeBlockRichContent,
   type CompositeRichContentProjection,
@@ -12,13 +11,11 @@ export type ContentBlockRenderKind =
   | 'tool'
   | 'toolGroup'
   | 'diff'
-  | 'plan'
   | 'composite'
   | 'canvasLifecycle'
   | 'empty';
 
-export type ContentBlockHeaderIconKind =
-  'thinking' | 'response' | 'tool' | 'edit' | 'plan' | 'composite';
+export type ContentBlockHeaderIconKind = 'thinking' | 'response' | 'tool' | 'edit' | 'composite';
 
 export type ContentBlockHeaderTone = 'purple' | 'green' | 'blue' | 'orange' | 'yellow';
 
@@ -75,11 +72,6 @@ export interface DiffContentBlockProjection extends ContentBlockProjectionBase {
   codeDiff: CodeDiff;
 }
 
-export interface PlanContentBlockProjection extends ContentBlockProjectionBase {
-  renderKind: 'plan';
-  plan: Plan;
-}
-
 export interface CompositeContentBlockProjection extends ContentBlockProjectionBase {
   renderKind: 'composite';
   richContent: CompositeRichContentProjection;
@@ -100,7 +92,6 @@ export type ContentBlockUiProjection =
   | ToolContentBlockProjection
   | ToolGroupContentBlockProjection
   | DiffContentBlockProjection
-  | PlanContentBlockProjection
   | CompositeContentBlockProjection
   | CanvasLifecycleContentBlockProjection
   | EmptyContentBlockProjection;
@@ -167,11 +158,6 @@ const CONTENT_BLOCK_HEADER_METADATA: Record<ContentBlock['type'], ContentBlockHe
     label: 'Edit',
     tone: 'orange',
   },
-  plan: {
-    iconKind: 'plan',
-    label: 'Plan',
-    tone: 'yellow',
-  },
   composite: {
     iconKind: 'composite',
     label: 'Composite',
@@ -229,15 +215,6 @@ export function projectContentBlockUi(input: ProjectContentBlockUiInput): Conten
         ...base,
         renderKind: 'diff',
         codeDiff: input.block.codeDiff,
-      };
-    case 'plan':
-      if (!input.block.plan) {
-        return { ...base, renderKind: 'empty' };
-      }
-      return {
-        ...base,
-        renderKind: 'plan',
-        plan: input.block.plan,
       };
     case 'composite':
       if (!input.block.composite) {
@@ -439,7 +416,6 @@ function isPrimaryResultProjection(projection: ContentBlockUiProjection): boolea
     case 'composite':
     case 'canvasLifecycle':
     case 'diff':
-    case 'plan':
       return true;
     case 'thinking':
     case 'tool':
@@ -459,7 +435,6 @@ function isCollapsibleProcessProjection(projection: ContentBlockUiProjection): b
       return projection.toolCalls.every(isCollapsibleToolCall);
     case 'markdown':
     case 'diff':
-    case 'plan':
     case 'composite':
     case 'canvasLifecycle':
     case 'empty':

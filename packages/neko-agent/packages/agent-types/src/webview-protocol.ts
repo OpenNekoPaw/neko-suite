@@ -51,14 +51,12 @@ import {
 } from '@neko/shared/types/creative-ai-invocation';
 import type { AgentPhase } from './phase';
 import type { AgentFileReference, ContentBlock, Message } from './message';
-import type { Plan } from './plan';
 import type { ConfiguredProvider } from './provider';
 import type {
   ConversationSummary,
   CharacterDialogueSessionProjection,
   EmbodyCharacterSessionProjection,
   OpenTab,
-  PromptMode,
   SessionMode,
   SettingsState,
   SsoSession,
@@ -176,13 +174,7 @@ export interface ConfirmToolWebviewMessage {
 }
 
 export interface ConversationOnlyWebviewMessage {
-  type:
-    | 'clearHistory'
-    | 'cancelMessage'
-    | 'getTasks'
-    | 'getContextTokenCount'
-    | 'compressContext'
-    | 'getPromptMode';
+  type: 'clearHistory' | 'cancelMessage' | 'getTasks' | 'getContextTokenCount' | 'compressContext';
   conversationId: string;
 }
 
@@ -242,21 +234,6 @@ export interface EmptyWebviewMessage {
     | 'ssoLogout'
     | 'openConfigFile'
     | 'getTabState';
-}
-
-export interface PlanActionWebviewMessage {
-  type: 'planApprove' | 'planReject';
-  planId: string;
-  conversationId: string;
-  filePath?: string;
-}
-
-export interface PlanStepActionWebviewMessage {
-  type: 'planStepApprove' | 'planStepReject' | 'planStepModify';
-  planId: string;
-  stepId: string;
-  conversationId: string;
-  newDescription?: string;
 }
 
 export interface GetSettingsWebviewMessage {
@@ -323,12 +300,6 @@ export interface RevealAssetWebviewMessage {
 export interface OpenUrlWebviewMessage {
   type: 'openUrl';
   url: string;
-}
-
-export interface SetPromptModeWebviewMessage {
-  type: 'setPromptMode';
-  mode: 'default' | 'plan';
-  conversationId: string;
 }
 
 export interface SendToPluginWebviewMessage {
@@ -527,8 +498,6 @@ export type WebviewToExtensionMessage =
   | EmptyWebviewMessage
   | GetSettingsWebviewMessage
   | GetConversationSnapshotWebviewMessage
-  | PlanActionWebviewMessage
-  | PlanStepActionWebviewMessage
   | UpdateSettingsWebviewMessage
   | UpdateTabStateWebviewMessage
   | TaskActionWebviewMessage
@@ -537,7 +506,6 @@ export type WebviewToExtensionMessage =
   | FilePathWebviewMessage
   | RevealAssetWebviewMessage
   | OpenUrlWebviewMessage
-  | SetPromptModeWebviewMessage
   | SendToPluginWebviewMessage
   | InvokeAgentCapabilityLifecycleWebviewMessage
   | RequestCanvasAuthoringHandoffWebviewMessage
@@ -932,7 +900,6 @@ export interface ToolResultMessage {
   success: boolean;
   data?: unknown;
   error?: string;
-  plan?: Plan;
   attachments?: readonly import('@neko/shared').ToolResultAttachment[];
   perceptionCards?: readonly import('@neko/shared').PerceptionCard[];
   backfillDiagnostics?: readonly import('@neko/shared').ToolResultBackfillDiagnostic[];
@@ -959,29 +926,6 @@ export interface ToolConfirmationMessage {
   action?: string;
   description?: string;
   details?: Record<string, unknown>;
-}
-
-export interface PlanStepStatusUpdateMessage {
-  type: 'planStepStatusUpdate';
-  planId: string;
-  stepId: string;
-  status: string;
-  newDescription?: string;
-  conversationId: string;
-}
-
-export interface PlanStatusUpdateMessage {
-  type: 'planStatusUpdate';
-  planId: string;
-  status: string;
-  conversationId: string;
-}
-
-export interface PromptModeChangedMessage {
-  type: 'promptModeChanged';
-  conversationId: string;
-  mode: PromptMode;
-  isPlanMode: boolean;
 }
 
 export interface TasksUpdatedMessage {
@@ -1203,9 +1147,6 @@ export type ExtensionToWebviewMessage =
   | ToolResultMessage
   | ToolResultBackfillMessage
   | ToolConfirmationMessage
-  | PlanStepStatusUpdateMessage
-  | PlanStatusUpdateMessage
-  | PromptModeChangedMessage
   | TasksUpdatedMessage
   | TaskCreatedMessage
   | TaskUpdatedMessage
@@ -1274,7 +1215,6 @@ const CONVERSATION_ONLY_MESSAGE_TYPES: readonly ConversationOnlyWebviewMessage['
   'getTasks',
   'getContextTokenCount',
   'compressContext',
-  'getPromptMode',
 ];
 const EMPTY_MESSAGE_TYPES: readonly EmptyWebviewMessage['type'][] = [
   'newConversation',
@@ -1289,15 +1229,6 @@ const EMPTY_MESSAGE_TYPES: readonly EmptyWebviewMessage['type'][] = [
   'ssoLogout',
   'openConfigFile',
   'getTabState',
-];
-const PLAN_ACTION_MESSAGE_TYPES: readonly PlanActionWebviewMessage['type'][] = [
-  'planApprove',
-  'planReject',
-];
-const PLAN_STEP_ACTION_MESSAGE_TYPES: readonly PlanStepActionWebviewMessage['type'][] = [
-  'planStepApprove',
-  'planStepReject',
-  'planStepModify',
 ];
 const TASK_ACTION_MESSAGE_TYPES: readonly TaskActionWebviewMessage['type'][] = [
   'cancelTask',
@@ -1320,8 +1251,6 @@ export const WEBVIEW_TO_EXTENSION_MESSAGE_TYPES = [
   ...EMPTY_MESSAGE_TYPES,
   'getSettings',
   'getConversationSnapshot',
-  ...PLAN_ACTION_MESSAGE_TYPES,
-  ...PLAN_STEP_ACTION_MESSAGE_TYPES,
   'updateSettings',
   'activateConversation',
   'updateTabState',
@@ -1331,7 +1260,6 @@ export const WEBVIEW_TO_EXTENSION_MESSAGE_TYPES = [
   'revealFile',
   'revealAsset',
   'openUrl',
-  'setPromptMode',
   'sendToPlugin',
   'invokeAgentCapabilityLifecycle',
   'requestCanvasAuthoringHandoff',
@@ -1354,7 +1282,6 @@ export const WEBVIEW_TO_EXTENSION_MESSAGE_TYPES = [
   'projectionDetach',
 ] as const satisfies readonly WebviewToExtensionMessage['type'][];
 
-const PROMPT_MODES: readonly SetPromptModeWebviewMessage['mode'][] = ['default', 'plan'];
 const DRAG_MEDIA_TYPES: ReadonlyArray<DragStartWebviewMessage['asset']['mediaType']> = [
   'image',
   'video',
@@ -1915,12 +1842,6 @@ export function parseWebviewToExtensionMessage(raw: unknown): WebviewToExtension
   if (type === 'conversationLifecycle') {
     return parseConversationLifecycleMessage(raw);
   }
-  if (isPlanActionMessageType(type)) {
-    return parsePlanActionMessage(type, raw);
-  }
-  if (isPlanStepActionMessageType(type)) {
-    return parsePlanStepActionMessage(type, raw);
-  }
   if (isTaskActionMessageType(type)) {
     return parseTaskActionMessage(type, raw);
   }
@@ -1946,8 +1867,6 @@ export function parseWebviewToExtensionMessage(raw: unknown): WebviewToExtension
       return parseRevealAssetMessage(raw);
     case 'openUrl':
       return parseOpenUrlMessage(raw);
-    case 'setPromptMode':
-      return parseSetPromptModeMessage(raw);
     case 'sendToPlugin':
       return parseSendToPluginMessage(raw);
     case 'invokeAgentCapabilityLifecycle':
@@ -2262,37 +2181,6 @@ function parseConversationLifecycleMessage(
   };
 }
 
-function parsePlanActionMessage(
-  type: PlanActionWebviewMessage['type'],
-  raw: Record<string, unknown>,
-): PlanActionWebviewMessage | null {
-  const planId = requiredString(raw.planId);
-  const conversationId = requiredString(raw.conversationId);
-  const filePath = optionalStringStrict(raw.filePath);
-  if (!planId || !conversationId || filePath === null) return null;
-  return { type, planId, conversationId, ...(filePath !== undefined ? { filePath } : {}) };
-}
-
-function parsePlanStepActionMessage(
-  type: PlanStepActionWebviewMessage['type'],
-  raw: Record<string, unknown>,
-): PlanStepActionWebviewMessage | null {
-  const planId = requiredString(raw.planId);
-  const stepId = requiredString(raw.stepId);
-  const conversationId = requiredString(raw.conversationId);
-  const newDescription = optionalStringStrict(raw.newDescription);
-  if (!planId || !stepId || !conversationId || newDescription === null) return null;
-  if (type === 'planStepModify' && newDescription === undefined) return null;
-
-  return {
-    type,
-    planId,
-    stepId,
-    conversationId,
-    ...(newDescription !== undefined ? { newDescription } : {}),
-  };
-}
-
 function parseUpdateSettingsMessage(
   raw: Record<string, unknown>,
 ): UpdateSettingsWebviewMessage | null {
@@ -2426,14 +2314,6 @@ function parseRevealAssetMessage(raw: Record<string, unknown>): RevealAssetWebvi
 function parseOpenUrlMessage(raw: Record<string, unknown>): OpenUrlWebviewMessage | null {
   const url = requiredString(raw.url);
   return url ? { type: 'openUrl', url } : null;
-}
-
-function parseSetPromptModeMessage(
-  raw: Record<string, unknown>,
-): SetPromptModeWebviewMessage | null {
-  const conversationId = requiredString(raw.conversationId);
-  if (!isPromptMode(raw.mode)) return null;
-  return conversationId ? { type: 'setPromptMode', mode: raw.mode, conversationId } : null;
 }
 
 function parseSendToPluginMessage(raw: Record<string, unknown>): SendToPluginWebviewMessage | null {
@@ -3576,14 +3456,6 @@ function isEmptyMessageType(value: string): value is EmptyWebviewMessage['type']
   return includesString(EMPTY_MESSAGE_TYPES, value);
 }
 
-function isPlanActionMessageType(value: string): value is PlanActionWebviewMessage['type'] {
-  return includesString(PLAN_ACTION_MESSAGE_TYPES, value);
-}
-
-function isPlanStepActionMessageType(value: string): value is PlanStepActionWebviewMessage['type'] {
-  return includesString(PLAN_STEP_ACTION_MESSAGE_TYPES, value);
-}
-
 function isTaskActionMessageType(value: string): value is TaskActionWebviewMessage['type'] {
   return includesString(TASK_ACTION_MESSAGE_TYPES, value);
 }
@@ -3592,10 +3464,6 @@ function isQueuedMessageActionType(
   value: string,
 ): value is QueuedMessageActionWebviewMessage['type'] {
   return includesString(QUEUED_MESSAGE_ACTION_TYPES, value);
-}
-
-function isPromptMode(value: unknown): value is SetPromptModeWebviewMessage['mode'] {
-  return typeof value === 'string' && includesString(PROMPT_MODES, value);
 }
 
 function isDragMediaType(value: unknown): value is DragStartWebviewMessage['asset']['mediaType'] {

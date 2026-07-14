@@ -2,7 +2,7 @@
  * Agent CLI Types
  */
 
-import type { AgentSessionConfig, MCPServerConfig } from '@neko/agent';
+import type { AgentSessionConfig, ExecutionMode, MCPServerConfig } from '@neko/agent';
 import type { ExternalResearchConfig } from '@neko/shared';
 import type { AgentLlmConfig } from '@neko-agent/types';
 
@@ -58,6 +58,8 @@ export interface CLIConfig {
   externalResearch?: ExternalResearchConfig;
   /** Output format */
   outputFormat: 'text' | 'json' | 'markdown';
+  /** Session execution and confirmation behavior. */
+  executionMode: ExecutionMode;
   /** Extended thinking budget in tokens (0 = disabled, Anthropic/DeepSeek only) */
   thinkingBudget: number;
   /** Runtime LLM parameter presets and advanced values for Agent turns. */
@@ -82,5 +84,6 @@ export const DEFAULT_CLI_CONFIG: CLIConfig = {
   mcpServers: [],
   externalResearch: undefined,
   outputFormat: 'text',
+  executionMode: 'ask',
   thinkingBudget: 0,
 };

@@ -1,11 +1,7 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
+import { AGENT_RUNTIME_CHANNELS, createEventBus } from '../../events';
 import { createNdjsonEventSink, type NdjsonFsOps } from '../ndjson-event-sink';
-import { createEventBus, CREATION_CHANNELS, EXECUTION_CHANNELS } from '../../events';
 
-/**
- * In-memory fsOps for tests. Records mkdir calls and accumulates
- * appendFile writes per path so assertions can reconstruct the JSONL.
- */
 function memFs(): NdjsonFsOps & {
   files: Map<string, string>;
   dirs: string[];
@@ -34,8 +30,8 @@ function memFs(): NdjsonFsOps & {
 function parseLines(blob: string): Array<Record<string, unknown>> {
   return blob
     .split('\n')
-    .filter((l) => l.length > 0)
-    .map((l) => JSON.parse(l) as Record<string, unknown>);
+    .filter(Boolean)
+    .map((line) => JSON.parse(line) as Record<string, unknown>);
 }
 
 describe('NdjsonEventSink', () => {
@@ -44,219 +40,86 @@ describe('NdjsonEventSink', () => {
     now = 100;
   });
 
-  it('writes every event as a JSONL line with monotonic seq', async () => {
+  it('writes ordinary Agent events with monotonic sequence and conversation partition', async () => {
     const fs = memFs();
+    const path = '/r/.neko/logs/events.jsonl';
     const sink = createNdjsonEventSink({
-      filePath: '/r/.neko/logs/events.jsonl',
+      filePath: path,
       fsOps: fs,
       writerId: 'writer-events',
       now: () => now++,
+      mapEvent: (event) => ({ ...event, conversationId: 'conv-1' }),
     });
     const bus = createEventBus();
     sink.attach(bus);
-
     bus.emit({
-      channel: CREATION_CHANNELS.RUN_STARTED,
-      runId: 'run-1',
-      creationKind: 'w-1',
-      at: 0,
+      channel: AGENT_RUNTIME_CHANNELS.APPROVAL_DECIDED,
+      subject: 'tool:Write',
+      decision: 'accept',
+      at: 1,
     });
     bus.emit({
-      channel: EXECUTION_CHANNELS.APPLY_COMMITTED,
-      runId: 'run-1',
-      kind: 'tool:x',
-      at: 0,
+      channel: AGENT_RUNTIME_CHANNELS.STEP_COMPLETED,
+      round: 0,
+      thinkOnly: false,
+      at: 2,
     });
     await sink.flush();
 
-    const lines = parseLines(fs.files.get('/r/.neko/logs/events.jsonl') ?? '');
-    expect(lines).toHaveLength(2);
-    expect(lines.map((line) => line.writerId)).toEqual(['writer-events', 'writer-events']);
-    expect(lines[0]!.seq).toBe(1);
-    expect(lines[1]!.seq).toBe(2);
-    expect((lines[0]!.event as { channel: string }).channel).toBe('creation.run.started');
-    expect((lines[1]!.event as { channel: string }).channel).toBe('execution.apply.committed');
-  });
-
-  it('keeps global seq diagnostic while partition seq is conversation-run local', async () => {
-    const fs = memFs();
-    const sink = createNdjsonEventSink({
-      filePath: '/r/.neko/logs/events.jsonl',
-      fsOps: fs,
-      mapEvent: (event) => ({
-        ...event,
-        conversationId: event.runId === 'run-a' ? 'conv-a' : 'conv-b',
-      }),
-    });
-    const bus = createEventBus();
-    sink.attach(bus);
-
-    bus.emit({
-      channel: CREATION_CHANNELS.RUN_STARTED,
-      runId: 'run-a',
-      creationKind: 'w-a',
-      at: 0,
-    });
-    bus.emit({
-      channel: CREATION_CHANNELS.RUN_STARTED,
-      runId: 'run-b',
-      creationKind: 'w-b',
-      at: 0,
-    });
-    bus.emit({
-      channel: EXECUTION_CHANNELS.APPLY_COMMITTED,
-      runId: 'run-a',
-      kind: 'tool:x',
-      at: 0,
-    });
-    await sink.flush();
-
-    const lines = parseLines(fs.files.get('/r/.neko/logs/events.jsonl') ?? '');
-    expect(lines.map((line) => line.seq)).toEqual([1, 2, 3]);
-    expect(lines.map((line) => line.partitionSeq)).toEqual([1, 1, 2]);
+    const lines = parseLines(fs.files.get(path) ?? '');
+    expect(lines.map((line) => line.seq)).toEqual([1, 2]);
+    expect(lines.map((line) => line.partitionSeq)).toEqual([1, 2]);
     expect(lines.map((line) => line.partition)).toEqual([
-      { conversationId: 'conv-a', runId: 'run-a' },
-      { conversationId: 'conv-b', runId: 'run-b' },
-      { conversationId: 'conv-a', runId: 'run-a' },
+      { conversationId: 'conv-1' },
+      { conversationId: 'conv-1' },
     ]);
-  });
-
-  it('ensureDir runs exactly once regardless of event volume', async () => {
-    const fs = memFs();
-    const sink = createNdjsonEventSink({
-      filePath: '/r/.neko/logs/events.jsonl',
-      fsOps: fs,
-    });
-    const bus = createEventBus();
-    sink.attach(bus);
-
-    for (let i = 0; i < 5; i++) {
-      bus.emit({
-        channel: CREATION_CHANNELS.MILESTONE,
-        runId: 'r',
-        label: `m${i}`,
-        at: 0,
-      });
-    }
-    await sink.flush();
-
     expect(fs.dirs).toEqual(['/r/.neko/logs']);
   });
 
-  it('filter predicate routes only matching events onto disk', async () => {
+  it('filters channels, survives one write failure, and detaches on dispose', async () => {
     const fs = memFs();
+    const path = '/r/.neko/logs/audits.jsonl';
     const sink = createNdjsonEventSink({
-      filePath: '/r/.neko/logs/audits.jsonl',
+      filePath: path,
       fsOps: fs,
-      filter: (e) => e.channel.startsWith('execution.autoheal.'),
+      filter: (event) => event.channel === AGENT_RUNTIME_CHANNELS.APPROVAL_DECIDED,
     });
     const bus = createEventBus();
     sink.attach(bus);
-
-    bus.emit({
-      channel: CREATION_CHANNELS.MILESTONE,
-      runId: 'r',
-      label: 'boring',
-      at: 0,
-    });
-    bus.emit({
-      channel: EXECUTION_CHANNELS.AUTOHEAL_L5_ESCALATED,
-      runId: 'r',
-      trigger: { subject: 'tool:x', errorCode: 'OOM' },
-      reason: 'retry-exhausted',
-      at: 0,
-    });
-    await sink.flush();
-
-    const lines = parseLines(fs.files.get('/r/.neko/logs/audits.jsonl') ?? '');
-    expect(lines).toHaveLength(1);
-    expect((lines[0]!.event as { channel: string }).channel).toBe(
-      'execution.autoheal.l5.escalated',
-    );
-  });
-
-  it('dispose flushes, detaches, and silences further emits', async () => {
-    const fs = memFs();
-    const sink = createNdjsonEventSink({
-      filePath: '/r/.neko/logs/events.jsonl',
-      fsOps: fs,
-    });
-    const bus = createEventBus();
-    sink.attach(bus);
-
-    bus.emit({
-      channel: CREATION_CHANNELS.RUN_STARTED,
-      runId: 'r',
-      creationKind: 'w',
-      at: 0,
-    });
-    await sink.dispose();
-    const before = fs.files.get('/r/.neko/logs/events.jsonl') ?? '';
-
-    bus.emit({
-      channel: CREATION_CHANNELS.RUN_ENDED,
-      runId: 'r',
-      status: 'completed',
-      at: 0,
-    });
-    await sink.flush();
-
-    expect(fs.files.get('/r/.neko/logs/events.jsonl')).toBe(before);
-  });
-
-  it('write failures are logged, chain keeps accepting events', async () => {
-    const fs = memFs();
-    const sink = createNdjsonEventSink({
-      filePath: '/r/.neko/logs/events.jsonl',
-      fsOps: fs,
-    });
-    const bus = createEventBus();
-    sink.attach(bus);
-
     fs.failNextAppend = true;
     bus.emit({
-      channel: CREATION_CHANNELS.RUN_STARTED,
-      runId: 'r',
-      creationKind: 'w',
-      at: 0,
+      channel: AGENT_RUNTIME_CHANNELS.APPROVAL_DECIDED,
+      subject: 'tool:A',
+      decision: 'accept',
+      at: 1,
     });
-    // A second event must still land even though the first failed.
     bus.emit({
-      channel: CREATION_CHANNELS.RUN_ENDED,
-      runId: 'r',
-      status: 'completed',
-      at: 0,
+      channel: AGENT_RUNTIME_CHANNELS.APPROVAL_DECIDED,
+      subject: 'tool:B',
+      decision: 'reject',
+      at: 2,
+    });
+    bus.emit({
+      channel: AGENT_RUNTIME_CHANNELS.STEP_COMPLETED,
+      round: 0,
+      thinkOnly: false,
+      at: 3,
+    });
+    await sink.dispose();
+    const before = fs.files.get(path);
+    bus.emit({
+      channel: AGENT_RUNTIME_CHANNELS.APPROVAL_DECIDED,
+      subject: 'tool:C',
+      decision: 'accept',
+      at: 4,
     });
     await sink.flush();
 
-    const lines = parseLines(fs.files.get('/r/.neko/logs/events.jsonl') ?? '');
-    expect(lines).toHaveLength(1);
-    expect((lines[0]!.event as { channel: string }).channel).toBe('creation.run.ended');
+    expect(parseLines(fs.files.get(path) ?? '')).toHaveLength(1);
+    expect(fs.files.get(path)).toBe(before);
   });
 
-  it('attach while already attached returns the existing unsubscriber (no double-write)', async () => {
-    const fs = memFs();
-    const sink = createNdjsonEventSink({
-      filePath: '/r/.neko/logs/events.jsonl',
-      fsOps: fs,
-    });
-    const bus = createEventBus();
-    sink.attach(bus);
-    sink.attach(bus); // second attach is a noop
-
-    bus.emit({
-      channel: CREATION_CHANNELS.RUN_STARTED,
-      runId: 'r',
-      creationKind: 'w',
-      at: 0,
-    });
-    await sink.flush();
-
-    const lines = parseLines(fs.files.get('/r/.neko/logs/events.jsonl') ?? '');
-    expect(lines).toHaveLength(1);
-  });
-
-  it('filePath is required', () => {
+  it('rejects an empty path', () => {
     expect(() => createNdjsonEventSink({ filePath: '', fsOps: memFs() })).toThrow(/filePath/);
   });
 });

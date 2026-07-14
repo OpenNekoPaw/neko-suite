@@ -32,7 +32,6 @@ import {
   type AgentSessionDiagnosticMessage,
   Message,
   OpenTab,
-  PromptMode,
   SessionMode,
   TabType,
 } from '@neko-agent/types';
@@ -273,14 +272,6 @@ export function ConversationController({
     entryInputValueRef.current = value;
     setEntryInputValue(value);
   }, []);
-  const setPromptModeForConversation = useCallback(
-    (conversationId: string, mode: PromptMode) => {
-      for (const runtime of tabRenderRuntimeRegistry.getByConversation(conversationId)) {
-        runtime.store.updateState({ promptMode: mode, promptModeInitialized: true });
-      }
-    },
-    [tabRenderRuntimeRegistry],
-  );
   const hydrateConversationSettings = useCallback(
     (conversationId: string, snapshot: ConversationSettingsSnapshot) => {
       settingsSnapshotByConversationRef.current.set(conversationId, snapshot);
@@ -452,7 +443,6 @@ export function ConversationController({
           compressingByConversation: conversationCompressingRef.current,
           agentStateByConversation: conversationAgentStateRef.current,
           workItemsByConversation,
-          defaultPromptMode: settings.promptMode,
         }),
       );
     }
@@ -465,7 +455,6 @@ export function ConversationController({
     conversationStreamingRef,
     openTabs,
     projectionVersion,
-    settings.promptMode,
     visibleConversationId,
     workItemsByConversation,
   ]);
@@ -482,9 +471,8 @@ export function ConversationController({
         conversationId: visibleConversationId ?? '',
         messagesByConversation: new Map(),
         streamingByConversation: new Map(),
-        defaultPromptMode: settings.promptMode,
       }),
-    [sessionStateByConversation, settings.promptMode, visibleConversationId],
+    [sessionStateByConversation, visibleConversationId],
   );
   const activeSettings = settings;
 
@@ -494,14 +482,8 @@ export function ConversationController({
       if (!store) continue;
       const settingsSnapshot = settingsSnapshotByConversationRef.current.get(tab.conversationId);
       if (settingsSnapshot) applyConversationSettingsSnapshot(store, settingsSnapshot);
-      if (!store.getSnapshot().state.promptModeInitialized) {
-        store.updateState({
-          promptModeInitialized: true,
-          promptMode: activeSettings.promptMode,
-        });
-      }
     }
-  }, [activeSettings.promptMode, openTabs, tabRenderRuntimeRegistry]);
+  }, [openTabs, tabRenderRuntimeRegistry]);
   const entryModelState = useMemo(
     () =>
       projectChatWorkspaceModelState({
@@ -604,7 +586,6 @@ export function ConversationController({
     AgentHostMessages.getSettings(conversationId);
     AgentHostMessages.getContextTokenCount(conversationId);
     AgentHostMessages.getTasks(conversationId);
-    AgentHostMessages.getPromptMode(conversationId);
     AgentHostMessages.getMessageQueue(conversationId);
   }, []);
 
@@ -805,7 +786,6 @@ export function ConversationController({
     setActiveSkill,
     setActivationProgressByConversation,
     updateSettings,
-    setPromptModeForConversation,
     setShowOnboarding,
     setGlobalError,
     reportConversationDiagnostic,
@@ -1345,8 +1325,6 @@ export function ConversationController({
               onMediaUnderstandingModelSelect={() => undefined}
               executionMode={activeSettings.executionMode}
               onExecutionModeChange={(mode) => updateEntrySettings({ executionMode: mode })}
-              promptMode={activeSettings.promptMode}
-              onPromptModeChange={(mode) => updateEntrySettings({ promptMode: mode })}
               maxContextTokens={entryModelState.selectedEffectiveInputBudget}
               outputTokenCap={entryModelState.selectedOutputTokenCap}
               modelMaxOutputTokens={entryModelState.selectedMaxOutputTokens}

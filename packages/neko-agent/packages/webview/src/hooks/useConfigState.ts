@@ -5,7 +5,7 @@
  */
 
 import { useState, useCallback } from 'react';
-import type { SettingsState, ShellExecutionMode, PromptMode } from '@neko-agent/types';
+import type { SettingsState, ShellExecutionMode } from '@neko-agent/types';
 import type { MentionItem, PluginSlashCommandDef } from '@/components/ChatView/InputArea/types';
 
 /**
@@ -35,7 +35,6 @@ const DEFAULT_SETTINGS: SettingsState = {
   temperature: 0.7,
   maxTokens: 8192,
   executionMode: 'ask' as ShellExecutionMode,
-  promptMode: 'default' as PromptMode,
   chatModelOptions: [],
   defaultMediaModels: {},
   modelGroups: [],

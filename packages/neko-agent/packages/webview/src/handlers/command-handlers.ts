@@ -6,11 +6,7 @@
 
 import { defineHandler } from './types';
 import type { MessageHandler, HandlerRegistration, MessageHandlerContext } from './types';
-import type {
-  AgentCapabilityLifecycleResultMessage,
-  PromptModeChangedMessage,
-  SlashCommandResultMessage,
-} from './messages';
+import type { AgentCapabilityLifecycleResultMessage, SlashCommandResultMessage } from './messages';
 import type { SlashCommandResultEffect } from '@neko-agent/types';
 import type { ContentBlock } from '@neko-agent/types';
 import {
@@ -38,13 +34,6 @@ const handleSlashCommandResult: MessageHandler<'slashCommandResult'> = (
   for (const effect of projection.effects) {
     applySlashCommandEffect(effect, context, message.conversationId);
   }
-};
-
-const handlePromptModeChanged: MessageHandler<'promptModeChanged'> = (
-  message: PromptModeChangedMessage,
-  context,
-) => {
-  context.setPromptModeForConversation(message.conversationId, message.mode);
 };
 
 const handleAgentCapabilityLifecycleResult: MessageHandler<'agentCapabilityLifecycleResult'> = (
@@ -95,9 +84,6 @@ function applySlashCommandEffect(
       context.activeConversationIdRef.current = projection.activeConversationId;
       break;
     }
-    case 'setPromptMode':
-      context.setPromptModeForConversation(effect.conversationId, effect.promptMode);
-      break;
     case 'setActiveTab':
       context.setActiveTab(effect.activeTab);
       break;
@@ -109,7 +95,6 @@ function applySlashCommandEffect(
  */
 export const commandHandlers: HandlerRegistration[] = [
   defineHandler('slashCommandResult', handleSlashCommandResult),
-  defineHandler('promptModeChanged', handlePromptModeChanged),
   defineHandler('agentCapabilityLifecycleResult', handleAgentCapabilityLifecycleResult),
 ];
 

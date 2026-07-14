@@ -14,11 +14,9 @@ const vscodeMocks = vi.hoisted(() => ({
   searchProjectFiles: vi.fn(),
   getContextTokenCount: vi.fn(),
   getTasks: vi.fn(),
-  getPromptMode: vi.fn(),
   getMessageQueue: vi.fn(),
   clearHistory: vi.fn(),
   compressContext: vi.fn(),
-  setPromptMode: vi.fn(),
   cancelMessage: vi.fn(),
   cancelTask: vi.fn(),
   retryTask: vi.fn(),
@@ -27,11 +25,6 @@ const vscodeMocks = vi.hoisted(() => ({
   cancelQueuedMessage: vi.fn(),
   editQueuedMessage: vi.fn(),
   clearActiveSkill: vi.fn(),
-  approvePlanStep: vi.fn(),
-  rejectPlanStep: vi.fn(),
-  modifyPlanStep: vi.fn(),
-  approveAllPlanSteps: vi.fn(),
-  rejectAllPlanSteps: vi.fn(),
 }));
 
 vi.mock('@/messages', () => ({
@@ -45,8 +38,6 @@ vi.mock('@/components/ChatView/InputAreaContext', () => ({
     sessionMode?: 'agent' | 'image' | 'video' | 'audio';
     onSessionModeChange?: (mode: 'agent' | 'image' | 'video' | 'audio') => void;
     onCompressContext?: () => Promise<void>;
-    onPromptModeChange?: (mode: 'default' | 'plan') => void;
-    promptMode?: 'default' | 'plan';
     selectedModel?: string;
     onModelSelect?: (modelId: string) => void;
     contextChips?: readonly AgentContextPayload[];
@@ -55,7 +46,6 @@ vi.mock('@/components/ChatView/InputAreaContext', () => ({
   }) => (
     <div>
       <span data-testid="session-mode">{props.sessionMode ?? 'agent'}</span>
-      <span data-testid="prompt-mode">{props.promptMode ?? 'default'}</span>
       <span data-testid="selected-model">{props.selectedModel ?? 'none'}</span>
       <span data-testid="context-chips">
         {props.contextChips?.map((chip) => chip.label).join('|') ?? ''}
@@ -85,11 +75,6 @@ vi.mock('@/components/ChatView/InputAreaContext', () => ({
         data-testid="compress-context"
         onClick={() => void props.onCompressContext?.()}
       />
-      <button
-        type="button"
-        data-testid="set-plan-mode"
-        onClick={() => props.onPromptModeChange?.('plan')}
-      />
       {props.children}
     </div>
   ),
@@ -111,11 +96,6 @@ vi.mock('@/components/ChatView', () => ({
     onPromoteQueuedMessage?: (queueItemId: string) => void;
     onCancelQueuedMessage?: (queueItemId: string) => void;
     onEditQueuedMessage?: (queueItemId: string) => void;
-    onApprovePlanStep?: (planId: string, stepId: string) => void;
-    onRejectPlanStep?: (planId: string, stepId: string) => void;
-    onModifyPlanStep?: (planId: string, stepId: string, newDescription: string) => void;
-    onApproveAllPlanSteps?: (planId: string) => void;
-    onRejectAllPlanSteps?: (planId: string) => void;
     entryPromptMenu?: 'generate-assets' | 'roleplay' | null;
     onEntryPromptMenuChange?: (menu: 'generate-assets' | 'roleplay' | null) => void;
     isComposing?: boolean;
@@ -166,11 +146,6 @@ vi.mock('@/components/ChatView', () => ({
         type="button"
         data-testid="clear-active-skill"
         onClick={() => props.onClearActiveSkill?.('record-1')}
-      />
-      <button
-        type="button"
-        data-testid="approve-plan-step"
-        onClick={() => props.onApprovePlanStep?.('plan-1', 'step-1')}
       />
       <button
         type="button"
@@ -533,29 +508,6 @@ describe('ChatWorkspace pending send', () => {
     expect(vscodeMocks.editQueuedMessage).toHaveBeenCalledWith('tab-1', 'conv-1', 'queued-1');
   });
 
-  it('keeps prompt mode in its owning Tab store while switching', () => {
-    const runtimeA = createTabRenderRuntime({ tabId: 'tab-a', conversationId: 'conv-a' });
-    const runtimeB = createTabRenderRuntime({ tabId: 'tab-b', conversationId: 'conv-b' });
-    runtimeA.store.updateState({ promptMode: 'plan', promptModeInitialized: true });
-    const { getByTestId, rerender } = render(
-      <ChatWorkspace
-        {...createProps({
-          tabRenderStore: runtimeA.store,
-        })}
-      />,
-    );
-
-    expect(getByTestId('prompt-mode').textContent).toBe('plan');
-    rerender(
-      <ChatWorkspace
-        {...createProps({
-          tabRenderStore: runtimeB.store,
-        })}
-      />,
-    );
-    expect(getByTestId('prompt-mode').textContent).toBe('default');
-  });
-
   it('keeps model selection in its owning Tab store while switching', () => {
     const runtimeA = createTabRenderRuntime({ tabId: 'tab-a', conversationId: 'conv-a' });
     const runtimeB = createTabRenderRuntime({ tabId: 'tab-b', conversationId: 'conv-b' });
@@ -795,9 +747,7 @@ describe('ChatWorkspace pending send', () => {
     });
     fireEvent.click(target.getByTestId('send'));
     fireEvent.click(target.getByTestId('compress-context'));
-    fireEvent.click(target.getByTestId('set-plan-mode'));
     fireEvent.click(target.getByTestId('clear-active-skill'));
-    fireEvent.click(target.getByTestId('approve-plan-step'));
     fireEvent.click(target.getByTestId('promote-queued'));
     fireEvent.click(target.getByTestId('cancel-queued'));
     fireEvent.click(target.getByTestId('edit-queued'));
@@ -812,9 +762,7 @@ describe('ChatWorkspace pending send', () => {
     );
     expect(vscodeMocks.clearHistory).toHaveBeenCalledWith('conv-b');
     expect(vscodeMocks.compressContext).toHaveBeenCalledWith('conv-b');
-    expect(vscodeMocks.setPromptMode).toHaveBeenCalledWith('plan', 'conv-b');
     expect(vscodeMocks.clearActiveSkill).toHaveBeenCalledWith('conv-b', { recordId: 'record-1' });
-    expect(vscodeMocks.approvePlanStep).toHaveBeenCalledWith('plan-1', 'step-1', 'conv-b');
     expect(vscodeMocks.promoteQueuedMessage).toHaveBeenCalledWith('conv-b', 'queued-1');
     expect(vscodeMocks.cancelQueuedMessage).toHaveBeenCalledWith('conv-b', 'queued-1');
     expect(vscodeMocks.editQueuedMessage).toHaveBeenCalledWith('tab-b', 'conv-b', 'queued-1');
@@ -822,7 +770,6 @@ describe('ChatWorkspace pending send', () => {
     expect(vscodeMocks.retryTask).toHaveBeenCalledWith('task-1');
     expect(vscodeMocks.viewTaskResult).toHaveBeenCalledWith('task-1', 'result-1');
     expect(clearMessages).toHaveBeenCalledTimes(1);
-    expect(runtime.store.getSnapshot().state.promptMode).toBe('plan');
     expect(setAmbientNodes).toHaveBeenCalledWith([
       { nodeId: 'node-b', type: 'scene', summary: 'Tab B scene' },
     ]);
@@ -972,7 +919,6 @@ function createSettings(): SettingsState {
     temperature: 0.2,
     maxTokens: 8192,
     executionMode: 'ask',
-    promptMode: 'default',
     chatModelOptions: [
       {
         id: 'test-model',

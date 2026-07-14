@@ -6,8 +6,7 @@
  * - Shared pack runs when ring pack declines
  * - User prompt invoked only when no pack decided
  * - User prompt throw → auto-reject with 'no-decision'
- * - Creation pack: idempotent+non-destructive plan auto-accepted
- * - Creation pack: destructive plan → undefined (ask user)
+ * - Creation pack: creator review is always bound and user-decided
  * - Execution pack: idempotent + non-destructive → auto-accept
  * - Execution pack: destructive + non-idempotent → auto-reject
  * - Execution pack: quality-gate verdict routing
@@ -194,34 +193,97 @@ describe('ApprovalEngine', () => {
 });
 
 describe('creationStrategyPack', () => {
-  it('auto-accepts idempotent + non-destructive plan reviews', async () => {
-    const engine = createApprovalEngine({ strategyPacks: [creationStrategyPack] });
+  it('binds creator review to current content and asks the user', async () => {
+    const prompt = vi.fn(async (approvalRequest: ApprovalRequest) => ({
+      requestId: approvalRequest.id,
+      resolution: 'user-accept' as const,
+      reason: 'creator-approved',
+      decidedAt: 10,
+    }));
+    const engine = createApprovalEngine({
+      strategyPacks: [creationStrategyPack],
+      userPrompt: prompt,
+    });
     const res = await engine.evaluate(
       request({
-        channel: 'draft-review',
+        channel: 'creator-review',
+        binding: {
+          contentDigest: 'sha256:creator-review-1',
+          target: 'animated-short',
+          criticalInputIds: ['story.md'],
+          creativeScope: ['character', 'style'],
+          costRiskCeiling: 'medium',
+          mutationScope: ['generated/'],
+          deliveryBoundary: 'local-export',
+        },
         paradigm: 'declarative',
         idempotent: true,
         destructive: false,
       }),
     );
-    expect(res.resolution).toBe('auto-accept');
-    expect(res.reason).toBe('preview-only-draft');
-  });
-
-  it('defers destructive plan reviews to the user', async () => {
-    const engine = createApprovalEngine({
-      strategyPacks: [creationStrategyPack],
-      userPrompt: async () => undefined, // user declines
-    });
-    const res = await engine.evaluate(
-      request({
-        channel: 'draft-review',
-        paradigm: 'declarative',
-        destructive: true,
+    expect(res.resolution).toBe('user-accept');
+    expect(prompt).toHaveBeenCalledWith(
+      expect.objectContaining({
+        binding: expect.objectContaining({ contentDigest: 'sha256:creator-review-1' }),
       }),
     );
-    // User prompt returned undefined → engine auto-rejects.
-    expect(res.resolution).toBe('auto-reject');
+  });
+
+  it('rejects creator review requests without an approval binding', async () => {
+    const engine = createApprovalEngine({
+      strategyPacks: [creationStrategyPack],
+    });
+    await expect(
+      engine.evaluate(
+        request({
+          channel: 'creator-review',
+          paradigm: 'declarative',
+          destructive: true,
+        }),
+      ),
+    ).rejects.toThrow('requires a binding');
+  });
+
+  it('rejects creator review requests without a content digest', async () => {
+    const engine = createApprovalEngine({ strategyPacks: [creationStrategyPack] });
+    await expect(
+      engine.evaluate(
+        request({
+          channel: 'creator-review',
+          paradigm: 'declarative',
+          binding: {
+            contentDigest: ' ',
+            target: 'animated-short',
+            criticalInputIds: ['story.md'],
+            creativeScope: ['story'],
+            costRiskCeiling: 'medium',
+            mutationScope: ['generated/'],
+            deliveryBoundary: 'local-export',
+          },
+        }),
+      ),
+    ).rejects.toThrow('content digest');
+  });
+
+  it('rejects creator review requests with an incomplete approval scope', async () => {
+    const engine = createApprovalEngine({ strategyPacks: [creationStrategyPack] });
+    await expect(
+      engine.evaluate(
+        request({
+          channel: 'creator-review',
+          paradigm: 'declarative',
+          binding: {
+            contentDigest: 'sha256:creator-review-1',
+            target: 'animated-short',
+            criticalInputIds: ['story.md'],
+            creativeScope: [],
+            costRiskCeiling: 'medium',
+            mutationScope: ['generated/'],
+            deliveryBoundary: 'local-export',
+          },
+        }),
+      ),
+    ).rejects.toThrow('creative scope');
   });
 
   it('auto-accepts non-destructive permission requests', async () => {

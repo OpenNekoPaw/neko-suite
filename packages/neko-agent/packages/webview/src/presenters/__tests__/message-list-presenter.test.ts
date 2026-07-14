@@ -33,15 +33,14 @@ describe('message-list-presenter', () => {
       isThinking: false,
       streamingMessageId: null,
       activeSkillNotice: {
-        skillName: 'creation-persona',
+        skillName: 'style-reference',
         records: [
           {
             id: 'record-1',
-            skillName: 'creation-persona',
-            slot: 'stagePersona',
-            owner: 'creation-profile',
-            clearable: false,
-            lockedReason: 'stage owned',
+            skillName: 'style-reference',
+            slot: 'referenceSkill',
+            owner: 'agent',
+            clearable: true,
           },
           {
             id: 'record-2',
@@ -59,7 +58,7 @@ describe('message-list-presenter', () => {
       kind: 'skill_notice',
       notice: {
         records: [
-          expect.objectContaining({ id: 'record-1', clearable: false }),
+          expect.objectContaining({ id: 'record-1', clearable: true }),
           expect.objectContaining({ id: 'record-2', clearable: true }),
         ],
       },

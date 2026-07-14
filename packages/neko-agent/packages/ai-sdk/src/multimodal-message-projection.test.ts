@@ -202,6 +202,24 @@ describe('multimodal-message-projection', () => {
     ]);
   });
 
+  it('keeps depth-one semantic image evidence without requiring a layer-two asset ref', async () => {
+    const result = await projectMultimodalPacketToChatMessageAsync(emptyPacket(), {
+      provider: { providerId: 'openai' },
+      perceptionCards: [
+        {
+          ...imageCard(),
+          layerStatus: { layer0: 'complete', layer1: 'complete', layer2: 'skipped' },
+          perceptual: undefined,
+        },
+      ],
+    });
+
+    expect(result.diagnostics).toEqual([]);
+    expect(result.message.content).toEqual([
+      expect.objectContaining({ type: 'text', text: expect.stringContaining('rainy street') }),
+    ]);
+  });
+
   it('uses provider-loadable duplicate cards when older cards lack perceptual refs', async () => {
     const loadCalls: string[] = [];
     const result = await projectMultimodalPacketToChatMessageAsync(emptyPacket(), {

@@ -1328,37 +1328,6 @@ describe('AgentStreamProcessor', () => {
       );
     });
 
-    it('should detect plan mode in tool results', async () => {
-      const events = toAsyncIterable([
-        {
-          type: 'tool_call',
-          toolCall: { id: 'tc-plan', name: 'ExitPlanMode', arguments: {} },
-        },
-        {
-          type: 'tool_result',
-          toolResult: {
-            toolCallId: 'tc-plan',
-            success: true,
-            data: {
-              planMode: { status: 'awaiting_approval' },
-              title: 'Refactor Auth',
-              plan: '## Step 1\nDo X\n## Step 2\nDo Y',
-              filePath: '/tmp/plan.md',
-            },
-          },
-        },
-      ]);
-
-      const result = await processor.processStream(webview as any, 'conv-1', events, callbacks);
-
-      const planBlocks = result.contentBlocks.filter((b) => b.type === 'plan');
-      expect(planBlocks).toHaveLength(1);
-      expect(planBlocks[0]!.plan!.title).toBe('Refactor Auth');
-      expect(planBlocks[0]!.plan!.steps).toHaveLength(2);
-      expect(planBlocks[0]!.plan!.steps[0]!.description).toContain('Step 1');
-      expect(planBlocks[0]!.plan!.filePath).toBe('/tmp/plan.md');
-    });
-
     it('should handle full conversation flow', async () => {
       const events = toAsyncIterable([
         { type: 'thinking_content', thinking: 'Analyzing...' },

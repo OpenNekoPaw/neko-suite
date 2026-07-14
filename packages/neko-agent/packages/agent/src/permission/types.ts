@@ -128,16 +128,10 @@ export type ConfirmToolCallback = (
 /**
  * Default read-only tools (allowed in plan mode)
  *
- * Claude Code Plan Mode only allows read-only/research tools:
+ * Plan Mode allows read-only/research tools and authorized Markdown edits:
  * - File reading: Read, Glob, Grep, LS
  * - Web research: WebFetch, WebSearch
- * - Task management: Task, TodoRead
- * - Plan mode control: ExitPlanMode, EnterPlanMode, AskUserQuestion
- *
- * NOT allowed in plan mode:
- * - Edit, Write, NotebookEdit (file modifications)
- * - Bash (command execution)
- * - TodoWrite (state modifications)
+ * It does not expose a separate task, TODO, or mode-control protocol.
  */
 export const DEFAULT_READ_ONLY_TOOLS = [
   // Claude Code standard read-only tools
@@ -147,14 +141,6 @@ export const DEFAULT_READ_ONLY_TOOLS = [
   'Glob',
   'Grep',
   'LS',
-  // Task/agent management (read-only)
-  'Task',
-  'TaskOutput',
-  'TodoRead',
-  // Plan mode control
-  'ExitPlanMode',
-  'EnterPlanMode',
-  'AskUserQuestion',
   // Neko Suite internal read-only tools
   'ListDirectory',
   'GitStatus',
@@ -192,35 +178,12 @@ export const DEFAULT_PERMISSION_CONFIG: PermissionConfig = {
 };
 
 /**
- * Plan file path (Claude Code compatible)
- * Agent can write to this file in plan mode
- */
-export const PLAN_FILE_PATH = '.neko/plan.md';
-
-/**
- * Plan Mode System Reminder (Claude Code compatible)
+ * Plan Mode System Reminder
  *
  * This is a lightweight reminder injected before user messages in plan mode.
  * The main constraints are in the plan-mode system prompt.
  * This reminder serves as an additional safeguard.
  */
 export const PLAN_MODE_SYSTEM_REMINDER = `<system-reminder>
-Plan mode is active. You can explore the codebase using read-only tools.
-When ready to propose your plan:
-1. Write your plan to ${PLAN_FILE_PATH} using the Write or Edit tool
-2. Call ExitPlanMode to present your plan for user approval
+Plan mode is active. Read and analyze actual authorized content. You may edit ordinary authorized Markdown for creator review, but do not generate media, mutate projects or assets, export, deliver, start background execution, or implicitly activate Skills. Markdown does not trigger execution.
 </system-reminder>`;
-
-/**
- * Plan file result from ExitPlanMode
- */
-export interface PlanFileResult {
-  /** Path to the generated plan file */
-  filePath: string;
-  /** Plan content (markdown) */
-  plan: string;
-  /** Plan title/summary */
-  title: string;
-  /** Whether user approval is required */
-  requiresApproval: boolean;
-}

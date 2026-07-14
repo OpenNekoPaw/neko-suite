@@ -39,15 +39,6 @@ function createMockSettings() {
   };
 }
 
-function createMockSystemPrompt() {
-  return {
-    isPlanMode: vi.fn().mockReturnValue(false),
-    togglePlanMode: vi.fn(),
-    getMode: vi.fn().mockReturnValue('default'),
-    getPrompt: vi.fn().mockReturnValue('system prompt'),
-  };
-}
-
 function createMockSkillHandler() {
   return {
     handleSlashCommand: vi.fn().mockResolvedValue(null),
@@ -65,8 +56,8 @@ function createMockContextHandler() {
   return { compressContext: vi.fn() };
 }
 
-function createMockPlanModeHandler() {
-  return { handleTogglePlanMode: vi.fn() };
+function createMockSettingsHandler() {
+  return { handleUpdateSettings: vi.fn().mockResolvedValue(undefined) };
 }
 
 function createMockAgentTurnHandler() {
@@ -96,11 +87,10 @@ describe('SlashCommandHandler', () => {
   let webview: ReturnType<typeof createMockWebview>;
   let conversations: ReturnType<typeof createMockConversations>;
   let settings: ReturnType<typeof createMockSettings>;
-  let systemPrompt: ReturnType<typeof createMockSystemPrompt>;
   let skillHandler: ReturnType<typeof createMockSkillHandler>;
   let taskHandler: ReturnType<typeof createMockTaskHandler>;
   let contextHandler: ReturnType<typeof createMockContextHandler>;
-  let planModeHandler: ReturnType<typeof createMockPlanModeHandler>;
+  let settingsHandler: ReturnType<typeof createMockSettingsHandler>;
   let agentTurnHandler: ReturnType<typeof createMockAgentTurnHandler>;
   let characterDialogue: ReturnType<typeof createMockCharacterDialogue>;
   let sendConversationList: ReturnType<typeof vi.fn>;
@@ -111,11 +101,10 @@ describe('SlashCommandHandler', () => {
     webview = createMockWebview();
     conversations = createMockConversations();
     settings = createMockSettings();
-    systemPrompt = createMockSystemPrompt();
     skillHandler = createMockSkillHandler();
     taskHandler = createMockTaskHandler();
     contextHandler = createMockContextHandler();
-    planModeHandler = createMockPlanModeHandler();
+    settingsHandler = createMockSettingsHandler();
     agentTurnHandler = createMockAgentTurnHandler();
     characterDialogue = createMockCharacterDialogue();
     sendConversationList = vi.fn();
@@ -124,12 +113,11 @@ describe('SlashCommandHandler', () => {
     handler = new SlashCommandHandler({
       conversations: conversations as any,
       settings: settings as any,
-      systemPrompt: systemPrompt as any,
       messages: agentTurnHandler as any,
       skillHandler: skillHandler as any,
       taskHandler: taskHandler as any,
       contextHandler: contextHandler as any,
-      planModeHandler: planModeHandler as any,
+      settingsHandler: settingsHandler as any,
       characterDialogue: characterDialogue as any,
       sendConversationList,
       sendActiveConversation,
@@ -170,12 +158,11 @@ describe('SlashCommandHandler', () => {
         conversations: conversations as any,
         agentManager: agentManager as any,
         settings: settings as any,
-        systemPrompt: systemPrompt as any,
         messages: agentTurnHandler as any,
         skillHandler: skillHandler as any,
         taskHandler: taskHandler as any,
         contextHandler: contextHandler as any,
-        planModeHandler: planModeHandler as any,
+        settingsHandler: settingsHandler as any,
         sendConversationList,
         sendActiveConversation,
       });
@@ -294,30 +281,27 @@ describe('SlashCommandHandler', () => {
     });
 
     it('should handle /plan command', async () => {
-      systemPrompt.isPlanMode.mockReturnValue(true);
       await handler.handleCommand(webview as any, 'plan', undefined, 'conv-1');
 
-      expect(planModeHandler.handleTogglePlanMode).toHaveBeenCalledWith(webview, 'conv-1');
+      expect(settingsHandler.handleUpdateSettings).toHaveBeenCalledWith(
+        webview,
+        { executionMode: 'plan' },
+        { conversationId: 'conv-1' },
+      );
       expect(webview.postMessage).toHaveBeenCalledWith(
         expect.objectContaining({
           command: 'plan',
-          action: 'togglePlanMode',
-          data: { planMode: true },
+          action: 'updateExecutionMode',
+          data: { executionMode: 'plan' },
         }),
       );
     });
 
-    it('should enter plan mode and immediately execute slash arguments', async () => {
-      systemPrompt.isPlanMode.mockReturnValue(true);
-
+    it('should not execute slash arguments as a plan-mode side effect', async () => {
       await handler.handleCommand(webview as any, 'plan', 'outline the rollout', 'conv-1');
 
-      expect(planModeHandler.handleTogglePlanMode).toHaveBeenCalledWith(webview, 'conv-1');
-      expect(agentTurnHandler.handleUserMessage).toHaveBeenCalledWith(webview, {
-        conversationId: 'conv-1',
-        messageText: 'outline the rollout',
-        sessionMode: 'agent',
-      });
+      expect(settingsHandler.handleUpdateSettings).toHaveBeenCalled();
+      expect(agentTurnHandler.handleUserMessage).not.toHaveBeenCalled();
     });
 
     it('should handle /tasks command', async () => {
@@ -446,12 +430,11 @@ describe('SlashCommandHandler', () => {
         conversations: conversations as any,
         agentManager: agentManager as any,
         settings: settings as any,
-        systemPrompt: systemPrompt as any,
         messages: agentTurnHandler as any,
         skillHandler: skillHandler as any,
         taskHandler: taskHandler as any,
         contextHandler: contextHandler as any,
-        planModeHandler: planModeHandler as any,
+        settingsHandler: settingsHandler as any,
         sendConversationList,
         sendActiveConversation,
       });
@@ -508,12 +491,11 @@ describe('SlashCommandHandler', () => {
         conversations: conversations as any,
         agentManager: agentManager as any,
         settings: settings as any,
-        systemPrompt: systemPrompt as any,
         messages: agentTurnHandler as any,
         skillHandler: skillHandler as any,
         taskHandler: taskHandler as any,
         contextHandler: contextHandler as any,
-        planModeHandler: planModeHandler as any,
+        settingsHandler: settingsHandler as any,
         sendConversationList,
         sendActiveConversation,
       });
@@ -544,12 +526,11 @@ describe('SlashCommandHandler', () => {
         conversations: conversations as any,
         agentManager: agentManager as any,
         settings: settings as any,
-        systemPrompt: systemPrompt as any,
         messages: agentTurnHandler as any,
         skillHandler: skillHandler as any,
         taskHandler: taskHandler as any,
         contextHandler: contextHandler as any,
-        planModeHandler: planModeHandler as any,
+        settingsHandler: settingsHandler as any,
         sendConversationList,
         sendActiveConversation,
       });
@@ -592,12 +573,11 @@ describe('SlashCommandHandler', () => {
         conversations: conversations as any,
         agentManager: agentManager as any,
         settings: settings as any,
-        systemPrompt: systemPrompt as any,
         messages: agentTurnHandler as any,
         skillHandler: skillHandler as any,
         taskHandler: taskHandler as any,
         contextHandler: contextHandler as any,
-        planModeHandler: planModeHandler as any,
+        settingsHandler: settingsHandler as any,
         sendConversationList,
         sendActiveConversation,
       });
@@ -676,12 +656,11 @@ describe('SlashCommandHandler', () => {
         conversations: conversations as any,
         agentManager: agentManager as any,
         settings: settings as any,
-        systemPrompt: systemPrompt as any,
         messages: agentTurnHandler as any,
         skillHandler: skillHandler as any,
         taskHandler: taskHandler as any,
         contextHandler: contextHandler as any,
-        planModeHandler: planModeHandler as any,
+        settingsHandler: settingsHandler as any,
         sendConversationList,
         sendActiveConversation,
       });
@@ -696,7 +675,6 @@ describe('SlashCommandHandler', () => {
             conversationCount: 2,
             tokenCount: 2500,
             activeSkill: 'commit',
-            planMode: false,
             executionMode: 'auto',
             messageCount: 1,
           }),

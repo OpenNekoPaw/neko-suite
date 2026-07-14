@@ -26,7 +26,6 @@ import {
 import type { AgentEvent } from '@neko/agent';
 import {
   createAutohealChain,
-  createDefaultCreativeProcessRecoveryPolicy,
   createDefaultOperationToolAdapterRegistry,
   createValidationCoordinatorFactory,
   createQualityReviewValidationAdapter,
@@ -334,7 +333,6 @@ export class AgentRunnerRuntimeAdapter implements AgentRunnerPort<IAgentConfig, 
       providerExpressionTargets: config.providerExpressionTargets,
       creationGuidance: {
         autohealChainFactory: createAutohealChain,
-        creativeProcessRecoveryPolicy: createDefaultCreativeProcessRecoveryPolicy(),
       },
       capabilityRuntime,
       validationLoop: {

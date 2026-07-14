@@ -32,7 +32,6 @@ import {
   TaskHandler,
   SkillHandler,
   FileOperationHandler,
-  PlanModeHandler,
   SettingsHandler,
   ContextHandler,
   SlashCommandHandler,
@@ -130,13 +129,6 @@ const SESSION_SCOPED_WEBVIEW_MESSAGE_TYPES = new Set([
   'viewTaskResult',
   'getContextTokenCount',
   'compressContext',
-  'planApprove',
-  'planReject',
-  'planStepApprove',
-  'planStepReject',
-  'planStepModify',
-  'setPromptMode',
-  'getPromptMode',
   'invokeSlashCommand',
   'invokeSkill',
   'invokePluginSlashCommand',
@@ -356,7 +348,6 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
   private readonly _taskHandler: TaskHandler;
   private readonly _skillHandler: SkillHandler;
   private readonly _fileOperationHandler: FileOperationHandler;
-  private readonly _planModeHandler: PlanModeHandler;
   private readonly _settingsHandler: SettingsHandler;
   private readonly _contextHandler: ContextHandler;
   private readonly _slashCommandHandler: SlashCommandHandler;
@@ -461,10 +452,6 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
     this._taskHandler = new TaskHandler({});
     this._skillHandler = new SkillHandler({});
     this._fileOperationHandler = new FileOperationHandler({});
-    this._planModeHandler = new PlanModeHandler({
-      systemPrompt: this._systemPrompt,
-      conversations: this._conversations,
-    });
     this._settingsHandler = new SettingsHandler({});
     this._contextHandler = new ContextHandler({
       conversations: this._conversations,
@@ -473,7 +460,6 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
       conversations: this._conversations,
       onConversationCreated: (conversationId) =>
         this._bindCreatedConversationToForegroundTab(conversationId),
-      promptModeCleanup: this._systemPrompt,
       getWebview: () => this._view?.webview,
     });
     this._characterDialogue = new CharacterDialogueController({
@@ -510,11 +496,10 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
     this._slashCommandHandler = new SlashCommandHandler({
       conversations: this._conversations,
       settings: this._settings,
-      systemPrompt: this._systemPrompt,
       skillHandler: this._skillHandler,
       taskHandler: this._taskHandler,
       contextHandler: this._contextHandler,
-      planModeHandler: this._planModeHandler,
+      settingsHandler: this._settingsHandler,
       characterDialogue: this._characterDialogue,
       sendConversationList: () => this._conversationMessageHandler.sendConversationList(),
       sendActiveConversation: () => {
@@ -610,10 +595,9 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
           this._conversations,
           this._agentManager,
           this._editorRegistry,
-          (conversationId) =>
-            skillRuntimeBootstrap.buildSystemPrompt(this._systemPrompt.getPrompt(conversationId))
+          (_conversationId, executionMode) =>
+            skillRuntimeBootstrap.buildSystemPrompt(this._systemPrompt.getPrompt(executionMode))
               .prompt,
-          (conversationId) => this._systemPrompt.isPlanMode(conversationId),
           this._platform,
           this._taskManager,
           (conversationId) => this._skillHandler.getActiveSkill(conversationId),
@@ -714,9 +698,6 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
         this._fileOperationHandler.updateDeps({
           platform: this._platform,
           generatedAssetLookup: this._generatedAssetIndex,
-        });
-        this._planModeHandler.updateDeps({
-          messages: this._messages,
         });
         this._settingsHandler.updateDeps({
           platform: this._platform,
@@ -1036,7 +1017,6 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
           taskHandler: this._taskHandler,
           skillHandler: this._skillHandler,
           fileOperationHandler: this._fileOperationHandler,
-          planModeHandler: this._planModeHandler,
           settingsHandler: this._settingsHandler,
           contextHandler: this._contextHandler,
           slashCommandHandler: this._slashCommandHandler,

@@ -107,11 +107,8 @@ export interface CommandContext {
     create(): string;
     clearCurrent(): void;
   };
-  /** Plan mode management (extension only) */
-  planMode?: {
-    isEnabled(): boolean;
-    toggle(): boolean;
-  };
+  /** Update the ordinary Agent execution mode for the active conversation. */
+  updateExecutionMode?(mode: 'auto' | 'ask' | 'plan'): void;
   /** Context compression (extension only) */
   contextManager?: {
     getTokenCount(conversationId: string): number;
@@ -150,7 +147,7 @@ export type CommandAction =
   | 'showMCPServers'
   | 'showPermissions'
   | 'showTasks'
-  | 'togglePlanMode'
+  | 'updateExecutionMode'
   | 'initProject'
   | 'resumeConversation'
   | 'newConversation'
@@ -181,7 +178,6 @@ export interface StatusData {
   messageCount?: number;
   tokenCount?: number;
   activeSkill?: string;
-  planMode?: boolean;
   executionMode?: string;
   mcpServerCount?: number;
   toolCount?: number;
@@ -202,7 +198,7 @@ export interface CommandActionDataMap {
   showMCPServers: undefined;
   showPermissions: undefined;
   showTasks: undefined;
-  togglePlanMode: { planMode: boolean };
+  updateExecutionMode: { executionMode: 'auto' | 'ask' | 'plan' };
   initProject: undefined;
   resumeConversation: { conversations: ConversationInfo[] };
   newConversation: { conversationId?: string };

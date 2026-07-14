@@ -166,7 +166,6 @@ function createBaseInput(
       addAssistantMessage: vi.fn(),
     },
     getBaseSystemPrompt: vi.fn(() => 'base system prompt'),
-    isPlanMode: vi.fn(() => false),
     getWorkspaceRoot: vi.fn(() => '/repo'),
     getWorkspaceIgnoreRules: vi.fn(() => ({ gitignoreRules: ['ignored/'] })),
     getAmbientCanvas: vi.fn(() => []),
@@ -357,7 +356,11 @@ describe('executeAgentTurn', () => {
         image: { providerId: 'flux', modelId: 'flux-pro', category: 'image' },
       },
       executionOverrides: { metadata: { traceId: 'trace-1' } },
-      isPlanMode: vi.fn(() => true),
+      settings: {
+        executionMode: 'plan',
+        autoExecuteTools: true,
+        temperature: 0.7,
+      },
     });
 
     await executeAgentTurn(input);
@@ -404,7 +407,11 @@ describe('executeAgentTurn', () => {
 
   it('keeps Plan Mode above lifecycle Skill tool policy', async () => {
     const { input, agentRunner } = createBaseInput({
-      isPlanMode: vi.fn(() => true),
+      settings: {
+        executionMode: 'plan',
+        autoExecuteTools: true,
+        temperature: 0.7,
+      },
       skillLifecycle: {
         projection: {
           promptSections: [
@@ -619,7 +626,7 @@ describe('executeAgentTurn', () => {
     );
   });
 
-  it('rejects running text input when execution metadata carries IDC activation context', async () => {
+  it('rejects running text input when execution metadata is not queue-safe', async () => {
     const platform = { name: 'platform' };
     const agentRunner = createAgentRunner({
       isRunning: true,
@@ -641,7 +648,7 @@ describe('executeAgentTurn', () => {
     const { input } = createBaseInput({
       platform,
       executionOverrides: {
-        metadata: { locale: 'zh', agentCreation: { creationKind: 'plan-mode' } },
+        metadata: { locale: 'zh', sourceDocumentRevision: 'revision-1' },
       },
       agentManager: {
         getOrCreate: vi.fn(() => agentRunner),
@@ -1080,13 +1087,13 @@ describe('executeAgentTurn', () => {
         projection: {
           promptSections: [
             {
-              id: 'skill:stagePersona:persona:record-1',
+              id: 'skill:referenceSkill:style-reference:record-1',
               layer: 'skill',
-              content: 'Stage persona prompt',
+              content: 'Style reference prompt',
               priority: 10,
               recordId: 'record-1',
-              slot: 'stagePersona',
-              skillName: 'persona',
+              slot: 'referenceSkill',
+              skillName: 'style-reference',
             },
             {
               id: 'skill:domainSkill:review:record-2',
@@ -1267,8 +1274,8 @@ describe('executeAgentTurn', () => {
 
     await executeAgentTurn(input);
     vi.mocked(agentRunner.getActiveSkill!).mockReturnValue({
-      name: 'creation-persona',
-      description: 'IDC persona',
+      name: 'style-reference',
+      description: 'Style reference',
       content: '',
       source: 'builtin',
       enabled: true,
@@ -1721,12 +1728,6 @@ describe('buildAgentTurnRuntimeInput', () => {
     const onPhaseChange = vi.fn();
     const onErrorMessage = vi.fn();
     const taskManager = {} as never;
-    const legacyTrace = {
-      workflowDefinitionId: 'neko.legacyTrace.idc.v1',
-      workflowRunId: 'run-1',
-      workflowNodeId: 'apply',
-    };
-
     const runtimeInput = buildAgentTurnRuntimeInput({
       conversationId: 'conv-1',
       message: 'cut the selected clip',
@@ -1775,10 +1776,8 @@ describe('buildAgentTurnRuntimeInput', () => {
           addAssistantMessage: vi.fn(),
         },
         getBaseSystemPrompt: vi.fn(() => 'Base prompt'),
-        isPlanMode: vi.fn(() => true),
         getActiveSkillState: vi.fn(() => undefined),
         taskManager,
-        legacyTrace,
       },
       host: {
         agentManager,
@@ -1832,7 +1831,6 @@ describe('buildAgentTurnRuntimeInput', () => {
     expect(runtimeInput.agentManager).toBe(agentManager);
     expect(runtimeInput.agentManager?.nextMessageQueueSnapshotVersion?.('conv-1')).toBeUndefined();
     expect(runtimeInput.taskManager).toBe(taskManager);
-    expect(runtimeInput.legacyTrace).toBe(legacyTrace);
     runtimeInput.onErrorMessage?.({
       id: 'error-1',
       role: 'assistant',

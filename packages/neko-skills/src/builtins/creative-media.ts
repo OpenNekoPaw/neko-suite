@@ -3,7 +3,6 @@ import {
   IMAGE_OPERATION_IDS,
   MEDIA_PRODUCTION_FROM_COMIC_PROFILE_ID,
   STORYBOARD_SOURCE_PROFILE_IDS,
-  TOOL_NAMES_CANVAS,
   TOOL_NAMES_MEDIA,
   TOOL_NAMES_PERCEPTION,
   TOOL_NAMES_QUALITY,
@@ -212,28 +211,62 @@ const videoZhCnContent = `# 视频
 
 const mediaProductionContent = `# Media Production
 
-Coordinate a recoverable source-to-deliverable workflow without implementing package-owned mutations inside the Skill.
+Coordinate an Agent-directed, recoverable source-to-deliverable production. Select and reorder work from current evidence and available capabilities; do not force every request through one fixed pipeline.
 
-## Stages
+## Evidence and creator review
 
-Source normalization → Storyboard validation → shot generation plan → image/video/audio generation → asset quality Gate → project authoring → pre-export Gate → export → deliverable verification.
+1. Read the actual source and existing project state before planning. Separate observed facts, Agent interpretation, creator decisions, and proposed actions. Never treat a filename, prompt, thumbnail, or old plan as content evidence.
+2. Reuse current Storyboards, character references, generated assets, project revisions, Quality evidence, and approved documents when they remain valid. Skip satisfied work instead of recreating documents or assets.
+3. Ask the creator to approve only material choices: adaptation target and omissions, story or character changes, core visual style, primary image/video/audio technique, cost or risk ceiling, mutation scope, and delivery boundary. Record alternatives, uncertainty, and unresolved questions.
+4. A simple low-risk operation may proceed without creating planning files. For complex work, an optional \`brief.md\` may capture source evidence, interpretation, alternatives, creator decisions, and approval scope; it remains ordinary reviewable Markdown, not runtime state.
 
-Each stage records typed artifact references, revision identity, status, diagnostics, provenance, and approvals. Resume from completed durable artifacts rather than replaying UI messages. A failed Gate blocks the next destructive or delivery stage by default. Repairs target the owning capability, create a new asset or project revision, invalidate stale evidence, and rerun the affected Gates.
+Ground each source in its own evidence: comics use actual page, panel, reading-order, dialogue, and character appearance evidence; screenplays use scene headings, action, dialogue, location, and timing intent; novels use chapter or scene boundaries, point of view, narration, dialogue, and adaptation omissions; illustrations use visible composition, subjects, layers when available, palette, and spatial relationships. Existing Storyboards and projects use their current revision, owned shots or timeline state, referenced assets, and validation evidence. When those existing facts already satisfy a work unit, mark it skipped or reused rather than rebuilding it.
 
-Use specialized source profiles such as comic interpretation inside this workflow; do not expose normalization, animation planning, Cut payload construction, shot assembly, or export packaging as peer Skills.
+## Actionable plan
+
+Use an optional living \`plan.md\` only when it improves review or coordination. For every applicable work unit state: the object to change or create; trigger and skip conditions; stable inputs; capability intent; creative and technical constraints; expected output kind; acceptance evidence; failure or degraded branch; dependencies; and approval requirement. Broad phase lists are not execution-ready.
+
+Keep near-term progress bounded with \`pending\`, \`in_progress\`, \`completed\`, or \`blocked\`, with at most one current unit per executing Agent task. Large shot, asset, and project graphs stay in their owning Storyboard, project revision, generated output, Quality result, or asynchronous task result. Progress text never proves completion.
+
+Do not persist selected executors, provider handles, operation schemas, polling state, or workflow nodes in Markdown. Editing Markdown does not execute it. On continuation, reread the current documents and files, discover current capabilities again, and execute through their normal authorization and result lifecycle.
+
+## Capability-aware execution and recovery
+
+Choose milestones only when applicable: source interpretation; creator review; Storyboard or shot planning; character/reference preparation; image, video, or audio production; animatic or project authoring; Quality review; export; deliverable verification. Missing panel/OCR, character/reference, Storyboard, animatic/project, audio, Quality, export, or delivery capability must yield a visible \`blocked\`, \`degraded\`, or \`partial\` outcome with the smallest useful next decision.
+
+Bounded reorder, batch split, equivalent capability selection, and local repair may remain inside approved scope. Story, character, core style or sound, primary technique, cost/risk, mutation, or delivery changes require renewed creator approval. Repairs target the owning capability, create a new asset or project revision, invalidate stale evidence, and rerun only affected acceptance or Quality checks.
+
+Execution continues until requested deliverables are backed by actual current results. Report planned, submitted, or blocked state when results are absent; never present an intended asset, edit, export, or delivery as completed.
 `;
 
 const mediaProductionZhCnContent = `# 媒体制作
 
-编排可恢复的“来源到交付物”流程，但不在 Skill 内实现各子包拥有的 mutation。
+编排由 Agent 驱动、可恢复的“来源到交付物”制作。根据当前证据和可用能力选择、跳过或重排工作，不强迫所有请求经过同一条固定流水线。
 
-## 阶段
+## 证据与创作者审阅
 
-来源归一化 → Storyboard 验证 → 镜头生成计划 → 图片/视频/音频生成 → 素材质量 Gate → 项目 authoring → 导出前 Gate → 导出 → 交付物验证。
+1. 规划前读取实际来源和已有项目状态，把观察事实、Agent 解释、创作者决定和拟执行动作分开；文件名、提示词、缩略图和旧计划都不能冒充内容证据。
+2. 现有 Storyboard、角色参考、生成资产、项目 revision、Quality 证据和已批准文档仍然有效时直接复用；满足条件的工作应跳过，不能重复创建文档或资产。
+3. 只让创作者批准实质选择：改编目标与删减、故事或角色变化、核心视觉风格、主要图片/视频/音频技术、成本或风险上限、mutation 范围和交付边界；同时记录备选项、不确定性和未决问题。
+4. 简单低风险操作无需创建规划文件。复杂任务可选用 \`brief.md\` 记录来源证据、解释、备选、创作者决定和审批范围；它只是普通、可审阅的 Markdown，不是运行时状态。
 
-每个阶段记录 typed artifact ref、修订身份、状态、诊断、provenance 和审批；恢复时从已完成的 durable artifact 继续，不能重放 UI message 猜状态。Gate 失败默认阻断后续破坏性或交付阶段。修复交给 owning capability，创建新的素材或项目修订版，使旧证据失效并重跑相关 Gate。
+不同来源必须使用各自的真实证据：漫画使用实际页、分格、阅读顺序、对白和角色外观证据；剧本使用场景标题、动作、对白、地点和时长意图；小说使用章节/场景边界、视角、叙述、对白和改编删减；插画使用可见构图、主体、可用时的图层、色彩和空间关系。已有 Storyboard 和项目使用当前 revision、所属镜头或时间线状态、引用资产及验证证据。已有事实满足工作单元时，应标记为跳过或复用，不能重新构建。
 
-漫画解释等专用能力以 source profile 进入流程；来源归一化、动画规划、Cut payload 构建、镜头装配和导出打包不再作为同级 Skill 暴露。
+## 可操作计划
+
+仅在有助于审阅或协作时使用可选、持续更新的 \`plan.md\`。每个适用工作单元必须写明：要创建或修改的对象；触发与跳过条件；稳定输入；能力意图；创意与技术约束；预期输出类型；验收证据；失败或降级分支；依赖；是否需要批准。只有宽泛阶段列表不属于可执行计划。
+
+近期进度只保留有限的 \`pending\`、\`in_progress\`、\`completed\` 或 \`blocked\` 项；每个正在执行的 Agent task 最多一个当前项。大规模镜头、资产和项目图仍由所属 Storyboard、项目 revision、生成结果、Quality 结果或异步 task result 管理；进度文字不能证明完成。
+
+Markdown 不保存已选 executor、provider handle、operation schema、轮询状态或 workflow node。编辑 Markdown 不会触发执行。继续执行时重新读取当前文档和文件，重新发现当前能力，并通过正常授权和结果生命周期执行。
+
+## 能力感知执行与恢复
+
+只在适用时选择里程碑：来源解释、创作者审阅、Storyboard/镜头规划、角色/参考准备、图片/视频/音频制作、animatic/项目 authoring、Quality 审阅、导出、交付物验证。缺少分格/OCR、角色/参考、Storyboard、animatic/项目、音频、Quality、导出或交付能力时，必须返回明确的 \`blocked\`、\`degraded\` 或 \`partial\` 结果，以及最小的下一项决策。
+
+有限重排、批次拆分、等价能力选择和局部修复可以保留在已批准范围内；故事、角色、核心画面或声音风格、主要技术、成本/风险、mutation 或交付范围改变时必须重新取得创作者批准。修复交给 owning capability，创建新的素材或项目 revision，使旧证据失效，并只重跑受影响的验收或 Quality 检查。
+
+执行应持续到实际当前结果能够证明用户要求的交付物。没有结果时只能报告 planned、submitted 或 blocked，禁止把预期资产、编辑、导出或交付描述成已完成。
 `;
 
 const qualityContent = `# Media Quality Review
@@ -366,18 +399,6 @@ export const mediaProductionSkill: Skill = {
   description:
     'Coordinate the complete recoverable workflow from source normalization and Storyboard through generation, quality Gates, project authoring, export, and deliverable verification.',
   content: mediaProductionContent,
-  allowedTools: [
-    TOOL_NAMES_SYSTEM.READ,
-    TOOL_NAMES_SYSTEM.READ_DOCUMENT,
-    TOOL_NAMES_SYSTEM.READ_IMAGE,
-    TOOL_NAMES_MEDIA.GENERATE_IMAGE,
-    TOOL_NAMES_MEDIA.GENERATE_VIDEO,
-    TOOL_NAMES_MEDIA.GENERATE_TTS,
-    TOOL_NAMES_MEDIA.GENERATE_MUSIC,
-    TOOL_NAMES_CANVAS.CANVAS_GET_ACTIVE_CONTEXT,
-    TOOL_NAMES_TIMELINE.GET_TIMELINE_INFO,
-    TOOL_NAMES_QUALITY.QUALITY_CHECK,
-  ],
   icon: '🎥',
   source: 'builtin',
   enabled: true,

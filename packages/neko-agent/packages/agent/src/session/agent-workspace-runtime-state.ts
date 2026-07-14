@@ -736,7 +736,6 @@ function isSkillLifecycleSlot(
   value: unknown,
 ): value is ActiveSkillLifecycleRecordProjection['slot'] {
   return (
-    value === 'stagePersona' ||
     value === 'domainSkill' ||
     value === 'referenceSkill' ||
     value === 'ephemeralSkill' ||

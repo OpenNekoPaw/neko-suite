@@ -343,6 +343,32 @@ describe('createTuiAutomationAppPort', () => {
     expect(rawSubmit).not.toHaveBeenCalled();
   });
 
+  it('accepts a submission that settles with a projected Agent error', async () => {
+    const expectedError = new Error('provider configuration unavailable');
+    const port = createTuiAutomationAppPort({
+      stores: runtime.conversation.stores,
+      submitInput: async () => {
+        runtime.conversation.stores.agent.getState().setError(expectedError);
+      },
+      readHandle: () => ({
+        isReady: true,
+        submit: async () => undefined,
+        cancel: () => undefined,
+        listTasks: async () => [],
+        getCurrentConversationId: () => 'tui-2026-01-01T00-00-00-000Z-test',
+        getHistory: () => [],
+        getMessageQueueSnapshot: () => null,
+        getConversationPersistenceSnapshot: memoryPersistenceSnapshot,
+      }),
+      readMarkdownFacts: () => ({ pathEvents: [], droppedPathEventCount: 0 }),
+    });
+
+    await port.submitMessage({ prompt: 'run with unavailable provider' });
+
+    expect(runtime.conversation.stores.agent.getState().error).toBe(expectedError);
+    expect(runtime.conversation.stores.conversation.getState().messages).toEqual([]);
+  });
+
   it('accepts submission without waiting for completion and exposes active cancellation', async () => {
     let resolveSubmit!: () => void;
     const submitPromise = new Promise<void>((resolve) => {

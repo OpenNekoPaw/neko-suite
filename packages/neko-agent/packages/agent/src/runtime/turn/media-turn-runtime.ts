@@ -12,7 +12,6 @@ import {
   type AgentPhaseMessage,
   type AgentMediaTaskView,
   type ErrorMessage,
-  type AgentLegacyCreationTrace,
   type MediaModelCategory,
   type MediaTaskCreatedMessage,
   type MediaTaskProgressMessage,
@@ -81,7 +80,6 @@ export interface RunAgentMediaTurnInput<
   readonly conversationId: string;
   readonly prompt: string;
   readonly mediaModel: ModelRef<MediaModelCategory>;
-  readonly legacyTrace?: AgentLegacyCreationTrace;
   readonly executeMediaTurn?: (
     input: AgentMediaTurnExecutionInput<TTaskView, TSourceTask>,
   ) => Promise<unknown>;
@@ -149,7 +147,6 @@ export async function runAgentMediaTurn<
             workItem: projectMediaTaskToWorkItem({
               conversationId: input.conversationId,
               task: event.task,
-              legacyTrace: input.legacyTrace,
             }),
           }),
         );
@@ -170,7 +167,6 @@ export async function runAgentMediaTurn<
             workItem: projectMediaTaskToWorkItem({
               conversationId: input.conversationId,
               task: event.task,
-              legacyTrace: input.legacyTrace,
             }),
           }),
         );

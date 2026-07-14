@@ -19,7 +19,6 @@ import type {
   Message,
   ConversationSummary,
   OpenTab,
-  PromptMode,
   TabType,
   SettingsState,
   AgentState,
@@ -138,7 +137,6 @@ export interface UseMessageHandlerProps {
 
   // State setters - SSO/Onboarding
   updateSettings: (partial: Partial<SettingsState>) => void;
-  setPromptModeForConversation: (conversationId: string, mode: PromptMode) => void;
   setShowOnboarding: React.Dispatch<React.SetStateAction<boolean>>;
   setGlobalError: React.Dispatch<React.SetStateAction<string | null>>;
   reportConversationDiagnostic: MessageHandlerContext['reportConversationDiagnostic'];
@@ -220,7 +218,6 @@ export function useMessageHandler(props: UseMessageHandlerProps): UseMessageHand
     setActiveSkill,
     setActivationProgressByConversation,
     updateSettings,
-    setPromptModeForConversation,
     setShowOnboarding,
     setGlobalError,
     reportConversationDiagnostic,
@@ -281,7 +278,6 @@ export function useMessageHandler(props: UseMessageHandlerProps): UseMessageHand
       setActiveSkill,
       setActivationProgressByConversation,
       updateSettings,
-      setPromptModeForConversation,
       setShowOnboarding,
       setGlobalError,
       reportConversationDiagnostic,
@@ -339,7 +335,6 @@ export function useMessageHandler(props: UseMessageHandlerProps): UseMessageHand
       setActiveSkill,
       setActivationProgressByConversation,
       updateSettings,
-      setPromptModeForConversation,
       setShowOnboarding,
       setGlobalError,
       reportConversationDiagnostic,

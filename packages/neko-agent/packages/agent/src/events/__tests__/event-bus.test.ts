@@ -1,130 +1,68 @@
-/**
- * EventBus tests
- *
- * Covers:
- * - Typed subscription per channel
- * - onAny fires for every channel
- * - Listener isolation (one throws, others still fire)
- * - Unsubscribe removes the listener
- * - clear wipes all subscriptions
- * - listenerCount reflects current subscribers
- */
+import { describe, expect, it, vi } from 'vitest';
+import { AGENT_RUNTIME_CHANNELS, createEventBus, type AgentEventBusEvent } from '../event-bus';
 
-import { describe, it, expect, vi } from 'vitest';
-import {
-  createEventBus,
-  CREATION_CHANNELS,
-  EXECUTION_CHANNELS,
-  type DualFlowEvent,
-} from '../event-bus';
-
-function creationStarted(runId = 'r1', at = 1): DualFlowEvent {
+function approvalDecided(subject = 'tool:Write', at = 1): AgentEventBusEvent {
   return {
-    channel: CREATION_CHANNELS.RUN_STARTED,
-    runId,
-    creationKind: 'profile.default',
+    channel: AGENT_RUNTIME_CHANNELS.APPROVAL_DECIDED,
+    subject,
+    decision: 'accept',
     at,
   };
 }
 
-function roundDecided(runId = 'r1', round = 0, at = 1): DualFlowEvent {
+function stepCompleted(round = 0, at = 1): AgentEventBusEvent {
   return {
-    channel: EXECUTION_CHANNELS.ROUND_ACTIVATION_DECIDED,
-    runId,
-    taskShape: 'multi-step',
-    summary: {
-      round,
-      activatedStages: ['apply'],
-      skippedStages: [],
-      decidedAt: at,
-    },
+    channel: AGENT_RUNTIME_CHANNELS.STEP_COMPLETED,
+    round,
+    thinkOnly: false,
     at,
   };
 }
 
 describe('EventBus', () => {
-  it('fires listeners on the matching channel only', () => {
+  it('dispatches ordinary Agent runtime channels independently', () => {
     const bus = createEventBus();
-    const onCreation = vi.fn();
-    const onExecution = vi.fn();
-    bus.on(CREATION_CHANNELS.RUN_STARTED, onCreation);
-    bus.on(EXECUTION_CHANNELS.ROUND_ACTIVATION_DECIDED, onExecution);
+    const approval = vi.fn();
+    const step = vi.fn();
+    bus.on(AGENT_RUNTIME_CHANNELS.APPROVAL_DECIDED, approval);
+    bus.on(AGENT_RUNTIME_CHANNELS.STEP_COMPLETED, step);
 
-    bus.emit(creationStarted());
-    bus.emit(roundDecided());
+    bus.emit(approvalDecided());
+    bus.emit(stepCompleted());
 
-    expect(onCreation).toHaveBeenCalledTimes(1);
-    expect(onExecution).toHaveBeenCalledTimes(1);
+    expect(approval).toHaveBeenCalledOnce();
+    expect(step).toHaveBeenCalledOnce();
   });
 
-  it('typed payload is narrowed via channel generic', () => {
+  it('narrows typed payloads by channel', () => {
     const bus = createEventBus();
-    bus.on(CREATION_CHANNELS.RUN_STARTED, (event) => {
-      expect(event.creationKind).toBe('profile.default');
+    bus.on(AGENT_RUNTIME_CHANNELS.APPROVAL_DECIDED, (event) => {
+      expect(event.subject).toBe('tool:Write');
     });
-    bus.emit(creationStarted());
+    bus.emit(approvalDecided());
   });
 
-  it('onAny fires for every event regardless of channel', () => {
-    const bus = createEventBus();
-    const any = vi.fn();
-    bus.onAny(any);
-    bus.emit(creationStarted());
-    bus.emit(roundDecided());
-    expect(any).toHaveBeenCalledTimes(2);
-  });
-
-  it('listener exceptions do not block siblings or subsequent emits', () => {
+  it('isolates listeners and supports any, unsubscribe, clear, and counts', () => {
     const bus = createEventBus();
     const good = vi.fn();
     const bad = vi.fn(() => {
       throw new Error('boom');
     });
-    bus.on(CREATION_CHANNELS.RUN_STARTED, bad);
-    bus.on(CREATION_CHANNELS.RUN_STARTED, good);
-
-    expect(() => bus.emit(creationStarted())).not.toThrow();
-    expect(good).toHaveBeenCalledTimes(1);
-    // Emit again — the bad listener is still registered but can't stop us.
-    expect(() => bus.emit(creationStarted())).not.toThrow();
-    expect(good).toHaveBeenCalledTimes(2);
-  });
-
-  it('unsubscribe removes only that listener', () => {
-    const bus = createEventBus();
-    const a = vi.fn();
-    const b = vi.fn();
-    const offA = bus.on(CREATION_CHANNELS.RUN_STARTED, a);
-    bus.on(CREATION_CHANNELS.RUN_STARTED, b);
-
-    offA();
-    bus.emit(creationStarted());
-    expect(a).not.toHaveBeenCalled();
-    expect(b).toHaveBeenCalledTimes(1);
-  });
-
-  it('clear removes every subscriber', () => {
-    const bus = createEventBus();
-    const a = vi.fn();
     const any = vi.fn();
-    bus.on(CREATION_CHANNELS.RUN_STARTED, a);
+    const offBad = bus.on(AGENT_RUNTIME_CHANNELS.APPROVAL_DECIDED, bad);
+    bus.on(AGENT_RUNTIME_CHANNELS.APPROVAL_DECIDED, good);
     bus.onAny(any);
 
+    expect(bus.listenerCount(AGENT_RUNTIME_CHANNELS.APPROVAL_DECIDED)).toBe(2);
+    expect(() => bus.emit(approvalDecided())).not.toThrow();
+    expect(good).toHaveBeenCalledOnce();
+    expect(any).toHaveBeenCalledOnce();
+
+    offBad();
+    expect(bus.listenerCount(AGENT_RUNTIME_CHANNELS.APPROVAL_DECIDED)).toBe(1);
     bus.clear();
-    bus.emit(creationStarted());
-    expect(a).not.toHaveBeenCalled();
-    expect(any).not.toHaveBeenCalled();
-  });
-
-  it('listenerCount reports per-channel subscribers', () => {
-    const bus = createEventBus();
-    expect(bus.listenerCount(CREATION_CHANNELS.RUN_STARTED)).toBe(0);
-
-    const off1 = bus.on(CREATION_CHANNELS.RUN_STARTED, () => {});
-    bus.on(CREATION_CHANNELS.RUN_STARTED, () => {});
-    expect(bus.listenerCount(CREATION_CHANNELS.RUN_STARTED)).toBe(2);
-
-    off1();
-    expect(bus.listenerCount(CREATION_CHANNELS.RUN_STARTED)).toBe(1);
+    bus.emit(approvalDecided());
+    expect(good).toHaveBeenCalledOnce();
+    expect(any).toHaveBeenCalledOnce();
   });
 });

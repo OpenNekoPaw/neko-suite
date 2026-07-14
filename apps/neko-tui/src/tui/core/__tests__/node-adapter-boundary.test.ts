@@ -42,7 +42,7 @@ describe('TUI Node adapter boundary', () => {
     expect(violations).toEqual([]);
   });
 
-  it('keeps config, tasks, skills, content access, and artifacts on Node/runtime services', () => {
+  it('keeps config, tasks, skills, content access, and workspace state on Node/runtime services', () => {
     const platformBootstrap = readFileSync(join(srcRoot, 'core', 'platform-bootstrap.ts'), 'utf8');
     const runtimeBootstrap = readFileSync(join(srcRoot, 'core', 'runtime-bootstrap.ts'), 'utf8');
     const defaultCapabilities = readFileSync(
@@ -56,7 +56,7 @@ describe('TUI Node adapter boundary', () => {
     expect(platformBootstrap).not.toContain('tasks.json');
     expect(platformBootstrap).toContain('createNodeWorkspaceContentHostAdapter');
     expect(platformBootstrap).toContain('createNodeContentAccessRuntime');
-    expect(runtimeBootstrap).toContain('createNodeArtifactStore');
+    expect(runtimeBootstrap).toContain('createNodeWorkspaceRuntimeStore');
     expect(runtimeBootstrap).toContain('skillService');
     expect(defaultCapabilities).toContain('createNodeContentAccessRuntime');
     expect(defaultCapabilities).toContain('createNodeAssetsCapabilityProvider');

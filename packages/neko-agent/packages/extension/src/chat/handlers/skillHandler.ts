@@ -261,7 +261,6 @@ function isSkillLifecycleSlot(
   value: string | undefined,
 ): value is import('@neko/shared').SkillLifecycleSlot {
   return (
-    value === 'stagePersona' ||
     value === 'domainSkill' ||
     value === 'referenceSkill' ||
     value === 'ephemeralSkill' ||

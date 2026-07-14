@@ -1,18 +1,17 @@
 /**
  * Creation strategy pack — approval rules for declarative-paradigm subjects
- * (Draft-stage artifacts + upstream business decisions).
+ * (creator-review documents and upstream creative decisions).
  *
- * Maps to ADR §6.1 "CreationStrategyPack: Draft/Review decisions". The
- * pack operates on `paradigm: 'declarative'` subjects — draft reviews
- * and read-only probing done during Draft / Plan.
+ * Maps to ADR §6.1 "CreationStrategyPack: creator review decisions". The
+ * pack operates on `paradigm: 'declarative'` subjects — creator reviews
+ * and read-only probing done before an authorized mutation.
  *
  * See: docs/architecture/agent-unified-workflow.md §6.1 (ApprovalEngine)
  *      §4.2 (declarative vs imperative split)
  *
  * Default posture:
- *   - draft-review: user-driven; pack does NOT auto-decide unless the
- *     draft is marked idempotent + non-destructive (e.g. preview-only).
- *   - permission (tool calls initiated during Draft / Plan — typically
+ *   - creator-review: always user-driven and bound to current content.
+ *   - permission (read-only probing before mutation — typically
  *     read-only probing): allowed if non-destructive; ask user otherwise.
  *   - quality-gate: never auto-decides here; caller routes to the
  *     execution strategy pack.
@@ -28,16 +27,7 @@ export const creationStrategyPack: StrategyPack = {
   evaluate(request: ApprovalRequest): ApprovalResponse | undefined {
     const { subject, channel } = request;
 
-    if (channel === 'draft-review') {
-      if (subject.idempotent && !subject.destructive) {
-        return {
-          requestId: request.id,
-          resolution: 'auto-accept',
-          reason: 'preview-only-draft',
-          note: 'Draft is idempotent + non-destructive; auto-accept for preview.',
-          decidedAt: 0,
-        };
-      }
+    if (channel === 'creator-review') {
       return undefined;
     }
 

@@ -111,7 +111,8 @@ export type AutohealEventChannel =
   (typeof AUTOHEAL_EVENT_CHANNELS)[keyof typeof AUTOHEAL_EVENT_CHANNELS];
 
 interface AutohealRuntimeEventBase {
-  readonly runId: string;
+  /** Optional owning async activity identity; ordinary Agent recovery has none. */
+  readonly runId?: string;
   readonly trigger: {
     readonly subject: string;
     readonly errorCode: string;

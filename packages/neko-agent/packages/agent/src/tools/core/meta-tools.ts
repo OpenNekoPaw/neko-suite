@@ -452,13 +452,7 @@ export class ActivateSkillTool extends BuiltinTool {
         },
         slot: {
           type: 'string',
-          enum: [
-            'domainSkill',
-            'referenceSkill',
-            'promptChainSkill',
-            'ephemeralSkill',
-            'stagePersona',
-          ],
+          enum: ['domainSkill', 'referenceSkill', 'promptChainSkill', 'ephemeralSkill'],
           description:
             'Optional lifecycle slot. Defaults to domainSkill. Use referenceSkill for supplemental guidance that must coexist with the active domain skill.',
         },
@@ -1140,7 +1134,6 @@ function readOptionalSkillLifecycleSlot(value: unknown): SkillLifecycleSlot | un
   switch (value) {
     case undefined:
       return undefined;
-    case 'stagePersona':
     case 'domainSkill':
     case 'referenceSkill':
     case 'ephemeralSkill':

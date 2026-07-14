@@ -1,11 +1,8 @@
-/// <reference path="./markdown-raw.d.ts" />
-
 export * from './builtins';
 export * from './autoheal';
 export * from './canvas';
 export * from './character';
 export * from './creative';
-export * from './creative-process';
 export * from './memory';
 export * from './operations';
 export * from './plugin-transfer';

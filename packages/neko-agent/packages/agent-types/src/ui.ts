@@ -94,11 +94,8 @@ export interface EmbodyCharacterSessionProjection {
 }
 
 // ---------------------------------------------------------------------------
-// Session & Prompt Mode
+// Session mode
 // ---------------------------------------------------------------------------
-
-/** Prompt mode for system prompt selection */
-export type PromptMode = 'default' | 'plan';
 
 /**
  * Session mode — controls the primary workflow / capability routing.
@@ -177,8 +174,6 @@ export interface SettingsState {
   maxTokens: number;
   /** Shell execution mode: plan (dry-run), ask (confirm), auto (whitelist only) */
   executionMode: ShellExecutionMode;
-  /** Prompt mode: default or plan (research/planning mode) */
-  promptMode: PromptMode;
   /** Chat model options for UI model selector (from Platform ConfigManager) */
   chatModelOptions: Array<ChatModelOption>;
   /** Global defaults for the tabless composer; conversation snapshots remain authoritative. */

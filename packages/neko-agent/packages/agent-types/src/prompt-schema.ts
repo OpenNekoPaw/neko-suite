@@ -7,28 +7,10 @@ import type {
 } from '@neko/shared';
 import type { AgentCapabilityDiagnostic, AgentInjectedCapabilitySet } from './capability';
 import type { AgentMultimodalEvidenceRef } from './multimodal-tooling';
-import type { AgentLegacyCreationTrace } from './legacy-trace';
 
 export type PromptSchemaProviderToolMode = 'native' | 'prompt-only' | 'none';
 export type PromptSchemaStructuredOutputMode = 'native' | 'prompt-json' | 'unsupported';
-export type GeneratedSchemaPurpose =
-  | 'idc-draft'
-  | 'idc-plan'
-  | 'idc-apply'
-  | 'creation-stage-output'
-  | 'evaluator-output'
-  | 'recovery-decision'
-  | 'tool-arguments';
-
-export interface PromptGenerationCreationContext {
-  readonly creationId?: string;
-  readonly iterationId?: string;
-  readonly profileId?: string;
-  readonly stage?: string;
-  readonly planMode?: boolean;
-  readonly allowedToolNames?: readonly string[];
-  readonly legacyTrace?: AgentLegacyCreationTrace;
-}
+export type GeneratedSchemaPurpose = 'evaluator-output' | 'recovery-decision' | 'tool-arguments';
 
 export interface PromptGenerationProviderCapabilities {
   readonly providerId?: string;
@@ -50,7 +32,6 @@ export interface PromptGenerationContext {
   readonly agentsMdOverlay?: string;
   readonly settings?: Readonly<Record<string, unknown>>;
   readonly activeSkillId?: string;
-  readonly creation?: PromptGenerationCreationContext;
   readonly injectedCapabilities?: AgentInjectedCapabilitySet;
   readonly provider?: PromptGenerationProviderCapabilities;
   readonly providerPromptFragments?: readonly {

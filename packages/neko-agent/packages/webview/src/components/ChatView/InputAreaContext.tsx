@@ -6,12 +6,7 @@
  */
 
 import { createContext, useContext, useMemo, type ReactNode } from 'react';
-import type {
-  MediaUnderstandingModels,
-  ShellExecutionMode,
-  PromptMode,
-  SessionMode,
-} from '@neko-agent/types';
+import type { MediaUnderstandingModels, ShellExecutionMode, SessionMode } from '@neko-agent/types';
 import type { ConversationKind } from '@neko-agent/types';
 import type { ChatModelOption } from '@neko/shared';
 import type { AgentContextPayload } from '@neko/shared';
@@ -61,9 +56,6 @@ export interface InputAreaContextValue {
   // Execution mode
   executionMode: ShellExecutionMode;
   onExecutionModeChange: (mode: ShellExecutionMode) => void;
-  // Prompt mode
-  promptMode: PromptMode;
-  onPromptModeChange: (mode: PromptMode) => void;
   // Context compression
   contextTokenCount: number;
   maxContextTokens?: number;
@@ -119,8 +111,6 @@ export function InputAreaProvider({
       onSessionModeChange: value.onSessionModeChange,
       executionMode: value.executionMode,
       onExecutionModeChange: value.onExecutionModeChange,
-      promptMode: value.promptMode,
-      onPromptModeChange: value.onPromptModeChange,
       contextTokenCount: value.contextTokenCount,
       maxContextTokens: value.maxContextTokens,
       outputTokenCap: value.outputTokenCap,
@@ -159,8 +149,6 @@ export function InputAreaProvider({
       value.onSessionModeChange,
       value.executionMode,
       value.onExecutionModeChange,
-      value.promptMode,
-      value.onPromptModeChange,
       value.contextTokenCount,
       value.maxContextTokens,
       value.outputTokenCap,

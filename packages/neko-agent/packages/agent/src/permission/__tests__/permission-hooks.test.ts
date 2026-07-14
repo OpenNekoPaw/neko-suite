@@ -323,17 +323,16 @@ describe('PermissionHooks', () => {
       expect(result).toBeNull();
     });
 
-    it('allows writing to plan file in plan mode', async () => {
+    it('allows writing ordinary Markdown in plan mode', async () => {
       const hooks = new PermissionHooks({
         config: makeConfig({ mode: 'plan', rules: {} }),
       });
 
-      const toolCall = makeToolCall('Write', { file_path: '/project/.neko/plan.md' });
-      const execute = vi.fn();
+      const writeBrief = makeToolCall('Write', { file_path: '/project/docs/brief.md' });
+      const editPlan = makeToolCall('Edit', { path: '/project/plans/animation-plan.md' });
 
-      const result = await hooks.onToolCall(toolCall, execute);
-
-      expect(result).toBeNull();
+      await expect(hooks.onToolCall(writeBrief, vi.fn())).resolves.toBeNull();
+      await expect(hooks.onToolCall(editPlan, vi.fn())).resolves.toBeNull();
     });
   });
 

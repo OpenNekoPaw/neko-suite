@@ -5,14 +5,12 @@ import {
   validateChildRunScope,
   type SubAgentEventMessage,
   type SubAgentWorkItemEvent,
-  type AgentLegacyCreationTrace,
 } from '@neko-agent/types';
 import type { SubAgentEvent } from '../subagent/types';
 
 export interface ProjectSubAgentEventForConversationInput {
   readonly conversationId: string;
   readonly event: SubAgentEvent;
-  readonly legacyTrace?: AgentLegacyCreationTrace;
 }
 
 export interface SubAgentEventRuntime {
@@ -50,7 +48,7 @@ class DefaultSubAgentEventRuntime implements SubAgentEventRuntime {
     const event = input.event satisfies SubAgentWorkItemEvent;
     return buildSubAgentEventMessage({
       event,
-      workItem: projectSubAgentEventToWorkItem(event, input.legacyTrace),
+      workItem: projectSubAgentEventToWorkItem(event),
     });
   }
 }

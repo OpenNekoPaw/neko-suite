@@ -15,17 +15,15 @@
  * - stream/: event stream projection, background task observation, and stream
  *   state.
  *
- * Existing owner directories remain canonical for artifacts, input/message
+ * Existing owner directories remain canonical for input/message
  * projection, context, memory, prompt, Skill lifecycle, permission, approval,
  * plan/task projection, and commands. This barrel preserves package imports; it
  * must not become a governance or compatibility layer.
  */
 export type {
   AgentRuntimeConfig,
-  ArtifactWatcherFactory,
-  ArtifactWatcherRuntimeConfig,
   ICreationGuidanceRuntime,
-  IArtifactStore,
+  IWorkspaceRuntimeStore,
   ICapabilityRuntime,
   IValidationLoop,
   IRuntimeJournalWriter,
@@ -76,24 +74,10 @@ export {
 } from './session/session-config-projection';
 
 export {
-  createWorkspaceArtifactService,
-  toArtifactScopeBinding,
-  type AnyArtifactObservedInput,
-  type AnyArtifactRecord,
-  type ArtifactObservedInput,
-  type ArtifactBinding,
-  type ArtifactRecord,
-  type ArtifactServiceConfig,
-  type ArtifactServiceFsOps,
-  type ArtifactWriteInput,
-  type IArtifactService,
-} from '../artifact/artifact-service';
-
-export {
-  createNodeArtifactStore,
+  createNodeWorkspaceRuntimeStore,
   createNodeRuntimeWorkspaceFsOps,
-  type NodeArtifactStoreConfig,
-} from '../artifact/node-artifact-store';
+  type NodeWorkspaceRuntimeStoreConfig,
+} from './session/node-workspace-runtime-store';
 
 export {
   AgentObservationRecorder,

@@ -4,9 +4,9 @@ import type { AgentSessionConfig } from '../../session/types';
 import { getLogger } from '../../utils/logger';
 import type {
   AgentRuntimeConfig,
-  IArtifactStore,
   ICapabilityRuntime,
   ICreationGuidanceRuntime,
+  IWorkspaceRuntimeStore,
 } from '../types';
 
 const logger = getLogger('AgentSessionRuntimeBootstrap');
@@ -25,16 +25,11 @@ export function buildAgentSessionConfigWithRuntime(
 ): AgentSessionConfig {
   const { runtime, ...base } = config;
   const creationGuidance = runtime?.creationGuidance;
-  const artifacts = runtime?.artifactStore;
+  const workspaceStore = runtime?.workspaceStore;
   const capability = runtime?.capabilityRuntime;
   const validation = runtime?.validationLoop;
 
-  const stageTracking = mergeStageTracking(base.stageTracking, creationGuidance, capability);
-  const creationTaskProjection =
-    base.creationTaskProjection ?? creationGuidance?.creationTaskProjection;
-  const workspace = base.workspace ?? toWorkspaceConfig(artifacts);
-  const artifactService = base.artifactService ?? artifacts?.artifactService;
-  const artifactWatcherFactory = base.artifactWatcherFactory ?? artifacts?.createArtifactWatcher;
+  const workspace = base.workspace ?? toWorkspaceConfig(workspaceStore);
   const promptFragments = base.promptFragments ?? capability?.promptFragments;
   const toolGroupRegistry = base.toolGroupRegistry ?? capability?.toolGroupRegistry;
   const toolCategoryRegistry = capability?.toolCategoryRegistry ?? base.toolCategoryRegistry;
@@ -51,23 +46,17 @@ export function buildAgentSessionConfigWithRuntime(
     base.validationCoordinatorFactory ?? validation?.validationCoordinatorFactory;
   const toolResultValidationAdapters =
     base.toolResultValidationAdapters ?? validation?.toolResultValidationAdapters;
-  const creativeProcessRecoveryPolicy =
-    base.creativeProcessRecoveryPolicy ?? creationGuidance?.creativeProcessRecoveryPolicy;
   const autohealChainFactory = base.autohealChainFactory ?? creationGuidance?.autohealChainFactory;
   const externalProcessorRuntime =
     base.externalProcessorRuntime ?? capability?.externalProcessorRuntime;
   const contentAccessRuntime = base.contentAccessRuntime ?? capability?.contentAccessRuntime;
   const operationToolAdapterRegistry =
     base.operationToolAdapterRegistry ?? capability?.operationToolAdapterRegistry;
-  const journalWriter = resolveJournalWriter(base, artifacts);
+  const journalWriter = resolveJournalWriter(base, workspaceStore);
 
   return {
     ...base,
-    ...(stageTracking ? { stageTracking } : {}),
-    ...(creationTaskProjection ? { creationTaskProjection } : {}),
     ...(workspace ? { workspace } : {}),
-    ...(artifactService ? { artifactService } : {}),
-    ...(artifactWatcherFactory ? { artifactWatcherFactory } : {}),
     ...(promptFragments ? { promptFragments } : {}),
     ...(toolGroupRegistry ? { toolGroupRegistry } : {}),
     ...(toolCategoryRegistry ? { toolCategoryRegistry } : {}),
@@ -79,7 +68,6 @@ export function buildAgentSessionConfigWithRuntime(
     ...(validationCoordinator ? { validationCoordinator } : {}),
     ...(validationCoordinatorFactory ? { validationCoordinatorFactory } : {}),
     ...(toolResultValidationAdapters ? { toolResultValidationAdapters } : {}),
-    ...(creativeProcessRecoveryPolicy ? { creativeProcessRecoveryPolicy } : {}),
     ...(autohealChainFactory ? { autohealChainFactory } : {}),
     ...(externalProcessorRuntime ? { externalProcessorRuntime } : {}),
     ...(contentAccessRuntime ? { contentAccessRuntime } : {}),
@@ -103,41 +91,10 @@ export function createAgentSessionWithRuntime(
   return createAgentSession(buildAgentSessionConfigWithRuntime(config));
 }
 
-/**
- * Merge stage tracking bindings from three planes with a fixed precedence:
- * explicit session config > creation guidance runtime > capability runtime.
- *
- * This keeps host overrides deterministic while still letting runtime
- * bootstrap fill shared skill/service references from lower layers.
- */
-function mergeStageTracking(
-  explicit: AgentSessionConfig['stageTracking'],
-  creationGuidance: ICreationGuidanceRuntime | undefined,
-  capability: ICapabilityRuntime | undefined,
-): AgentSessionConfig['stageTracking'] {
-  const runtimeStageTracking = creationGuidance?.stageTracking;
-  if (!explicit && !runtimeStageTracking) return undefined;
-
-  const skillRegistry =
-    explicit?.skillRegistry ?? runtimeStageTracking?.skillRegistry ?? capability?.skillRegistry;
-  const skillService =
-    explicit?.skillService ?? runtimeStageTracking?.skillService ?? capability?.skillService;
-  const skillLifecycleRuntime =
-    explicit?.skillLifecycleRuntime ??
-    runtimeStageTracking?.skillLifecycleRuntime ??
-    capability?.skillLifecycleRuntime;
-
-  return {
-    ...(runtimeStageTracking ?? {}),
-    ...(explicit ?? {}),
-    ...(skillRegistry ? { skillRegistry } : {}),
-    ...(skillService ? { skillService } : {}),
-    ...(skillLifecycleRuntime ? { skillLifecycleRuntime } : {}),
-  };
-}
-
-function toWorkspaceConfig(artifacts: IArtifactStore | undefined): AgentSessionConfig['workspace'] {
-  const workspace = artifacts?.workspace;
+function toWorkspaceConfig(
+  workspaceStore: IWorkspaceRuntimeStore | undefined,
+): AgentSessionConfig['workspace'] {
+  const workspace = workspaceStore?.workspace;
   if (!workspace) return undefined;
 
   return {
@@ -151,37 +108,39 @@ function toWorkspaceConfig(artifacts: IArtifactStore | undefined): AgentSessionC
 
 function resolveJournalWriter(
   base: AgentSessionConfig,
-  artifacts: IArtifactStore | undefined,
+  workspaceStore: IWorkspaceRuntimeStore | undefined,
 ): AgentSessionConfig['journalWriter'] {
   if (base.journalWriter) return base.journalWriter;
   if (!base.conversationId) {
-    if (artifacts?.createJournalWriter) {
+    if (workspaceStore?.createJournalWriter) {
       emitDiagnostic(logger, 'warn', {
         code: 'agent.runtime.bootstrap.journal-writer-skipped',
         reason: 'missing-conversation-id',
         message: 'Skipping runtime journal writer bootstrap because conversationId is missing.',
         context: {
-          hasArtifactStore: true,
+          hasWorkspaceStore: true,
           hasJournalWriterFactory: true,
         },
       });
     }
     return undefined;
   }
-  if (!artifacts?.createJournalWriter) {
-    if (artifacts) {
+  if (!workspaceStore?.createJournalWriter) {
+    if (workspaceStore) {
       emitDiagnostic(logger, 'warn', {
         code: 'agent.runtime.bootstrap.journal-writer-skipped',
         reason: 'missing-journal-writer-factory',
         message:
-          'Runtime artifact store does not provide createJournalWriter; journal persistence is disabled.',
+          'Runtime workspace store does not provide createJournalWriter; journal persistence is disabled.',
         context: {
           conversationId: base.conversationId,
-          hasArtifactStore: true,
+          hasWorkspaceStore: true,
         },
       });
     }
     return undefined;
   }
-  return artifacts.createJournalWriter(base.conversationId) as AgentSessionConfig['journalWriter'];
+  return workspaceStore.createJournalWriter(
+    base.conversationId,
+  ) as AgentSessionConfig['journalWriter'];
 }

@@ -1,4 +1,8 @@
 import { describe, expect, it } from 'vitest';
+import {
+  projectBackgroundTaskToWorkItem,
+  type AgentWorkItemTaskStatus,
+} from '@neko-agent/types';
 import { createEventAdapter } from './event-adapter';
 import { testAgentStore as useAgentStore } from '../__tests__/test-runtime';
 import { testConversationStore as useConversationStore } from '../__tests__/test-runtime';
@@ -200,6 +204,62 @@ describe('createEventAdapter timeline projection', () => {
       toolName: 'WriteFile',
     });
   });
+
+  it('projects Task work items from the production timeline update into conversation TODO state', () => {
+    resetStores();
+    const adapter = createEventAdapter({
+      agentStore: useAgentStore.getState,
+      conversationStore: useConversationStore.getState,
+      uiStore: useUIStore.getState,
+      presentation: createTestAgentTerminalPresentation(),
+    });
+
+    adapter.handleMessage(
+      createTaskTimelineUpdate(
+        createTaskWorkItem('task-1', 'Generate keyframe', 'processing', 1),
+        1,
+      ),
+    );
+    adapter.handleMessage(
+      createTaskTimelineUpdate(
+        createTaskWorkItem('task-2', 'Generate motion pass', 'processing', 2),
+        1,
+      ),
+    );
+
+    let assistant = useConversationStore
+      .getState()
+      .messages.find((message) => message.role === 'assistant');
+    expect(assistant?.todos).toEqual([
+      { content: 'Generate motion pass', status: 'in_progress' },
+      { content: 'Generate keyframe', status: 'pending' },
+    ]);
+
+    adapter.handleMessage(
+      createTaskTimelineUpdate(
+        createTaskWorkItem('task-1', 'Generate keyframe', 'completed', 3),
+        2,
+      ),
+    );
+
+    assistant = useConversationStore
+      .getState()
+      .messages.find((message) => message.role === 'assistant');
+    expect(assistant?.todos).toEqual([
+      { content: 'Generate motion pass', status: 'in_progress' },
+      { content: 'Generate keyframe', status: 'completed' },
+    ]);
+
+    adapter.reset();
+    adapter.handleMessage(
+      createTaskTimelineUpdate(
+        createTaskWorkItem('task-3', 'Validate output', 'failed', 4),
+        1,
+      ),
+    );
+    assistant = useConversationStore.getState().messages.at(-1);
+    expect(assistant?.todos).toEqual([{ content: 'Validate output', status: 'blocked' }]);
+  });
 });
 
 function resetStores(): void {
@@ -208,9 +268,75 @@ function resetStores(): void {
   useUIStore.setState({
     pendingApproval: null,
     pendingSelection: null,
-    pendingPlanReview: false,
     scrollOffset: 0,
     inputFocused: true,
     slashMenuOpen: false,
   });
+}
+
+function createTaskWorkItem(
+  taskId: string,
+  title: string,
+  status: AgentWorkItemTaskStatus,
+  updatedSecond: number,
+) {
+  return projectBackgroundTaskToWorkItem({
+    conversationId: 'conv-1',
+    task: {
+      scope: {
+        conversationId: 'conv-1',
+        runId: 'run-1',
+        parentRunId: 'run-1',
+        childRunId: taskId,
+        childKind: 'task',
+      },
+      id: taskId,
+      type: 'image',
+      name: title,
+      prompt: title,
+      providerId: 'provider-1',
+      providerName: 'model-1',
+      status,
+      progress: status === 'completed' ? 100 : 50,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: `2026-01-01T00:00:0${updatedSecond}.000Z`,
+    },
+  });
+}
+
+function createTaskTimelineUpdate(
+  workItem: ReturnType<typeof createTaskWorkItem>,
+  itemRevision: number,
+) {
+  const timestamp = Date.parse(workItem.updatedAt);
+  return {
+    type: 'agentTurnTimelineUpdate' as const,
+    conversationId: workItem.conversationId,
+    turnId: 'turn-1',
+    messageId: 'message-1',
+    operations: [
+      {
+        operation: 'upsert' as const,
+        item: {
+          conversationId: workItem.conversationId,
+          turnId: 'turn-1',
+          messageId: 'message-1',
+          itemId: `${workItem.kind}-${workItem.id}`,
+          sequence: 1,
+          itemRevision,
+          kind: 'task' as const,
+          status:
+            workItem.status === 'completed'
+              ? ('succeeded' as const)
+              : workItem.status === 'failed' || workItem.status === 'cancelled'
+                ? ('failed' as const)
+                : ('pending' as const),
+          parentAnchor: 'turn' as const,
+          payload: { workItem },
+          createdAt: timestamp,
+          updatedAt: timestamp,
+        },
+      },
+    ],
+  };
 }

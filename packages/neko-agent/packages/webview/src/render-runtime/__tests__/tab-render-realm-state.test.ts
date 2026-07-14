@@ -207,7 +207,6 @@ function draft(tabId: string, conversationId: string, inputValue: string): TabRe
     mediaUnderstandingSelection: { image: 'auto', video: 'auto', audio: 'auto' },
     sessionMode: 'agent',
     executionMode: 'ask',
-    promptMode: 'default',
     generationCategory: 'image',
     generationParams: {
       ratio: '16:9',

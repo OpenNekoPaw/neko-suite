@@ -19,25 +19,8 @@ export {
   type TaskTerminalCallback,
   type TaskTerminalSubscriptionOptions,
   type ConcurrencyConfig,
-  type ICreationProjectedTaskStore,
   type IRuntimeTaskManager,
 } from './task-manager';
-export {
-  createTaskManagerCreationTaskProjection,
-  type ICreationTaskProjection,
-  type ICreationTaskProjectionStore,
-  type CreationTaskProjectionConfig,
-} from './creation-task-projection';
-export {
-  getCreationProjectedTaskRunId,
-  isCreationProjectedTaskPayload,
-  toSerializableCreationProjectedTask,
-  toCreationProjectedTaskPayload,
-  type CreationProjectedTaskArtifactBinding,
-  type CreationProjectedTaskBinding,
-  type CreationProjectedTaskPayload,
-  type CreationProjectedTaskUpsertInput,
-} from './creation-projected-task';
 export {
   buildCancelTaskActionPlan,
   buildClearCompletedTaskPlan,

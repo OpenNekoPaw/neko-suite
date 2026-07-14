@@ -175,7 +175,7 @@ describe('Component Snapshots (ink-testing-library)', () => {
         { content: 'Read configuration file', status: 'completed' },
         { content: 'Analyzing code structure', status: 'in_progress' },
         { content: 'Generate test cases', status: 'pending' },
-        { content: 'Deploy failed', status: 'failed' },
+        { content: 'Deploy blocked', status: 'blocked' },
       ];
 
       const { lastFrame } = render(<TodoList todos={todos} />);
@@ -184,7 +184,7 @@ describe('Component Snapshots (ink-testing-library)', () => {
       expect(frame).toContain('Read configuration file');
       expect(frame).toContain('Analyzing code structure');
       expect(frame).toContain('[ ]');
-      expect(frame).toContain('[✗]');
+      expect(frame).toContain('[!]');
       console.log('TodoList (mixed states):\n', frame);
     });
 

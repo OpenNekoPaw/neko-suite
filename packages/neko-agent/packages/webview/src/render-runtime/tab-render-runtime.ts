@@ -1,6 +1,5 @@
 import type { AgentContextPayload } from '@neko/shared';
 import {
-  type PromptMode,
   type SessionMode,
   type ShellExecutionMode,
   type TabType,
@@ -80,7 +79,6 @@ export interface TabQueuedEditState {
 
 export interface TabRenderState {
   readonly modelConfigurationInitialized: boolean;
-  readonly promptModeInitialized: boolean;
   readonly activeSurface: TabType;
   readonly inputValue: string;
   readonly attachedFiles: readonly MessageAttachment[];
@@ -91,7 +89,6 @@ export interface TabRenderState {
   readonly mediaUnderstandingSelection: Readonly<MediaUnderstandingSelection>;
   readonly sessionMode: SessionMode;
   readonly executionMode: ShellExecutionMode;
-  readonly promptMode: PromptMode;
   readonly generationCategory: GenCategory;
   readonly generationParams: Readonly<GenerationParams>;
   readonly llmConfig: Readonly<AgentLlmConfig>;
@@ -598,7 +595,6 @@ function hasSameRetentionFields(
 function createInitialTabRenderState(): TabRenderState {
   return Object.freeze({
     modelConfigurationInitialized: false,
-    promptModeInitialized: false,
     activeSurface: 'chat',
     inputValue: '',
     attachedFiles: Object.freeze([]),
@@ -609,7 +605,6 @@ function createInitialTabRenderState(): TabRenderState {
     mediaUnderstandingSelection: Object.freeze({ image: 'auto', video: 'auto', audio: 'auto' }),
     sessionMode: 'agent',
     executionMode: 'ask',
-    promptMode: 'default',
     generationCategory: 'image',
     generationParams: Object.freeze({ ...DEFAULT_GENERATION_PARAMS }),
     llmConfig: Object.freeze({ ...DEFAULT_AGENT_LLM_CONFIG }),

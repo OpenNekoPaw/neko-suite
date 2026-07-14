@@ -4,7 +4,6 @@ import type {
   AgentWorkItemStore,
   ConversationStreamingState,
   Message,
-  PromptMode,
 } from '@neko-agent/types';
 import type { ActiveSkillIndicator } from '@/components/ChatView/SkillIndicator';
 import type { ActivationProgressTimeline } from './activation-progress-presenter';
@@ -36,7 +35,6 @@ export interface ConversationSessionState {
   readonly conversationId: string;
   readonly messages: readonly Message[];
   readonly streaming: ConversationSessionStreamingState;
-  readonly promptMode: PromptMode;
   readonly skill: ConversationSessionSkillProjection;
   readonly context: ConversationSessionContextProjection;
   readonly agentState: AgentState | null;
@@ -49,7 +47,6 @@ export interface ProjectConversationSessionStateInput {
   readonly conversationId: string;
   readonly messagesByConversation: ReadonlyMap<string, readonly Message[]>;
   readonly streamingByConversation: ReadonlyMap<string, ConversationSessionStreamingState>;
-  readonly promptModeByConversation?: ReadonlyMap<string, PromptMode>;
   readonly activeSkillByConversation?: ReadonlyMap<string, ConversationSessionActiveSkill | null>;
   readonly activationProgressByConversation?: ReadonlyMap<
     string,
@@ -60,7 +57,6 @@ export interface ProjectConversationSessionStateInput {
   readonly compressingByConversation?: ReadonlyMap<string, boolean>;
   readonly agentStateByConversation?: ReadonlyMap<string, AgentState>;
   readonly workItemsByConversation?: AgentWorkItemStore;
-  readonly defaultPromptMode?: PromptMode;
 }
 
 export function projectConversationSessionState(
@@ -71,8 +67,6 @@ export function projectConversationSessionState(
     conversationId,
     messages: [...(input.messagesByConversation.get(conversationId) ?? [])],
     streaming: normalizeSessionStreamingState(input.streamingByConversation.get(conversationId)),
-    promptMode:
-      input.promptModeByConversation?.get(conversationId) ?? input.defaultPromptMode ?? 'default',
     skill: {
       activeSkill: input.activeSkillByConversation?.get(conversationId) ?? null,
       activationProgress: [...(input.activationProgressByConversation?.get(conversationId) ?? [])],

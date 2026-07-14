@@ -115,19 +115,6 @@ describe('skillCatalogProvider', () => {
     });
   });
 
-  it('keeps persona skills out of the primary catalog', () => {
-    const skills = buildSkillDefs({
-      builtinSkills: [
-        makeSkill('creation-persona', 'Specify persona.'),
-        makeSkill('execution-persona', 'Execute persona.'),
-        makeSkill('iteration-persona', 'Iterate persona.'),
-        makeSkill('media-quality-review', 'Review quality.'),
-      ],
-    });
-
-    expect(skills.map((skill) => skill.id)).toEqual(['media-quality-review']);
-  });
-
   it('includes project and personal file skills as editable catalog entries', () => {
     const skills = buildSkillDefs({
       builtinSkills: [],

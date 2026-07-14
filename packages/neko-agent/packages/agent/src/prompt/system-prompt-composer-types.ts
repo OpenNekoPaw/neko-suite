@@ -14,9 +14,8 @@
  *
  * Layers (ADR §11.6 six control planes → Prompt plane sublayers):
  * - base: protocol skeleton (tool-call conventions, output format, project context)
- * - schema: machine contracts (artifact frontmatter, path templates, URI rules)
- *   projected by modules when a run / artifact state is active
- * - skill: active persona (creation-persona / execution-persona / iteration-persona)
+ * - schema: machine contracts contributed by current capabilities
+ * - skill: explicitly active domain/reference guidance
  * - environment: user-authored overlay (AGENTS.md) + project memory
  * - ephemeral: per-turn injections (memory recall, version log, future self-eval)
  */

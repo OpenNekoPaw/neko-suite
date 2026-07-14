@@ -18,7 +18,7 @@ import type {
   PermissionCheckResult,
   PermissionConfig,
 } from './types';
-import { DEFAULT_READ_ONLY_TOOLS, READ_ONLY_MCP_PREFIXES, PLAN_FILE_PATH } from './types';
+import { DEFAULT_READ_ONLY_TOOLS, READ_ONLY_MCP_PREFIXES } from './types';
 import type { ToolTraitsRegistry } from './tool-traits-registry';
 
 // Re-export pattern matching utilities from centralized module for backward compatibility
@@ -26,10 +26,9 @@ export { normalizeToolCall, matchesPattern, isInPatternList } from '../tools/too
 import { normalizeToolCall, isInPatternList } from '../tools/tool-pattern-matcher';
 
 /**
- * Check if a tool call is writing to the plan file
- * In plan mode, Write/Edit to the plan file is allowed
+ * Check if a tool call edits ordinary Markdown.
  */
-export function isPlanFileWrite(toolCall: ToolCallInfo): boolean {
+export function isPlanMarkdownWrite(toolCall: ToolCallInfo): boolean {
   const { name, arguments: args } = toolCall;
 
   // Only Write and Edit tools can write to files
@@ -43,9 +42,7 @@ export function isPlanFileWrite(toolCall: ToolCallInfo): boolean {
     return false;
   }
 
-  // Check if the path ends with the plan file path
-  // Only match the canonical .neko/plan.md path, not arbitrary *plan.md files
-  return filePath.endsWith(PLAN_FILE_PATH);
+  return /(?:^|[/\\])[^/\\]+\.md$/iu.test(filePath);
 }
 
 /**
@@ -147,18 +144,17 @@ export class PermissionRuleMatcher {
         };
       }
 
-      // Allow writing to the plan file (Claude Code compatible)
-      if (isPlanFileWrite(toolCall)) {
+      if (isPlanMarkdownWrite(toolCall)) {
         return {
           decision: 'allow',
-          reason: `Writing to plan file (${PLAN_FILE_PATH}) allowed in plan mode`,
+          reason: 'Authorized Markdown edits are allowed in plan mode',
           toolCall,
         };
       }
 
       return {
         decision: 'deny',
-        reason: `Tool '${toolCall.name}' is not allowed in plan mode (read-only mode). Only read-only tools and writing to ${PLAN_FILE_PATH} are permitted.`,
+        reason: `Tool '${toolCall.name}' is not allowed in plan mode. Only read-only tools and ordinary authorized Markdown edits are permitted.`,
         toolCall,
       };
     }

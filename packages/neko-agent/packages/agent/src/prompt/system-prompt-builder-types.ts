@@ -2,10 +2,7 @@
  * System Prompt Builder Types
  */
 
-/**
- * Prompt mode
- */
-export type PromptMode = 'default' | 'plan';
+export type PromptExecutionMode = 'auto' | 'ask' | 'plan';
 
 /**
  * Locale for built-in prompts
@@ -24,8 +21,8 @@ export interface SystemPromptBuilderConfig {
   /** Locale for built-in prompts */
   locale?: PromptLocale;
 
-  /** Initial mode */
-  mode?: PromptMode;
+  /** Initial Agent execution mode. */
+  executionMode?: PromptExecutionMode;
 
   /** Custom default prompt (overrides built-in) */
   customDefaultPrompt?: string;
@@ -66,25 +63,13 @@ export interface ISystemPromptBuilder {
    */
   getLocale(): PromptLocale;
 
-  /**
-   * Set prompt mode
-   */
-  setMode(mode: PromptMode): void;
+  /** Select the prompt using the ordinary Agent execution mode. */
+  setExecutionMode(mode: PromptExecutionMode): void;
 
   /**
    * Get current mode
    */
-  getMode(): PromptMode;
-
-  /**
-   * Toggle between default and plan mode
-   */
-  togglePlanMode(): PromptMode;
-
-  /**
-   * Check if in plan mode
-   */
-  isPlanMode(): boolean;
+  getExecutionMode(): PromptExecutionMode;
 
   // ---------------------------------------------------------------------------
   // AGENTS.md Management
@@ -128,7 +113,7 @@ export interface ISystemPromptBuilder {
    * Build the base system prompt for a specific mode without mutating the
    * builder's current mode. AGENTS.md remains an environment-layer overlay.
    */
-  buildForMode(mode: PromptMode): string;
+  buildForExecutionMode(mode: PromptExecutionMode): string;
 
   /**
    * Build prompt with skill injection

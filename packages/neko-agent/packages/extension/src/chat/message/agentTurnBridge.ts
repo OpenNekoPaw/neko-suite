@@ -55,8 +55,7 @@ export interface AgentTurnBridgeDeps {
   conversations: ConversationBridge;
   agentManager?: IAgentManager;
   editorRegistry?: IEditorRegistry;
-  getSystemPrompt: (conversationId: string) => string;
-  isPlanMode: (conversationId: string) => boolean;
+  getSystemPrompt: (conversationId: string, executionMode: 'auto' | 'ask' | 'plan') => string;
   platform?: Platform;
   taskManager?: IRuntimeTaskManager;
   getActiveSkillState?: (conversationId: string) => ActiveSkillState | undefined;
@@ -191,7 +190,6 @@ export class AgentTurnBridge {
               this.deps.conversations.upsertMessageToConversation(id, assistantMessage),
           },
           getBaseSystemPrompt: this.deps.getSystemPrompt,
-          isPlanMode: this.deps.isPlanMode,
           getActiveSkillState: this.deps.getActiveSkillState,
           getSkillLifecycleProjection: this.deps.getSkillLifecycleProjection,
           ...(this.deps.taskManager ? { taskManager: this.deps.taskManager } : {}),

@@ -48,30 +48,6 @@ export const builtinSkillLocales: Readonly<Record<string, BuiltinSkillLocaleMap>
       tags: ['Agent', 'Skill', '创作'],
     },
   },
-  'creation-persona': {
-    'zh-cn': {
-      name: '创作人格',
-      description:
-        'IDC Draft / Plan 阶段的共创伙伴，用于理解创作意图、提出方向、收集反馈，并把技术进展转成用户可读叙述。',
-      tags: ['创作', '共创', '计划'],
-    },
-  },
-  'execution-persona': {
-    'zh-cn': {
-      name: '执行人格',
-      description:
-        'IDC Apply 阶段的系统操作员，用于执行已批准 Draft、调用工具、提交变更、处理错误和运行自动修复链。',
-      tags: ['执行', 'Apply', '自动修复'],
-    },
-  },
-  'iteration-persona': {
-    'zh-cn': {
-      name: '迭代人格',
-      description:
-        '面向一致性问题的窄范围迭代伙伴，用于诊断漂移镜头、提出局部重跑范围和提示词/参考修改方案。',
-      tags: ['迭代', '一致性', '局部重跑'],
-    },
-  },
   'scene-to-music': {
     'zh-cn': {
       name: '场景配乐',

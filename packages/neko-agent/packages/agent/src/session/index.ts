@@ -14,7 +14,6 @@ export {
 export * from './agent-session';
 export { createSkillCreationKind, encodeCreationKindSegment } from './creation-kind';
 export {
-  createPlanModeCreationMetadata,
   createSkillExecutionCreationMetadata,
   mergeCreationExecutionMetadata,
 } from './creation-execution-metadata';

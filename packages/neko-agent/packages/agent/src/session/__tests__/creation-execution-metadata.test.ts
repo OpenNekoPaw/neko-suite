@@ -1,21 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
-  createPlanModeCreationMetadata,
   createSkillExecutionCreationMetadata,
   mergeCreationExecutionMetadata,
 } from '../creation-execution-metadata';
 
 describe('creation-execution-metadata', () => {
-  it('creates plan-mode creation metadata', () => {
-    expect(createPlanModeCreationMetadata()).toEqual({
-      agentCreation: {
-        entrySignal: 'vague-creative',
-        taskShape: 'multi-step',
-        creationKind: 'plan-mode',
-      },
-    });
-  });
-
   it('creates prompt-chain-skill metadata for explicit slash skill execution', () => {
     expect(
       createSkillExecutionCreationMetadata(
@@ -48,7 +37,7 @@ describe('creation-execution-metadata', () => {
       mergeCreationExecutionMetadata(
         {
           agentCreation: {
-            creationKind: 'plan-mode',
+            creationKind: 'skill:storyboard',
             taskShape: 'multi-step',
           },
           source: 'plan',
@@ -62,7 +51,7 @@ describe('creation-execution-metadata', () => {
       ),
     ).toEqual({
       agentCreation: {
-        creationKind: 'plan-mode',
+        creationKind: 'skill:storyboard',
         taskShape: 'multi-step',
         entrySignal: 'prompt-chain-skill',
       },

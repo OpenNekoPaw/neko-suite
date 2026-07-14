@@ -222,8 +222,10 @@ async function waitForSubmissionAcceptance(
   });
   const startedAt = Date.now();
   for (;;) {
-    if (stores.agent.getState().status === 'running') return;
+    const agentStatus = stores.agent.getState().status;
+    if (agentStatus === 'running') return;
     if (settled && hasProjectedAssistantAfter(messageCountBeforeSubmit, stores)) return;
+    if (settled && agentStatus === 'error') return;
     if (Date.now() - startedAt >= 5_000) {
       throw new TuiDebugAutomationProtocolError(
         'session-timeout',
@@ -351,6 +353,7 @@ function readEffectiveConfiguration(
   const config = stores.config.getState().config;
   const projection: Omit<TuiDebugAutomationSessionFacts['configuration'], 'digest'> = {
     runtime: {
+      executionMode: stores.agent.getState().executionMode,
       temperature: config.temperature,
       maxTokens: config.maxTokens,
       thinkingBudget: config.thinkingBudget,
@@ -398,6 +401,7 @@ function readTurnSummaries(stores: TuiConversationStores): {
     ...(message.displayKind ? { displayKind: message.displayKind } : {}),
     ...(message.metadata ? { metadata: message.metadata } : {}),
     content: readMessageSummaryContent(message),
+    todos: message.todos.map((todo) => ({ ...todo })),
     ...(message.isError ? { isError: true } : {}),
     toolCalls: (() => {
       const projected = bounded(readMessageToolCallSummaries(message), FACT_LIMITS.turnToolCalls);

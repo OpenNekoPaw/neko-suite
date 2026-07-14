@@ -37,11 +37,6 @@ export interface AgentCapabilityPermissionRequirement {
   readonly approvalRequired?: boolean;
 }
 
-export interface AgentCapabilityCreationStageRequirement {
-  readonly profileIds?: readonly string[];
-  readonly stageIds?: readonly string[];
-}
-
 export interface AgentCapabilityContributionIdentity {
   readonly id: string;
   readonly source: AgentCapabilitySource;
@@ -216,7 +211,6 @@ export interface AgentCapabilityContribution {
   readonly description?: string;
   readonly hostRequirements?: readonly AgentCapabilityHostRequirement[];
   readonly permissionRequirements?: readonly AgentCapabilityPermissionRequirement[];
-  readonly creationStageRequirements?: readonly AgentCapabilityCreationStageRequirement[];
   readonly promptFragments?: readonly PromptFragment[];
   readonly allowedTools?: readonly string[];
   readonly slashCommands?: readonly AgentCapabilitySlashCommandContribution[];
@@ -241,8 +235,6 @@ export interface AgentCapabilityDiagnostic {
 export interface AgentCapabilityInjectionContext {
   readonly host: AgentCapabilityHost;
   readonly activeSkillId?: string;
-  readonly creationProfileId?: string;
-  readonly creationStageId?: string;
   readonly allowedTrustLevels?: readonly AgentCapabilityTrustLevel[];
   readonly toolBudget?: number;
   readonly disabledContributionIds?: readonly string[];

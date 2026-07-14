@@ -1,5 +1,5 @@
 /**
- * NdjsonEventSink — append every DualFlowEvent to a JSONL log file.
+ * NdjsonEventSink — append Agent runtime events to a JSONL log file.
  *
  * See: docs/architecture/agent-unified-workflow.md §7 (format dichotomy:
  *   AI → Markdown, program → JSONL) + §7.4 (events/audits/steps split).
@@ -29,7 +29,7 @@
  */
 
 import type { IEventBus } from '../events/event-bus';
-import type { DualFlowEvent } from '../events/event-bus';
+import type { AgentEventBusEvent } from '../events/event-bus';
 import { getLogger } from '../utils/logger';
 
 const logger = getLogger('NdjsonEventSink');
@@ -56,14 +56,14 @@ export interface NdjsonEventSinkConfig {
   /** Optional stable writer id for multi-window/process diagnostics. */
   writerId?: string;
   /** Optional projection used by owning sessions to attach log-only identity. */
-  mapEvent?: (event: DualFlowEvent) => NdjsonLoggedEvent;
+  mapEvent?: (event: AgentEventBusEvent) => NdjsonLoggedEvent;
   /**
    * Optional predicate deciding which events end up on disk. When
    * absent, every event on the bus is written. Pass a predicate to
    * split streams (e.g. `e.channel.startsWith('execution.autoheal.')`
    * for an audits-only sink).
    */
-  filter?: (event: DualFlowEvent) => boolean;
+  filter?: (event: AgentEventBusEvent) => boolean;
   /** Clock injection. Defaults to Date.now. */
   now?: () => number;
 }
@@ -87,7 +87,7 @@ export interface INdjsonEventSink {
   dispose(): Promise<void>;
 }
 
-export type NdjsonLoggedEvent = DualFlowEvent & {
+export type NdjsonLoggedEvent = AgentEventBusEvent & {
   readonly conversationId?: string;
   readonly turnId?: string;
 };
@@ -102,8 +102,8 @@ class NdjsonEventSink implements INdjsonEventSink {
   private readonly _filePath: string;
   private readonly _fsOps: NdjsonFsOps;
   private readonly _writerId: string;
-  private readonly _mapEvent: ((event: DualFlowEvent) => NdjsonLoggedEvent) | undefined;
-  private readonly _filter: ((event: DualFlowEvent) => boolean) | undefined;
+  private readonly _mapEvent: ((event: AgentEventBusEvent) => NdjsonLoggedEvent) | undefined;
+  private readonly _filter: ((event: AgentEventBusEvent) => boolean) | undefined;
   private readonly _now: () => number;
   private _seq = 0;
   private readonly _partitionSeq = new Map<string, number>();
@@ -158,7 +158,7 @@ class NdjsonEventSink implements INdjsonEventSink {
   // Private
   // ---------------------------------------------------------------------------
 
-  private _enqueue(event: DualFlowEvent): void {
+  private _enqueue(event: AgentEventBusEvent): void {
     const seq = ++this._seq;
     const ts = this._now();
     const loggedEvent = this._mapEvent ? this._mapEvent(event) : event;

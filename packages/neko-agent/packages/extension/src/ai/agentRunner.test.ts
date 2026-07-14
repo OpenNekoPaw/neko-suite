@@ -147,7 +147,7 @@ vi.mock('@neko/agent', async (importOriginal) => {
       loadAgentsFile: vi.fn().mockResolvedValue(undefined),
       getAgentsContent: vi.fn().mockReturnValue(null),
       build: vi.fn().mockReturnValue('default prompt'),
-      buildForMode: vi.fn().mockReturnValue('default prompt'),
+      buildForExecutionMode: vi.fn().mockReturnValue('default prompt'),
       buildBaseOnly: vi.fn().mockReturnValue('default prompt'),
       buildAgentsOverlay: vi.fn().mockReturnValue(undefined),
     })),
@@ -337,24 +337,8 @@ function buildMockSessionConfig(
     ...(config.conversationId ? { conversationId: config.conversationId } : {}),
     ...(config.perceptionClients ? { perceptionClients: config.perceptionClients } : {}),
     ...(config.onConfirmTool ? { onConfirmTool: config.onConfirmTool } : {}),
+    ...(config.taskManager ? { taskManager: config.taskManager } : {}),
     runtime: {
-      creationGuidance: {
-        ...(capabilityRuntime?.skillRegistry || capabilityRuntime?.skillService
-          ? {
-              stageTracking: {
-                ...(capabilityRuntime.skillRegistry
-                  ? { skillRegistry: capabilityRuntime.skillRegistry }
-                  : {}),
-                ...(capabilityRuntime.skillService
-                  ? { skillService: capabilityRuntime.skillService }
-                  : {}),
-              },
-            }
-          : {}),
-        ...(config.taskManager
-          ? { creationTaskProjection: { syncTask: vi.fn(), clearRun: vi.fn() } }
-          : {}),
-      },
       capabilityRuntime: {
         ...(capabilityRuntime?.skillService
           ? { skillService: capabilityRuntime.skillService }
@@ -538,12 +522,6 @@ describe('AgentRunner', () => {
               skillService,
               skillRegistry,
             }),
-            creationGuidance: expect.objectContaining({
-              stageTracking: expect.objectContaining({
-                skillRegistry,
-                skillService,
-              }),
-            }),
           }),
         }),
       );
@@ -724,7 +702,7 @@ describe('AgentRunner', () => {
       );
     });
 
-    it('应该把宿主 TaskManager 投影成 IDC task projection', async () => {
+    it('应该把宿主 TaskManager 直接传入普通 Agent session', async () => {
       const taskManager = new TaskManager();
 
       await runner.configure({
@@ -735,14 +713,7 @@ describe('AgentRunner', () => {
 
       expect(latestCreateSessionConfig).toEqual(
         expect.objectContaining({
-          runtime: expect.objectContaining({
-            creationGuidance: expect.objectContaining({
-              creationTaskProjection: expect.objectContaining({
-                syncTask: expect.any(Function),
-                clearRun: expect.any(Function),
-              }),
-            }),
-          }),
+          taskManager,
         }),
       );
     });

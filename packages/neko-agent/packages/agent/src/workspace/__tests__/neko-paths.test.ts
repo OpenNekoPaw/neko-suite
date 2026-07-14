@@ -6,7 +6,6 @@ import {
   NEKO_STATE_FILES,
   NEKO_SUBDIRS,
 } from '../neko-paths';
-import { createCreationArtifactPaths } from '../creation-artifact-paths';
 
 describe('NekoPaths', () => {
   it('root is <projectRoot>/.neko', () => {
@@ -47,16 +46,6 @@ describe('NekoPaths', () => {
   it('file() rejects empty basename', () => {
     const p = createNekoPaths('/r');
     expect(() => p.file('sessions', '')).toThrow(/basename is required/);
-  });
-
-  it('keeps Draft / Plan / Task creation documents outside managed .neko paths', () => {
-    const p = createCreationArtifactPaths('/r');
-    expect(p.root).toBe('/r/neko/creations');
-    expect(p.creationDir('launch-teaser')).toBe('/r/neko/creations/launch-teaser');
-    expect(p.file('draft', 'launch-teaser')).toBe('/r/neko/creations/launch-teaser/brief.md');
-    expect(p.file('plan', 'launch-teaser')).toBe('/r/neko/creations/launch-teaser/plan.md');
-    expect(p.file('task', 'launch-teaser')).toBe('/r/neko/creations/launch-teaser/checklist.md');
-    expect(() => p.file('draft', '../bad')).toThrow(/invalid path segment/);
   });
 
   it('log() returns canonical JSONL paths', () => {

@@ -36,25 +36,6 @@ export {
 } from './neko-content-layout';
 
 export {
-  createArtifactIndexStore,
-  type ArtifactIndexEntry,
-  type ArtifactIndexSnapshot,
-  type ArtifactIndexStoreConfig,
-  type ArtifactIndexStoreFsOps,
-  type DraftArtifactIndexEntry,
-  type IArtifactIndexStore,
-  type PlanArtifactIndexEntry,
-  type TaskArtifactIndexEntry,
-} from './artifact-index-store';
-
-export {
-  createCreationArtifactPaths,
-  CREATION_ARTIFACT_FILES,
-  CREATION_ARTIFACT_ROOT,
-  type ICreationArtifactPaths,
-} from './creation-artifact-paths';
-
-export {
   createSessionLock,
   type ISessionLock,
   type SessionLockConfig,
@@ -82,10 +63,6 @@ export {
   type JsonFileWriteMetadata,
   type StaleJsonFileWriteDetails,
 } from './json-file-write-guard';
-
-export { serializeTask, parseTask } from './task-markdown';
-export { serializeDraft, parseDraft } from './draft-markdown';
-export { serializeExecutionPlan, parseExecutionPlan } from './plan-markdown';
 
 export {
   parsePreferences,

@@ -73,7 +73,6 @@ export const chat = {
   'chat.skill.clear': 'Clear record',
   'chat.skill.locked': 'Locked by lifecycle policy',
   'chat.skill.expires': 'Expires: {expires}',
-  'chat.skill.slot.stagePersona': 'Stage persona',
   'chat.skill.slot.domainSkill': 'Domain skill',
   'chat.skill.slot.referenceSkill': 'Reference skill',
   'chat.skill.slot.ephemeralSkill': 'Ephemeral skill',
@@ -84,11 +83,8 @@ export const chat = {
   'chat.skill.owner.runtime': 'Runtime',
   'chat.skill.provenance.user-explicit': 'User triggered',
   'chat.skill.provenance.agent-tool': 'Agent requested',
-  'chat.skill.lockedReason.creationStagePersonaStageExit':
-    'Cleared automatically when its owning creation stage exits',
   'chat.activation.target.skill': 'Skill',
   'chat.activation.target.creation-profile': 'Creation profile',
-  'chat.activation.target.creation-stage': 'Creation stage',
   'chat.activation.target.execution-mode': 'Execution mode',
   'chat.activation.status.pending': 'pending',
   'chat.activation.status.running': 'running',
@@ -554,11 +550,6 @@ export const chat = {
   'chat.executionMode.auto': 'Auto',
   'chat.executionMode.autoDesc': 'Auto-execute safe commands',
   'chat.executionMode.deny': 'Never execute',
-
-  'chat.promptMode.default': 'Default',
-  'chat.promptMode.plan': 'Plan Mode',
-  'chat.promptMode.planActive': 'Plan mode active - read-only research phase',
-  'chat.promptMode.switchToPlan': 'Switch to plan mode',
 
   'chat.quickActions.generateImage': 'Generate Image',
   'chat.quickActions.generateVideo': 'Generate Video',

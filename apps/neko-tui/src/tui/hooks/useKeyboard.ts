@@ -35,9 +35,8 @@ export function useKeyboard(actions: KeyboardActions): void {
   const status = useAgentStore((s) => s.status);
   const pendingApproval = useUIStore((s) => s.pendingApproval);
   const pendingSelection = useUIStore((s) => s.pendingSelection);
-  const pendingPlanReview = useUIStore((s) => s.pendingPlanReview);
   const terminalRows = useUIStore((s) => s.terminalSize.rows);
-  const keyboardBlocked = Boolean(pendingApproval || pendingSelection || pendingPlanReview);
+  const keyboardBlocked = Boolean(pendingApproval || pendingSelection);
 
   useInput((_input, key) => {
     // Modal surfaces own their keyboard input while active.

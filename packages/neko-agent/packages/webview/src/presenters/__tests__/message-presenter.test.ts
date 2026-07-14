@@ -9,9 +9,6 @@ import {
   projectToolCallIntoMessages,
   projectToolConfirmationIntoMessages,
   projectToolResultIntoMessages,
-  toPlanStatus,
-  updatePlanStatusInMessages,
-  updatePlanStepInMessages,
 } from '../message-presenter';
 import { projectToolResultBackfillIntoMessages } from '../tool-result-backfill-presenter';
 import { projectMarkdownResourceRendering } from '../markdown-resource-rendering-presenter';
@@ -198,7 +195,7 @@ describe('message presenter', () => {
     });
   });
 
-  it('merges task work item ids and appends plan blocks from tool results', () => {
+  it('merges task work item ids from tool results', () => {
     const result = projectToolResultIntoMessages({
       messages: createToolMessages({ workItemIds: ['task-existing'] }),
       streamingMessageId: null,
@@ -207,12 +204,6 @@ describe('message presenter', () => {
       data: {
         backgroundMode: true,
         taskIds: ['task-1', 'task-2', 'task-1'],
-      },
-      plan: {
-        id: 'plan-1',
-        title: 'Plan',
-        status: 'pending',
-        steps: [{ id: 'step-1', description: 'Do it', status: 'pending' }],
       },
       now: () => 3000,
     });
@@ -235,12 +226,6 @@ describe('message presenter', () => {
                 },
               },
             },
-          },
-          {
-            id: 'block-plan-plan-1',
-            type: 'plan',
-            timestamp: 3000,
-            plan: { id: 'plan-1' },
           },
         ],
       },
@@ -344,53 +329,6 @@ describe('message presenter', () => {
         },
       ],
     });
-  });
-
-  it('updates plan status and step status in messages', () => {
-    const messages: Message[] = [
-      {
-        id: 'msg-1',
-        role: 'assistant',
-        content: '',
-        timestamp: 1,
-        contentBlocks: [
-          {
-            id: 'block-plan-plan-1',
-            type: 'plan',
-            timestamp: 1,
-            plan: {
-              id: 'plan-1',
-              title: 'Plan',
-              status: 'pending',
-              steps: [{ id: 'step-1', description: 'Do it', status: 'pending' }],
-            },
-          },
-        ],
-      },
-    ];
-
-    const withStep = updatePlanStepInMessages(messages, 'plan-1', 'step-1', {
-      status: 'completed',
-      description: 'Done',
-    });
-    const withStatus = updatePlanStatusInMessages(withStep.messages, 'plan-1', 'approved');
-
-    expect(withStep.updated).toBe(true);
-    expect(withStatus.updated).toBe(true);
-    expect(withStatus.messages).toMatchObject([
-      {
-        contentBlocks: [
-          {
-            plan: {
-              status: 'approved',
-              steps: [{ id: 'step-1', description: 'Done', status: 'completed' }],
-            },
-          },
-        ],
-      },
-    ]);
-    expect(toPlanStatus('approved')).toBe('approved');
-    expect(toPlanStatus('invalid')).toBeNull();
   });
 
   it('projects streaming text into new and existing assistant messages', () => {

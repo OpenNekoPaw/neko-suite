@@ -21,7 +21,6 @@ export interface TabRenderDraftSnapshot extends TabRenderBinding {
   readonly mediaUnderstandingSelection: Readonly<MediaUnderstandingSelection>;
   readonly sessionMode: TabRenderState['sessionMode'];
   readonly executionMode: TabRenderState['executionMode'];
-  readonly promptMode: TabRenderState['promptMode'];
   readonly generationCategory: GenCategory;
   readonly generationParams: Readonly<GenerationParams>;
   readonly llmConfig: Readonly<AgentLlmConfig>;
@@ -186,7 +185,6 @@ function projectDraft(state: TabRenderState, binding: TabRenderBinding): TabRend
     mediaUnderstandingSelection: { ...state.mediaUnderstandingSelection },
     sessionMode: state.sessionMode,
     executionMode: state.executionMode,
-    promptMode: state.promptMode,
     generationCategory: state.generationCategory,
     generationParams: { ...state.generationParams },
     llmConfig: {
@@ -204,7 +202,6 @@ function toStateUpdate(draft: TabRenderDraftSnapshot): TabRenderStateUpdate {
     mediaUnderstandingSelection: draft.mediaUnderstandingSelection,
     sessionMode: draft.sessionMode,
     executionMode: draft.executionMode,
-    promptMode: draft.promptMode,
     generationCategory: draft.generationCategory,
     generationParams: draft.generationParams,
     llmConfig: draft.llmConfig,
@@ -225,7 +222,6 @@ function hasSameDraft(left: TabRenderDraftSnapshot, right: TabRenderDraftSnapsho
     left.mediaUnderstandingSelection.audio === right.mediaUnderstandingSelection.audio &&
     left.sessionMode === right.sessionMode &&
     left.executionMode === right.executionMode &&
-    left.promptMode === right.promptMode &&
     left.generationCategory === right.generationCategory &&
     left.generationParams.ratio === right.generationParams.ratio &&
     left.generationParams.resolution === right.generationParams.resolution &&
@@ -272,7 +268,6 @@ function parseDraft(value: unknown, index: number): TabRenderDraftSnapshot {
       `${path}.sessionMode`,
     ),
     executionMode: enumValue(value.executionMode, ['plan', 'ask', 'auto'], `${path}.executionMode`),
-    promptMode: enumValue(value.promptMode, ['default', 'plan'], `${path}.promptMode`),
     generationCategory: enumValue(
       value.generationCategory,
       ['image', 'video', 'audio'],

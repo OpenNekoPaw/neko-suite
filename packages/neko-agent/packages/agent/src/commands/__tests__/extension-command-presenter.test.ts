@@ -6,7 +6,6 @@ import {
   buildExtensionSkillCommandResultPayload,
   normalizeSlashCommandName,
   parseBuiltinCommandArgs,
-  shouldExecutePlanPromptAfterToggle,
 } from '../extension-command-presenter';
 
 describe('extension command presenter', () => {
@@ -187,29 +186,11 @@ describe('extension command presenter', () => {
     ]);
   });
 
-  it('decides whether a /plan argument should be executed after toggling plan mode', () => {
-    expect(
-      shouldExecutePlanPromptAfterToggle({
-        result: { handled: true, continueExecution: true, action: 'togglePlanMode' },
-        isPlanMode: true,
-        rawArgs: 'draft a plan',
-      }),
-    ).toBe(true);
-    expect(
-      shouldExecutePlanPromptAfterToggle({
-        result: { handled: true, continueExecution: true, action: 'togglePlanMode' },
-        isPlanMode: false,
-        rawArgs: 'draft a plan',
-      }),
-    ).toBe(false);
-  });
-
   it('builds host effects for command actions', () => {
     expect(
       buildExtensionCommandHostEffectPlan({
         result: { handled: true, continueExecution: true, action: 'clearHistory' },
         activeConversationId: 'conv-1',
-        isPlanMode: false,
       }),
     ).toEqual({
       beforeResult: [
@@ -222,7 +203,6 @@ describe('extension command presenter', () => {
     expect(
       buildExtensionCommandHostEffectPlan({
         result: { handled: true, continueExecution: true, action: 'newConversation' },
-        isPlanMode: false,
       }),
     ).toEqual({
       beforeResult: [{ type: 'refreshConversationList' }, { type: 'refreshActiveConversation' }],
@@ -233,7 +213,6 @@ describe('extension command presenter', () => {
       buildExtensionCommandHostEffectPlan({
         result: { handled: true, continueExecution: true, action: 'showTasks' },
         activeConversationId: 'conv-1',
-        isPlanMode: false,
       }),
     ).toEqual({
       beforeResult: [{ type: 'sendTasks', conversationId: 'conv-1' }],
@@ -241,24 +220,15 @@ describe('extension command presenter', () => {
     });
   });
 
-  it('schedules plan prompt execution after result payload', () => {
+  it('does not execute plan text as a side effect of changing execution mode', () => {
     expect(
       buildExtensionCommandHostEffectPlan({
-        result: { handled: true, continueExecution: true, action: 'togglePlanMode' },
+        result: { handled: true, continueExecution: true, action: 'updateExecutionMode' },
         activeConversationId: 'conv-1',
-        isPlanMode: true,
-        rawArgs: '  draft a plan  ',
       }),
     ).toEqual({
       beforeResult: [],
-      afterResult: [
-        {
-          type: 'executePlanPrompt',
-          conversationId: 'conv-1',
-          messageText: 'draft a plan',
-          sessionMode: 'agent',
-        },
-      ],
+      afterResult: [],
     });
   });
 });

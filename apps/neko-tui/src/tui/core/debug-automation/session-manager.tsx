@@ -573,11 +573,24 @@ function readRuntimeConfig(
   const config = assertRecordParams(value, method);
   assertAllowedParamKeys(
     config,
-    ['temperature', 'maxTokens', 'thinkingBudget', 'outputFormat'],
+    ['executionMode', 'temperature', 'maxTokens', 'thinkingBudget', 'outputFormat'],
     method,
     'params.runtimeConfig',
   );
   const outputFormat = readOptionalStringParam(config, 'outputFormat');
+  const executionMode = readOptionalStringParam(config, 'executionMode');
+  if (
+    executionMode !== undefined &&
+    executionMode !== 'auto' &&
+    executionMode !== 'ask' &&
+    executionMode !== 'plan'
+  ) {
+    throw new TuiDebugAutomationProtocolError(
+      'invalid-request',
+      'session runtimeConfig.executionMode must be auto, ask, or plan.',
+      { received: executionMode },
+    );
+  }
   if (
     outputFormat !== undefined &&
     outputFormat !== 'text' &&
@@ -594,6 +607,7 @@ function readRuntimeConfig(
   const maxTokens = readOptionalNumberParam(config, 'maxTokens');
   const thinkingBudget = readOptionalNumberParam(config, 'thinkingBudget');
   return {
+    ...(executionMode ? { executionMode } : {}),
     ...(temperature !== undefined ? { temperature } : {}),
     ...(maxTokens !== undefined ? { maxTokens } : {}),
     ...(thinkingBudget !== undefined ? { thinkingBudget } : {}),

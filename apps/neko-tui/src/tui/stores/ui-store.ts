@@ -42,8 +42,6 @@ export interface UISlice {
   // State
   readonly pendingApproval: PendingApproval | null;
   readonly pendingSelection: PendingSelection | null;
-  /** Whether a plan review prompt is waiting for user decision */
-  readonly pendingPlanReview: boolean;
   /** Rows above the live bottom; zero means follow new output. */
   readonly scrollOffset: number;
   readonly scrollLimit: number;
@@ -56,8 +54,6 @@ export interface UISlice {
   dismissToolApproval: () => void;
   showSelection: (selection: PendingSelection) => void;
   dismissSelection: () => void;
-  showPlanReview: () => void;
-  dismissPlanReview: () => void;
   setScrollOffset: (offset: number) => void;
   setScrollLimit: (limit: number) => void;
   scrollUp: (lines?: number) => void;
@@ -92,7 +88,6 @@ function createUIState(
     return {
       pendingApproval: null,
       pendingSelection: null,
-      pendingPlanReview: false,
       scrollOffset: 0,
       scrollLimit: 0,
       inputFocused: true,
@@ -113,14 +108,6 @@ function createUIState(
 
       dismissSelection: () => {
         update({ pendingSelection: null, inputFocused: true });
-      },
-
-      showPlanReview: () => {
-        update({ pendingPlanReview: true, inputFocused: false });
-      },
-
-      dismissPlanReview: () => {
-        update({ pendingPlanReview: false, inputFocused: true });
       },
 
       setScrollOffset: (offset) => {

@@ -27,7 +27,7 @@
  *
  *   - tool:GenerateImage        → { prefix: 'tool', value: 'GenerateImage' }
  *   - domain:cut                → { prefix: 'domain', value: 'cut' }
- *   - channel:draft-review      → { prefix: 'channel', value: 'draft-review' }
+ *   - channel:creator-review    → { prefix: 'channel', value: 'creator-review' }
  *
  * Prefix-less bullets are treated as label matches against
  * `ApprovalSubject.label` (case-insensitive substring). That's a

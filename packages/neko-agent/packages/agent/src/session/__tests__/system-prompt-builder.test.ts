@@ -40,26 +40,22 @@ describe('SystemPromptBuilder', () => {
   });
 
   describe('Mode Management', () => {
-    it('should default to default mode', () => {
+    it('should default to ask execution mode', () => {
       const builder = new SystemPromptBuilder();
-      expect(builder.getMode()).toBe('default');
-      expect(builder.isPlanMode()).toBe(false);
+      expect(builder.getExecutionMode()).toBe('ask');
     });
 
-    it('should set mode from config', () => {
-      const builder = new SystemPromptBuilder({ mode: 'plan' });
-      expect(builder.getMode()).toBe('plan');
-      expect(builder.isPlanMode()).toBe(true);
+    it('should set execution mode from config', () => {
+      const builder = new SystemPromptBuilder({ executionMode: 'plan' });
+      expect(builder.getExecutionMode()).toBe('plan');
     });
 
-    it('should toggle plan mode', () => {
+    it('should update execution mode explicitly', () => {
       const builder = new SystemPromptBuilder();
-
-      expect(builder.togglePlanMode()).toBe('plan');
-      expect(builder.isPlanMode()).toBe(true);
-
-      expect(builder.togglePlanMode()).toBe('default');
-      expect(builder.isPlanMode()).toBe(false);
+      builder.setExecutionMode('plan');
+      expect(builder.getExecutionMode()).toBe('plan');
+      builder.setExecutionMode('auto');
+      expect(builder.getExecutionMode()).toBe('auto');
     });
   });
 
@@ -120,14 +116,14 @@ describe('SystemPromptBuilder', () => {
     });
 
     it('should build plan mode English prompt', () => {
-      const builder = new SystemPromptBuilder({ locale: 'en', mode: 'plan' });
+      const builder = new SystemPromptBuilder({ locale: 'en', executionMode: 'plan' });
       const prompt = builder.build();
 
       expect(prompt).toBe(BUILTIN_PLAN_PROMPT_EN);
     });
 
     it('should build plan mode Chinese prompt', () => {
-      const builder = new SystemPromptBuilder({ locale: 'zh', mode: 'plan' });
+      const builder = new SystemPromptBuilder({ locale: 'zh', executionMode: 'plan' });
       const prompt = builder.build();
 
       expect(prompt).toBe(BUILTIN_PLAN_PROMPT_ZH);
@@ -145,7 +141,7 @@ describe('SystemPromptBuilder', () => {
     });
 
     it('should use plan prompt even when AGENTS.md is set', () => {
-      const builder = new SystemPromptBuilder({ mode: 'plan' });
+      const builder = new SystemPromptBuilder({ executionMode: 'plan' });
       builder.setAgentsContent('Custom content', 'project');
 
       const prompt = builder.build();
@@ -168,7 +164,7 @@ describe('SystemPromptBuilder', () => {
     it('should use custom plan prompt when provided', () => {
       const customPlanPrompt = 'My custom plan prompt';
       const builder = new SystemPromptBuilder({
-        mode: 'plan',
+        executionMode: 'plan',
         customPlanPrompt: customPlanPrompt,
       });
 
@@ -178,14 +174,14 @@ describe('SystemPromptBuilder', () => {
     });
 
     it('should build for a requested mode without mutating current mode', () => {
-      const builder = new SystemPromptBuilder({ mode: 'default' });
+      const builder = new SystemPromptBuilder({ executionMode: 'ask' });
       builder.setAgentsContent('# Project rules', 'project');
 
-      expect(builder.buildForMode('plan')).toBe(BUILTIN_PLAN_PROMPT_EN);
-      expect(builder.getMode()).toBe('default');
-      expect(builder.buildForMode('default')).toBe(BUILTIN_DEFAULT_PROMPT_EN);
+      expect(builder.buildForExecutionMode('plan')).toBe(BUILTIN_PLAN_PROMPT_EN);
+      expect(builder.getExecutionMode()).toBe('ask');
+      expect(builder.buildForExecutionMode('auto')).toBe(BUILTIN_DEFAULT_PROMPT_EN);
       expect(builder.buildAgentsOverlay()).toBe('# Project rules');
-      expect(builder.getMode()).toBe('default');
+      expect(builder.getExecutionMode()).toBe('ask');
     });
   });
 
@@ -214,10 +210,10 @@ describe('SystemPromptBuilder', () => {
 
   describe('Factory Function', () => {
     it('should create builder with factory function', () => {
-      const builder = createSystemPromptBuilder({ locale: 'zh', mode: 'plan' });
+      const builder = createSystemPromptBuilder({ locale: 'zh', executionMode: 'plan' });
 
       expect(builder.getLocale()).toBe('zh');
-      expect(builder.getMode()).toBe('plan');
+      expect(builder.getExecutionMode()).toBe('plan');
     });
   });
 
@@ -234,7 +230,7 @@ describe('SystemPromptBuilder', () => {
     });
 
     it('returns plan prompt in plan mode (ignoring AGENTS.md)', () => {
-      const builder = new SystemPromptBuilder({ mode: 'plan' });
+      const builder = new SystemPromptBuilder({ executionMode: 'plan' });
       builder.setAgentsContent('# Project rules', 'project');
       expect(builder.buildBaseOnly()).toBe(BUILTIN_PLAN_PROMPT_EN);
     });
@@ -252,7 +248,7 @@ describe('SystemPromptBuilder', () => {
       builder.setAgentsContent(content, 'project');
       expect(builder.buildAgentsOverlay()).toBe(content);
 
-      builder.setMode('plan');
+      builder.setExecutionMode('plan');
       expect(builder.buildAgentsOverlay()).toBe(content);
     });
   });
@@ -296,12 +292,20 @@ describe('Builtin Prompts', () => {
   });
 
   it('should contain planning instructions in plan prompts', () => {
-    // English
     expect(BUILTIN_PLAN_PROMPT_EN).toContain('PLANNING MODE');
-    expect(BUILTIN_PLAN_PROMPT_EN).toContain('DO NOT execute');
+    expect(BUILTIN_PLAN_PROMPT_EN).toContain('actual authorized source documents');
+    expect(BUILTIN_PLAN_PROMPT_EN).toContain('execution-ready work units');
+    expect(BUILTIN_PLAN_PROMPT_EN).toContain('ordinary authorized Markdown');
+    expect(BUILTIN_PLAN_PROMPT_EN).toContain('Do not generate media');
+    expect(BUILTIN_PLAN_PROMPT_EN).not.toContain('software architect assistant');
+    expect(BUILTIN_PLAN_PROMPT_EN).not.toContain('Focus on the "what" and "why"');
 
-    // Chinese
     expect(BUILTIN_PLAN_PROMPT_ZH).toContain('规划模式');
-    expect(BUILTIN_PLAN_PROMPT_ZH).toContain('不要执行');
+    expect(BUILTIN_PLAN_PROMPT_ZH).toContain('实际来源文档');
+    expect(BUILTIN_PLAN_PROMPT_ZH).toContain('可执行工作单元');
+    expect(BUILTIN_PLAN_PROMPT_ZH).toContain('普通、已授权的 Markdown');
+    expect(BUILTIN_PLAN_PROMPT_ZH).toContain('不得生成媒体');
+    expect(BUILTIN_PLAN_PROMPT_ZH).not.toContain('软件架构师助手');
+    expect(BUILTIN_PLAN_PROMPT_ZH).not.toContain('只关注“做什么”和“为什么”');
   });
 });

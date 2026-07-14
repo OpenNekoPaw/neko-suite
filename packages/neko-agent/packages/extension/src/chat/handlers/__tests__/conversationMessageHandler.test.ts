@@ -115,18 +115,10 @@ function createMockAgentManager() {
   };
 }
 
-function createMockPromptModeCleanup() {
-  return {
-    clearPromptMode: vi.fn(),
-    clearAllPromptModes: vi.fn(),
-  };
-}
-
 describe('ConversationMessageHandler', () => {
   let webview: ReturnType<typeof createMockWebview>;
   let conversations: ReturnType<typeof createMockConversations>;
   let agentManager: ReturnType<typeof createMockAgentManager>;
-  let promptModeCleanup: ReturnType<typeof createMockPromptModeCleanup>;
   let handler: ConversationMessageHandler;
 
   beforeEach(() => {
@@ -134,11 +126,9 @@ describe('ConversationMessageHandler', () => {
     webview = createMockWebview();
     conversations = createMockConversations();
     agentManager = createMockAgentManager();
-    promptModeCleanup = createMockPromptModeCleanup();
     handler = new ConversationMessageHandler({
       conversations: conversations as any,
       agentManager: agentManager as any,
-      promptModeCleanup,
       getWebview: () => webview as any,
     });
   });
@@ -282,13 +272,12 @@ describe('ConversationMessageHandler', () => {
     expect(conversations.getActiveId).not.toHaveBeenCalled();
   });
 
-  it('deletes a conversation and clears scoped prompt mode state', async () => {
+  it('deletes a conversation and clears scoped agent state', async () => {
     const messages = { clearAgentState: vi.fn() };
     handler = new ConversationMessageHandler({
       conversations: conversations as any,
       agentManager: agentManager as any,
       messages: messages as any,
-      promptModeCleanup,
       getWebview: () => webview as any,
     });
 
@@ -296,7 +285,6 @@ describe('ConversationMessageHandler', () => {
 
     expect(agentManager.remove).toHaveBeenCalledWith('conv-a');
     expect(messages.clearAgentState).toHaveBeenCalledWith('conv-a');
-    expect(promptModeCleanup.clearPromptMode).toHaveBeenCalledWith('conv-a');
     expect(conversations.delete).toHaveBeenCalledWith('conv-a', { activateNext: true });
     expect(conversations.sendConversationList).toHaveBeenCalledWith(webview);
     expect(conversations.sendActiveConversation).toHaveBeenCalledWith(webview, undefined);
@@ -436,7 +424,6 @@ describe('ConversationMessageHandler', () => {
       conversations: conversations as any,
       agentManager: agentManager as any,
       messages: messages as any,
-      promptModeCleanup,
       getWebview: () => webview as any,
     });
 
@@ -446,8 +433,6 @@ describe('ConversationMessageHandler', () => {
     expect(agentManager.remove).toHaveBeenCalledWith('conv-b');
     expect(messages.clearAgentState).toHaveBeenCalledWith('conv-a');
     expect(messages.clearAgentState).toHaveBeenCalledWith('conv-b');
-    expect(promptModeCleanup.clearAllPromptModes).toHaveBeenCalledTimes(1);
-    expect(promptModeCleanup.clearPromptMode).not.toHaveBeenCalled();
     expect(conversations.clearAll).toHaveBeenCalledTimes(1);
     expect(conversations.sendConversationList).toHaveBeenCalledWith(webview);
     expect(webview.postMessage).toHaveBeenCalledWith({

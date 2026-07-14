@@ -29,7 +29,7 @@ export const tokens: ThemeTokens = {
   todoPending: 'gray',
   todoInProgress: 'yellow',
   todoCompleted: 'green',
-  todoFailed: 'red',
+  todoBlocked: 'red',
 
   // Tool call states — aligned with CLI TOOL_ICONS semantics
   toolPending: 'cyan',
@@ -92,7 +92,7 @@ export const INK_TODO_ICONS = {
   pending: '[ ]',
   in_progress: '[•]',
   completed: '[✓]',
-  failed: '[✗]',
+  blocked: '[!]',
 } as const;
 
 /**

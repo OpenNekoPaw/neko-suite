@@ -1,7 +1,7 @@
 /**
  * Tool Message Handlers
  *
- * Handles: toolCall, toolResult, toolConfirmation, planStepStatusUpdate, planStatusUpdate
+ * Handles: toolCall, toolResult, toolConfirmation
  */
 
 import { defineHandler } from './types';
@@ -11,8 +11,6 @@ import type {
   ToolResultMessage,
   ToolResultBackfillMessage,
   ToolConfirmationMessage,
-  PlanStepStatusUpdateMessage,
-  PlanStatusUpdateMessage,
 } from './messages';
 import { updateConversation } from './message-updater';
 import { upsertWorkItemsForConversation } from '@/presenters/work-item-state-presenter';
@@ -20,9 +18,6 @@ import {
   projectToolCallIntoMessages,
   projectToolConfirmationIntoMessages,
   projectToolResultIntoMessages,
-  toPlanStatus,
-  updatePlanStatusInMessages,
-  updatePlanStepInMessages,
   type ToolResultMessageProjectionResult,
 } from '../presenters/message-presenter';
 import { projectToolResultBackfillIntoMessages } from '../presenters/tool-result-backfill-presenter';
@@ -92,21 +87,11 @@ const handleToolResult: MessageHandler<'toolResult'> = (message: ToolResultMessa
       attachments: message.attachments,
       perceptionCards: message.perceptionCards,
       backfillDiagnostics: message.backfillDiagnostics,
-      plan: message.plan,
       artifacts: message.artifacts,
     });
 
     if (!projection.updated) {
       logger.debug('No target message found for toolResult');
-    }
-
-    if (message.plan) {
-      logger.debug('Received pre-parsed plan from Extension:', {
-        planId: message.plan.id,
-        title: message.plan.title,
-        stepsCount: message.plan.steps.length,
-        filePath: message.plan.filePath,
-      });
     }
 
     return { messages: projection.messages };
@@ -182,47 +167,6 @@ const handleToolConfirmation: MessageHandler<'toolConfirmation'> = (
 };
 
 /**
- * Handle plan step status update from Extension
- */
-const handlePlanStepStatusUpdate: MessageHandler<'planStepStatusUpdate'> = (
-  message: PlanStepStatusUpdateMessage,
-  context,
-) => {
-  const { planId, stepId, status, newDescription, conversationId } = message;
-  const planStatus = toPlanStatus(status);
-  if (!planStatus) {
-    logger.warn('Ignoring invalid plan step status:', { planId, stepId, status });
-    return;
-  }
-
-  updateConversation(context, conversationId, (msgs) => ({
-    messages: updatePlanStepInMessages(msgs, planId, stepId, {
-      status: planStatus,
-      description: newDescription,
-    }).messages,
-  }));
-};
-
-/**
- * Handle overall plan status update from Extension
- */
-const handlePlanStatusUpdate: MessageHandler<'planStatusUpdate'> = (
-  message: PlanStatusUpdateMessage,
-  context,
-) => {
-  const { planId, status, conversationId } = message;
-  const planStatus = toPlanStatus(status);
-  if (!planStatus) {
-    logger.warn('Ignoring invalid plan status:', { planId, status });
-    return;
-  }
-
-  updateConversation(context, conversationId, (msgs) => ({
-    messages: updatePlanStatusInMessages(msgs, planId, planStatus).messages,
-  }));
-};
-
-/**
  * All tool handler registrations
  */
 export const toolHandlers: HandlerRegistration[] = [
@@ -230,6 +174,4 @@ export const toolHandlers: HandlerRegistration[] = [
   defineHandler('toolResult', handleToolResult),
   defineHandler('toolResultBackfill', handleToolResultBackfill),
   defineHandler('toolConfirmation', handleToolConfirmation),
-  defineHandler('planStepStatusUpdate', handlePlanStepStatusUpdate),
-  defineHandler('planStatusUpdate', handlePlanStatusUpdate),
 ];

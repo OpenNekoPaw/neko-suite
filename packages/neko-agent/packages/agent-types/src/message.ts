@@ -17,7 +17,6 @@ import type {
   ToolResultBackfillDiagnostic,
 } from '@neko/shared';
 import type { AgentArtifactTransferPayload } from './artifact-transfer';
-import type { Plan } from './plan';
 
 // ---------------------------------------------------------------------------
 // ToolCall (internal format — NOT the LLM wire format in platform/adapter)
@@ -56,7 +55,7 @@ export interface ToolCall {
  * Allows thinking, tool calls, text, and code diffs to be rendered in chronological order.
  */
 export type ContentBlockType =
-  'thinking' | 'text' | 'tool_call' | 'code_diff' | 'plan' | 'composite' | 'canvas_lifecycle';
+  'thinking' | 'text' | 'tool_call' | 'code_diff' | 'composite' | 'canvas_lifecycle';
 
 export type CompositeTemplate = 'storyboard-table' | 'comparison' | 'gallery' | 'report';
 
@@ -132,8 +131,6 @@ export interface ContentBlock {
   toolCall?: ToolCall;
   /** For code_diff blocks */
   codeDiff?: CodeDiff;
-  /** For plan blocks — the parsed Plan (from plan-mode markdown). */
-  plan?: Plan;
   /** For composite blocks — structured multimodal presentation intent. */
   composite?: CompositeBlockData;
   /** Present only when the composite is derived from authoritative Markdown source. */

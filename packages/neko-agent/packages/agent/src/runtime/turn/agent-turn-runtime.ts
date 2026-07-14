@@ -5,7 +5,6 @@ import type {
   MessageQueuedMessage,
   AgentMessageQueueSnapshot,
   AgentQueuedMessageItem,
-  AgentLegacyCreationTrace,
   AgentModelSlots,
   AgentMediaModelSelections,
   MediaUnderstandingModelSelections,
@@ -243,8 +242,10 @@ export interface ExecuteAgentTurnInput<
   readonly providerSource: AgentTurnProviderSource<TProvider>;
   readonly agentManager: AgentTurnAgentManager<TPlatform, TContext, THistoryMessage, TRunner>;
   readonly conversations: AgentTurnConversationStore<THistoryMessage>;
-  readonly getBaseSystemPrompt: (conversationId: string) => string;
-  readonly isPlanMode: (conversationId: string) => boolean;
+  readonly getBaseSystemPrompt: (
+    conversationId: string,
+    executionMode: 'auto' | 'ask' | 'plan',
+  ) => string;
   readonly getWorkspaceRoot?: () => string | undefined;
   readonly getAuthorizedReadRoots?: () => readonly string[];
   readonly getWorkspaceIgnoreRules?: () => WorkspaceFileIgnoreRules | undefined;
@@ -289,7 +290,6 @@ export interface ExecuteAgentTurnInput<
   readonly generateMessageId: () => string;
   readonly now?: () => number;
   readonly taskManager?: IRuntimeTaskManager;
-  readonly legacyTrace?: AgentLegacyCreationTrace;
 }
 
 export type AgentTurnHostMessage =
@@ -586,10 +586,12 @@ export async function executeAgentTurn<
 
   const turnConfig = buildAgentTurnConfigurationPlan({
     conversationId: input.conversationId,
-    baseSystemPrompt: input.getBaseSystemPrompt(input.conversationId),
+    baseSystemPrompt: input.getBaseSystemPrompt(
+      input.conversationId,
+      input.executionOverrides?.executionMode ?? input.settings.executionMode,
+    ),
     customSystemPrompt: input.settings.customSystemPrompt,
     ambientCanvas,
-    isPlanMode: input.isPlanMode(input.conversationId),
     executionMode: input.settings.executionMode,
     chatModel: {
       providerId: providerSelection.provider.id,
@@ -838,7 +840,6 @@ async function executeAgentTurnMessage<
       ? timelineContextPacket
       : null,
     canvasContextPacket,
-    ...(input.input.legacyTrace ? { legacyTrace: input.input.legacyTrace } : {}),
   });
 
   const contextPatch = buildAgentTurnContextPatch({

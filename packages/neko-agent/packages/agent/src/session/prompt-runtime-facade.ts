@@ -12,7 +12,6 @@ export interface PromptRuntimeComposerPort {
 }
 
 export interface PromptRuntimeModulePort {
-  readonly artifactSchemaModule: PromptModule;
   readonly validationGuidanceModule: PromptRuntimeContentModule;
   readonly memoryRecallModule: PromptRuntimeContentModule;
   readonly creativeVersionLogModule: PromptRuntimeVersionLogModule;
@@ -83,7 +82,6 @@ export class PromptRuntimeFacade {
     readonly history: ChatMessage[];
     readonly historyEventIds: string[][];
   }): string[][] {
-    this.applyModuleSync(this._options.ports.modules.artifactSchemaModule);
     this.applyModuleSync(this._options.ports.modules.validationGuidanceModule);
     this.applyModuleSync(this._options.ports.modules.memoryRecallModule);
 

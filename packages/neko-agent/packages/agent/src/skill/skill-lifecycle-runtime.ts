@@ -438,15 +438,6 @@ export function defaultDeactivationPolicy(
   slot: SkillLifecycleSlot,
   owner: SkillLifecycleOwner,
 ): SkillLifecycleDeactivationPolicy {
-  if (slot === 'stagePersona' && owner === 'creation-profile') {
-    return {
-      clearableByUser: false,
-      clearableByAgent: false,
-      clearableByRuntime: true,
-      lockedReason: 'Creation stage persona is cleared when its owning stage exits',
-    };
-  }
-
   if (slot === 'ephemeralSkill') {
     return {
       clearableByUser: false,

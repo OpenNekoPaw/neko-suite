@@ -44,18 +44,9 @@ export function projectSlashCommandResultMessage(
       if (messageText) effects.push(createAssistantMessageEffect(messageText, timestamp));
       break;
 
-    case 'togglePlanMode': {
-      const planMode = readBoolean(message.data, 'planMode');
-      if (planMode !== undefined) {
-        effects.push({
-          type: 'setPromptMode',
-          conversationId: message.conversationId,
-          promptMode: planMode ? 'plan' : 'default',
-        });
-      }
+    case 'updateExecutionMode':
       if (messageText) effects.push(createAssistantMessageEffect(messageText, timestamp));
       break;
-    }
 
     case 'showStatus':
       if (message.data) {
@@ -150,7 +141,6 @@ function formatStatusMessage(data: Record<string, unknown>): string {
 - Messages in current: ${readNumber(data, 'messageCount', 0)}
 - Context tokens: ${readNumber(data, 'tokenCount', 0)}
 - Active skill: ${readDisplayString(data, 'activeSkill', 'None')}
-- Plan mode: ${readBoolean(data, 'planMode') ? 'Enabled' : 'Disabled'}
 - Execution mode: ${readDisplayString(data, 'executionMode', 'normal')}`;
 }
 
@@ -207,11 +197,6 @@ function readString(data: Record<string, unknown>, key: string): string | undefi
 function readNumber(data: Record<string, unknown>, key: string, defaultValue: number): number {
   const value = data[key];
   return typeof value === 'number' ? value : defaultValue;
-}
-
-function readBoolean(data: Record<string, unknown> | undefined, key: string): boolean | undefined {
-  const value = data?.[key];
-  return typeof value === 'boolean' ? value : undefined;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

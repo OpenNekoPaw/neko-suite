@@ -52,13 +52,17 @@ export const handleCompact: CommandHandler = async (_args, context) => {
 
 /** Handle /plan command (extension only). */
 export const handlePlan: CommandHandler = (_args, context) => {
-  const enabled = context.planMode?.toggle() ?? false;
+  const executionMode = context.config?.executionMode === 'plan' ? 'ask' : 'plan';
+  context.updateExecutionMode?.(executionMode);
 
   return {
     handled: true,
     continueExecution: true,
-    action: 'togglePlanMode',
-    data: { planMode: enabled },
-    semantic: { family: 'session', result: { kind: 'plan-changed', enabled } },
+    action: 'updateExecutionMode',
+    data: { executionMode },
+    semantic: {
+      family: 'session',
+      result: { kind: 'plan-changed', enabled: executionMode === 'plan' },
+    },
   };
 };

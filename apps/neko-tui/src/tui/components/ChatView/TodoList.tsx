@@ -61,7 +61,7 @@ function normalizeStatus(status: TodoItem['status']): string {
       return 'Pending';
     case 'completed':
       return 'Completed';
-    case 'failed':
-      return 'Failed';
+    case 'blocked':
+      return 'Blocked';
   }
 }

@@ -2,7 +2,6 @@ import { memo } from 'react';
 import type { Message } from '@neko-agent/types';
 import { ToolCallDisplay, ToolCallGroupDisplay } from '@/components/ChatView/ToolCallDisplay';
 import { DiffBlock } from '@/components/ChatView/DiffBlock';
-import { PlanReview } from '@/components/ChatView/PlanReview';
 import { TaskCard, BatchTaskCard } from '@/components/ChatView/TaskCard';
 import { SubAgentCard } from '@/components/ChatView/SubAgentCard';
 import { ProcessRecordsGroup } from '@/components/ChatView/ProcessRecordsGroup';
@@ -139,11 +138,6 @@ function ContentBlockRenderer({
   ambientNodes,
   onAcceptDiff,
   onRejectDiff,
-  onApprovePlanStep,
-  onRejectPlanStep,
-  onModifyPlanStep,
-  onApproveAllPlanSteps,
-  onRejectAllPlanSteps,
 }: {
   projection: ContentBlockUiProjection;
   conversationId: string | null;
@@ -154,11 +148,6 @@ function ContentBlockRenderer({
   ambientNodes?: ReturnType<typeof useMessageActions>['ambientNodes'];
   onAcceptDiff?: (filePath: string) => void;
   onRejectDiff?: (filePath: string) => void;
-  onApprovePlanStep?: (planId: string, stepId: string) => void;
-  onRejectPlanStep?: (planId: string, stepId: string) => void;
-  onModifyPlanStep?: (planId: string, stepId: string, newDescription: string) => void;
-  onApproveAllPlanSteps?: (planId: string) => void;
-  onRejectAllPlanSteps?: (planId: string) => void;
 }) {
   switch (projection.renderKind) {
     case 'thinking':
@@ -253,36 +242,6 @@ function ContentBlockRenderer({
         </div>
       );
 
-    case 'plan':
-      return (
-        <div className="w-full">
-          <PlanReview
-            plan={projection.plan}
-            onApproveStep={
-              onApprovePlanStep
-                ? (stepId) => onApprovePlanStep(projection.plan.id, stepId)
-                : undefined
-            }
-            onRejectStep={
-              onRejectPlanStep
-                ? (stepId) => onRejectPlanStep(projection.plan.id, stepId)
-                : undefined
-            }
-            onModifyStep={
-              onModifyPlanStep
-                ? (stepId, desc) => onModifyPlanStep(projection.plan.id, stepId, desc)
-                : undefined
-            }
-            onApproveAll={
-              onApproveAllPlanSteps ? () => onApproveAllPlanSteps(projection.plan.id) : undefined
-            }
-            onRejectAll={
-              onRejectAllPlanSteps ? () => onRejectAllPlanSteps(projection.plan.id) : undefined
-            }
-          />
-        </div>
-      );
-
     case 'composite':
       return (
         <div className="w-full">
@@ -319,11 +278,6 @@ function AssistantContentBlocks({
   conversationId,
   onAcceptDiff,
   onRejectDiff,
-  onApprovePlanStep,
-  onRejectPlanStep,
-  onModifyPlanStep,
-  onApproveAllPlanSteps,
-  onRejectAllPlanSteps,
   pluginsAvailable,
   contextChips,
   ambientNodes,
@@ -333,11 +287,6 @@ function AssistantContentBlocks({
   conversationId: string | null;
   onAcceptDiff?: (filePath: string) => void;
   onRejectDiff?: (filePath: string) => void;
-  onApprovePlanStep?: (planId: string, stepId: string) => void;
-  onRejectPlanStep?: (planId: string, stepId: string) => void;
-  onModifyPlanStep?: (planId: string, stepId: string, newDescription: string) => void;
-  onApproveAllPlanSteps?: (planId: string) => void;
-  onRejectAllPlanSteps?: (planId: string) => void;
   pluginsAvailable?: PluginsAvailable;
   contextChips?: ReturnType<typeof useMessageActions>['contextChips'];
   ambientNodes?: ReturnType<typeof useMessageActions>['ambientNodes'];
@@ -372,11 +321,6 @@ function AssistantContentBlocks({
               ambientNodes={ambientNodes}
               onAcceptDiff={onAcceptDiff}
               onRejectDiff={onRejectDiff}
-              onApprovePlanStep={onApprovePlanStep}
-              onRejectPlanStep={onRejectPlanStep}
-              onModifyPlanStep={onModifyPlanStep}
-              onApproveAllPlanSteps={onApproveAllPlanSteps}
-              onRejectAllPlanSteps={onRejectAllPlanSteps}
             />
           ) : (
             <ProcessRecordsGroup
@@ -437,11 +381,6 @@ export const MessageItem = memo(function MessageItem({
     onViewTaskResult,
     onAcceptDiff,
     onRejectDiff,
-    onApprovePlanStep,
-    onRejectPlanStep,
-    onModifyPlanStep,
-    onApproveAllPlanSteps,
-    onRejectAllPlanSteps,
     pluginsAvailable,
     contextChips,
     ambientNodes,
@@ -548,11 +487,6 @@ export const MessageItem = memo(function MessageItem({
               conversationId={conversationId}
               onAcceptDiff={onAcceptDiff}
               onRejectDiff={onRejectDiff}
-              onApprovePlanStep={onApprovePlanStep}
-              onRejectPlanStep={onRejectPlanStep}
-              onModifyPlanStep={onModifyPlanStep}
-              onApproveAllPlanSteps={onApproveAllPlanSteps}
-              onRejectAllPlanSteps={onRejectAllPlanSteps}
               pluginsAvailable={pluginsAvailable}
               contextChips={contextChips}
               ambientNodes={ambientNodes}

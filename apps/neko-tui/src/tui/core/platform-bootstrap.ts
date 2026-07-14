@@ -9,6 +9,7 @@
 import * as path from 'path';
 import {
   createPlatform,
+  createGeneratedAssetResourceResolver,
   FileUserConfigManager,
   GeneratedAssetIndex,
   toSharedService,
@@ -151,6 +152,13 @@ function createCLISharedService(
     host,
     ...(options.resourceCacheManifestStore
       ? { resourceCacheManifestStore: options.resourceCacheManifestStore }
+      : {}),
+    ...(options.generatedAssetIndex
+      ? {
+          resolveGeneratedAsset: createGeneratedAssetResourceResolver(
+            options.generatedAssetIndex,
+          ),
+        }
       : {}),
   });
   const assetLoader = createNodePerceptionAssetLoader(contentAccessRuntime, {

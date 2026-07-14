@@ -287,7 +287,6 @@ function createContext(): MessageHandlerContext {
     setHasConfigSnapshot: vi.fn(),
     hydrateConversationSettings: vi.fn(),
     updateSettings: vi.fn(),
-    setPromptModeForConversation: vi.fn(),
     setAgentState: vi.fn(),
     conversationAgentStateRef: { current: new Map() },
     forceAgentStateUpdate: vi.fn(),

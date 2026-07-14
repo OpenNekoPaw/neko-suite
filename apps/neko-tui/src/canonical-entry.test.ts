@@ -25,7 +25,7 @@ describe('Neko TUI canonical application entry', () => {
       'utf8',
     );
     const ablationPlan = readFileSync(
-      resolve(repoRoot, 'scripts/agent-eval/ablation/plans/creation-persona-guidance.json'),
+      resolve(repoRoot, 'scripts/agent-eval/ablation/plans/media-production-guidance.json'),
       'utf8',
     );
     const protocolSmoke = readFileSync(

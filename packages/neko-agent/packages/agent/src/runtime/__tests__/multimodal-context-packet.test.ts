@@ -13,7 +13,7 @@ import {
 } from '../turn/multimodal-context-packet';
 
 describe('multimodal-context-packet runtime', () => {
-  it('builds one packet from image attachments, timeline, canvas, audio/video metadata, and legacy trace links', () => {
+  it('builds one packet from image attachments, timeline, canvas, and audio/video metadata', () => {
     const timeline = createTimelineSelectionContextPacket(
       [
         {
@@ -41,11 +41,6 @@ describe('multimodal-context-packet runtime', () => {
 
     const packet = buildTurnMultimodalContextPacket({
       conversationId: 'conv-1',
-      legacyTrace: {
-        workflowDefinitionId: 'neko.legacyTrace.idc.v1',
-        workflowRunId: 'run-1',
-        workflowNodeId: 'draft',
-      },
       message: 'revise this scene',
       imageAttachments: [{ type: 'base64', media_type: 'image/png', data: 'YWJj' }],
       mediaAttachments: [
@@ -80,10 +75,6 @@ describe('multimodal-context-packet runtime', () => {
     expect(packet).toMatchObject({
       metadata: {
         conversationId: 'conv-1',
-        legacyTrace: {
-          workflowRunId: 'run-1',
-          workflowNodeId: 'draft',
-        },
       },
       uiContext: {
         userAnnotation: 'revise this scene',
@@ -193,7 +184,7 @@ describe('multimodal-context-packet runtime', () => {
     });
   });
 
-  it('projects generated media artifacts with legacy trace and task linkage', () => {
+  it('projects generated media artifacts with conversation and task linkage', () => {
     expect(
       projectGeneratedArtifactReference({
         id: 'asset-1',
@@ -203,11 +194,6 @@ describe('multimodal-context-packet runtime', () => {
         conversationId: 'conv-1',
         taskId: 'task-1',
         toolCallId: 'tool-1',
-        legacyTrace: {
-          workflowDefinitionId: 'neko.legacyTrace.idc.v1',
-          workflowRunId: 'run-1',
-          workflowNodeId: 'apply',
-        },
       }),
     ).toMatchObject({
       artifactRefs: [
@@ -220,10 +206,6 @@ describe('multimodal-context-packet runtime', () => {
             conversationId: 'conv-1',
             taskId: 'task-1',
             toolCallId: 'tool-1',
-            legacyTrace: {
-              workflowRunId: 'run-1',
-              workflowNodeId: 'apply',
-            },
           },
         },
       ],
@@ -233,11 +215,6 @@ describe('multimodal-context-packet runtime', () => {
   it('converts image tool attachments into artifact and next-turn evidence refs', () => {
     const feedback = createToolProducedMultimodalEvidenceFeedback({
       conversationId: 'conv-1',
-      legacyTrace: {
-        workflowDefinitionId: 'neko.legacyTrace.idc.v1',
-        workflowRunId: 'run-1',
-        workflowNodeId: 'apply',
-      },
       taskId: 'task-1',
       toolCallId: 'tool-1',
       toolName: 'generate_image',

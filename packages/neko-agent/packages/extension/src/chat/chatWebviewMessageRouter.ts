@@ -2,7 +2,6 @@ import type { WebviewToExtensionMessage } from '@neko-agent/types';
 import { tryHandleConversationRoute } from './router/conversationRoutes';
 import { tryHandleFileAndPluginRoute } from './router/fileAndPluginRoutes';
 import { tryHandleMessageRoute } from './router/messageRoutes';
-import { tryHandlePlanRoute } from './router/planRoutes';
 import { tryHandleProjectionRoute } from './router/projectionRoutes';
 import { tryHandleSettingsRoute } from './router/settingsRoutes';
 import { tryHandleSkillContextRoute } from './router/skillContextRoutes';
@@ -36,13 +35,6 @@ export const CHAT_WEBVIEW_MESSAGE_ROUTER_TYPES = [
   'editQueuedMessage',
   'clearHistory',
   'clearAllConversations',
-  'planApprove',
-  'planReject',
-  'planStepApprove',
-  'planStepReject',
-  'planStepModify',
-  'setPromptMode',
-  'getPromptMode',
   'getSettings',
   'getConversationSnapshot',
   'refreshConfigSnapshot',
@@ -96,7 +88,6 @@ const routeHandlers = [
   tryHandleProjectionRoute,
   tryHandleMessageRoute,
   tryHandleConversationRoute,
-  tryHandlePlanRoute,
   tryHandleSettingsRoute,
   tryHandleTaskRoute,
   tryHandleFileAndPluginRoute,

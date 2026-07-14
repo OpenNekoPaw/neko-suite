@@ -49,11 +49,6 @@ import type { IAgentManager } from '../../ai/agentManager';
 
 const logger = getLogger('ConversationMessageHandler');
 
-export interface ConversationPromptModeCleanup {
-  clearPromptMode(conversationId: string): void;
-  clearAllPromptModes?(): void;
-}
-
 export type ConversationLifecycleCommandResult =
   | {
       readonly ok: true;
@@ -79,7 +74,6 @@ export interface ConversationMessageHandlerDeps {
   agentManager?: IAgentManager;
   messages?: AgentMessageTurnHandler;
   creativeAiLifecycle?: ConversationLifecycleCommandHandler;
-  promptModeCleanup?: ConversationPromptModeCleanup;
   getWebview: () => vscode.Webview | undefined;
 }
 
@@ -369,7 +363,6 @@ export class ConversationMessageHandler {
   private _createConversationRuntimeEffects(
     webview?: vscode.Webview,
   ): ConversationControlRuntimeEffects {
-    const promptModeCleanup = this.deps.promptModeCleanup;
     const effects: ConversationControlRuntimeEffects = {
       createConversation: () => this.deps.conversations.create(),
       onConversationCreated: (conversationId) => this.deps.onConversationCreated?.(conversationId),
@@ -418,13 +411,6 @@ export class ConversationMessageHandler {
         logger.warn('Conversation control runtime warning:', { code, action, conversationId });
       },
     };
-    if (promptModeCleanup) {
-      effects.clearPromptMode = (conversationId) =>
-        promptModeCleanup.clearPromptMode(conversationId);
-      if (promptModeCleanup.clearAllPromptModes) {
-        effects.clearAllPromptModes = () => promptModeCleanup.clearAllPromptModes?.();
-      }
-    }
     return effects;
   }
 }

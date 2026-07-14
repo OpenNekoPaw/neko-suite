@@ -11,7 +11,6 @@ import type {
   Message,
   ConversationSummary,
   OpenTab,
-  PromptMode,
   TabType,
   SettingsState,
   ShellExecutionMode,
@@ -106,7 +105,6 @@ export interface SettingsContext {
     snapshot: ConversationSettingsSnapshot,
   ) => void;
   updateSettings: (partial: Partial<SettingsState>) => void;
-  setPromptModeForConversation: (conversationId: string, mode: PromptMode) => void;
 }
 
 export interface ConversationSettingsSnapshot {

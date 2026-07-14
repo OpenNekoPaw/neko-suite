@@ -46,21 +46,6 @@ export const coreSystemToolSet: ToolGroup = {
 };
 
 /**
- * Plan mode tools
- */
-export const planModeToolSet: ToolGroup = {
-  name: 'plan-mode',
-  description: 'Plan mode tools for entering and exiting planning phase',
-  tools: ['EnterPlanMode', 'ExitPlanMode'],
-  alwaysActive: true,
-  priority: 100,
-  loadingTier: 'resident',
-  source: 'builtin',
-  enabled: true,
-  icon: '📋',
-};
-
-/**
  * File editing tools
  */
 export const fileEditingToolSet: ToolGroup = {
@@ -365,7 +350,6 @@ export const perceptionEvidenceToolSet: ToolGroup = {
 export const builtinToolGroups: ToolGroup[] = [
   // Resident
   coreSystemToolSet,
-  planModeToolSet,
   fileEditingToolSet,
   shellExecutionToolSet,
   // Eager

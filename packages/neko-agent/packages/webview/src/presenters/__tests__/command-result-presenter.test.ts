@@ -49,7 +49,6 @@ describe('command result presenter', () => {
             messageCount: 5,
             tokenCount: 123,
             activeSkill: 'review',
-            planMode: true,
             executionMode: 'ask',
           },
         },
@@ -65,13 +64,12 @@ describe('command result presenter', () => {
 - Messages in current: 5
 - Context tokens: 123
 - Active skill: review
-- Plan mode: Enabled
 - Execution mode: ask`,
       },
     });
   });
 
-  it('projects plan mode toggles and chat-only actions to effects', () => {
+  it('projects execution mode changes and chat-only actions to effects', () => {
     expect(
       projectSlashCommandResultMessage(
         {
@@ -79,15 +77,14 @@ describe('command result presenter', () => {
           conversationId: 'conv-1',
           command: 'plan',
           success: true,
-          action: 'togglePlanMode',
-          message: 'Plan mode enabled',
-          data: { planMode: true },
+          action: 'updateExecutionMode',
+          message: 'Execution mode changed to plan',
+          data: { executionMode: 'plan' },
         },
         { now: () => 1000 },
       ).effects,
     ).toMatchObject([
-      { type: 'setPromptMode', conversationId: 'conv-1', promptMode: 'plan' },
-      { type: 'appendAssistantMessage', message: { content: 'Plan mode enabled' } },
+      { type: 'appendAssistantMessage', message: { content: 'Execution mode changed to plan' } },
     ]);
 
     expect(

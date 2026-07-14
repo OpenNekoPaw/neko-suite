@@ -66,12 +66,6 @@ interface ChatViewProps {
   // Code diff actions
   onAcceptDiff?: (filePath: string) => void;
   onRejectDiff?: (filePath: string) => void;
-  // Plan review actions
-  onApprovePlanStep?: (planId: string, stepId: string) => void;
-  onRejectPlanStep?: (planId: string, stepId: string) => void;
-  onModifyPlanStep?: (planId: string, stepId: string, newDescription: string) => void;
-  onApproveAllPlanSteps?: (planId: string) => void;
-  onRejectAllPlanSteps?: (planId: string) => void;
   // Input callbacks
   onInputChange: (value: string) => void;
   onPromoteQueuedMessage?: (queueItemId: string) => void;
@@ -139,11 +133,6 @@ export function ChatView({
   onViewTaskResult,
   onAcceptDiff,
   onRejectDiff,
-  onApprovePlanStep,
-  onRejectPlanStep,
-  onModifyPlanStep,
-  onApproveAllPlanSteps,
-  onRejectAllPlanSteps,
   onInputChange,
   onPromoteQueuedMessage,
   onCancelQueuedMessage,
@@ -217,11 +206,6 @@ export function ChatView({
           onViewTaskResult={onViewTaskResult}
           onAcceptDiff={onAcceptDiff}
           onRejectDiff={onRejectDiff}
-          onApprovePlanStep={onApprovePlanStep}
-          onRejectPlanStep={onRejectPlanStep}
-          onModifyPlanStep={onModifyPlanStep}
-          onApproveAllPlanSteps={onApproveAllPlanSteps}
-          onRejectAllPlanSteps={onRejectAllPlanSteps}
         >
           {foregroundConversationAvailability.kind !== 'ready' ? (
             <div

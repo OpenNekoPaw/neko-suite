@@ -13,10 +13,8 @@ function createContext(overrides: Partial<CommandContext> = {}): CommandContext 
       create: vi.fn(() => 'conv-new'),
       clearCurrent: vi.fn(),
     },
-    planMode: {
-      isEnabled: () => false,
-      toggle: vi.fn(() => true),
-    },
+    config: { executionMode: 'ask' },
+    updateExecutionMode: vi.fn(),
     contextManager: {
       getTokenCount: () => 100,
       compress: vi.fn(async () => undefined),
@@ -93,28 +91,33 @@ describe('session command handlers', () => {
   });
 
   it.each([
-    [true, 'plan-changed'],
-    [false, 'plan-changed'],
-  ] as const)('returns the actual plan mode state (%s)', async (enabled, kind) => {
+    ['ask', 'plan'],
+    ['plan', 'ask'],
+  ] as const)('toggles execution mode from %s to %s', async (current, next) => {
     const context = createContext({
-      planMode: { isEnabled: () => !enabled, toggle: vi.fn(() => enabled) },
+      config: { executionMode: current },
+      updateExecutionMode: vi.fn(),
     });
     const result = await resolve(handlePlan([], context));
 
     expect(result).toMatchObject({
-      action: 'togglePlanMode',
-      data: { planMode: enabled },
-      semantic: { family: 'session', result: { kind, enabled } },
+      action: 'updateExecutionMode',
+      data: { executionMode: next },
+      semantic: {
+        family: 'session',
+        result: { kind: 'plan-changed', enabled: next === 'plan' },
+      },
     });
+    expect(context.updateExecutionMode).toHaveBeenCalledWith(next);
   });
 
-  it('uses disabled state when the plan service is unavailable', async () => {
-    const result = await resolve(handlePlan([], createContext({ planMode: undefined })));
+  it('returns the next mode even when no host update adapter is available', async () => {
+    const result = await resolve(handlePlan([], createContext({ updateExecutionMode: undefined })));
 
-    expect(result.data).toEqual({ planMode: false });
+    expect(result.data).toEqual({ executionMode: 'plan' });
     expect(result.semantic).toEqual({
       family: 'session',
-      result: { kind: 'plan-changed', enabled: false },
+      result: { kind: 'plan-changed', enabled: true },
     });
   });
 });

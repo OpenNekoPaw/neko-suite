@@ -223,7 +223,7 @@ describe('3. Task Progress (TodoList)', () => {
       { content: 'Read source files', status: 'completed' },
       { content: 'Refactoring modules', status: 'in_progress' },
       { content: 'Write unit tests', status: 'pending' },
-      { content: 'Integration test failed', status: 'failed' },
+      { content: 'Integration test blocked', status: 'blocked' },
     ];
     const { lastFrame } = render(<TodoList todos={todos} />);
     const frame = lastFrame()!;
@@ -231,7 +231,7 @@ describe('3. Task Progress (TodoList)', () => {
     expect(frame).toContain('[✓] Read source files');
     expect(frame).toContain('Refactoring modules'); // in_progress uses spinner
     expect(frame).toContain('[ ] Write unit tests');
-    expect(frame).toContain('[✗] Integration test failed');
+    expect(frame).toContain('[!] Integration test blocked');
 
     // in_progress should have braille spinner
     expect(frame).toMatch(/[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏]/);
@@ -364,12 +364,11 @@ describe('5. Model Configuration Display', () => {
         status: 'active',
       },
       {
-        id: 'stage-1',
-        skillName: 'creation-persona',
-        slot: 'stagePersona',
-        owner: 'creation-profile',
-        clearable: false,
-        lockedReason: 'Creation stage persona is cleared when its owning stage exits',
+        id: 'reference-1',
+        skillName: 'style-reference',
+        slot: 'referenceSkill',
+        owner: 'agent',
+        clearable: true,
         status: 'active',
       },
     ]);

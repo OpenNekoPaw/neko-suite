@@ -8,17 +8,6 @@ export interface SkillExecutionAgentCreationMetadata {
   readonly checkpointId?: string;
 }
 
-export function createPlanModeCreationMetadata(): Record<string, unknown> {
-  const creationKind = 'plan-mode';
-  return {
-    agentCreation: {
-      entrySignal: 'vague-creative',
-      taskShape: 'multi-step',
-      creationKind,
-    },
-  };
-}
-
 /**
  * Explicit slash Skill execution always enters Agent-native creation as prompt-chain guidance.
  * Skill schema fields do not control creation routing; non-slash activation paths

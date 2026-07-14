@@ -79,7 +79,7 @@ describe('message runtime helpers', () => {
     });
   });
 
-  it('merges plan-mode creation metadata with execution overrides and media models', () => {
+  it('keeps execution overrides and media models without creating plan runtime metadata', () => {
     expect(
       buildAgentTurnExecutionMetadata(
         'plan',
@@ -99,9 +99,7 @@ describe('message runtime helpers', () => {
       ),
     ).toEqual({
       agentCreation: {
-        entrySignal: 'vague-creative',
         taskShape: 'single-step',
-        creationKind: 'plan-mode',
         custom: true,
       },
       traceId: 'trace-1',
@@ -1348,7 +1346,6 @@ describe('message runtime helpers', () => {
     const plan = buildAgentTurnConfigurationPlan({
       conversationId: 'conv-1',
       baseSystemPrompt: 'base',
-      isPlanMode: false,
       executionMode: 'ask',
       chatModel: { providerId: 'openai', modelId: 'gpt-text', category: 'llm' },
       understandingModels: {
@@ -1372,7 +1369,6 @@ describe('message runtime helpers', () => {
     const plan = buildAgentTurnConfigurationPlan({
       conversationId: 'conv-1',
       baseSystemPrompt: 'base',
-      isPlanMode: false,
       executionMode: 'ask',
       chatModel: { providerId: 'google', modelId: 'gemini-2.5-flash', category: 'llm' },
       understandingModels: {
@@ -1656,8 +1652,7 @@ describe('message runtime helpers', () => {
         baseSystemPrompt: 'base',
         customSystemPrompt: 'Prefer concise replies.',
         ambientCanvas: [{ nodeId: 'node-1', type: 'shot', summary: 'Opening shot' }],
-        isPlanMode: true,
-        executionMode: 'auto',
+        executionMode: 'plan',
         chatModel: { providerId: 'openai', modelId: 'gpt-4.1', category: 'llm' },
         mediaModels: {
           image: { providerId: 'flux', modelId: 'flux-pro', category: 'image' },
@@ -1692,7 +1687,6 @@ describe('message runtime helpers', () => {
       conversationId: 'conv-1',
       baseSystemPrompt: 'base',
       customSystemPrompt: 'Prefer concise replies.',
-      isPlanMode: false,
       executionMode: 'ask',
     });
     expect(plan.systemPrompt).toContain('base');
@@ -1700,12 +1694,11 @@ describe('message runtime helpers', () => {
     expect(plan.systemPrompt).toContain('runtime tool protocol');
   });
 
-  it('lets per-turn execution overrides bypass prompt-mode defaults', () => {
+  it('lets per-turn execution overrides replace the configured execution mode', () => {
     expect(
       buildAgentTurnConfigurationPlan({
         conversationId: 'conv-1',
         baseSystemPrompt: 'base',
-        isPlanMode: true,
         executionMode: 'ask',
         executionOverrides: { executionMode: 'auto' },
       }),

@@ -14,7 +14,6 @@ import {
 } from './skill-lifecycle-tool-policy';
 
 const SLOT_PRIORITY: Record<SkillLifecycleSlot, number> = {
-  stagePersona: 10,
   domainSkill: 20,
   referenceSkill: 30,
   promptChainSkill: 40,
@@ -25,7 +24,6 @@ const SLOT_MODEL_SOURCE: Record<
   SkillLifecycleSlot,
   SkillLifecycleModelOverrideProjection['source']
 > = {
-  stagePersona: 'stagePersona',
   domainSkill: 'domainSkill',
   referenceSkill: 'runtime',
   promptChainSkill: 'promptChainSkill',
@@ -284,8 +282,6 @@ function projectExpiry(record: SkillLifecycleRecord): string | undefined {
   switch (record.lifetime.kind) {
     case 'turn':
       return `turn:${record.lifetime.turnId}`;
-    case 'creation-stage':
-      return `creation-stage:${record.lifetime.runId}:${record.lifetime.stage}`;
     case 'prompt-chain':
       return `prompt-chain:${record.lifetime.runId}`;
     case 'inactivity':

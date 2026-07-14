@@ -7,6 +7,7 @@
 
 import { createStore, type StateCreator, type StoreApi } from 'zustand/vanilla';
 import type { Message, TerminalTimelineRow, ToolCallState, TodoItem } from '../types/state';
+import { deriveTodoProjection } from '../core/todo-projection';
 
 type SystemMessageInput =
   string | Omit<Message, 'id' | 'role' | 'toolCalls' | 'todos' | 'timestamp'>;
@@ -114,7 +115,12 @@ function createConversationState(assertMutable: () => void): StateCreator<Conver
           const messages = [...state.messages];
           const last = messages[messages.length - 1];
           if (last?.role === 'assistant') {
-            messages[messages.length - 1] = { ...last, content };
+            const derivedTodos = deriveTodoProjection(content);
+            messages[messages.length - 1] = {
+              ...last,
+              content,
+              todos: derivedTodos.length > 0 ? derivedTodos : last.todos,
+            };
           }
           return { messages, currentDelta: '', isStreaming: false };
         });

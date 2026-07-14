@@ -1,8 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const createNodeArtifactStore = vi.fn((config: unknown) => ({ kind: 'artifact-store', config }));
-const createTaskManagerCreationTaskProjection = vi.fn((config: unknown) => ({
-  kind: 'idc-projection',
+const createNodeWorkspaceRuntimeStore = vi.fn((config: unknown) => ({
+  kind: 'workspace-store',
   config,
 }));
 const createAgentCapabilityRuntimeRegistries = vi.fn(() => ({
@@ -13,26 +12,21 @@ const createAgentCapabilityRuntimeRegistries = vi.fn(() => ({
 const registerBuiltinToolGroups = vi.fn();
 const createQualityReviewValidationAdapter = vi.fn(() => ({ id: 'quality-review-validation' }));
 const createValidationCoordinatorFactory = vi.fn(() => ({ id: 'validation-coordinator-factory' }));
-const createDefaultCreativeProcessRecoveryPolicy = vi.fn(() => ({
-  id: 'creative-process-recovery-policy',
-}));
 const createAutohealChain = vi.fn(() => ({ id: 'autoheal-chain' }));
 
 vi.mock('@neko/agent', () => ({
   ToolGroupRegistry: class ToolGroupRegistry {
     readonly kind = 'tool-group-registry';
   },
-  createTaskManagerCreationTaskProjection,
 }));
 
 vi.mock('@neko/agent/runtime', () => ({
   createAgentCapabilityRuntimeRegistries,
-  createNodeArtifactStore,
+  createNodeWorkspaceRuntimeStore,
 }));
 
 vi.mock('@neko/skills', () => ({
   createAutohealChain,
-  createDefaultCreativeProcessRecoveryPolicy,
   createValidationCoordinatorFactory,
   createQualityReviewValidationAdapter,
   registerBuiltinToolGroups,
@@ -58,28 +52,15 @@ describe('createCliAgentRuntime', () => {
       projectMemoryManager: projectMemoryManager as never,
     });
 
-    expect(createTaskManagerCreationTaskProjection).toHaveBeenCalledWith({ store: taskManager });
-    expect(createNodeArtifactStore).toHaveBeenCalledWith({ workspaceRoot: '/workspace' });
+    expect(createNodeWorkspaceRuntimeStore).toHaveBeenCalledWith({ workspaceRoot: '/workspace' });
     expect(registerBuiltinToolGroups).toHaveBeenCalledOnce();
-    expect(runtime.creationGuidance?.stageTracking).toEqual({
-      skillService,
-      skillRegistry: skillService.registry,
-      skillLifecycleRuntime,
-    });
-    expect(runtime.creationGuidance?.creativeProcessRecoveryPolicy).toEqual({
-      id: 'creative-process-recovery-policy',
-    });
     expect(runtime.creationGuidance?.autohealChainFactory).toBe(createAutohealChain);
-    expect(runtime.creationGuidance?.creationTaskProjection).toEqual({
-      kind: 'idc-projection',
-      config: { store: taskManager },
-    });
     expect(runtime.capabilityRuntime?.skillService).toBe(skillService);
     expect(runtime.capabilityRuntime?.skillRegistry).toBe(skillService.registry);
     expect(runtime.capabilityRuntime?.skillLifecycleRuntime).toBe(skillLifecycleRuntime);
     expect(runtime.capabilityRuntime?.toolGroupRegistry).toBeDefined();
-    expect(runtime.artifactStore).toEqual({
-      kind: 'artifact-store',
+    expect(runtime.workspaceStore).toEqual({
+      kind: 'workspace-store',
       config: { workspaceRoot: '/workspace' },
     });
     expect(runtime.validationLoop?.projectMemoryManager).toBe(projectMemoryManager);
@@ -99,7 +80,6 @@ describe('createCliAgentRuntime', () => {
       taskManager: { id: 'task-manager' } as never,
     });
 
-    expect(runtime.creationGuidance?.stageTracking).toBeUndefined();
     expect(runtime.creationGuidance?.autohealChainFactory).toBe(createAutohealChain);
     expect(runtime.capabilityRuntime?.skillService).toBeUndefined();
     expect(runtime.capabilityRuntime?.skillRegistry).toBeUndefined();

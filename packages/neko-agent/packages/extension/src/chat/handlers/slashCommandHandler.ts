@@ -21,11 +21,10 @@ import {
 import type { IAgentManager } from '../../ai/agentManager';
 import type { ConversationBridge } from '../conversationBridge';
 import type { SettingsManager } from '../settingsManager';
-import type { SystemPromptManager } from '../systemPromptManager';
 import type { SkillHandler } from './skillHandler';
 import type { TaskHandler } from './taskHandler';
 import type { ContextHandler } from './contextHandler';
-import type { PlanModeHandler } from './planModeHandler';
+import type { SettingsHandler } from './settingsHandler';
 import type { AgentMessageTurnHandler } from '../agentMessageTurnHandler';
 import type { CharacterDialogueController } from '../characterDialogueController';
 import { getLogger } from '../../base';
@@ -49,12 +48,11 @@ export interface SlashCommandHandlerDeps {
   conversations: ConversationBridge;
   agentManager?: IAgentManager;
   settings: SettingsManager;
-  systemPrompt: SystemPromptManager;
   messages?: AgentMessageTurnHandler;
   skillHandler: SkillHandler;
   taskHandler: TaskHandler;
   contextHandler: ContextHandler;
-  planModeHandler: PlanModeHandler;
+  settingsHandler: SettingsHandler;
   characterDialogue?: CharacterDialogueController;
   /** Callback to send conversation list to webview */
   sendConversationList: () => void;
@@ -199,12 +197,12 @@ export class SlashCommandHandler {
         model: settings.selectedModelId,
         executionMode: settings.executionMode,
       },
-      planMode: {
-        isEnabled: (conversationId) => this.deps.systemPrompt.isPlanMode(conversationId),
-        toggle: (conversationId) => {
-          this.deps.planModeHandler.handleTogglePlanMode(webview, conversationId);
-          return this.deps.systemPrompt.isPlanMode(conversationId);
-        },
+      updateExecutionMode: (conversationId, executionMode) => {
+        void this.deps.settingsHandler.handleUpdateSettings(
+          webview,
+          { executionMode },
+          { conversationId },
+        );
       },
       contextManager: {
         getTokenCount: (conversationId: string) =>
@@ -246,12 +244,6 @@ export class SlashCommandHandler {
       case 'sendTasks':
         this.deps.taskHandler.sendTasks(webview, effect.conversationId);
         return;
-      case 'executePlanPrompt':
-        return this.deps.messages?.handleUserMessage(webview, {
-          conversationId: effect.conversationId,
-          messageText: effect.messageText,
-          sessionMode: effect.sessionMode,
-        });
     }
   }
 

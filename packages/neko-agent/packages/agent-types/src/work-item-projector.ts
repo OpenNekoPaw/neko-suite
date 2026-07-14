@@ -8,6 +8,7 @@ import type {
   AgentBackgroundTask,
   AgentMediaTaskResult,
   AgentMediaTaskView,
+  AgentTodoProjectionItem,
   AgentWorkItem,
   AgentWorkItemBase,
   AgentWorkItemTaskStatus,
@@ -17,7 +18,14 @@ import type {
   SubAgentWorkItemEvent,
   TaskWorkItem,
 } from './work-item';
-import type { AgentLegacyCreationTrace } from './legacy-trace';
+
+const DEFAULT_TODO_PROJECTION_LIMIT = 6;
+
+export interface ProjectAgentWorkItemsToTodoInput {
+  readonly conversationId: string;
+  readonly items: readonly AgentWorkItem[];
+  readonly maxItems?: number;
+}
 
 export interface ProjectBackgroundTaskWorkItemInput {
   conversationId: string;
@@ -25,7 +33,6 @@ export interface ProjectBackgroundTaskWorkItemInput {
   kind?: TaskWorkItem['kind'];
   parentMessageId?: string | null;
   parentToolCallId?: string | null;
-  legacyTrace?: AgentLegacyCreationTrace;
 }
 
 export interface ProjectBackgroundTasksWorkItemsInput {
@@ -39,7 +46,6 @@ export interface ProjectMediaTaskWorkItemInput {
   task: AgentMediaTaskView;
   parentMessageId?: string | null;
   parentToolCallId?: string | null;
-  legacyTrace?: AgentLegacyCreationTrace;
 }
 
 export function backgroundTaskToWorkItem(
@@ -47,14 +53,12 @@ export function backgroundTaskToWorkItem(
   conversationId: string,
   kind: TaskWorkItem['kind'],
   links: Partial<Pick<AgentWorkItemBase, 'parentMessageId' | 'parentToolCallId'>> = {},
-  legacyTrace?: AgentLegacyCreationTrace,
 ): TaskWorkItem {
   const result = sanitizeAgentMediaTaskResult(task.result);
   const { result: _discardedResult, ...taskWithoutResult } = task;
   return {
     id: task.id,
     conversationId,
-    ...(legacyTrace ? { legacyTrace } : {}),
     kind,
     parentMessageId: links.parentMessageId ?? null,
     parentToolCallId: links.parentToolCallId ?? null,
@@ -133,7 +137,6 @@ export function projectBackgroundTaskToWorkItem(
       parentMessageId: input.parentMessageId,
       parentToolCallId: input.parentToolCallId,
     },
-    input.legacyTrace,
   );
 }
 
@@ -156,14 +159,47 @@ export function projectMediaTaskToWorkItem(input: ProjectMediaTaskWorkItemInput)
     kind: 'media-task',
     parentMessageId: input.parentMessageId,
     parentToolCallId: input.parentToolCallId,
-    legacyTrace: input.legacyTrace,
   });
 }
 
-export function projectSubAgentEventToWorkItem(
-  event: SubAgentWorkItemEvent,
-  legacyTrace?: AgentLegacyCreationTrace,
-): SubAgentWorkItem {
+/**
+ * Projects one summary row per owning work item for near-term display.
+ *
+ * Work-item steps and domain graphs are intentionally not copied. Rebuilding
+ * or dropping this projection cannot alter Task, file, project, or result
+ * state, and a projected `completed` status is never delivery evidence.
+ */
+export function projectAgentWorkItemsToTodo(
+  input: ProjectAgentWorkItemsToTodoInput,
+): AgentTodoProjectionItem[] {
+  const limit = input.maxItems ?? DEFAULT_TODO_PROJECTION_LIMIT;
+  if (!Number.isSafeInteger(limit) || limit < 1) {
+    throw new Error(`TODO projection limit must be a positive safe integer, received ${limit}`);
+  }
+
+  const candidates = input.items
+    .filter((item) => item.conversationId === input.conversationId)
+    .map((item) => ({ item, status: toTodoProjectionStatus(item.status) }))
+    .sort(compareTodoProjectionCandidates)
+    .slice(0, limit);
+  let hasInProgress = false;
+
+  return candidates.map(({ item, status }) => {
+    const projectedStatus = status === 'in_progress' && hasInProgress ? 'pending' : status;
+    if (status === 'in_progress' && !hasInProgress) {
+      hasInProgress = true;
+    }
+    return {
+      id: `work-item:${item.kind}:${item.id}`,
+      content: item.title,
+      status: projectedStatus,
+      sourceWorkItemId: item.id,
+      sourceKind: item.kind,
+    };
+  });
+}
+
+export function projectSubAgentEventToWorkItem(event: SubAgentWorkItemEvent): SubAgentWorkItem {
   const status = toSubAgentWorkItemStatus(event.data?.status ?? event.type);
   const progress = toSubAgentProgress(event.type, event.data?.progress);
   const result = event.data?.result;
@@ -175,7 +211,6 @@ export function projectSubAgentEventToWorkItem(
     scope: event.scope,
     id: event.subAgentId,
     conversationId: event.conversationId,
-    ...(legacyTrace ? { legacyTrace } : {}),
     kind: 'subagent',
     parentMessageId: event.data?.parentMessageId ?? null,
     parentToolCallId: event.data?.parentToolCallId ?? null,
@@ -214,6 +249,40 @@ export function toSubAgentWorkItemStatus(status: unknown): AgentWorkItemTaskStat
     default:
       return 'queued';
   }
+}
+
+function toTodoProjectionStatus(
+  status: AgentWorkItemTaskStatus,
+): AgentTodoProjectionItem['status'] {
+  switch (status) {
+    case 'processing':
+      return 'in_progress';
+    case 'completed':
+      return 'completed';
+    case 'failed':
+    case 'cancelled':
+      return 'blocked';
+    case 'queued':
+      return 'pending';
+  }
+}
+
+function compareTodoProjectionCandidates(
+  left: { readonly item: AgentWorkItem; readonly status: AgentTodoProjectionItem['status'] },
+  right: { readonly item: AgentWorkItem; readonly status: AgentTodoProjectionItem['status'] },
+): number {
+  const statusOrder: Record<AgentTodoProjectionItem['status'], number> = {
+    in_progress: 0,
+    blocked: 1,
+    pending: 2,
+    completed: 3,
+  };
+  const statusDelta = statusOrder[left.status] - statusOrder[right.status];
+  if (statusDelta !== 0) return statusDelta;
+
+  const updatedDelta = Date.parse(right.item.updatedAt) - Date.parse(left.item.updatedAt);
+  if (Number.isFinite(updatedDelta) && updatedDelta !== 0) return updatedDelta;
+  return left.item.id.localeCompare(right.item.id);
 }
 
 function projectSubAgentEventStep(

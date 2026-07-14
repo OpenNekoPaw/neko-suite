@@ -6,15 +6,7 @@ import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { TaskManager } from '../task-manager';
 import { MemoryTaskStorage } from '../task-storage';
 import { MemoryTaskRecoveryStorage } from '../task-recovery-storage';
-import { toSerializableCreationProjectedTask } from '../creation-projected-task';
-import type {
-  ConversationRunScope,
-  ITaskStorage,
-  SerializableTask,
-  TaskExecutor,
-  TaskRunOwnerScope,
-  TaskRunScope,
-} from '@neko/shared';
+import type { ITaskStorage, TaskExecutor, TaskRunOwnerScope, TaskRunScope } from '@neko/shared';
 
 const OWNER: TaskRunOwnerScope = {
   conversationId: 'conv-persistence',
@@ -29,22 +21,6 @@ function taskScope(childRunId: string, owner: TaskRunOwnerScope = OWNER): TaskRu
     childKind: 'task',
   };
 }
-
-const RESTORE_RUN: ConversationRunScope = {
-  conversationId: 'conv-restore',
-  runId: 'run-restore',
-};
-
-const RESTORE_OWNER: TaskRunOwnerScope = {
-  ...RESTORE_RUN,
-  parentRunId: RESTORE_RUN.runId,
-};
-
-const LEGACY_OWNER: TaskRunOwnerScope = {
-  conversationId: 'conv-legacy',
-  runId: 'run-legacy',
-  parentRunId: 'run-legacy',
-};
 
 describe('TaskManager Persistence', () => {
   let manager: TaskManager;
@@ -195,172 +171,6 @@ describe('TaskManager Persistence', () => {
       const match = newTaskScope.childRunId.match(/task_\d+_(\d+)/);
       expect(match).toBeTruthy();
       expect(parseInt(match![1], 10)).toBeGreaterThan(999);
-    });
-  });
-
-  describe('persisted workflow cleanup', () => {
-    it('should clear staged-creation projected tasks for a run directly from storage even before initialize', async () => {
-      await storage.save(
-        toSerializableCreationProjectedTask({
-          id: 'creation:run-restore:item-1',
-          status: 'completed',
-          progress: 100,
-          createdAt: 10,
-          updatedAt: 20,
-          content: 'Recovered task',
-          binding: {
-            source: 'creation',
-            conversationId: 'conv-restore',
-            runId: 'run-restore',
-            runStartedAt: 111,
-            checklistId: 'task-restore',
-            itemId: 'item-1',
-          },
-        }),
-      );
-      await storage.save(
-        toSerializableCreationProjectedTask({
-          id: 'creation:run-restore:item-2',
-          status: 'completed',
-          progress: 100,
-          createdAt: 11,
-          updatedAt: 21,
-          content: 'Recovered task retry',
-          binding: {
-            source: 'creation',
-            conversationId: 'conv-restore',
-            runId: 'run-restore',
-            runStartedAt: 222,
-            checklistId: 'task-restore-2',
-            itemId: 'item-2',
-          },
-        }),
-      );
-      await storage.save({
-        scope: taskScope('task_other'),
-        id: 'task_other',
-        type: 'custom',
-        status: 'completed',
-        input: { type: 'custom', payload: {} },
-        progress: 100,
-        createdAt: 1,
-        updatedAt: 2,
-      });
-
-      const deletedIds = await manager.clearCreationProjectedTasksForRun(RESTORE_RUN, 111);
-
-      expect(deletedIds).toEqual(['creation:run-restore:item-1']);
-      expect(
-        await storage.load(taskScope('creation:run-restore:item-1', RESTORE_OWNER)),
-      ).toBeUndefined();
-      expect(await storage.load(taskScope('creation:run-restore:item-2', RESTORE_OWNER))).toEqual(
-        expect.objectContaining({ id: 'creation:run-restore:item-2' }),
-      );
-      expect(await storage.load(taskScope('task_other'))).toEqual(
-        expect.objectContaining({ id: 'task_other' }),
-      );
-    });
-
-    it('ignores corrupted legacy IDC payload bindings during provenance cleanup', async () => {
-      await storage.save(
-        toSerializableCreationProjectedTask({
-          id: 'creation:run-restore:item-1',
-          status: 'completed',
-          progress: 100,
-          createdAt: 10,
-          updatedAt: 20,
-          content: 'Recovered task',
-          binding: {
-            source: 'creation',
-            conversationId: 'conv-restore',
-            runId: 'run-restore',
-            runStartedAt: 111,
-            checklistId: 'task-restore',
-            itemId: 'item-1',
-          },
-        }),
-      );
-      await storage.save({
-        scope: taskScope('creation:run-restore:item-corrupt'),
-        id: 'creation:run-restore:item-corrupt',
-        type: 'workflow',
-        status: 'running',
-        input: {
-          type: 'workflow',
-          payload: {
-            source: 'creation',
-            runId: 123,
-            checklistId: 'task-corrupt',
-          },
-        },
-        progress: 25,
-        createdAt: 12,
-        updatedAt: 22,
-      } as SerializableTask);
-      await storage.save(
-        toSerializableCreationProjectedTask({
-          id: 'creation:run-restore:item-2',
-          status: 'completed',
-          progress: 100,
-          createdAt: 11,
-          updatedAt: 21,
-          content: 'Recovered task retry',
-          binding: {
-            source: 'creation',
-            conversationId: 'conv-restore',
-            runId: 'run-restore',
-            runStartedAt: 222,
-            checklistId: 'task-restore-2',
-            itemId: 'item-2',
-          },
-        }),
-      );
-
-      const deletedIds = await manager.clearCreationProjectedTasksForRun(RESTORE_RUN, 111);
-
-      expect(deletedIds).toEqual(['creation:run-restore:item-1']);
-      expect(
-        await storage.load(taskScope('creation:run-restore:item-1', RESTORE_OWNER)),
-      ).toBeUndefined();
-      expect(await storage.load(taskScope('creation:run-restore:item-corrupt'))).toEqual(
-        expect.objectContaining({ id: 'creation:run-restore:item-corrupt' }),
-      );
-      expect(await storage.load(taskScope('creation:run-restore:item-2', RESTORE_OWNER))).toEqual(
-        expect.objectContaining({ id: 'creation:run-restore:item-2' }),
-      );
-    });
-
-    it('clears legacy idc-prefixed projected tasks from pre-migration storage', async () => {
-      await storage.save({
-        scope: taskScope('idc:run-legacy:item-1', LEGACY_OWNER),
-        id: 'idc:run-legacy:item-1',
-        type: 'workflow',
-        status: 'completed',
-        input: {
-          type: 'workflow',
-          payload: {
-            source: 'idc',
-            name: 'Legacy task',
-            legacyTrace: {
-              runId: 'run-legacy',
-              runStartedAt: 333,
-            },
-            checklistId: 'task-legacy',
-            itemId: 'item-1',
-          },
-        },
-        progress: 100,
-        createdAt: 10,
-        updatedAt: 20,
-      });
-
-      const deletedIds = await manager.clearCreationProjectedTasksForRun(
-        { conversationId: 'conv-legacy', runId: 'run-legacy' },
-        333,
-      );
-
-      expect(deletedIds).toEqual(['idc:run-legacy:item-1']);
-      expect(await storage.load(taskScope('idc:run-legacy:item-1', LEGACY_OWNER))).toBeUndefined();
     });
   });
 

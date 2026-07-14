@@ -57,7 +57,7 @@ export interface ThemeTokens {
   readonly todoPending: InkColor;
   readonly todoInProgress: InkColor;
   readonly todoCompleted: InkColor;
-  readonly todoFailed: InkColor;
+  readonly todoBlocked: InkColor;
 
   // Tool call states
   readonly toolPending: InkColor;

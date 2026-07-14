@@ -271,7 +271,6 @@ describe('parseWebviewToExtensionMessage', () => {
     ['task refresh', { type: 'getTasks' }],
     ['context token refresh', { type: 'getContextTokenCount' }],
     ['context compression', { type: 'compressContext' }],
-    ['prompt mode refresh', { type: 'getPromptMode' }],
     ['active Skill clearing', { type: 'clearActiveSkill', recordId: 'record-1' }],
     ['conversation deletion', { type: 'deleteConversation' }],
     ['conversation lifecycle', { type: 'conversationLifecycle', action: 'archive' }],
@@ -281,23 +280,9 @@ describe('parseWebviewToExtensionMessage', () => {
       'queued message editing',
       { type: 'editQueuedMessage', tabId: 'tab-1', queueItemId: 'queue-1' },
     ],
-    ['plan approval', { type: 'planApprove', planId: 'plan-1' }],
-    ['plan rejection', { type: 'planReject', planId: 'plan-1' }],
-    ['plan step approval', { type: 'planStepApprove', planId: 'plan-1', stepId: 'step-1' }],
-    ['plan step rejection', { type: 'planStepReject', planId: 'plan-1', stepId: 'step-1' }],
-    [
-      'plan step modification',
-      {
-        type: 'planStepModify',
-        planId: 'plan-1',
-        stepId: 'step-1',
-        newDescription: 'Update step',
-      },
-    ],
     ['task cancellation', { type: 'cancelTask', taskId: 'task-1' }],
     ['task retry', { type: 'retryTask', taskId: 'task-1' }],
     ['task result viewing', { type: 'viewTaskResult', taskId: 'task-1' }],
-    ['prompt mode setting', { type: 'setPromptMode', mode: 'plan' }],
     [
       'capability lifecycle invocation',
       {

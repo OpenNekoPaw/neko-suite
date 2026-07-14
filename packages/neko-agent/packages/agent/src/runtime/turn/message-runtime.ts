@@ -36,10 +36,7 @@ import type {
 import { isDocumentFile } from '@neko/shared';
 import type { AgentPendingMessageSource } from '../runner/agent-runner-port';
 import type { AgentEvent } from '../../session/types';
-import {
-  createPlanModeCreationMetadata,
-  mergeCreationExecutionMetadata,
-} from '../../session/creation-execution-metadata';
+import { mergeCreationExecutionMetadata } from '../../session/creation-execution-metadata';
 import { DEFAULT_MENTION_EXCLUDE_GLOB } from '../../input/mention-excludes';
 import {
   extractFileReferencePaths,
@@ -539,7 +536,6 @@ export interface AgentTurnConfigurationPlanInput {
   readonly baseSystemPrompt: string;
   readonly customSystemPrompt?: string | null;
   readonly ambientCanvas?: readonly AgentAmbientCanvasNode[];
-  readonly isPlanMode: boolean;
   readonly executionMode: 'auto' | 'ask' | 'plan';
   readonly chatModel?: ModelRef<'llm'>;
   readonly mediaModel?: ModelRef<MediaModelCategory>;
@@ -1668,8 +1664,7 @@ export function buildAgentHistoryHydrationPlan<TMessage>(
 export function buildAgentTurnConfigurationPlan(
   input: AgentTurnConfigurationPlanInput,
 ): AgentTurnConfigurationPlan {
-  const effectiveExecutionMode =
-    input.executionOverrides?.executionMode ?? (input.isPlanMode ? 'plan' : input.executionMode);
+  const effectiveExecutionMode = input.executionOverrides?.executionMode ?? input.executionMode;
   const turnRuntime = buildAgentTurnRuntimePlan({
     executionMode: effectiveExecutionMode,
     executionOverrides: input.executionOverrides,
@@ -1800,8 +1795,7 @@ export function buildAgentTurnExecutionMetadata(
   mediaModels?: RuntimeMediaModelSelections,
   understandingModels?: MediaUnderstandingModelSelections,
 ): Record<string, unknown> | undefined {
-  const base = executionMode === 'plan' ? createPlanModeCreationMetadata() : undefined;
-  const merged = mergeCreationExecutionMetadata(base, overrides);
+  const merged = mergeCreationExecutionMetadata(undefined, overrides);
   const hasMediaModels = mediaModels !== undefined && Object.keys(mediaModels).length > 0;
   const hasUnderstandingModels =
     understandingModels !== undefined && Object.keys(understandingModels).length > 0;

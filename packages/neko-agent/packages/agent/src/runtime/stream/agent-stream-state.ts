@@ -4,11 +4,9 @@ import {
   type AgentPhase,
   type AgentQueuedMessageItem,
   type ContentBlock,
-  type Plan,
   type ToolCall,
 } from '@neko-agent/types';
 import type { AgentEvent } from '../../session';
-import { createPlanContentBlockFromToolResultData } from '../../plan';
 import { applyToolResultBackfillToResult } from '../tool-result-backfill';
 import { readAgentEventErrorMessage } from './agent-event-error';
 import {
@@ -43,7 +41,6 @@ export interface AgentStreamStateUpdate {
     phase: AgentPhase;
     toolName?: string;
   };
-  plan?: Plan;
 }
 
 export interface AgentStreamStateOptions {
@@ -99,7 +96,6 @@ export type AgentStreamProjectionMessage =
       perceptionCards?: import('@neko/shared').PerceptionCard[];
       backfillDiagnostics?: import('@neko/shared').ToolResultBackfillDiagnostic[];
       artifacts?: readonly AgentArtifactTransferPayload[];
-      plan?: Plan;
     }
   | {
       type: 'toolResultBackfill';
@@ -151,7 +147,6 @@ export interface ProjectAgentStreamEventToHostMessagesInput {
   conversationId: string;
   messageId: string;
   event: AgentEvent;
-  plan?: Plan;
 }
 
 /** Migration alias. Prefer AgentStreamProjectionMessage. */
@@ -185,7 +180,7 @@ export function createAgentStreamMessageId(options: AgentStreamMessageIdOptions 
 export function projectAgentStreamEventToHostMessages(
   input: ProjectAgentStreamEventToHostMessagesInput,
 ): AgentStreamProjectionMessage[] {
-  const { conversationId, messageId, event, plan } = input;
+  const { conversationId, messageId, event } = input;
 
   switch (event.type) {
     case 'thinking_content':
@@ -241,7 +236,6 @@ export function projectAgentStreamEventToHostMessages(
           perceptionCards: event.toolResult?.perceptionCards,
           backfillDiagnostics: event.toolResult?.backfillDiagnostics,
           artifacts: event.toolResult?.artifacts,
-          plan,
         },
       ];
     case 'tool_result_backfill':
@@ -331,7 +325,7 @@ export function applyAgentStreamEventToState(
     case 'tool_call':
       return applyToolCall(state, event, options);
     case 'tool_result':
-      return applyToolResult(state, event, options);
+      return applyToolResult(state, event);
     case 'tool_result_backfill':
       return applyToolResultBackfill(state, event);
     case 'error': {
@@ -513,7 +507,6 @@ function applyToolCall(
 function applyToolResult(
   state: AgentStreamProjectionState,
   event: AgentEvent,
-  options: AgentStreamStateOptions,
 ): AgentStreamStateUpdate {
   if (!event.toolResult) return {};
 
@@ -545,13 +538,7 @@ function applyToolResult(
     toolBlock.toolCall.result = result;
   }
 
-  const planProjection = createPlanContentBlockFromToolResultData(event.toolResult.data, {
-    now: options.now,
-  });
-  if (!planProjection) return {};
-
-  state.contentBlocks.push(planProjection.contentBlock);
-  return { plan: planProjection.plan };
+  return {};
 }
 
 function applyToolResultBackfill(

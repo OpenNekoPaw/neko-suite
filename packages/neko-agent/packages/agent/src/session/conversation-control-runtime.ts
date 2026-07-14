@@ -31,8 +31,6 @@ export interface ConversationControlRuntimeEffects {
   clearAgentState?(conversationId: string): void;
   clearAgentHistory?(conversationId: string): void;
   clearPendingMessages?(conversationId: string): void;
-  clearPromptMode?(conversationId: string): void;
-  clearAllPromptModes?(): void;
   updateConversationMessages?(conversationId: string, messages: []): void;
   confirmTool?(conversationId: string, toolCallId: string, approved: boolean): void;
   cancelAgent?(conversationId: string): void;
@@ -141,7 +139,6 @@ export async function runDeleteConversationRuntime(
   effects.removeAgent?.(input.conversationId);
   effects.clearAgentState?.(input.conversationId);
   effects.clearPendingMessages?.(input.conversationId);
-  effects.clearPromptMode?.(input.conversationId);
   const activateNext = input.activateNext ?? true;
   effects.deleteConversation?.(input.conversationId, { activateNext });
   effects.refreshConversationList?.();
@@ -184,13 +181,6 @@ export async function runClearAllConversationsRuntime(
     effects.removeAgent?.(conversationId);
     effects.clearAgentState?.(conversationId);
     effects.clearPendingMessages?.(conversationId);
-  }
-  if (effects.clearAllPromptModes) {
-    effects.clearAllPromptModes();
-  } else {
-    for (const conversationId of conversationIds) {
-      effects.clearPromptMode?.(conversationId);
-    }
   }
 
   effects.clearConversations?.();

@@ -1,10 +1,9 @@
 import type { Message } from './message';
-import type { OpenTab, PromptMode, TabType } from './ui';
+import type { OpenTab, TabType } from './ui';
 
 export type SlashCommandResultEffect =
   | { type: 'appendAssistantMessage'; message: Message }
   | { type: 'closeCurrentTab' }
-  | { type: 'setPromptMode'; conversationId: string; promptMode: PromptMode }
   | { type: 'setActiveTab'; activeTab: TabType };
 
 export interface SlashCommandResultProjection {

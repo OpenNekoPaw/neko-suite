@@ -483,7 +483,6 @@ function buildHandler(
     providers?: ReturnType<typeof createMockProviders>;
     conversations?: ReturnType<typeof createMockConversations>;
     settings?: ReturnType<typeof createMockSettings>;
-    isPlanMode?: boolean;
     localResourceAccess?: {
       toWebviewUri: ReturnType<typeof vi.fn>;
       toWebviewAsset?: ReturnType<typeof vi.fn>;
@@ -508,7 +507,6 @@ function buildHandler(
     agentManager as any,
     undefined, // editorRegistry
     () => 'mock system prompt',
-    () => overrides.isPlanMode ?? false,
     platform as any,
     undefined,
     undefined,
@@ -656,14 +654,19 @@ describe('AgentMessageTurnHandler', () => {
     });
   });
 
-  describe('IDC plan mode wiring', () => {
-    it('configures the agent in plan execution mode when prompt plan mode is active', async () => {
+  describe('execution mode wiring', () => {
+    it('configures the agent from the conversation execution mode', async () => {
       const agentManager = createMockAgentManager();
       const agentRunner = agentManager.getOrCreate();
+      const settings = createMockSettings();
+      settings.snapshotForConversation.mockReturnValue({
+        ...settings.snapshotForConversation(),
+        executionMode: 'plan',
+      });
       const handler = buildHandler({
         agentManager,
         providers: createMockProviders(true),
-        isPlanMode: true,
+        settings,
       });
 
       await handler.handleUserMessage(
@@ -678,13 +681,18 @@ describe('AgentMessageTurnHandler', () => {
       );
     });
 
-    it('passes explicit IDC turn metadata when prompt plan mode is active', async () => {
+    it('does not create IDC metadata for plan execution mode', async () => {
       const agentManager = createMockAgentManager();
       const agentRunner = agentManager.getOrCreate();
+      const settings = createMockSettings();
+      settings.snapshotForConversation.mockReturnValue({
+        ...settings.snapshotForConversation(),
+        executionMode: 'plan',
+      });
       const handler = buildHandler({
         agentManager,
         providers: createMockProviders(true),
-        isPlanMode: true,
+        settings,
       });
 
       await handler.handleUserMessage(
@@ -692,18 +700,8 @@ describe('AgentMessageTurnHandler', () => {
         createChatModelRequest('outline the rollout'),
       );
 
-      expect(agentRunner.execute).toHaveBeenCalledWith(
-        'outline the rollout',
-        expect.objectContaining({
-          metadata: expect.objectContaining({
-            agentCreation: expect.objectContaining({
-              entrySignal: 'vague-creative',
-              taskShape: 'multi-step',
-              creationKind: 'plan-mode',
-            }),
-          }),
-        }),
-      );
+      const executeOptions = agentRunner.execute.mock.calls[0]?.[1];
+      expect(executeOptions?.metadata?.agentCreation).toBeUndefined();
     });
   });
 

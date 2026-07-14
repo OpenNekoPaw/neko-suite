@@ -21,7 +21,7 @@ import {
 import { createProviderExpressionPromptFragments } from '../../provider';
 import { createFileProjectMemoryManager } from '../../memory';
 import { createCoreTools } from '../../tools';
-import { createTaskManagerCreationTaskProjection, type IRuntimeTaskManager } from '../../task';
+import type { IRuntimeTaskManager } from '../../task';
 import type {
   AgentSessionConfig,
   ExecutionMode,
@@ -30,12 +30,12 @@ import type {
   ToolConfirmationRequest,
 } from '../../session';
 import { createAgentSessionWithRuntime } from './session-config-projection';
-import { createNodeArtifactStore } from '../../artifact/node-artifact-store';
+import { createNodeWorkspaceRuntimeStore } from './node-workspace-runtime-store';
 import type {
   AgentRuntimeConfig,
-  IArtifactStore,
   ICapabilityRuntime,
   ICreationGuidanceRuntime,
+  IWorkspaceRuntimeStore,
   IValidationLoop,
 } from '../types';
 import type { ProviderExpressionTargetConfig } from '../turn/message-runtime';
@@ -85,7 +85,7 @@ export interface AgentRuntimeSessionFactoryConfig {
   readonly capabilityPromptFragments?: readonly PromptFragment[];
   readonly toolCategoryRegistry?: IToolCategoryRegistry;
   readonly creationGuidance?: ICreationGuidanceRuntime;
-  readonly artifactStore?: IArtifactStore;
+  readonly workspaceStore?: IWorkspaceRuntimeStore;
   readonly validationLoop?: IValidationLoop;
   readonly projectMemoryFilePath?: string;
   readonly personalPath?: string;
@@ -136,7 +136,7 @@ export async function createAgentRuntimeSession(
   const promptDomainLocale = toPromptDomainLocale(config.promptLocale);
   const promptBuilder = createSystemPromptBuilder({
     locale: promptDomainLocale,
-    mode: config.executionMode === 'plan' ? 'plan' : 'default',
+    executionMode: config.executionMode ?? 'ask',
   });
 
   if (config.workspaceRoot) {
@@ -479,35 +479,9 @@ function buildAgentRuntimeConfig(
   toolCategoryRegistry: IToolCategoryRegistry | undefined,
   validationLoop: IValidationLoop | undefined,
 ): AgentRuntimeConfig {
-  const runtimeStageTracking =
-    config.capabilityRuntime?.skillRegistry ||
-    config.capabilityRuntime?.skillService ||
-    config.capabilityRuntime?.skillLifecycleRuntime
-      ? {
-          ...(config.creationGuidance?.stageTracking ?? {}),
-          ...(config.capabilityRuntime.skillRegistry
-            ? { skillRegistry: config.capabilityRuntime.skillRegistry }
-            : {}),
-          ...(config.capabilityRuntime.skillService
-            ? { skillService: config.capabilityRuntime.skillService }
-            : {}),
-          ...(config.capabilityRuntime.skillLifecycleRuntime
-            ? { skillLifecycleRuntime: config.capabilityRuntime.skillLifecycleRuntime }
-            : {}),
-        }
-      : config.creationGuidance?.stageTracking;
-
   return {
     creationGuidance: {
       ...(config.creationGuidance ?? {}),
-      ...(runtimeStageTracking ? { stageTracking: runtimeStageTracking } : {}),
-      ...(config.taskManager
-        ? {
-            creationTaskProjection: createTaskManagerCreationTaskProjection({
-              store: config.taskManager,
-            }),
-          }
-        : {}),
     },
     capabilityRuntime: {
       ...(config.capabilityRuntime?.skillService
@@ -549,9 +523,9 @@ function buildAgentRuntimeConfig(
         ? { operationToolAdapterRegistry: config.operationToolAdapterRegistry }
         : {}),
     },
-    artifactStore:
-      config.artifactStore ??
-      createNodeArtifactStore({
+    workspaceStore:
+      config.workspaceStore ??
+      createNodeWorkspaceRuntimeStore({
         ...(config.workspaceRoot ? { workspaceRoot: config.workspaceRoot } : {}),
       }),
     ...(validationLoop ? { validationLoop } : {}),
@@ -599,7 +573,7 @@ function registerSubAgentRuntime(
     ...(config.operationToolAdapterRegistry
       ? { operationToolAdapterRegistry: config.operationToolAdapterRegistry }
       : {}),
-    ...(config.artifactStore ? { artifactStore: config.artifactStore } : {}),
+    ...(config.workspaceStore ? { workspaceStore: config.workspaceStore } : {}),
     ...(validationLoop ? { validationLoop } : {}),
     ...(config.perceptionClients ? { perceptionClients: config.perceptionClients } : {}),
   };

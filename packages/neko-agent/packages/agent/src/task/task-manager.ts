@@ -21,7 +21,6 @@ import type {
   TaskLifecycleMetadata,
   TaskRunOwnerScope,
   TaskRunScope,
-  ConversationRunScope,
 } from '@neko/shared';
 import {
   BaseError,
@@ -34,25 +33,12 @@ import {
 } from '@neko/shared';
 import { MemoryTaskStorage } from './task-storage';
 import { MemoryTaskRecoveryStorage } from './task-recovery-storage';
-import {
-  getCreationProjectedTaskRunBinding,
-  toSerializableCreationProjectedTask,
-  type CreationProjectedTaskUpsertInput,
-} from './creation-projected-task';
 import { isTaskCleanupCandidate } from './task-storage-policy';
 import { getLogger } from '../utils/logger';
 
 const logger = getLogger('TaskManager');
 
-export interface ICreationProjectedTaskStore {
-  upsertCreationProjectedTask(task: CreationProjectedTaskUpsertInput): Promise<void>;
-  clearCreationProjectedTasksForRun(
-    scope: ConversationRunScope,
-    runStartedAt?: number,
-  ): Promise<readonly string[]>;
-}
-
-export interface IRuntimeTaskManager extends ITaskManager, ICreationProjectedTaskStore {
+export interface IRuntimeTaskManager extends ITaskManager {
   initialize(): Promise<void>;
   resumePendingTasks(): Promise<TaskRunScope[]>;
   dispose(): Promise<void>;
@@ -221,8 +207,8 @@ export class TaskManager implements IRuntimeTaskManager {
         continue;
       }
 
-      // Re-execute only retryable executor work. Snapshot-only workflows are
-      // resumed explicitly from their persisted stage artifacts by their owner.
+      // Re-execute only retryable executor work. Snapshot-only operations are
+      // resumed explicitly from their owning project or provider state.
       this.executeTask(task).catch((error) => {
         this.updateTask(task.scope, {
           status: 'failed',
@@ -601,35 +587,6 @@ export class TaskManager implements IRuntimeTaskManager {
   }
 
   /**
-   * Upsert a staged-creation projected task with explicit checklist/artifact binding.
-   */
-  async upsertCreationProjectedTask(task: CreationProjectedTaskUpsertInput): Promise<void> {
-    await this.upsertExternalTask(toSerializableCreationProjectedTask(task));
-  }
-
-  /**
-   * Clear all persisted staged-creation projected tasks from a specific run.
-   *
-   * This intentionally scans storage instead of only the in-memory task map
-   * so completed-run cleanup still works after restore/restart. Old `idc:`
-   * ids are still recognized here only to clean pre-migration local state.
-   */
-  async clearCreationProjectedTasksForRun(
-    scope: ConversationRunScope,
-    runStartedAt?: number,
-  ): Promise<readonly string[]> {
-    const storedTasks = await this.storage.loadAll();
-    const tasks = storedTasks.filter((task) =>
-      isCreationProjectedTaskBoundToRun(task, scope, runStartedAt),
-    );
-    for (const task of tasks) {
-      await this.delete(task.scope);
-    }
-
-    return tasks.map((task) => task.id);
-  }
-
-  /**
    * Subscribe to task progress.
    * If the task is already in a terminal state (completed/failed/cancelled),
    * the callback is invoked immediately with the current task state so that
@@ -961,68 +918,4 @@ function getFlushPromises(storage: ITaskRecoveryStorage): Promise<unknown>[] {
     return [maybeFlushable.dispose()];
   }
   return [];
-}
-
-function isCreationProjectedTaskBoundToRun(
-  task: Pick<SerializableTask, 'id' | 'type' | 'input' | 'scope'>,
-  owner: ConversationRunScope,
-  runStartedAt?: number,
-): boolean {
-  if (task.scope.conversationId !== owner.conversationId || task.scope.runId !== owner.runId) {
-    return false;
-  }
-
-  if (task.type === 'workflow' && task.id.startsWith(`creation:${owner.runId}:`)) {
-    if (runStartedAt === undefined) {
-      return true;
-    }
-
-    const idBinding = getCreationProjectedTaskRunBinding(task);
-    return idBinding?.runId === owner.runId && idBinding.runStartedAt === runStartedAt;
-  }
-
-  if (task.type === 'workflow' && task.id.startsWith(`idc:${owner.runId}:`)) {
-    if (runStartedAt === undefined) {
-      return true;
-    }
-
-    const migrationBinding = getIdcMigrationProjectedTaskRunBinding(task);
-    return (
-      migrationBinding?.runId === owner.runId && migrationBinding.runStartedAt === runStartedAt
-    );
-  }
-
-  const binding = getCreationProjectedTaskRunBinding(task);
-  if (!binding || binding.runId !== owner.runId) {
-    return false;
-  }
-  if (runStartedAt === undefined) {
-    return true;
-  }
-
-  return binding.runStartedAt === runStartedAt;
-}
-
-function getIdcMigrationProjectedTaskRunBinding(
-  task: Pick<SerializableTask, 'type' | 'input'>,
-): { readonly runId: string; readonly runStartedAt: number } | null {
-  if (task.type !== 'workflow') {
-    return null;
-  }
-
-  const payload = task.input.payload;
-  if (typeof payload !== 'object' || payload === null) {
-    return null;
-  }
-
-  const candidate = payload as Record<string, unknown>;
-  const legacyTrace = candidate['legacyTrace'];
-  if (candidate['source'] !== 'idc' || typeof legacyTrace !== 'object' || legacyTrace === null) {
-    return null;
-  }
-
-  const trace = legacyTrace as Record<string, unknown>;
-  return typeof trace['runId'] === 'string' && typeof trace['runStartedAt'] === 'number'
-    ? { runId: trace['runId'], runStartedAt: trace['runStartedAt'] }
-    : null;
 }

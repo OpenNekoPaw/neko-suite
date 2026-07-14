@@ -202,7 +202,6 @@ export function deactivateCliSkillLifecycle(input: {
 
 function isSkillLifecycleSlot(value: unknown): value is SkillLifecycleDeactivationRequest['slot'] {
   return (
-    value === 'stagePersona' ||
     value === 'domainSkill' ||
     value === 'referenceSkill' ||
     value === 'ephemeralSkill' ||

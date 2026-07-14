@@ -22,13 +22,11 @@ import type {
   AgentCapabilityActivationProgressEvent,
   AgentCapabilityActivationTarget,
   AutohealEventEmitterPort,
-  AgentEventSubscriptionPort,
   AgentValidationCoordinator as IValidationCoordinator,
   AgentValidationCycle,
   AgentValidationSignal,
   IAutohealChain,
   AgentProviderExpressionConceptDecision,
-  AgentStageTransitionGuidance as StageTransitionGuidance,
   AgentObservedToolResult,
   AgentStep,
   AgentTraceContext,
@@ -46,44 +44,18 @@ import type {
 import {
   createAgentCapabilityActivationIntent,
   createAgentCapabilityActivationProgressEvent,
-  createAgentRunId,
   createAgentTraceContext,
   createAgentTurnId,
   deriveAgentTraceContext,
   withAgentTrace,
 } from '@neko/shared';
-import {
-  CREATION_CHANNELS,
-  EXECUTION_CHANNELS,
-  type Draft,
-  type ExecutionPlan,
-  type IdcStage,
-  type StageActivationDecision,
-  type Task,
-} from '@neko-agent/types';
-import type {
-  SkillInjection,
-  IStagePersonaBinding,
-  IStageGuardian,
-  IToolGuard,
-  SkillPromptEntry,
-} from '../skill';
-import {
-  buildSkillAwareSystemPrompt,
-  createToolGuard,
-  SkillInjectionCoordinator,
-  StageTracker,
-  createStagePersonaBinding,
-  createStageGuardian,
-} from '../skill';
-import type { StageMode } from '../skill/activation/stage-activation-matrix';
-import type { ReActLoopRunnerState } from '../executor';
+import type { SkillInjection, IToolGuard, SkillPromptEntry } from '../skill';
+import { buildSkillAwareSystemPrompt, createToolGuard, SkillInjectionCoordinator } from '../skill';
 import { createReActLoopRunner } from '../executor';
-import type { DualFlowEvent, IEventBus } from '../events';
-import { createEventBus } from '../events';
+import type { AgentEventBusEvent, IEventBus } from '../events';
+import { AGENT_RUNTIME_CHANNELS, createEventBus } from '../events';
 import type { NdjsonLoggedEvent } from '../workspace';
 import { createNekoPaths, createNdjsonEventSink } from '../workspace';
-import type { IArtifactWatcher } from '../artifact';
 import type { IApprovalEngine } from '../approval';
 import {
   createApprovalEngine,
@@ -143,7 +115,6 @@ import type { CreativeVersionLogModule } from '../prompt/modules/ephemeral/creat
 import type { ValidationGuidanceModule } from '../prompt/modules/ephemeral/validation-guidance-module';
 import type { SkillInjectionModule } from '../prompt/modules/skill/skill-injection-module';
 import type { AgentsMdModule } from '../prompt/modules/environment/agents-md-module';
-import type { ArtifactSchemaModule } from '../prompt/modules/schema/artifact-schema-module';
 import type { SubpackageFragmentsModule } from '../prompt/modules/environment/subpackage-fragments-module';
 import { createPromptContextProvider } from '../prompt/context';
 import { MemoryRecall } from '../memory/memory-recall';
@@ -165,21 +136,9 @@ import {
   DEFAULT_MAX_CONTEXT_TOKENS,
   DEFAULT_MAX_ITERATIONS,
 } from './agent-session-initializer';
-import { SessionArtifactFacade } from './session-artifact-facade';
 import { ValidationRuntimeBridge } from './validation-runtime-bridge';
 import { PromptRuntimeFacade } from './prompt-runtime-facade';
-import {
-  createWorkspaceArtifactService,
-  type AnyArtifactRecord,
-  type ArtifactRecord,
-  type IArtifactService,
-} from '../artifact/artifact-service';
 import { createAgentObservationRecorder } from '../runtime/agent-observation-recorder';
-import {
-  classifyCreationEntrySignal,
-  classifyCreationTaskShape,
-  type CreationTurnPlanningContext,
-} from './creation-turn-planning';
 
 const logger = getLogger('AgentSession');
 const SESSION_SYSTEM_PROMPT_REFRESH_HOOK_NAME = 'session-system-prompt-refresh';
@@ -203,11 +162,6 @@ function isPromiseLike<T>(value: T | Promise<T>): value is Promise<T> {
 // =============================================================================
 
 const MAX_VALIDATION_CYCLES = 32;
-const WORKFLOW_PERSONA_SKILL_NAMES = new Set([
-  'creation-persona',
-  'execution-persona',
-  'iteration-persona',
-]);
 
 // =============================================================================
 // AgentSession Implementation
@@ -256,7 +210,6 @@ export class AgentSession implements IAgentSession {
   private _agentsMdModule: AgentsMdModule;
   // PR3c: creation artifact contract (L1 schema layer). Instance held here so
   // Agent-native creation projection can toggle it.
-  private _artifactSchemaModule: ArtifactSchemaModule;
   // PR3e: sub-package prompt fragments (environment layer priority 70).
   // Instance held for future re-sync passes when provider set changes.
   private _subpackageFragmentsModule: SubpackageFragmentsModule;
@@ -268,15 +221,6 @@ export class AgentSession implements IAgentSession {
   private _lifecycleProjectionToolGuard: IToolGuard | null = null;
   private _lifecycleProjectionActivatedToolSets: string[] = [];
 
-  // built-in creation stage tracking: StageTracker emits stage.entered events;
-  // StagePersonaBinding subscribes and swaps the persona Skill when a new
-  // stage is reached.
-  private _stageTracker: StageTracker | null = null;
-  private _stagePersonaBinding: IStagePersonaBinding | null = null;
-  /** Non-blocking inspector that rides alongside the tracker (ADR §6.5). */
-  private _stageGuardian: IStageGuardian | null = null;
-
-  private _reactRunnerState: Readonly<ReActLoopRunnerState> | null = null;
   private _reactLoopBaseHooks: import('@neko/shared').ExecutorHooks | null = null;
   private _runnerHooks: import('@neko/shared').ExecutorHooks | null = null;
 
@@ -286,7 +230,6 @@ export class AgentSession implements IAgentSession {
   private _nekoPaths: import('../workspace').INekoPaths | null = null;
   // JSONL event sink persisting bus events to a conversation-owned log.
   private _eventSink: import('../workspace').INdjsonEventSink | null = null;
-  private _artifactFacade: SessionArtifactFacade;
   private _validationRuntime: ValidationRuntimeBridge;
   private _promptRuntime!: PromptRuntimeFacade;
   // JSONL audits sink persisting approve.decided events to
@@ -295,15 +238,9 @@ export class AgentSession implements IAgentSession {
   // JSONL steps sink persisting step.completed events to
   // `.neko/logs/steps.jsonl`. Third filter view on the bus.
   private _stepsSink: import('../workspace').INdjsonEventSink | null = null;
-  // Post-write validator + fs.watch for draft/plan/task artifacts (Phase B,
-  // ADR §6.5). Replaces the dedicated Write tools with a non-blocking
-  // validator that emits artifact.* events onto the EventBus.
-  private _artifactWatcher: IArtifactWatcher | null = null;
   // Skill/host-injected validation coordinator. Agent core owns the generic
   // runtime ports and delegates concrete observation/evaluation policies.
   private _validationCoordinator: IValidationCoordinator | null = null;
-  private _creativeProcessRecoveryPolicy:
-    import('@neko/shared').AgentCreativeProcessRecoveryPolicy | null = null;
   private _operationToolAdapterRegistry:
     import('@neko/shared').IOperationToolAdapterRegistry | null = null;
   // Loaded user preferences (ADR §9.3). null when workspace.fsOps
@@ -340,13 +277,10 @@ export class AgentSession implements IAgentSession {
   private _taskResultObservationEntries: TaskResultObservationJournalEntry[] = [];
   /** Tracks streaming state across step conversions */
   private _streamState: StreamState = { hasStreamedDeltas: false };
-  /** Current turn's creation planning hints (input, active skill, external metadata). */
-  private _currentTurnPlanningContext: CreationTurnPlanningContext | null = null;
+  /** Current turn metadata used by perception and evidence projection. */
+  private _currentTurnContext: { readonly metadata?: Record<string, unknown> } | null = null;
   /** Current chat turn identity for model/tool/timeline trace correlation. */
   private _activeTurnId: string | null = null;
-  /** Durable workflow/activity identity, present only when a distinct lifecycle exists. */
-  private _activeRunId: string | null = null;
-  private _activeRunStartedAt: number | null = null;
   private _memoryRecall: MemoryRecall | null = null;
   private _pendingConfirmations = new Map<
     string,
@@ -359,44 +293,11 @@ export class AgentSession implements IAgentSession {
   constructor(config: AgentSessionConfig) {
     this._config = config;
     this._executionMode = config.executionMode ?? 'auto';
-    if (config.stageTracking) {
-      this._ensureActiveRun();
-    }
-    this._artifactFacade = new SessionArtifactFacade({
-      ports: {
-        session: {
-          getConversationId: () => this._config.conversationId ?? null,
-        },
-        activity: {
-          getActiveArtifactScope: () => this._getActiveArtifactScope(),
-          getArtifactScopeStartedAt: (scopeId) => this._getArtifactScopeStartedAt(scopeId),
-        },
-        workspace: {
-          getWorkspaceReadFile: () => {
-            const readFile = this._config.workspace?.fsOps.readFile;
-            return readFile
-              ? (path: string) => readFile.call(this._config.workspace!.fsOps, path, 'utf-8')
-              : null;
-          },
-          isDisposed: () => this._disposed,
-        },
-        persistence: {
-          onPersist: () => undefined,
-          onWarn: (message, data) => logger.warn(message, data),
-        },
-      },
-    });
     this._validationRuntime = new ValidationRuntimeBridge({
       maxCycles: MAX_VALIDATION_CYCLES,
       ports: {
         validation: {
           getCoordinator: () => this._validationCoordinator,
-        },
-        recovery: {
-          getRecoveryPolicy: () => this._creativeProcessRecoveryPolicy,
-          getCurrentStage: () => this._stageTracker?.current ?? null,
-          getActiveArtifactScope: () => this._getActiveArtifactScope(),
-          recordStageTransition: (input) => this._recordValidationStageTransition(input),
         },
         prompt: {
           setGuidanceContent: (content) =>
@@ -437,11 +338,8 @@ export class AgentSession implements IAgentSession {
     this._promptModuleOrchestrator = components.promptModuleOrchestrator;
     this._skillInjectionModule = components.skillInjectionModule;
     this._agentsMdModule = components.agentsMdModule;
-    this._artifactSchemaModule = components.artifactSchemaModule;
     this._subpackageFragmentsModule = components.subpackageFragmentsModule;
     this._promptContextProvider = createPromptContextProvider({
-      getRunId: () => this._getActiveRunId(),
-      getStage: () => this._stageTracker?.current ?? null,
       getActiveSkillName: () => this.getActiveSkill()?.name ?? null,
       getActiveTools: () => collectInjectedToolNames(this._toolInjectionManager),
       getLocale: () => this._config.locale ?? 'en',
@@ -455,7 +353,6 @@ export class AgentSession implements IAgentSession {
           promptContextProvider: this._promptContextProvider,
         },
         modules: {
-          artifactSchemaModule: this._artifactSchemaModule,
           validationGuidanceModule: this._validationGuidanceModule,
           memoryRecallModule: this._memoryRecallModule,
           creativeVersionLogModule: this._creativeVersionLogModule,
@@ -479,12 +376,7 @@ export class AgentSession implements IAgentSession {
     if (config.journalWriter) {
       this._journalWriter = config.journalWriter;
     }
-    this._creativeProcessRecoveryPolicy = config.creativeProcessRecoveryPolicy ?? null;
     this._operationToolAdapterRegistry = config.operationToolAdapterRegistry ?? null;
-
-    this._artifactFacade.setArtifactService(resolveArtifactService(config));
-    this._artifactFacade.setTaskProjection(config.creationTaskProjection ?? null);
-    this._artifactFacade.scheduleRestore();
 
     // SkillInjectionCoordinator requires closures over Session fields
     // (e.g. _permissionHooks changes on configure()), so created here.
@@ -499,232 +391,94 @@ export class AgentSession implements IAgentSession {
     this._installSessionSystemPromptRefreshHook();
     this._installReadImagePerceptionBackfillHook();
 
-    // Stage tracking: when the caller supplies a skill registry + service,
-    // spin up a StageTracker and auto-swap the persona Skill on each stage
-    // transition. The initial persona sync is async; fire-and-forget here —
-    // callers that need determinism should call syncInitialPersona() directly.
-    if (config.stageTracking) {
-      this._stageTracker = new StageTracker({ initialStage: config.stageTracking.initialStage });
-      if (config.stageTracking.skillRegistry && config.stageTracking.skillService) {
-        this._stagePersonaBinding = createStagePersonaBinding({
-          stageTracker: this._stageTracker,
-          skillRegistry: config.stageTracking.skillRegistry,
-          skillService: config.stageTracking.skillService,
-          ...(config.stageTracking.skillLifecycleRuntime
-            ? { lifecycleRuntime: config.stageTracking.skillLifecycleRuntime }
-            : { coordinator: this._skillCoordinator }),
-          // Placeholder name from the binding API: value is the Agent-native creation id.
-          getRunId: () => this._getActiveRunId(),
-          getConversationId: () => this._config.conversationId ?? null,
-        });
-        void this._stagePersonaBinding.syncCurrent();
-      }
+    this._eventBus = createEventBus();
 
-      // Install the ReAct-loop stage-activation runner and its companions:
-      //   - EventBus: typed channel for compacted round / milestone events.
-      //   - Optional skill-owned Autoheal chain: routes tool errors through
-      //     L1-L5 and emits execution.autoheal.* through a shared event port.
-      //   - Approval engine: pre-filters ask-mode tool calls via the
-      //     declarative + imperative strategy packs.
-      this._eventBus = createEventBus();
-
-      // Workspace persistence (ADR §7.4). When a project root is supplied,
-      // persist every bus event to
-      // `<root>/.neko/logs/conversations/<conversationId>/events.jsonl`.
-      // No-op otherwise — the session still runs, just without disk
-      // telemetry. Audits / steps sinks can be added later as
-      // filter-predicated siblings.
-      const mapWorkspaceLogEvent = (event: DualFlowEvent): NdjsonLoggedEvent =>
-        this._mapWorkspaceLogEvent(event);
-      if (config.workspace) {
-        this._nekoPaths = createNekoPaths(config.workspace.root);
-        const logConversationId = normalizeWorkspaceLogConversationId(config.conversationId);
-        this._eventSink = createNdjsonEventSink({
-          filePath: this._nekoPaths.conversationLog('events', logConversationId),
-          fsOps: config.workspace.fsOps,
-          mapEvent: mapWorkspaceLogEvent,
-        });
-        this._eventSink.attach(this._eventBus);
-      }
-
-      // Creation document persistence is host-owned. Only start a watcher when
-      // an explicit runtime factory is supplied; the session must not create
-      // hidden managed creation-document directories by default.
-      this._artifactWatcher = this._createConfiguredArtifactWatcher();
-      void this._artifactWatcher?.start();
-
-      this._autohealChain =
-        config.autohealChainFactory?.({
-          eventBus: createAutohealEventEmitterPort(this._eventBus),
-          diagnostics: {
-            warn: (message, details) => logger.warn(message, details),
-            info: (message, details) => logger.info(message, details),
-          },
-        }) ?? null;
-      this._approvalEngine = createApprovalEngine({
-        strategyPacks: [creationStrategyPack, executionStrategyPack],
+    const mapWorkspaceLogEvent = (event: AgentEventBusEvent): NdjsonLoggedEvent =>
+      this._mapWorkspaceLogEvent(event);
+    if (config.workspace) {
+      this._nekoPaths = createNekoPaths(config.workspace.root);
+      const logConversationId = normalizeWorkspaceLogConversationId(config.conversationId);
+      this._eventSink = createNdjsonEventSink({
+        filePath: this._nekoPaths.conversationLog('events', logConversationId),
+        fsOps: config.workspace.fsOps,
+        mapEvent: mapWorkspaceLogEvent,
       });
-
-      // User preferences (ADR §9.3). When workspace.fsOps provides
-      // `readFile`, load `.neko/preferences.md` + optional global
-      // counterpart and prepend a preferences strategy pack so user
-      // rules short-circuit the default packs. Async — callers that
-      // need determinism await `whenPreferencesReady()`.
-      if (
-        config.workspace &&
-        this._nekoPaths &&
-        typeof config.workspace.fsOps.readFile === 'function'
-      ) {
-        const engine = this._approvalEngine;
-        const paths = this._nekoPaths;
-        const fsOps = config.workspace.fsOps as import('../workspace').PreferencesFsOps;
-        const globalPath = config.workspace.globalPreferencesPath;
-        this._preferencesReady = loadPreferences({
-          paths,
-          ...(globalPath ? { globalPath } : {}),
-          fsOps,
-        }).then(({ merged, warnings }) => {
-          this._preferencesWarnings = warnings;
-          // Register prepended so preferences evaluate before defaults.
-          // registerPriority prepends; call in reverse order so the
-          // declarative pack ends up before the imperative pack (both
-          // before the built-in packs).
-          const packs = createPreferencesStrategyPacks(merged.effective);
-          for (let i = packs.length - 1; i >= 0; i--) {
-            engine.registerPriority(packs[i]!);
-          }
-        });
-      }
-
-      // ApprovalEngine → bus bridge. Every finalised decision lands on
-      // `execution.approve.decided` so audit sinks (ADR §7.4) can
-      // consume the stream without peeking into the engine directly.
-      // Independent of StageGuardian wiring — callers without a guardian
-      // still get audit coverage.
-      {
-        const bus = this._eventBus;
-        const getRunId = (): string | undefined => this._getActiveRunId() ?? undefined;
-        this._approvalEngine.onDecision((request, response) => {
-          const runId = getRunId();
-          if (!runId) return; // No active run — skip (pre-execute engine use).
-          bus.emit({
-            channel: 'execution.approve.decided',
-            runId,
-            subject: request.subject.kind,
-            decision: _approvalResolutionToDecision(response.resolution),
-            at: response.decidedAt,
-          });
-        });
-      }
-
-      // Workspace audits sink — captures every approve.decided event
-      // to the conversation-owned audits JSONL. Filter-predicated sibling
-      // of the events sink so ApprovalEngine decisions are separable
-      // from the general event stream for compliance reads.
-      if (this._nekoPaths && config.workspace) {
-        const logConversationId = normalizeWorkspaceLogConversationId(config.conversationId);
-        this._auditsSink = createNdjsonEventSink({
-          filePath: this._nekoPaths.conversationLog('audits', logConversationId),
-          fsOps: config.workspace.fsOps,
-          mapEvent: mapWorkspaceLogEvent,
-          filter: (e: { channel: string }) => e.channel === 'execution.approve.decided',
-        });
-        this._auditsSink.attach(this._eventBus);
-
-        // Workspace steps sink — per-round step records land in the
-        // conversation-owned steps JSONL. Third filter view on the
-        // same bus; forms the ADR §7.4 logs/ triptych alongside
-        // events.jsonl (everything) and audits.jsonl (approvals).
-        this._stepsSink = createNdjsonEventSink({
-          filePath: this._nekoPaths.conversationLog('steps', logConversationId),
-          fsOps: config.workspace.fsOps,
-          mapEvent: mapWorkspaceLogEvent,
-          filter: (e: { channel: string }) => e.channel === 'execution.step.completed',
-        });
-        this._stepsSink.attach(this._eventBus);
-      }
-
-      const { hooks: runnerHooks, state } = createReActLoopRunner({
-        stageTracker: this._stageTracker,
-        getRunContext: () => this._getActiveRunContext(),
-        getMode: () => this._executionMode as StageMode,
-        classifyTaskShape: (signals) =>
-          classifyCreationTaskShape(signals, this._currentTurnPlanningContext),
-        classifyEntrySignal: (signals) =>
-          classifyCreationEntrySignal(signals, this._currentTurnPlanningContext),
-        eventBus: this._eventBus,
-        ...(this._autohealChain ? { autohealChain: this._autohealChain } : {}),
-      });
-      this._reactRunnerState = state;
-      this._installRuntimeEventObservers();
-
-      // StageGuardian — non-blocking inspector alongside the tracker.
-      // Opted out by setting `stageTracking.guardian = false`; otherwise
-      // we build it with the caller's config (or defaults). Issues stay
-      // on the guardian itself; consumers subscribe via
-      // `session.onStageGuardianIssue()` or read `getStageGuardianIssues()`.
-      // The typed EventBus is reserved for creation.*/execution.* payloads.
-      if (config.stageTracking.guardian !== false) {
-        const guardianConfig =
-          typeof config.stageTracking.guardian === 'object'
-            ? config.stageTracking.guardian
-            : undefined;
-        this._stageGuardian = createStageGuardian(this._stageTracker, guardianConfig);
-
-        // Wire ApprovalEngine.onDecision → guardian.noteApproval so the
-        // `approval-skipped` rule has a record of every gate that fired.
-        // Any resolution counts as "the gate was consulted" — what we're
-        // catching is Apply calls that bypass the engine entirely.
-        const guardian = this._stageGuardian;
-        if (this._approvalEngine) {
-          this._approvalEngine.onDecision((request) => {
-            if (request.subject?.kind) {
-              guardian.noteApproval(request.subject.kind);
-            }
-          });
-        }
-        // Wire execution.apply.committed → guardian.noteApply. The runner
-        // emits this event with `kind` = tool name; we feed the same key
-        // to the guardian so approval ↔ apply pairing works.
-        if (this._eventBus) {
-          this._eventBus.on('execution.apply.committed', (event) => {
-            guardian.noteApply(event.kind);
-          });
-        }
-      }
-
-      this._rebuildValidationCoordinator();
-
-      // Compose runner hooks with the guardian's tick. Keep runner hooks
-      // in a single ExecutorHooks object so the executor's addHook call
-      // stays idempotent across configure() rebuilds.
-      const guardian = this._stageGuardian;
-      const withGuardian: import('@neko/shared').ExecutorHooks = guardian
-        ? {
-            ...runnerHooks,
-            name: runnerHooks.name ?? 'react-loop+stage-guardian',
-            afterAct: async (results) => {
-              if (runnerHooks.afterAct) await runnerHooks.afterAct(results);
-              // Tick drives the stage-timeout check without an internal
-              // timer — sampled on tool-batch boundaries is enough for
-              // long-running generate / render calls to surface.
-              guardian.tick();
-            },
-          }
-        : runnerHooks;
-
-      this._reactLoopBaseHooks = withGuardian;
-      this._runnerHooks = this._composeRunnerHooks(withGuardian);
-
-      // Register on the already-built executor + on any re-builds after configure().
-      if (this._executor) {
-        this._executor.addHook(this._runnerHooks);
-      }
+      this._eventSink.attach(this._eventBus);
     }
 
-    if (!config.stageTracking) {
-      this._rebuildValidationCoordinator();
+    this._autohealChain =
+      config.autohealChainFactory?.({
+        eventBus: createAutohealEventEmitterPort(this._eventBus),
+        diagnostics: {
+          warn: (message, details) => logger.warn(message, details),
+          info: (message, details) => logger.info(message, details),
+        },
+      }) ?? null;
+    this._approvalEngine = createApprovalEngine({
+      strategyPacks: [creationStrategyPack, executionStrategyPack],
+    });
+
+    if (
+      config.workspace &&
+      this._nekoPaths &&
+      typeof config.workspace.fsOps.readFile === 'function'
+    ) {
+      const engine = this._approvalEngine;
+      const paths = this._nekoPaths;
+      const fsOps = config.workspace.fsOps as import('../workspace').PreferencesFsOps;
+      const globalPath = config.workspace.globalPreferencesPath;
+      this._preferencesReady = loadPreferences({
+        paths,
+        ...(globalPath ? { globalPath } : {}),
+        fsOps,
+      }).then(({ merged, warnings }) => {
+        this._preferencesWarnings = warnings;
+        const packs = createPreferencesStrategyPacks(merged.effective);
+        for (let i = packs.length - 1; i >= 0; i--) {
+          engine.registerPriority(packs[i]!);
+        }
+      });
     }
+
+    {
+      const bus = this._eventBus;
+      this._approvalEngine.onDecision((request, response) => {
+        bus.emit({
+          channel: AGENT_RUNTIME_CHANNELS.APPROVAL_DECIDED,
+          subject: request.subject.kind,
+          decision: _approvalResolutionToDecision(response.resolution),
+          at: response.decidedAt,
+        });
+      });
+    }
+
+    if (this._nekoPaths && config.workspace) {
+      const logConversationId = normalizeWorkspaceLogConversationId(config.conversationId);
+      this._auditsSink = createNdjsonEventSink({
+        filePath: this._nekoPaths.conversationLog('audits', logConversationId),
+        fsOps: config.workspace.fsOps,
+        mapEvent: mapWorkspaceLogEvent,
+        filter: (event) => event.channel === AGENT_RUNTIME_CHANNELS.APPROVAL_DECIDED,
+      });
+      this._auditsSink.attach(this._eventBus);
+      this._stepsSink = createNdjsonEventSink({
+        filePath: this._nekoPaths.conversationLog('steps', logConversationId),
+        fsOps: config.workspace.fsOps,
+        mapEvent: mapWorkspaceLogEvent,
+        filter: (event) => event.channel === AGENT_RUNTIME_CHANNELS.STEP_COMPLETED,
+      });
+      this._stepsSink.attach(this._eventBus);
+    }
+
+    const { hooks: runnerHooks } = createReActLoopRunner({
+      eventBus: this._eventBus,
+      ...(this._autohealChain ? { autohealChain: this._autohealChain } : {}),
+    });
+    this._rebuildValidationCoordinator();
+    this._reactLoopBaseHooks = runnerHooks;
+    this._runnerHooks = this._composeRunnerHooks(runnerHooks);
+    this._executor.addHook(this._runnerHooks);
+
     this._wireMetaToolCapabilityProvider(
       this._createCapabilityProvider(createEmptySkillProvider()),
     );
@@ -737,16 +491,6 @@ export class AgentSession implements IAgentSession {
   configure(config: Partial<AgentSessionConfig>): void {
     // Update config
     this._config = { ...this._config, ...config };
-    if (config.artifactService !== undefined || config.workspace !== undefined) {
-      this._artifactFacade.setArtifactService(resolveArtifactService(this._config));
-      this._artifactFacade.scheduleRestore();
-    }
-    if (config.creationTaskProjection !== undefined) {
-      this._artifactFacade.setTaskProjection(config.creationTaskProjection ?? null);
-    }
-    if (config.creativeProcessRecoveryPolicy !== undefined) {
-      this._creativeProcessRecoveryPolicy = config.creativeProcessRecoveryPolicy ?? null;
-    }
     if (config.operationToolAdapterRegistry !== undefined) {
       this._operationToolAdapterRegistry = config.operationToolAdapterRegistry ?? null;
     }
@@ -900,19 +644,6 @@ export class AgentSession implements IAgentSession {
     return this._promptComposer.projectComposition();
   }
 
-  getArtifactsForRun(runId?: string): readonly ArtifactRecord[] {
-    const targetRunId = runId ?? this._getActiveRunId();
-    if (!targetRunId) {
-      return [];
-    }
-
-    return this._artifactFacade.getRecordsForRun(targetRunId);
-  }
-
-  listArtifactRunIds(): readonly string[] {
-    return this._artifactFacade.listRunIds();
-  }
-
   getValidationCycles(): readonly AgentValidationCycle[] {
     return this._validationRuntime.cycles;
   }
@@ -926,32 +657,15 @@ export class AgentSession implements IAgentSession {
       return;
     }
 
-    const activeRunId = this._getActiveRunId();
     this._validationCoordinator.observe({
       kind: 'subagent-review',
       observedAt: result.createdAt,
       review: result,
-      ...(activeRunId ? { runId: activeRunId } : {}),
     });
 
     await Promise.all(result.evidence.map((evidence) => this._recordAgentEvidence(evidence)));
 
     await this._captureValidationCycle();
-  }
-
-  writeDraftArtifact(draft: Draft, options?: { runId?: string }): Promise<ArtifactRecord<'draft'>> {
-    return this._artifactFacade.writeDraft(draft, options?.runId);
-  }
-
-  writePlanArtifact(
-    plan: ExecutionPlan,
-    options?: { runId?: string },
-  ): Promise<ArtifactRecord<'plan'>> {
-    return this._artifactFacade.writePlan(plan, options?.runId);
-  }
-
-  writeTaskArtifact(task: Task, options?: { runId?: string }): Promise<ArtifactRecord<'task'>> {
-    return this._artifactFacade.writeTask(task, options?.runId);
   }
 
   setExecutionMode(mode: ExecutionMode): void {
@@ -1021,12 +735,7 @@ export class AgentSession implements IAgentSession {
     let validationGuidanceAdjustedThisTurn = false;
 
     try {
-      this._currentTurnPlanningContext = {
-        input,
-        executionMode: this._executionMode,
-        activeSkill: this.getActiveSkill(),
-        metadata: context?.metadata,
-      };
+      this._currentTurnContext = { metadata: context?.metadata };
       turnActivatedToolSets = this._activateTurnMediaToolSets(context?.metadata);
 
       // Execute UserPromptSubmit hooks (if configured)
@@ -1278,7 +987,7 @@ export class AgentSession implements IAgentSession {
       }
       void runCompletionStatus;
       void runCompletionError;
-      this._currentTurnPlanningContext = null;
+      this._currentTurnContext = null;
       this._activeTurnId = null;
       this._promptRuntime.setMemoryRecallContent(null);
       if (!validationGuidanceAdjustedThisTurn && hadPendingValidationGuidance) {
@@ -1472,9 +1181,6 @@ export class AgentSession implements IAgentSession {
    * @param skill Optional full Skill object for active skill tracking + Track D (ToolSets)
    */
   applySkillInjection(injection: SkillInjection, skill?: Skill): void {
-    if (skillRequiresDurableRun(injection, skill)) {
-      this._ensureActiveRun();
-    }
     this._skillCoordinator.apply(injection, skill);
   }
 
@@ -1535,80 +1241,13 @@ export class AgentSession implements IAgentSession {
     return this._skillCoordinator.isToolAllowed(toolName);
   }
 
-  // ---------------------------------------------------------------------------
-  // built-in creation stage tracking
-  // ---------------------------------------------------------------------------
-
-  /**
-   * Current built-in creation stage the agent is operating in, or null if stage tracking
-   * is not configured.
-   */
-  getCurrentStage(): IdcStage | null {
-    return this._stageTracker?.current ?? null;
-  }
-
-  /**
-   * Explicitly apply the persona Skill for the current stage. Useful for
-   * tests and for callers that need deterministic initialization (the
-   * constructor fires the initial sync as a background task).
-   */
-  async syncStagePersona(): Promise<void> {
-    if (this._stagePersonaBinding) {
-      await this._stagePersonaBinding.syncCurrent();
-    }
-  }
-
-  /**
-   * Manually enter a stage. Normally the ReAct-loop runner drives this
-   * automatically from planner decisions; call sites that want to override
-   * (e.g. restoring a saved session) can trigger the transition explicitly.
-   * Returns true iff the stage actually changed.
-   */
-  enterStage(stage: IdcStage): boolean {
-    if (!this._stageTracker) return false;
-    return this._stageTracker.enter(stage);
-  }
-
-  /**
-   * Last built-in creation stage-activation decision made by the runner.
-   */
-  getLastActivationDecision(): StageActivationDecision | null {
-    return this._reactRunnerState?.lastDecision ?? null;
-  }
-
-  /**
-   * Snapshot of StageGuardian issues raised during this session
-   * (ADR §6.5). Empty array when the guardian is disabled or has not
-   * fired. Bounded by the guardian's internal history cap.
-   */
-  getStageGuardianIssues(): readonly import('../skill').StageGuardianIssue[] {
-    return this._stageGuardian?.getHistory() ?? [];
-  }
-
-  /**
-   * Subscribe to StageGuardian issues as they are raised. Returns an
-   * unsubscribe function; no-op unsubscribe when the guardian is
-   * disabled (so callers don't need to null-check).
-   */
-  onStageGuardianIssue(
-    listener: (issue: import('../skill').StageGuardianIssue) => void,
-  ): () => void {
-    if (!this._stageGuardian) return () => {};
-    return this._stageGuardian.onIssue(listener);
-  }
-
-  /**
-   * Typed EventBus for dual-flow channels (creation.* / execution.*).
-   * Returns null if dual-flow is not configured.
-   */
+  /** Session-owned event stream for approval, Tool, step and recovery logs. */
   getEventBus(): IEventBus | null {
     return this._eventBus;
   }
 
   /**
-   * Shared ApprovalEngine — permission, plan-review, and quality-gate
-   * channels consult it. Callers may register custom strategy packs
-   * or set a user prompt. Returns null if dual-flow is not configured.
+   * Shared ApprovalEngine for ordinary Tool and creator authorization.
    */
   getApprovalEngine(): IApprovalEngine | null {
     return this._approvalEngine;
@@ -1629,12 +1268,10 @@ export class AgentSession implements IAgentSession {
    * disabled.
    */
   async flushWorkspaceSink(): Promise<void> {
-    await this._artifactFacade.whenRestoreReady();
     await Promise.all([
       this._eventSink ? this._eventSink.flush() : Promise.resolve(),
       this._auditsSink ? this._auditsSink.flush() : Promise.resolve(),
       this._stepsSink ? this._stepsSink.flush() : Promise.resolve(),
-      this._artifactFacade.flush(),
     ]);
   }
 
@@ -1786,10 +1423,6 @@ export class AgentSession implements IAgentSession {
     this._isRunning = false;
     // Flush journal writer
     void this._journalWriter?.dispose();
-    // Stage tracking: unsubscribe binding listener + clear tracker listeners.
-    this._stagePersonaBinding?.dispose();
-    this._stageGuardian?.dispose();
-    this._stageTracker?.dispose();
     // Reject all pending tool confirmations via permission hooks
     for (const pending of this._pendingConfirmations.values()) {
       if (pending.source === 'live' && pending.request.confirmationToken && this._permissionHooks) {
@@ -1797,10 +1430,6 @@ export class AgentSession implements IAgentSession {
       }
     }
     this._pendingConfirmations.clear();
-    this._stagePersonaBinding = null;
-    this._stageGuardian = null;
-    this._stageTracker = null;
-    this._reactRunnerState = null;
     this._runnerHooks = null;
     // Flush all JSONL sinks before clearing the bus so in-flight
     // writes still reach disk. Fire-and-forget — dispose is synchronous
@@ -1808,16 +1437,11 @@ export class AgentSession implements IAgentSession {
     void this._eventSink?.dispose();
     void this._auditsSink?.dispose();
     void this._stepsSink?.dispose();
-    // Close fs.watch handles + drop pending debounces before the bus goes away
-    // so any last emit on settle has somewhere to land. Fire-and-forget.
-    void this._artifactWatcher?.dispose();
     this._validationCoordinator?.dispose();
     this._eventSink = null;
     this._auditsSink = null;
     this._stepsSink = null;
-    this._artifactWatcher = null;
     this._validationCoordinator = null;
-    this._creativeProcessRecoveryPolicy = null;
     this._operationToolAdapterRegistry = null;
     this._nekoPaths = null;
     this._eventBus?.clear();
@@ -1825,21 +1449,23 @@ export class AgentSession implements IAgentSession {
     this._autohealChain = null;
     this._approvalEngine = null;
     this._reactLoopBaseHooks = null;
-    this._artifactFacade.dispose();
   }
 
   // ---------------------------------------------------------------------------
   // Private Methods
   // ---------------------------------------------------------------------------
 
-  private _mapWorkspaceLogEvent(event: DualFlowEvent): NdjsonLoggedEvent {
+  private _mapWorkspaceLogEvent(event: AgentEventBusEvent): NdjsonLoggedEvent {
     const conversationId = normalizeWorkspaceLogConversationId(this._config.conversationId);
+    const eventRecord: unknown = event;
     const eventConversationId =
-      isRecord(event) && typeof event['conversationId'] === 'string'
-        ? event['conversationId'].trim()
+      isRecord(eventRecord) && typeof eventRecord['conversationId'] === 'string'
+        ? eventRecord['conversationId'].trim()
         : '';
     const eventTurnId =
-      isRecord(event) && typeof event['turnId'] === 'string' ? event['turnId'].trim() : '';
+      isRecord(eventRecord) && typeof eventRecord['turnId'] === 'string'
+        ? eventRecord['turnId'].trim()
+        : '';
 
     if (eventConversationId.length > 0 && eventConversationId !== conversationId) {
       throw new Error(
@@ -1865,49 +1491,6 @@ export class AgentSession implements IAgentSession {
         : this._activeTurnId !== null
           ? { turnId: this._activeTurnId }
           : {}),
-    };
-  }
-
-  private _getActiveRunId(): string | null {
-    return this._activeRunId;
-  }
-
-  private _ensureActiveRun(): string {
-    if (!this._activeRunId) {
-      this._activeRunStartedAt = Date.now();
-      this._activeRunId = createAgentRunId(
-        this._config.conversationId ?? 'unknown',
-        this._activeRunStartedAt,
-      );
-    }
-    return this._activeRunId;
-  }
-
-  private _getActiveArtifactScope(): { readonly id: string; readonly startedAt?: number } | null {
-    const id = this._getActiveRunId();
-    if (!id) {
-      return null;
-    }
-    return {
-      id,
-      ...(this._activeRunStartedAt !== null ? { startedAt: this._activeRunStartedAt } : {}),
-    };
-  }
-
-  private _getArtifactScopeStartedAt(creationId: string): number | undefined {
-    void creationId;
-    return undefined;
-  }
-
-  private _getActiveRunContext(): { readonly runId: string; readonly creationKind: string } | null {
-    const runId = this._getActiveRunId();
-    if (!runId) {
-      return null;
-    }
-    const creationKind = this._currentTurnPlanningContext?.metadata?.['creationKind'];
-    return {
-      runId,
-      creationKind: typeof creationKind === 'string' ? creationKind : 'agent-turn',
     };
   }
 
@@ -1952,14 +1535,6 @@ export class AgentSession implements IAgentSession {
       logger.warn('Failed to persist terminal session journal snapshot', {
         eventType,
         error,
-      });
-    }
-  }
-
-  private _installRuntimeEventObservers(): void {
-    if (this._eventBus) {
-      this._eventBus.on(EXECUTION_CHANNELS.ARTIFACT_WRITTEN, (event) => {
-        this._artifactFacade.queueObservedArtifactSync(event);
       });
     }
   }
@@ -2010,8 +1585,6 @@ export class AgentSession implements IAgentSession {
     this._validationCoordinator =
       this._config.validationCoordinator ??
       this._config.validationCoordinatorFactory?.({
-        eventBus: createValidationEventSubscriptionPort(this._eventBus),
-        stageTracker: this._stageTracker,
         workspace: createValidationWorkspacePort(this._config.workspace),
         projectMemoryManager: this._config.projectMemoryManager,
         autoMemoryExtraction: this._config.autoMemoryExtraction,
@@ -2022,24 +1595,6 @@ export class AgentSession implements IAgentSession {
     if (previous && previous !== this._validationCoordinator) {
       previous.dispose();
     }
-  }
-
-  private _createConfiguredArtifactWatcher(): IArtifactWatcher | null {
-    if (!this._eventBus) {
-      return null;
-    }
-
-    const getRunId = (): string | null => this._getActiveRunId();
-    const getCreationId = (): string | null => this._getActiveRunId();
-    if (this._config.artifactWatcherFactory) {
-      return this._config.artifactWatcherFactory({
-        eventBus: this._eventBus,
-        getRunId,
-        getCreationId,
-      });
-    }
-
-    return null;
   }
 
   private _composeRunnerHooks(
@@ -2132,11 +1687,7 @@ export class AgentSession implements IAgentSession {
       return;
     }
 
-    const activeRunId = this._getActiveRunId();
-    const validationTrace = deriveAgentTraceContext(trace, {
-      ...(activeRunId ? { runId: activeRunId } : {}),
-      phase: 'validation',
-    });
+    const validationTrace = deriveAgentTraceContext(trace, { phase: 'validation' });
     let failureSignals = 0;
     let toolReviewSignals = 0;
     let providerExpressionSignals = 0;
@@ -2152,7 +1703,6 @@ export class AgentSession implements IAgentSession {
           toolCallId,
           toolName,
           error: result.error ?? 'Tool execution failed',
-          ...(activeRunId ? { runId: activeRunId } : {}),
         });
         failureSignals += 1;
         continue;
@@ -2166,7 +1716,6 @@ export class AgentSession implements IAgentSession {
         toolName,
         observedAt: step.timestamp,
         ...(this._config.locale ? { locale: this._config.locale } : {}),
-        ...(activeRunId ? { runId: activeRunId } : {}),
       });
       if (toolReviewSignal) {
         this._validationCoordinator.observe(toolReviewSignal);
@@ -2181,7 +1730,6 @@ export class AgentSession implements IAgentSession {
         toolCallId,
         toolName,
         observedAt: step.timestamp,
-        ...(activeRunId ? { runId: activeRunId } : {}),
       });
       if (providerExpressionSignal) {
         this._validationCoordinator.observe(providerExpressionSignal);
@@ -2228,7 +1776,7 @@ export class AgentSession implements IAgentSession {
   }
 
   private _getCurrentContextPacketId(): string | undefined {
-    const packet = this._currentTurnPlanningContext?.metadata?.['multimodalContextPacket'];
+    const packet = this._currentTurnContext?.metadata?.['multimodalContextPacket'];
     if (!isRecord(packet)) {
       return undefined;
     }
@@ -2239,32 +1787,6 @@ export class AgentSession implements IAgentSession {
 
   private async _captureValidationCycle(trace?: AgentTraceContext): Promise<boolean> {
     return this._validationRuntime.captureCycle(trace);
-  }
-
-  private async _recordValidationStageTransition(input: {
-    readonly cycle: AgentValidationCycle;
-    readonly decision: import('@neko/shared').AgentValidationDecision;
-    readonly guidance: StageTransitionGuidance;
-    readonly timestamp: number;
-  }): Promise<void> {
-    if (!this._journalWriter) {
-      return;
-    }
-
-    try {
-      await this._journalWriter.appendEvent(++this._journalSeq, {
-        type: 'validation.stage_transition_requested',
-        validationStageTransition: {
-          timestamp: input.timestamp,
-          ...(input.cycle.activeRunId ? { activeRunId: input.cycle.activeRunId } : {}),
-          ...(input.cycle.currentStage ? { currentStageId: input.cycle.currentStage } : {}),
-          decision: input.decision,
-          guidance: input.guidance,
-        },
-      });
-    } catch (error) {
-      logger.warn('Failed to record creative process recovery transition', { error });
-    }
   }
 
   private _markProcessedMemoryEventIds(eventIds: readonly string[]): void {
@@ -2380,7 +1902,7 @@ export class AgentSession implements IAgentSession {
         backfillReadImagePerceptionResults({
           results,
           perceptionPipeline: this._config.perceptionPipeline,
-          metadata: this._currentTurnPlanningContext?.metadata,
+          metadata: this._currentTurnContext?.metadata,
           chatModel:
             this._config.providerId && this._config.modelId
               ? { providerId: this._config.providerId, modelId: this._config.modelId }
@@ -2427,12 +1949,7 @@ export class AgentSession implements IAgentSession {
     void this._resolveToolConfirmation(request);
   }
 
-  /**
-   * Resolve a tool confirmation request. When the approval engine is
-   * live (stageTracking configured), consult it first; only fall through to
-   * the user's onConfirmTool callback on 'escalate' or no-decision
-   * cases where a user prompt is still warranted.
-   */
+  /** Resolve a tool confirmation through the session-owned ApprovalEngine. */
   private async _resolveToolConfirmation(request: ToolConfirmationRequest): Promise<void> {
     const toolCallId = request.toolCall.id;
     const trace = deriveAgentTraceContext(request.toolCall.trace, {
@@ -2440,9 +1957,7 @@ export class AgentSession implements IAgentSession {
       parentRequestId: request.confirmationToken,
     });
 
-    // Consult the approval engine if wired. Permission-channel requests
-    // always belong to the imperative paradigm (Implement-stage tool calls).
-    if (this._approvalEngine && this._stageTracker) {
+    if (this._approvalEngine) {
       try {
         const decision = await this._approvalEngine.evaluate({
           channel: 'permission',
@@ -2668,23 +2183,6 @@ function createEmptySkillProvider(): ISkillProvider {
   };
 }
 
-function createValidationEventSubscriptionPort(
-  eventBus: IEventBus | null,
-): AgentEventSubscriptionPort | null {
-  if (!eventBus) {
-    return null;
-  }
-
-  return {
-    on(channel, listener) {
-      if (channel !== EXECUTION_CHANNELS.ARTIFACT_INVALID) {
-        throw new Error(`Unsupported validation event channel: ${channel}`);
-      }
-      return eventBus.on(EXECUTION_CHANNELS.ARTIFACT_INVALID, (event) => listener(event));
-    },
-  };
-}
-
 function createAutohealEventEmitterPort(
   eventBus: IEventBus | null,
 ): AutohealEventEmitterPort | undefined {
@@ -2694,22 +2192,9 @@ function createAutohealEventEmitterPort(
 
   return {
     emit(event) {
-      if (!isAutohealExecutionChannel(event.channel)) {
-        throw new Error(`Unsupported autoheal event channel: ${event.channel}`);
-      }
-      eventBus.emit(event as Parameters<IEventBus['emit']>[0]);
+      eventBus.emit(event);
     },
   };
-}
-
-function isAutohealExecutionChannel(channel: string): boolean {
-  return (
-    channel === EXECUTION_CHANNELS.AUTOHEAL_L1_RETRY ||
-    channel === EXECUTION_CHANNELS.AUTOHEAL_L2_DEGRADE ||
-    channel === EXECUTION_CHANNELS.AUTOHEAL_L3_SUBSTITUTE ||
-    channel === EXECUTION_CHANNELS.AUTOHEAL_L4_TRIGGERED ||
-    channel === EXECUTION_CHANNELS.AUTOHEAL_L5_ESCALATED
-  );
 }
 
 function createValidationWorkspacePort(
@@ -2862,26 +2347,6 @@ function getChatMessageContent(message: ChatMessage): string {
     .join('\n');
 }
 
-function resolveArtifactService(config: AgentSessionConfig): IArtifactService | null {
-  if (config.artifactService) {
-    return config.artifactService;
-  }
-
-  const workspace = config.workspace;
-  if (!workspace || !hasWorkspaceWriteFileFsOps(workspace.fsOps)) {
-    return null;
-  }
-
-  const fsOps = workspace.fsOps;
-  return createWorkspaceArtifactService({
-    workspaceRoot: workspace.root,
-    fsOps: {
-      mkdir: fsOps.mkdir.bind(fsOps),
-      writeFile: fsOps.writeFile.bind(fsOps),
-    },
-  });
-}
-
 type WorkspaceFsOps = NonNullable<AgentSessionConfig['workspace']>['fsOps'];
 
 interface WorkspaceWriteFileFsOps extends WorkspaceFsOps {
@@ -2946,24 +2411,6 @@ function toProviderExpressionValidationSignal(input: {
     ...(input.runId ? { runId: input.runId } : {}),
     metadata: metadata.raw,
   };
-}
-
-function skillRequiresDurableRun(injection: SkillInjection, skill?: Skill): boolean {
-  const name = skill?.name ?? injection.name;
-  if (WORKFLOW_PERSONA_SKILL_NAMES.has(name)) {
-    return true;
-  }
-
-  const workflow = skill?.mediaWorkflow;
-  if (!workflow) {
-    return false;
-  }
-
-  return (
-    (workflow.producedArtifacts?.length ?? 0) > 0 ||
-    (workflow.artifactProfiles?.length ?? 0) > 0 ||
-    (workflow.suggestedProjectors?.length ?? 0) > 0
-  );
 }
 
 function extractProviderExpressionMetadata(result: ObservedToolResult): {

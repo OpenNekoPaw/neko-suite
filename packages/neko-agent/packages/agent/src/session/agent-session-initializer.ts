@@ -36,7 +36,6 @@ import { CreativeVersionLogModule } from '../prompt/modules/ephemeral/creative-v
 import { ValidationGuidanceModule } from '../prompt/modules/ephemeral/validation-guidance-module';
 import { SkillInjectionModule } from '../prompt/modules/skill/skill-injection-module';
 import { AgentsMdModule } from '../prompt/modules/environment/agents-md-module';
-import { ArtifactSchemaModule } from '../prompt/modules/schema/artifact-schema-module';
 import { SubpackageFragmentsModule } from '../prompt/modules/environment/subpackage-fragments-module';
 import { ModuleOrchestrator } from '../prompt/composer/module-orchestrator';
 import { PromptModuleRegistry } from '../prompt/registry/module-registry';
@@ -88,12 +87,6 @@ export interface SessionComponents {
   // PR3b: AGENTS.md overlay projected into the environment layer instead
   // of replacing the base prompt.
   agentsMdModule: AgentsMdModule;
-
-  // PR3c: creation artifact contract (paths, frontmatter, write rules)
-  // extracted out of creation-persona and into the L1 schema layer. The
-  // initializer only creates/exposes the module; runtime activation is
-  // driven by Agent-native creation stage transitions (PR3d).
-  artifactSchemaModule: ArtifactSchemaModule;
 
   // PR3e: sub-package prompt fragments projected into the L3 environment
   // layer (priority 70). Populated from config.promptFragments at init.
@@ -263,14 +256,12 @@ export function initializeSession(
   const validationGuidanceModule = new ValidationGuidanceModule();
   const skillInjectionModule = new SkillInjectionModule();
   const agentsMdModule = new AgentsMdModule();
-  const artifactSchemaModule = new ArtifactSchemaModule();
   const subpackageFragmentsModule = new SubpackageFragmentsModule();
   const promptModuleRegistry = new PromptModuleRegistry();
   for (const module of [
     memoryRecallModule,
     agentsMdModule,
     creativeVersionLogModule,
-    artifactSchemaModule,
     subpackageFragmentsModule,
     validationGuidanceModule,
     memoryProjectModule,
@@ -331,7 +322,6 @@ export function initializeSession(
     promptModuleOrchestrator,
     skillInjectionModule,
     agentsMdModule,
-    artifactSchemaModule,
     subpackageFragmentsModule,
   };
 }
@@ -342,8 +332,6 @@ function buildInitializerPromptContext(
 ): PromptContext {
   const state = toolInjectionManager.getState();
   return freezePromptContext({
-    runId: null,
-    stage: config.stageTracking?.initialStage ?? null,
     locale: config.locale ?? 'en',
     projectPath: config.workspace?.root ?? '',
     activeSkillName: null,

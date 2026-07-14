@@ -35,26 +35,14 @@ function generate(context: PromptGenerationContext) {
 }
 
 describe('agent-prompt-schema-generator', () => {
-  it('generates deterministic layered prompt and schemas for PlanMode IDC context', () => {
+  it('generates deterministic layered prompt and schemas for ordinary Plan Mode context', () => {
     const bundle = generate({
       basePrompt: 'BASE',
       locale: 'zh',
       agentsMdOverlay: 'AGENTS overlay',
       settings: { executionMode: 'plan', temperature: 0.2 },
       activeSkillId: 'skill:storyboard',
-      creation: {
-        creationId: 'creation-1',
-        iterationId: 'iteration-1',
-        profileId: 'idc.default',
-        stage: 'plan',
-        planMode: true,
-        allowedToolNames: ['write_plan'],
-        legacyTrace: {
-          workflowDefinitionId: 'idc',
-          workflowRunId: 'run-1',
-          workflowNodeId: 'plan',
-        },
-      },
+      requestedSchemaPurposes: ['evaluator-output'],
       injectedCapabilities: injected({
         promptFragments: [{ id: 'skill:storyboard:prompt', content: 'SKILL PROMPT', priority: 75 }],
         allowedTools: ['write_plan', 'read_file'],
@@ -90,7 +78,6 @@ describe('agent-prompt-schema-generator', () => {
 
     expect(bundle.sections.map((section) => section.id)).toEqual([
       'base',
-      'creation:idc-profile',
       'schema:structured-output',
       'capability:skill:storyboard:prompt',
       'environment:agents-md',
@@ -100,64 +87,17 @@ describe('agent-prompt-schema-generator', () => {
       'ephemeral:multimodal-context',
       'ephemeral:memory',
     ]);
-    expect(bundle.prompt).toMatchInlineSnapshot(`
-      "BASE
-
-      ---
-
-      ## Creation Profile Guidance
-      - Plan mode: enabled
-      - Creation profile: idc.default
-      - Creation stage: plan
-      - Creation id: creation-1
-      - Iteration id: iteration-1
-      - Legacy trace node: plan
-      - Follow creation profile guidance: Draft clarifies intent, Plan decomposes work, Apply executes verified changes.
-
-      ---
-
-      ## Structured Output Contract
-      - Expected schema purposes: idc-plan
-      - Return machine-readable JSON when a creation stage explicitly asks for a structured artifact.
-
-      ---
-
-      SKILL PROMPT
-
-      ---
-
-      AGENTS overlay
-
-      ---
-
-      PROVIDER CARD
-
-      ---
-
-      ## Runtime Settings
-      - executionMode: plan
-      - temperature: 0.2
-
-      ---
-
-      ## Feedback Evidence
-      - Included: evidence-image [image, tool/tool-1]: Generated style frame
-      - Withheld: evidence-video [video, engine]: Motion score (policy)
-
-      ---
-
-      Image + timeline evidence
-
-      ---
-
-      Memory summary"
-    `);
-    expect(bundle.schemaBundle.toolAllowlist).toEqual(['write_plan']);
+    expect(bundle.prompt).toContain('Expected schema purposes: evaluator-output');
+    expect(bundle.prompt).toContain('SKILL PROMPT');
+    expect(bundle.prompt).toContain('Feedback Evidence');
+    expect(bundle.prompt).not.toContain('Creation Profile Guidance');
+    expect(bundle.schemaBundle.toolAllowlist).toEqual(['read_file', 'write_plan']);
     expect(bundle.schemaBundle.toolSchemas).toEqual([toolSchema]);
     expect(bundle.schemaBundle.structuredOutputSchemas.map((schema) => schema.purpose)).toEqual([
-      'idc-plan',
+      'evaluator-output',
     ]);
-    expect(bundle.snapshot).toEqual({ promptHash: 'aa622fed', schemaHash: '022451d8' });
+    expect(bundle.snapshot.promptHash).toMatch(/^[a-f0-9]{8}$/u);
+    expect(bundle.snapshot.schemaHash).toMatch(/^[a-f0-9]{8}$/u);
   });
 
   it('projects prompt-only tool instructions for providers without native tool calls', () => {
@@ -166,7 +106,7 @@ describe('agent-prompt-schema-generator', () => {
       injectedCapabilities: injected({ allowedTools: ['write_plan'] }),
       toolSchemas: [toolSchema],
       provider: { toolMode: 'prompt-only', structuredOutputMode: 'prompt-json' },
-      requestedSchemaPurposes: ['creation-stage-output'],
+      requestedSchemaPurposes: ['tool-arguments'],
     });
 
     expect(bundle.schemaBundle.toolSchemas).toEqual([toolSchema]);

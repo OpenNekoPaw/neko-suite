@@ -9,6 +9,11 @@
  */
 
 import type { AgentEvent } from '@neko/agent';
+import {
+  getAgentWorkItemRuntimeKey,
+  projectAgentWorkItemsToTodo,
+  type AgentWorkItem,
+} from '@neko-agent/types';
 import type { ConversationSlice } from '../stores/conversation-store';
 import type { AgentSlice } from '../stores/agent-store';
 import type { UISlice, PendingApproval } from '../stores/ui-store';
@@ -62,6 +67,7 @@ export function createEventAdapter(deps: EventAdapterDeps): IEventAdapter {
   const agentStore = createStoreAccessor(deps.agentStore);
   const uiStore = createStoreAccessor(deps.uiStore);
   const timelineProjector = createTerminalTimelineProjector({ presentation: deps.presentation });
+  const workItemsByRuntimeKey = new Map<string, AgentWorkItem>();
   let hasStartedMessage = false;
   let currentDelta = '';
 
@@ -85,6 +91,15 @@ export function createEventAdapter(deps: EventAdapterDeps): IEventAdapter {
       conversationStore().applyTimelineRows(rows);
       hasStartedMessage = true;
     }
+  };
+
+  const projectWorkItemTodos = (conversationId: string, workItem: AgentWorkItem): void => {
+    workItemsByRuntimeKey.set(getAgentWorkItemRuntimeKey(workItem), workItem);
+    const todos = projectAgentWorkItemsToTodo({
+      conversationId,
+      items: [...workItemsByRuntimeKey.values()],
+    }).map(({ content, status }) => ({ content, status }));
+    conversationStore().updateTodos(todos);
   };
 
   return {
@@ -226,10 +241,30 @@ export function createEventAdapter(deps: EventAdapterDeps): IEventAdapter {
         conversationStore().applyTimelineRows(rows);
         hasStartedMessage = true;
       }
+      switch (message.type) {
+        case 'mediaTaskCreated':
+        case 'mediaTaskProgress':
+        case 'taskCreated':
+        case 'taskUpdated':
+          projectWorkItemTodos(message.conversationId, message.workItem);
+          break;
+        case 'agentTurnTimelineUpdate':
+          for (const operation of message.operations) {
+            if (operation.operation !== 'upsert' && operation.operation !== 'snapshot') {
+              continue;
+            }
+            if (operation.item.kind !== 'task' && operation.item.kind !== 'media') {
+              continue;
+            }
+            projectWorkItemTodos(message.conversationId, operation.item.payload.workItem);
+          }
+          break;
+      }
     },
 
     reset(): void {
       timelineProjector.reset();
+      workItemsByRuntimeKey.clear();
       hasStartedMessage = false;
       currentDelta = '';
     },

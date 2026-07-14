@@ -11,8 +11,6 @@ import {
 
 function makeMinimalCtx(overrides: Partial<PromptContext> = {}): PromptContext {
   const base: PromptContext = {
-    runId: null,
-    stage: null,
     locale: 'en',
     projectPath: '/tmp/proj',
     activeSkillName: null,
@@ -23,8 +21,10 @@ function makeMinimalCtx(overrides: Partial<PromptContext> = {}): PromptContext {
 
 describe('freezePromptContext', () => {
   it('returns an object with the same values', () => {
-    const ctx = freezePromptContext(makeMinimalCtx({ runId: 'r1', locale: 'zh' }));
-    expect(ctx.runId).toBe('r1');
+    const ctx = freezePromptContext(
+      makeMinimalCtx({ activeSkillName: 'script-generation', locale: 'zh' }),
+    );
+    expect(ctx.activeSkillName).toBe('script-generation');
     expect(ctx.locale).toBe('zh');
   });
 
@@ -60,8 +60,6 @@ describe('freezePromptContext', () => {
 describe('createPromptContextProvider', () => {
   function makeSources(overrides: Partial<PromptContextSources> = {}): PromptContextSources {
     return {
-      getRunId: () => null,
-      getStage: () => null,
       getActiveSkillName: () => null,
       getActiveTools: () => [],
       getLocale: () => 'en',
@@ -78,17 +76,13 @@ describe('createPromptContextProvider', () => {
 
   it('pulls each required field from its accessor', () => {
     const provider = createPromptContextProvider({
-      getRunId: () => 'run-1',
-      getStage: () => 'draft',
-      getActiveSkillName: () => 'creation-persona',
+      getActiveSkillName: () => 'script-generation',
       getActiveTools: () => ['Read', 'Write'],
       getLocale: () => 'zh',
       getProjectPath: () => '/Users/me/proj',
     });
     const ctx = provider();
-    expect(ctx.runId).toBe('run-1');
-    expect(ctx.stage).toBe('draft');
-    expect(ctx.activeSkillName).toBe('creation-persona');
+    expect(ctx.activeSkillName).toBe('script-generation');
     expect(ctx.activeTools).toEqual(['Read', 'Write']);
     expect(ctx.locale).toBe('zh');
     expect(ctx.projectPath).toBe('/Users/me/proj');
@@ -116,13 +110,15 @@ describe('createPromptContextProvider', () => {
   });
 
   it('re-reads accessors each call (supports live session state)', () => {
-    let stage: 'draft' | 'plan' | 'apply' = 'draft';
-    const provider = createPromptContextProvider(makeSources({ getStage: () => stage }));
-    expect(provider().stage).toBe('draft');
-    stage = 'plan';
-    expect(provider().stage).toBe('plan');
-    stage = 'apply';
-    expect(provider().stage).toBe('apply');
+    let activeSkillName: string | null = 'script-generation';
+    const provider = createPromptContextProvider(
+      makeSources({ getActiveSkillName: () => activeSkillName }),
+    );
+    expect(provider().activeSkillName).toBe('script-generation');
+    activeSkillName = 'storyboard';
+    expect(provider().activeSkillName).toBe('storyboard');
+    activeSkillName = null;
+    expect(provider().activeSkillName).toBeNull();
   });
 
   it('mediaLibrary accessor returning undefined omits the key', () => {

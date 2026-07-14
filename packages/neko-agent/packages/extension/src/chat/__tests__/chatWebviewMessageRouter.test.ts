@@ -110,15 +110,6 @@ function createDeps(): ChatWebviewMessageRouterDeps {
       handleOpenUrl: vi.fn(),
       handleDownloadSvg: vi.fn(),
     } as any,
-    planModeHandler: {
-      handlePlanApprove: vi.fn(),
-      handlePlanReject: vi.fn(),
-      handlePlanStepAction: vi.fn(),
-      handlePlanStepModify: vi.fn(),
-      handleSetPromptMode: vi.fn(),
-      handleTogglePlanMode: vi.fn(),
-      sendPromptMode: vi.fn(),
-    } as any,
     settingsHandler: {
       sendSettings: vi.fn(),
       handleUpdateSettings: vi.fn(),

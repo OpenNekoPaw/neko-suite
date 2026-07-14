@@ -1,7 +1,5 @@
 import type {
   AgentContext,
-  AgentArtifactInvalidEvent as ExecutionArtifactInvalidEvent,
-  AgentEventSubscriptionPort as IEventBus,
   AgentFeedbackArbiter as IValidationArbiter,
   AgentFeedbackControlPolicy as ValidationPolicy,
   AgentFeedbackCoordinator as IValidationCoordinator,
@@ -18,13 +16,10 @@ import type {
   AgentFeedbackSignal as ValidationSignal,
   AgentObservation,
   AgentProviderExpressionConceptDecision as ProviderExpressionConceptDecision,
-  AgentStageTrackerPort as StageTracker,
   DecisionRationale,
   ExecutorHooks,
   IProjectMemoryManager,
 } from '@neko/shared';
-import { createArtifactObservationHooks } from './artifact-validation-observation-hooks';
-import { SelfEvaluationHooks } from '../creative-process/self-evaluation-hooks';
 import { KeyFactExtractor } from '../memory/keyfact-extractor';
 import { ProjectMemoryRouter } from '../memory/project-memory-router';
 import {
@@ -32,8 +27,6 @@ import {
   type ProviderCardProjectFsOps,
   type ProviderCardProjectReviewMode,
 } from '../memory/provider-card-project-router';
-
-const ARTIFACT_INVALID_CHANNEL = 'execution.artifact.invalid';
 
 // =============================================================================
 // Types
@@ -50,8 +43,6 @@ export interface ValidationLogger {
 }
 
 export interface ValidationCoordinatorConfig {
-  readonly eventBus?: IEventBus | null;
-  readonly stageTracker?: StageTracker | null;
   readonly projectMemoryManager?: IProjectMemoryManager;
   readonly autoMemoryExtraction?: boolean;
   readonly evaluators?: readonly IValidationEvaluator[];
@@ -72,11 +63,10 @@ export interface ValidationCoordinatorConfig {
   readonly now?: () => number;
 }
 
-export interface ValidationCoordinatorFactoryConfig
-  extends Omit<
-    ValidationCoordinatorConfig,
-    'eventBus' | 'stageTracker' | 'projectMemoryManager' | 'autoMemoryExtraction'
-  > {}
+export interface ValidationCoordinatorFactoryConfig extends Omit<
+  ValidationCoordinatorConfig,
+  'projectMemoryManager' | 'autoMemoryExtraction'
+> {}
 
 export type {
   ValidationPolicy,
@@ -122,35 +112,8 @@ class ValidationCoordinator implements IValidationCoordinator {
   private readonly _signalCounts = new Map<string, number>();
   private readonly _decisionHistory: ValidationDecision[] = [];
   private readonly _actionHistory: ValidationFlowAction[] = [];
-  private readonly _artifactInvalidUnsubscribe: (() => void) | null;
-
   constructor(config: ValidationCoordinatorConfig) {
-    const observationHook = config.eventBus
-      ? createArtifactObservationHooks({
-          eventBus: config.eventBus,
-        })
-      : null;
-    const selfEvaluationHook = config.stageTracker
-      ? new SelfEvaluationHooks({
-          stageTracker: config.stageTracker,
-          onGuidanceRequested: () => {
-            this.observe({
-              kind: 'self-evaluation-requested',
-              observedAt: this._now(),
-              stage: 'apply',
-            });
-          },
-        })
-      : null;
-
-    const beforeThinkHooks: ExecutorHooks[] = [];
-    if (observationHook) {
-      beforeThinkHooks.push(observationHook);
-    }
-    if (selfEvaluationHook) {
-      beforeThinkHooks.push(selfEvaluationHook);
-    }
-    this._beforeThinkHooks = beforeThinkHooks;
+    this._beforeThinkHooks = [];
     this._now = config.now ?? (() => Date.now());
     this._logger = config.logger ?? null;
     this._evaluators =
@@ -158,10 +121,6 @@ class ValidationCoordinator implements IValidationCoordinator {
         ? [...config.evaluators]
         : [createDefaultValidationEvaluator()];
     this._arbiter = config.arbiter ?? createDefaultValidationArbiter(config.validationPolicy);
-    this._artifactInvalidUnsubscribe =
-      config.eventBus?.on(ARTIFACT_INVALID_CHANNEL, (event) => {
-        this.observe(validationSignalFromArtifactInvalidEvent(event));
-      }) ?? null;
     this._providerCardProjectRouter = config.providerCardProject
       ? (config.providerCardProjectRouterFactory ?? createDefaultProviderCardProjectRouter)({
           ...config.providerCardProject,
@@ -227,12 +186,13 @@ class ValidationCoordinator implements IValidationCoordinator {
       signals,
       decisions: normalizedDecisions,
       actions,
-      ...(context.currentStage !== undefined ? { currentStage: context.currentStage } : {}),
       ...(context.activeRunId !== undefined ? { activeRunId: context.activeRunId } : {}),
     };
   }
 
-  private async _writeProviderCardObservations(signals: readonly ValidationSignal[]): Promise<void> {
+  private async _writeProviderCardObservations(
+    signals: readonly ValidationSignal[],
+  ): Promise<void> {
     if (!this._providerCardProjectRouter) {
       return;
     }
@@ -302,12 +262,7 @@ class ValidationCoordinator implements IValidationCoordinator {
   }
 
   dispose(): void {
-    this._artifactInvalidUnsubscribe?.();
-    for (const hook of this._beforeThinkHooks) {
-      if (typeof (hook as { dispose?: () => void }).dispose === 'function') {
-        (hook as { dispose: () => void }).dispose();
-      }
-    }
+    // The coordinator owns no external subscriptions.
   }
 }
 
@@ -328,8 +283,6 @@ export function createValidationCoordinatorFactory(
   return (runtime) =>
     createValidationCoordinator({
       ...config,
-      eventBus: runtime.eventBus,
-      stageTracker: runtime.stageTracker,
       providerCardProject:
         configuredProviderCardProject ??
         (runtime.workspace
@@ -400,19 +353,6 @@ const DEFAULT_VALIDATION_POLICY: Required<ValidationPolicy> = {
   toolEvidenceMode: 'optional',
 };
 
-function validationSignalFromArtifactInvalidEvent(
-  event: ExecutionArtifactInvalidEvent,
-): ValidationSignal {
-  return {
-    kind: 'artifact-invalid',
-    observedAt: event.at,
-    runId: event.runId,
-    artifactKind: event.kind,
-    path: event.path,
-    issues: [...event.issues],
-  };
-}
-
 function createDefaultValidationEvaluator(): IValidationEvaluator {
   return {
     id: 'default-validation-evaluator',
@@ -429,13 +369,6 @@ function createDefaultValidationEvaluator(): IValidationEvaluator {
               artifactKind: signal.artifactKind,
               path: signal.path,
               issueCount: signal.issues.length,
-            });
-            break;
-          case 'self-evaluation-requested':
-            decisions.push({
-              action: 'self-evaluate',
-              signalKind: signal.kind,
-              stage: signal.stage,
             });
             break;
           case 'tool-failure':
@@ -647,13 +580,6 @@ function createDefaultValidationArbiter(policy: ValidationPolicy | undefined): I
             );
             break;
           }
-          case 'self-evaluate':
-            guidanceKinds.add(decision.signalKind);
-            guidanceBlocks.push(
-              'Before the next Apply step, perform a short self-evaluation: summarize what changed, ' +
-                'what is still risky, and whether user confirmation is needed.',
-            );
-            break;
           case 'memorize':
             break;
           case 'continue':
@@ -831,8 +757,6 @@ function signalSignature(signal: ValidationSignal): string {
   switch (signal.kind) {
     case 'artifact-invalid':
       return `artifact-invalid|${signal.runId}|${signal.path}`;
-    case 'self-evaluation-requested':
-      return `self-evaluation-requested|${signal.stage}`;
     case 'tool-failure':
       return `tool-failure|${signal.runId ?? ''}|${signal.toolName}`;
     case 'tool-review':

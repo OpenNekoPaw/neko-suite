@@ -81,6 +81,30 @@ describe('createCoreTools', () => {
     });
   });
 
+  it('keeps creator-review and plan documents as ordinary authorized Markdown', async () => {
+    const briefPath = path.join(workspaceRoot, 'brief.md');
+    const planPath = path.join(workspaceRoot, 'plan.md');
+    await fs.writeFile(briefPath, '# Existing brief\nKeep this decision.\n', 'utf-8');
+    await fs.writeFile(planPath, '# Existing plan\n- pending: review source\n', 'utf-8');
+    const tools = createCoreTools({ defaultCwd: workspaceRoot });
+    const read = getTool(tools, 'Read');
+    const write = getTool(tools, 'Write');
+
+    await expect(read.execute({ file_path: 'brief.md' })).resolves.toMatchObject({
+      success: true,
+      data: expect.objectContaining({ content: expect.stringContaining('Keep this decision') }),
+    });
+    await expect(
+      write.execute({
+        file_path: 'plan.md',
+        content: '# Existing plan\n- in_progress: review source\n',
+      }),
+    ).resolves.toMatchObject({ success: true });
+
+    expect(await fs.readFile(briefPath, 'utf-8')).toContain('Keep this decision');
+    expect(await fs.readFile(planPath, 'utf-8')).toContain('in_progress');
+  });
+
   it('blocks reads, listings, and searches outside the workspace root', async () => {
     const tools = createCoreTools({ defaultCwd: workspaceRoot });
     const outsideFile = path.join(outsideRoot, 'secret.txt');

@@ -36,7 +36,6 @@ const vscodeMocks = vi.hoisted(() => ({
   getConversationSnapshot: vi.fn(),
   getContextTokenCount: vi.fn(),
   getTasks: vi.fn(),
-  getPromptMode: vi.fn(),
   getMessageQueue: vi.fn(),
 }));
 
@@ -176,9 +175,6 @@ vi.mock('@/components/ChatWorkspace', () => ({
         />
         <span data-testid={testId('workspace-conversation')}>
           {tabRenderSnapshot.snapshot.conversationId}
-        </span>
-        <span data-testid={testId('workspace-prompt-mode')}>
-          {tabRenderSnapshot.snapshot.state.promptMode}
         </span>
         <span data-testid={testId('workspace-selected-model')}>
           {tabRenderSnapshot.snapshot.state.selectedModel}
@@ -885,15 +881,6 @@ describe('ConversationController entry state', () => {
           data: { type: 'tabState', tabState: { openTabs, activeTabId: 'tab-6' } },
         }),
       );
-      window.dispatchEvent(
-        new MessageEvent('message', {
-          data: {
-            type: 'promptModeChanged',
-            conversationId: 'conv-1',
-            mode: 'plan',
-          },
-        }),
-      );
     });
 
     expect(screen.queryByTestId('workspace-runtime-tab-1')).toBeNull();
@@ -903,7 +890,6 @@ describe('ConversationController entry state', () => {
 
     const remountedTabOne = screen.getByTestId('workspace-runtime-tab-1');
     expect(remountedTabOne.getAttribute('data-visible')).toBe('true');
-    expect(screen.getByTestId('workspace-prompt-mode').textContent).toBe('plan');
     expect(screen.queryByTestId('workspace-runtime-tab-2')).toBeNull();
     expect(screen.getByTestId('workspace-runtime-tab-6')).toBeTruthy();
   });
@@ -1349,7 +1335,7 @@ describe('ConversationController entry state', () => {
     );
   });
 
-  it('routes prompt mode and diagnostics to every Tab store for the owning conversation only', () => {
+  it('routes diagnostics to every Tab store for the owning conversation only', () => {
     vi.clearAllMocks();
     render(<ConversationController {...createProps()} />);
     const openTabs = [
@@ -1367,15 +1353,6 @@ describe('ConversationController entry state', () => {
       window.dispatchEvent(
         new MessageEvent('message', {
           data: {
-            type: 'promptModeChanged',
-            conversationId: 'conv-a',
-            mode: 'plan',
-          },
-        }),
-      );
-      window.dispatchEvent(
-        new MessageEvent('message', {
-          data: {
             type: 'sessionDiagnostic',
             code: 'conversation-durability-failed',
             severity: 'error',
@@ -1386,17 +1363,14 @@ describe('ConversationController entry state', () => {
       );
     });
 
-    expect(screen.getByTestId('workspace-prompt-mode').textContent).toContain('default');
     expect(screen.getByTestId('workspace-diagnostics').textContent).toBe('');
 
     fireEvent.click(screen.getByRole('button', { name: 'Switch Chat A1' }));
-    expect(screen.getByTestId('workspace-prompt-mode').textContent).toContain('plan');
     expect(screen.getByTestId('workspace-diagnostics').textContent).toContain(
       'Conversation A only.',
     );
 
     fireEvent.click(screen.getByRole('button', { name: 'Switch Chat A2' }));
-    expect(screen.getByTestId('workspace-prompt-mode').textContent).toContain('plan');
     expect(screen.getByTestId('workspace-diagnostics').textContent).toContain(
       'Conversation A only.',
     );
@@ -1873,7 +1847,6 @@ function createSettings(): SettingsState {
     temperature: 0.2,
     maxTokens: 8192,
     executionMode: 'ask',
-    promptMode: 'default',
     chatModelOptions: [
       {
         id: 'test-model',

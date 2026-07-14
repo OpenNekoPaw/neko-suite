@@ -2039,8 +2039,6 @@ function Harness({
       onSessionModeChange={onSessionModeChange}
       executionMode="ask"
       onExecutionModeChange={vi.fn()}
-      promptMode="default"
-      onPromptModeChange={vi.fn()}
       contextTokenCount={0}
       maxContextTokens={8192}
       isCompressing={false}

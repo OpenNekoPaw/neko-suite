@@ -275,38 +275,6 @@ describe('agent stream state reducer', () => {
     expect(state.contentBlocks[0]?.toolCall?.result).toEqual(state.collectedToolCalls[0]?.result);
   });
 
-  it('projects plan tool results into plan content blocks', () => {
-    const state = createAgentStreamProjectionState();
-
-    const update = applyAgentStreamEventToState(
-      state,
-      {
-        type: 'tool_result',
-        toolResult: {
-          toolCallId: 'tool-plan',
-          success: true,
-          data: {
-            planMode: { status: 'awaiting_approval' },
-            title: 'Refactor Auth',
-            plan: '## Step 1\nDo X',
-            filePath: '/tmp/plan.md',
-          },
-        },
-      },
-      { now: () => 123 },
-    );
-
-    expect(update.plan).toEqual(
-      expect.objectContaining({ id: 'plan-123', title: 'Refactor Auth' }),
-    );
-    expect(state.contentBlocks.at(-1)).toEqual({
-      id: 'block-plan-plan-123',
-      type: 'plan',
-      timestamp: 123,
-      plan: update.plan,
-    });
-  });
-
   it('marks errors and emits idle phase changes', () => {
     const state = createAgentStreamProjectionState();
     applyAgentStreamEventToState(state, { type: 'text', content: 'partial' });

@@ -32,7 +32,7 @@ describe('useTabRenderRuntimeRegistry', () => {
     });
   });
 
-  it('restores host state before publishing reconciled Tab runtimes', () => {
+  it('preserves user draft settings while discarding retired runtime-only fields', () => {
     const getState = vi.fn(() => ({
       schemaVersion: TAB_RENDER_REALM_STATE_VERSION,
       drafts: [
@@ -40,12 +40,15 @@ describe('useTabRenderRuntimeRegistry', () => {
           tabId: 'tab-a',
           conversationId: 'conv-a',
           inputValue: 'restored draft',
-          selectedModel: '',
-          mediaModelSelection: { image: 'none', video: 'none', audio: 'none' },
+          selectedModel: 'provider:model',
+          mediaModelSelection: { image: 'image:model', video: 'none', audio: 'none' },
           mediaUnderstandingSelection: { image: 'auto', video: 'auto', audio: 'auto' },
           sessionMode: 'agent',
           executionMode: 'ask',
           promptMode: 'default',
+          idcRun: { id: 'retired-run' },
+          stagePersona: 'creation-persona',
+          checkpoint: { stage: 'plan' },
           generationCategory: 'image',
           generationParams: {
             ratio: '16:9',
@@ -55,7 +58,7 @@ describe('useTabRenderRuntimeRegistry', () => {
             audioDuration: 'auto',
             audioType: 'sfx',
           },
-          llmConfig: {},
+          llmConfig: { reasoningPreset: 'deep' },
         },
       ],
     }));
@@ -68,9 +71,16 @@ describe('useTabRenderRuntimeRegistry', () => {
       useTabRenderRuntimeRegistry([tabA], 'tab-a', host),
     );
 
-    expect(result.current.require('tab-a').store.getSnapshot().state.inputValue).toBe(
-      'restored draft',
-    );
+    const state = result.current.require('tab-a').store.getSnapshot().state;
+    expect(state.inputValue).toBe('restored draft');
+    expect(state.selectedModel).toBe('provider:model');
+    expect(state.mediaModelSelection.image).toBe('image:model');
+    expect(state.executionMode).toBe('ask');
+    expect(state.llmConfig.reasoningPreset).toBe('deep');
+    expect(state).not.toHaveProperty('promptMode');
+    expect(state).not.toHaveProperty('idcRun');
+    expect(state).not.toHaveProperty('stagePersona');
+    expect(state).not.toHaveProperty('checkpoint');
     unmount();
   });
 });

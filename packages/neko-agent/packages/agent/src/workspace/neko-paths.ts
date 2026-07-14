@@ -5,10 +5,9 @@
  *
  * NekoPaths — managed `.neko/` runtime layout resolver.
  *
- * User-creation documents such as Draft / Plan / Task do not live under `.neko`;
- * they use visible project-owned creation paths resolved by creation-artifact-paths.ts.
+ * User-authored Markdown remains ordinary workspace content outside `.neko`.
  * This module only owns managed runtime state, logs, rebuildable indexes, and
- * preferences.
+ * preferences; it does not prescribe a hidden creation-document layout.
  *
  *   <root>/.neko/
  *     sessions/        AI-produced session-<runId>.md
@@ -43,7 +42,7 @@ export type NekoSubdir = keyof typeof NEKO_SUBDIRS;
 
 /**
  * Canonical log-file names. Each is append-only JSONL.
- *   events.jsonl — every DualFlowEvent that lands on the bus
+ *   events.jsonl — every Agent runtime event that lands on the bus
  *   audits.jsonl — ApprovalEngine decisions (who decided what, why)
  *   steps.jsonl  — per-ReAct-step records (tool / params / outcome)
  */

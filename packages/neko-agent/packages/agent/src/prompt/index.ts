@@ -26,22 +26,7 @@ export {
   hasAgentsFile,
 } from './system-prompt-builder';
 
-export {
-  buildConversationPromptModeChangedMessage,
-  createConversationPromptModeRuntime,
-  runSendConversationPromptModeRuntime,
-  runSetConversationPromptModeRuntime,
-  runToggleConversationPromptModeRuntime,
-} from './conversation-prompt-mode-runtime';
 export { runSystemPromptAgentsFileLoadRuntime } from './system-prompt-agents-file-runtime';
-
-export type {
-  ConversationPromptModeRuntime,
-  ConversationPromptModeRuntimeOptions,
-  ConversationPromptModeSnapshot,
-  ConversationPromptModeMessageRuntimeEffects,
-  ConversationPromptModeMessageRuntimeResult,
-} from './conversation-prompt-mode-runtime';
 export type {
   SystemPromptAgentsFileRuntimeDeps,
   SystemPromptAgentsFileRuntimeInput,
@@ -50,7 +35,7 @@ export type {
 export type {
   ISystemPromptBuilder,
   SystemPromptBuilderConfig,
-  PromptMode,
+  PromptExecutionMode,
   PromptLocale,
   AgentsSource,
   AgentsLoadResult,
@@ -115,7 +100,6 @@ export { CreativeVersionLogModule } from './modules/ephemeral/creative-version-l
 export { AgentsMdModule } from './modules/environment/agents-md-module';
 
 // Schema-layer modules (PR3c)
-export { ArtifactSchemaModule } from './modules/schema/artifact-schema-module';
 
 // Sub-package prompt fragments module (PR3e)
 export { SubpackageFragmentsModule } from './modules/environment/subpackage-fragments-module';

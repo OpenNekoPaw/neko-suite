@@ -127,7 +127,6 @@ export class JournalReader {
           case 'compaction':
           case 'compaction_failed':
           case 'memory_extraction':
-          case 'validation.stage_transition_requested':
           case 'agent.observation.created':
           case 'agent.evidence.attached':
           case 'agent.rationale.created':

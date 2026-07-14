@@ -13,7 +13,6 @@
  * - This type is the contract surface between session state and the prompt layer —
  *   do not add runtime methods, only data + pure lazy fetchers.
  */
-import type { IdcStage } from '@neko-agent/types';
 import type { ToolName } from '@neko/shared';
 
 /**
@@ -29,14 +28,12 @@ export interface ArtifactIssue {
  * Frozen read-only context used by every PromptModule.
  *
  * Fields are grouped into three kinds:
- * - Identity: stable per-session values (runId, stage, locale, projectPath)
+ * - Identity: stable per-session values (locale, projectPath)
  * - Activation: current skill/tool state (may change as user switches focus)
  * - Lazy accessors: optional async fetchers for expensive per-turn data
  */
 export interface PromptContext {
   // --- Identity ---
-  readonly runId: string | null;
-  readonly stage: IdcStage | null;
   readonly locale: 'en' | 'zh';
   readonly projectPath: string;
   readonly mediaLibrary?: string;
@@ -61,7 +58,7 @@ export function freezePromptContext(input: PromptContext): PromptContext {
 /**
  * A factory that produces a frozen PromptContext snapshot on demand.
  * Called at every orchestrator render point so that modules always see the
- * latest session state (active skill, stage, run id, etc.).
+ * latest session state (active skill, tools, locale, etc.).
  */
 export type PromptContextProvider = () => PromptContext;
 
@@ -72,8 +69,6 @@ export type PromptContextProvider = () => PromptContext;
  * mutable ref that gets filled in later.
  */
 export interface PromptContextSources {
-  getRunId: () => string | null;
-  getStage: () => IdcStage | null;
   getActiveSkillName: () => string | null;
   getActiveTools: () => readonly ToolName[];
   getLocale: () => 'en' | 'zh';
@@ -92,8 +87,6 @@ export interface PromptContextSources {
 export function createPromptContextProvider(sources: PromptContextSources): PromptContextProvider {
   return () => {
     const base: PromptContext = {
-      runId: sources.getRunId(),
-      stage: sources.getStage(),
       locale: sources.getLocale(),
       projectPath: sources.getProjectPath(),
       activeSkillName: sources.getActiveSkillName(),
