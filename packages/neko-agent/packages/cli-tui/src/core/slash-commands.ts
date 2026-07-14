@@ -18,7 +18,7 @@ import {
   parseSlashCommand as parseCommand,
   resolveSlashCommandCatalogEntry,
   getCliCommands,
-  type FileConversationStorage,
+  type ConversationResumeStorage,
   type ConversationRecord,
 } from '@neko/agent';
 import { parseAgentInputTrigger } from '@neko-agent/types';
@@ -81,7 +81,7 @@ export interface SlashCommandContext {
   /** Callback to update config */
   onConfigUpdate?: (updates: Partial<CLIConfig>) => void;
   /** Conversation storage for /resume */
-  conversationStorage?: FileConversationStorage;
+  conversationStorage?: ConversationResumeStorage;
   /** Current conversation ID */
   currentConversationId?: string;
   /** Load history into current session */

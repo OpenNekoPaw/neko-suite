@@ -7,21 +7,23 @@
  */
 
 import * as path from 'path';
-import * as os from 'os';
 import {
   createPlatform,
   FileUserConfigManager,
+  GeneratedAssetIndex,
   toSharedService,
   type Platform,
 } from '@neko/platform';
 import type { PerceptionAssetLoader } from '@neko/ai-sdk';
-import {
-  TaskManager,
-  createFileTaskStorage,
-  createFileWorkspaceVisibleAgentTaskStorage,
-  type IRuntimeTaskManager,
-} from '@neko/agent';
-import type { IProviderCardRegistry, IService, IToolRegistry } from '@neko/shared';
+import { TaskManager, type IRuntimeTaskManager } from '@neko/agent';
+import type {
+  IProviderCardRegistry,
+  IService,
+  ITaskRecoveryStorage,
+  ITaskStorage,
+  IToolRegistry,
+  ResourceCacheManifestStore,
+} from '@neko/shared';
 import { getEnvKeyMap } from '@neko/shared';
 import { createNodeContentAccessRuntime } from '../host/node-content-access-runtime';
 import { createNodePerceptionAssetLoader } from '../host/node-perception-asset-loader';
@@ -33,8 +35,10 @@ const ENV_KEY_MAP = getEnvKeyMap();
 export interface CLIPlatformOptions {
   workspacePath?: string;
   toolRegistry: IToolRegistry;
-  taskManager?: IRuntimeTaskManager;
+  taskManager: IRuntimeTaskManager;
   providerCardRegistry?: Pick<IProviderCardRegistry, 'get'>;
+  generatedAssetIndex?: GeneratedAssetIndex;
+  resourceCacheManifestStore?: ResourceCacheManifestStore;
 }
 
 export interface CLIPlatformResult {
@@ -47,23 +51,20 @@ export interface CLIPlatformResult {
 export interface CLISharedServiceOptions {
   workspacePath?: string;
   providerCardRegistry?: Pick<IProviderCardRegistry, 'get'>;
+  generatedAssetIndex?: GeneratedAssetIndex;
+  resourceCacheManifestStore?: ResourceCacheManifestStore;
 }
 
 export interface CLITaskManagerOptions {
-  readonly workspacePath?: string;
-  readonly storageScope?: 'workspace-visible' | 'host-private';
+  readonly taskStorage: ITaskStorage;
+  readonly taskRecoveryStorage: ITaskRecoveryStorage;
 }
 
-export function createCLITaskManager(options: CLITaskManagerOptions = {}): IRuntimeTaskManager {
-  const workspacePath = options.workspacePath?.trim();
-  const taskStorage =
-    workspacePath && options.storageScope !== 'host-private'
-      ? createFileWorkspaceVisibleAgentTaskStorage({
-          workspaceRoot: workspacePath,
-          writerId: 'tui-workspace-task-storage',
-        })
-      : createFileTaskStorage(path.join(os.homedir(), '.neko', 'tasks.json'));
-  return new TaskManager({ storage: taskStorage });
+export function createCLITaskManager(options: CLITaskManagerOptions): IRuntimeTaskManager {
+  return new TaskManager({
+    storage: options.taskStorage,
+    recoveryStorage: options.taskRecoveryStorage,
+  });
 }
 
 /**
@@ -95,11 +96,7 @@ function collectEnvApiKeys(): Record<string, string> {
 export function createCLIPlatform(options: CLIPlatformOptions): CLIPlatformResult {
   const userConfigManager = new FileUserConfigManager();
 
-  const taskManager =
-    options.taskManager ??
-    createCLITaskManager({
-      workspacePath: options.workspacePath,
-    });
+  const taskManager = options.taskManager;
 
   const platform = createPlatform({
     userConfigManager,
@@ -133,6 +130,8 @@ export function createCLIPlatform(options: CLIPlatformOptions): CLIPlatformResul
   const service = createCLISharedService(platform, {
     workspacePath: options.workspacePath,
     providerCardRegistry: options.providerCardRegistry,
+    generatedAssetIndex: options.generatedAssetIndex,
+    resourceCacheManifestStore: options.resourceCacheManifestStore,
   });
   return {
     platform,
@@ -148,8 +147,15 @@ export function createCLISharedService(
 ): { readonly service: IService; readonly assetLoader: PerceptionAssetLoader } {
   const workspacePath = path.resolve(options.workspacePath ?? process.cwd());
   const host = createNodeWorkspaceContentHostAdapter({ workDir: workspacePath });
-  const contentAccessRuntime = createNodeContentAccessRuntime({ host });
-  const assetLoader = createNodePerceptionAssetLoader(contentAccessRuntime);
+  const contentAccessRuntime = createNodeContentAccessRuntime({
+    host,
+    ...(options.resourceCacheManifestStore
+      ? { resourceCacheManifestStore: options.resourceCacheManifestStore }
+      : {}),
+  });
+  const assetLoader = createNodePerceptionAssetLoader(contentAccessRuntime, {
+    assetIndex: options.generatedAssetIndex,
+  });
   const service = toSharedService(platform.createService(), {
     ...(options.providerCardRegistry ? { providerCardRegistry: options.providerCardRegistry } : {}),
     assetLoader,

@@ -6,3 +6,4 @@
  */
 
 export { ChatViewProvider } from './chatProvider';
+export type { ChatViewProviderOptions } from './chatProvider';

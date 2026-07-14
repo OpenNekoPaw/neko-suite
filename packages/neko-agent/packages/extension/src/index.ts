@@ -6,6 +6,7 @@
  */
 
 import * as vscode from 'vscode';
+import * as nodeOs from 'node:os';
 import {
   ServiceCollection,
   setGlobalServices,
@@ -21,18 +22,28 @@ import {
   watchLogLevel,
 } from '@neko/shared/vscode/extension';
 import {
+  formatLocalMetadataUserDiagnostic,
   LogLevel,
+  projectLocalMetadataUserDiagnostic,
   withTimeout,
   type ISkillProvider,
   type ProjectQualityFacade,
   type QualityProjectRef,
 } from '@neko/shared';
+import {
+  createNodeGlobalResourceCacheMetadataBinding,
+  type NodeGlobalResourceCacheMetadataBinding,
+} from '@neko/shared/local-metadata/node';
 import { builtinSkillLocales, getBuiltinSkills, registerBuiltinToolGroups } from '@neko/skills';
 import { bootstrapCoreServices, logServicesStatus } from './bootstrap';
 import { ITaskManager } from './bootstrap';
 import { setPlatformRootLogger } from '@neko/platform';
 import { setRootLogger as setAgentRootLogger } from '@neko/agent';
 import { ChatViewProvider } from './chat';
+import {
+  createExtensionConversationResume,
+  type ExtensionConversationResumeBinding,
+} from './chat/extensionConversationResume';
 import { registerExtensionTools, buildEmbedFn } from './bootstrap/toolBootstrap';
 import { registerAgentCoreCommands } from './commands/agentCoreCommands';
 import { registerSkillCatalogActionCommands } from './commands/skillCatalogActions';
@@ -71,6 +82,7 @@ import { ExternalProcessorRegistryService } from './services/externalProcessorRe
 import { runResourceCacheStartupGc } from './services/resourceCacheStartupGcService';
 import { getEngineClientProvider } from './services/engineClientProvider';
 import { createExtensionAgentContentAccessRuntime } from './services/agentContentAccessRuntime';
+import { createWorkspaceGeneratedAssetIndex } from './services/generatedAssetOpenResolver';
 import {
   createHostContentMediaPathContext,
   createHostContentPathResolver,
@@ -90,6 +102,7 @@ const LOG_LEVEL_NAMES: Record<LogLevel, string> = {
 };
 
 const SHOW_LOGS_COMMAND = 'neko.agent.showLogs';
+const LOCAL_METADATA_REVISION_POLL_MS = 2_000;
 
 /**
  * Activate the extension
@@ -163,19 +176,69 @@ export async function activate(context: vscode.ExtensionContext): Promise<ISkill
   setGlobalServices(services);
   context.subscriptions.push(services);
 
+  const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+  let conversationResume: ExtensionConversationResumeBinding | undefined;
+  let globalResourceCache: NodeGlobalResourceCacheMetadataBinding | undefined;
+  if (workspaceRoot) {
+    try {
+      conversationResume = await createExtensionConversationResume({
+        homedir: nodeOs.homedir(),
+        workDir: workspaceRoot,
+      });
+    } catch (error) {
+      const diagnostic = projectLocalMetadataUserDiagnostic(error);
+      if (!diagnostic) throw error;
+      const message = formatLocalMetadataUserDiagnostic(diagnostic);
+      await vscode.window.showErrorMessage(message);
+      throw new Error(message, { cause: error });
+    }
+  } else {
+    globalResourceCache = await createNodeGlobalResourceCacheMetadataBinding({
+      homedir: nodeOs.homedir(),
+    });
+  }
+
   // Bootstrap core services (Platform, MCP, Tools, etc.)
-  const bootstrapResult = await bootstrapCoreServices(services, context);
+  let bootstrapResult: Awaited<ReturnType<typeof bootstrapCoreServices>>;
+  try {
+    bootstrapResult = await bootstrapCoreServices(
+      services,
+      context,
+      conversationResume
+        ? {
+            taskStorage: conversationResume.taskStorage,
+            taskRecoveryStorage: conversationResume.taskRecoveryStorage,
+          }
+        : undefined,
+    );
+  } catch (error) {
+    await conversationResume?.disposeHost();
+    throw error;
+  }
   logServicesStatus(bootstrapResult);
-  void runResourceCacheStartupGc({ context }).catch((error) => {
-    logger.warn('Failed to run resource cache startup GC', { error });
-  });
+  void runResourceCacheStartupGc({
+    context,
+    ...(conversationResume
+      ? {
+          manifestStores: {
+            workspace: conversationResume.workspaceResourceCacheManifestStore,
+            global: conversationResume.globalResourceCacheManifestStore,
+          },
+        }
+      : globalResourceCache
+        ? { manifestStores: { global: globalResourceCache.manifestStore } }
+        : {}),
+  })
+    .catch((error) => {
+      logger.warn('Failed to run resource cache startup GC', { error });
+    })
+    .finally(() => globalResourceCache?.dispose());
 
   // Initialize capability discovery (P0-1: sub-packages register their own tools)
   // Platform services are injected into context so providers can use media/config/embed
   // without depending on @neko/platform directly.
   const capabilityRegistries = createAgentCapabilityRuntimeRegistries();
   registerBuiltinToolGroups(capabilityRegistries.toolGroupRegistry);
-  const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
   const engineClientProvider = getEngineClientProvider();
   await engineClientProvider.setAuthorizedReadRoots?.(
     await getHostContentAuthorizedReadRoots({
@@ -188,6 +251,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<ISkill
     context,
     engineClientProvider,
     workspaceRoot,
+    ...(conversationResume
+      ? { resourceCacheManifestStore: conversationResume.workspaceResourceCacheManifestStore }
+      : {}),
     mediaPathContext: await createHostContentMediaPathContext({
       workspaceRoot,
       workspaceFolders: vscode.workspace.workspaceFolders ?? [],
@@ -271,8 +337,44 @@ export async function activate(context: vscode.ExtensionContext): Promise<ISkill
       ? new StreamLifecycleAcceptanceController()
       : undefined;
 
+  const generatedAssetIndex =
+    conversationResume && workspaceRoot
+      ? await createWorkspaceGeneratedAssetIndex({
+          manifestStore: conversationResume.workspaceResourceCacheManifestStore,
+          workspaceRoot,
+          homedir: nodeOs.homedir(),
+          logger,
+        })
+      : undefined;
+
   // Create chat view provider
-  const chatViewProvider = new ChatViewProvider(context.extensionUri, context);
+  const chatViewProvider = new ChatViewProvider(context.extensionUri, context, {
+    ...(conversationResume ? { conversationResume } : {}),
+    ...(generatedAssetIndex ? { generatedAssetIndex } : {}),
+  });
+  const conversationResumeDiagnostics = chatViewProvider.getConversationResumeDiagnostics();
+  if (conversationResumeDiagnostics.length > 0) {
+    logger.warn('Some persisted conversations could not be restored', {
+      diagnostics: conversationResumeDiagnostics,
+    });
+    void vscode.window.showWarningMessage(
+      `${conversationResumeDiagnostics.length} persisted conversation(s) could not be restored. Their Journal data was preserved; review the Neko Agent logs for details.`,
+    );
+  }
+  if (conversationResume) {
+    const refreshSharedMetadata = (): void => {
+      void chatViewProvider.refreshSharedMetadata().catch((error) => {
+        logger.warn('Failed to refresh shared Agent metadata', { error });
+      });
+    };
+    const revisionTimer = setInterval(refreshSharedMetadata, LOCAL_METADATA_REVISION_POLL_MS);
+    context.subscriptions.push(
+      { dispose: () => clearInterval(revisionTimer) },
+      vscode.window.onDidChangeWindowState((state) => {
+        if (state.focused) refreshSharedMetadata();
+      }),
+    );
+  }
 
   if (streamLifecycleAcceptance) {
     await registerStreamLifecycleAcceptanceCommands({
@@ -305,10 +407,57 @@ export async function activate(context: vscode.ExtensionContext): Promise<ISkill
     logger: projectSearchLogger,
     adapters: createAgentProjectSearchAdapters({
       logger: projectSearchLogger,
+      ...(generatedAssetIndex ? { queryGeneratedAssets: () => generatedAssetIndex.list() } : {}),
+      ...(conversationResume
+        ? {
+            searchProjection: {
+              repository: conversationResume.searchDocuments,
+              partition: conversationResume.searchPartition,
+              hasProjection: async () => {
+                if (!(await conversationResume.readSearchRevision())) return false;
+                return (
+                  await conversationResume.searchDocuments.list(conversationResume.searchPartition)
+                ).some((document) => document.partition === 'media-library');
+              },
+              resolveFileKey: async (fileKey: string) => {
+                try {
+                  const resolved = await vscode.commands.executeCommand<unknown>(
+                    'neko.assets.resolvePath',
+                    fileKey,
+                    {
+                      owningWorkspaceRoot: workspaceRoot,
+                      workspaceRoots: workspaceRoot ? [workspaceRoot] : [],
+                    },
+                  );
+                  return typeof resolved === 'string' ? resolved : fileKey;
+                } catch (error) {
+                  projectSearchLogger.warn('Media search file key resolution failed', {
+                    fileKey,
+                    error,
+                  });
+                  return fileKey;
+                }
+              },
+            },
+            entityAssetProjection: {
+              repository: conversationResume.entityAssetProjections,
+              partition: conversationResume.entityAssetPartition,
+              readRevision: () => conversationResume.readEntityAssetRevision(),
+            },
+          }
+        : {}),
     }),
     semanticCoverageProviders: [
       createVSCodeSemanticCoverageProvider({
         logger: projectSearchLogger,
+        ...(conversationResume
+          ? {
+              semanticProjection: {
+                repository: conversationResume.semanticProjections,
+                partition: conversationResume.semanticPartition,
+              },
+            }
+          : {}),
       }),
     ],
   });

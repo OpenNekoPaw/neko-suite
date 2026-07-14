@@ -21,6 +21,7 @@ import {
   type TuiTestRuntime,
 } from '../../__tests__/render-with-presentation';
 import { TuiApplicationRuntimeProvider } from '../../runtime/tui-runtime-context';
+import { createMemoryConversationStorageBinding } from '../../host/__tests__/fixtures/memory-conversation-storage';
 
 let tempRoot: string;
 let runtime: TuiTestRuntime;
@@ -90,6 +91,7 @@ function ReferenceContributorProbe(props: {
     promptLocale: 'en',
     service: createNoopService(),
     capabilityProviders: props.capabilityProviders,
+    createConversationStorage: createMemoryConversationStorageBinding,
   });
 
   useEffect(() => {

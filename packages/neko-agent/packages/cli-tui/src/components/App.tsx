@@ -140,6 +140,7 @@ function AppContent({
     compactContext,
     getMessageQueueSnapshot,
     listTasks,
+    refreshSharedMetadataAtBoundary,
     promoteQueuedMessage,
     cancelQueuedMessage,
     discardQueuedContinuation,
@@ -157,6 +158,7 @@ function AppContent({
     getCapabilityDiagnostics,
     listCapabilityTools,
     getReferenceContributors,
+    querySearchDocuments,
     getConversationStorage,
     getCurrentConversationId,
     resumeConversation,
@@ -190,6 +192,7 @@ function AppContent({
         presentation: terminal.presentation,
         query,
         referenceContributors: getReferenceContributors(),
+        searchDocuments: querySearchDocuments,
       }).then(
         (suggestions) => {
           if (!cancelled && referenceRequestIdRef.current === requestId) {
@@ -208,7 +211,13 @@ function AppContent({
         cancelled = true;
       };
     },
-    [config.workDir, getReferenceContributors, slashCommands, terminal.presentation],
+    [
+      config.workDir,
+      getReferenceContributors,
+      querySearchDocuments,
+      slashCommands,
+      terminal.presentation,
+    ],
   );
 
   useEffect(() => refreshReferenceSuggestions(), [refreshReferenceSuggestions]);
@@ -225,6 +234,7 @@ function AppContent({
     compactContext,
     getMessageQueueSnapshot,
     listTasks,
+    refreshSharedMetadataAtBoundary,
     promoteQueuedMessage,
     cancelQueuedMessage,
     discardQueuedContinuation,

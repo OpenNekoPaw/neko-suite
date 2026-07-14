@@ -21,7 +21,6 @@ import {
   type TaskRuntimeEffects,
   type TaskRuntimeMessage,
 } from '@neko/agent';
-import type { Platform } from '@neko/platform';
 import type { ITaskManager as TaskManager, TaskRunScope } from '@neko/shared';
 import { getLogger } from '../../base';
 import type { AgentDashboardWorkItemSource } from '../../services/dashboardWorkItemSource';
@@ -37,7 +36,6 @@ const logger = getLogger('TaskHandler');
  * Dependencies for TaskHandler
  */
 export interface TaskHandlerDeps {
-  platform?: Platform;
   taskManager?: TaskManager;
   dashboardWorkItems?: AgentDashboardWorkItemSource;
   localResourceAccess?: AgentLocalResourceAccess;

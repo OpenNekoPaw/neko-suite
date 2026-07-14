@@ -12,22 +12,20 @@ import * as nodePath from 'node:path';
 import { Platform, createPlatform, FileUserConfigManager } from '@neko/platform';
 import {
   MCPManager,
+  MemoryTaskRecoveryStorage,
+  MemoryTaskStorage,
   TaskManager,
   ToolRegistry,
   DEFAULT_TASK_CLEANUP_INTERVAL_MS,
   DEFAULT_TASK_RETENTION_PERIOD_MS,
-  DEFAULT_TASK_STORAGE_KEY,
   connectMCPServersRuntime,
-  createFileWorkspaceVisibleAgentTaskStorage,
-  createStateTaskRecoveryStorage,
-  createStateTaskStorage,
   JournalProjection,
   type IRuntimeTaskManager,
   type AgentEventType,
   type TaskResultObservationJournalEntry,
 } from '@neko/agent';
 import { createNekoPaths } from '@neko/agent/workspace';
-import type { SerializableTask, TaskRecoveryInfo } from '@neko/shared';
+import type { ITaskRecoveryStorage, ITaskStorage } from '@neko/shared';
 import { ServiceCollection, createServiceId, getLogger } from '../base';
 
 const logger = getLogger('ServiceBootstrap');
@@ -53,24 +51,11 @@ export const ITaskResultObservationCoordinator = createServiceId<TaskResultObser
   'taskResultObservationCoordinator',
 );
 
-const DEFAULT_TASK_RECOVERY_STORAGE_KEY = 'neko.agent.taskRecovery';
 const TASK_RESULT_OBSERVATION_JOURNAL_EVENT_TYPES = [
   'agent.observation.created',
   'agent.evidence.attached',
   'agent.task_result.followup_requested',
 ] as const satisfies readonly AgentEventType[];
-let mementoArrayWriterOrdinal = 0;
-
-interface MementoArrayWriteMetadata {
-  readonly ownerId: string;
-  readonly revision: number;
-  readonly updatedAt: number;
-}
-
-type ExtensionAgentTaskStorage =
-  | ReturnType<typeof createStateTaskStorage>
-  | ReturnType<typeof createFileWorkspaceVisibleAgentTaskStorage>;
-
 // Re-export IEditorRegistry
 export { IEditorRegistry };
 
@@ -89,6 +74,11 @@ export interface IServiceBootstrapResult {
   editorRegistry: EditorRegistry;
 }
 
+export interface ExtensionAgentTaskPersistence {
+  readonly taskStorage: ITaskStorage;
+  readonly taskRecoveryStorage: ITaskRecoveryStorage;
+}
+
 // =============================================================================
 // Service Bootstrap
 // =============================================================================
@@ -99,17 +89,18 @@ export interface IServiceBootstrapResult {
 export async function bootstrapCoreServices(
   services: ServiceCollection,
   context: vscode.ExtensionContext,
+  taskPersistence?: ExtensionAgentTaskPersistence,
 ): Promise<IServiceBootstrapResult> {
   const workspacePath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+  if (workspacePath && !taskPersistence) {
+    throw new Error('Workspace Agent bootstrap requires shared SQLite Task persistence.');
+  }
 
   // ==========================================================================
   // 1. Task Manager with Persistence
   // ==========================================================================
-  const taskStorage = createExtensionAgentTaskStorage({
-    context,
-    ...(workspacePath ? { workspacePath } : {}),
-  });
-  const recoveryStorage = createExtensionAgentTaskRecoveryStorage(context);
+  const taskStorage = taskPersistence?.taskStorage ?? new MemoryTaskStorage();
+  const recoveryStorage = taskPersistence?.taskRecoveryStorage ?? new MemoryTaskRecoveryStorage();
   const taskManager = new TaskManager({
     storage: taskStorage,
     recoveryStorage,
@@ -185,7 +176,7 @@ export async function bootstrapCoreServices(
       list: () => taskManager.list(),
     },
     taskCancellation: {
-      cancel: (taskId) => taskManager.cancel(taskId),
+      cancel: (scope) => taskManager.cancel(scope),
     },
   });
   services.set(ITaskLifecycleCoordinator, taskLifecycleCoordinator);
@@ -216,102 +207,6 @@ export async function bootstrapCoreServices(
     taskResultObservationCoordinator,
     editorRegistry,
   };
-}
-
-function createMementoArrayAdapter<T>(
-  context: vscode.ExtensionContext,
-  ownerPrefix: string,
-): {
-  load(key: string): readonly T[];
-  save(key: string, values: readonly T[]): Thenable<void>;
-} {
-  mementoArrayWriterOrdinal += 1;
-  const ownerId = `${ownerPrefix}-${Date.now().toString(36)}-${mementoArrayWriterOrdinal}`;
-  let loadedRevision = 0;
-
-  return {
-    load: (key) => {
-      loadedRevision = readMementoArrayWriteMetadata(context, key)?.revision ?? 0;
-      return context.globalState.get<T[]>(key, []);
-    },
-    save: async (key, values) => {
-      const currentMetadata = readMementoArrayWriteMetadata(context, key);
-      if (
-        currentMetadata &&
-        currentMetadata.revision !== loadedRevision &&
-        currentMetadata.ownerId !== ownerId
-      ) {
-        logger.warn('neko.agent.state_storage.stale_write_possible', {
-          storageKey: key,
-          ownerId,
-          loadedRevision,
-          currentOwnerId: currentMetadata.ownerId,
-          currentRevision: currentMetadata.revision,
-        });
-        loadedRevision = currentMetadata.revision;
-      }
-      const nextMetadata: MementoArrayWriteMetadata = {
-        ownerId,
-        revision: loadedRevision + 1,
-        updatedAt: Date.now(),
-      };
-      await context.globalState.update(key, [...values]);
-      await context.globalState.update(mementoArrayWriteMetadataKey(key), nextMetadata);
-      loadedRevision = nextMetadata.revision;
-    },
-  };
-}
-
-export function createExtensionAgentTaskStorage(input: {
-  readonly context: vscode.ExtensionContext;
-  readonly workspacePath?: string;
-}): ExtensionAgentTaskStorage {
-  if (input.workspacePath) {
-    return createFileWorkspaceVisibleAgentTaskStorage({
-      workspaceRoot: input.workspacePath,
-      writerId: 'extension-workspace-task-storage',
-    });
-  }
-
-  return createStateTaskStorage({
-    storageKey: DEFAULT_TASK_STORAGE_KEY,
-    adapter: createMementoArrayAdapter<SerializableTask>(input.context, 'task-storage'),
-  });
-}
-
-export function createExtensionAgentTaskRecoveryStorage(
-  context: vscode.ExtensionContext,
-): ReturnType<typeof createStateTaskRecoveryStorage> {
-  return createStateTaskRecoveryStorage({
-    storageKey: DEFAULT_TASK_RECOVERY_STORAGE_KEY,
-    adapter: createMementoArrayAdapter<TaskRecoveryInfo>(context, 'task-recovery'),
-  });
-}
-
-function readMementoArrayWriteMetadata(
-  context: vscode.ExtensionContext,
-  key: string,
-): MementoArrayWriteMetadata | null {
-  const value = context.globalState.get<unknown>(mementoArrayWriteMetadataKey(key));
-  if (
-    typeof value !== 'object' ||
-    value === null ||
-    Array.isArray(value) ||
-    typeof (value as { ownerId?: unknown }).ownerId !== 'string' ||
-    (value as { ownerId: string }).ownerId.trim().length === 0 ||
-    typeof (value as { revision?: unknown }).revision !== 'number' ||
-    !Number.isInteger((value as { revision: number }).revision) ||
-    (value as { revision: number }).revision < 0 ||
-    typeof (value as { updatedAt?: unknown }).updatedAt !== 'number' ||
-    !Number.isFinite((value as { updatedAt: number }).updatedAt)
-  ) {
-    return null;
-  }
-  return value as MementoArrayWriteMetadata;
-}
-
-function mementoArrayWriteMetadataKey(key: string): string {
-  return `${key}.writeMetadata`;
 }
 
 function createTaskResultObservationJournalPort(): {

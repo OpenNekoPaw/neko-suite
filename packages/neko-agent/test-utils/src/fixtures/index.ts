@@ -194,7 +194,6 @@ export const CONFIG_FIXTURES = {
 export {
   createAgentWorkspaceRuntimeFixture,
   createAgentWorkspaceRuntimeFixturePaths,
-  createAgentWorkspaceRuntimeTaskRecord,
   createDefaultAgentWorkspaceRuntimeUserConfig,
   createDefaultAgentWorkspaceRuntimeWorkspaceConfig,
   writeAgentWorkspaceRuntimeFixture,

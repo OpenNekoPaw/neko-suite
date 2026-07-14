@@ -12,7 +12,7 @@
 import React from 'react';
 import { render } from 'ink';
 import { Command } from 'commander';
-import { createFileConversationStorage } from '@neko/agent';
+import * as nodeOs from 'node:os';
 import {
   CliConfigLoadError,
   loadConfig,
@@ -37,6 +37,12 @@ import { App } from './components/App';
 import { detectCapabilities } from './utils/terminal';
 import { TuiDebugAutomationSessionManager } from './core/debug-automation/session-manager';
 import { runTuiDebugAutomationJsonLineServer } from './core/debug-automation/stdio';
+import { createTuiSqliteConversationStorage } from './host/tui-sqlite-conversation-storage';
+import {
+  formatLocalMetadataUserDiagnostic,
+  projectLocalMetadataUserDiagnostic,
+} from '@neko/shared';
+import { disposeMarketCommandStorage } from './commands/market';
 import chalk from 'chalk';
 import { presentConfigCommand } from './presentation/config-history-presentation';
 import { presentTuiConversationIdDiagnostic } from './presentation/conversation-presentation';
@@ -541,7 +547,11 @@ async function renderTuiSession(input: {
       terminal={terminal}
     />,
   );
-  await waitUntilExit();
+  try {
+    await waitUntilExit();
+  } finally {
+    await disposeMarketCommandStorage();
+  }
 }
 
 async function handleResumeCommand(
@@ -768,9 +778,19 @@ async function resolveLatestResumeId(
   workDir: string,
   terminal: AgentTerminalInvocationContext,
 ): Promise<string> {
-  const storage = createFileConversationStorage(workDir);
+  let binding: Awaited<ReturnType<typeof createTuiSqliteConversationStorage>>;
   try {
-    const conversations = await storage.list();
+    binding = await createTuiSqliteConversationStorage({
+      homedir: nodeOs.homedir(),
+      workDir,
+    });
+  } catch (error) {
+    const diagnostic = projectLocalMetadataUserDiagnostic(error);
+    if (!diagnostic) throw error;
+    throw new Error(formatLocalMetadataUserDiagnostic(diagnostic), { cause: error });
+  }
+  try {
+    const conversations = await binding.storage.list();
     const latest = conversations.find((conversation) =>
       isCanonicalTuiConversationId(conversation.id),
     );
@@ -781,7 +801,7 @@ async function resolveLatestResumeId(
     }
     return latest.id;
   } finally {
-    await storage.dispose();
+    await binding.dispose();
   }
 }
 

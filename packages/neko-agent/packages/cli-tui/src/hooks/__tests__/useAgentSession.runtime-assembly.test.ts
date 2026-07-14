@@ -9,13 +9,25 @@ import type { AgentEvent } from '@neko/agent';
 import type { StageGuardianIssue } from '@neko/agent/skill';
 import { createAgentRuntimeSessionMessageQueuePort } from '@neko/agent/runtime';
 import type { AgentConversationMessageQueue } from '@neko/agent/runtime';
-import type { AgentCapabilityProvider, IService } from '@neko/shared';
+import { type AgentCapabilityProvider, type IService, type TaskRunScope } from '@neko/shared';
 import type { MediaTask } from '@neko/platform';
 import { DEFAULT_CLI_CONFIG, type CLIConfig } from '../../core/types';
-import { useAgentStore } from '../../stores/agent-store';
-import { useConversationStore } from '../../stores/conversation-store';
-import { useAgentSession, type AgentSessionHandle } from '../useAgentSession';
+import {
+  useAgentSession,
+  type AgentSessionHandle,
+  type UseAgentSessionOptions,
+} from '../useAgentSession';
 import { createTestAgentTerminalPresentation } from '../../presentation/testing';
+import { createTuiConversationId } from '../../core/tui-conversation-id';
+import {
+  createTuiTestRuntime,
+  type TuiTestRuntime,
+} from '../../__tests__/render-with-presentation';
+import {
+  TuiApplicationRuntimeProvider,
+  useTuiConversationStores,
+} from '../../runtime/tui-runtime-context';
+import { createMemoryConversationStorageBinding } from '../../host/__tests__/fixtures/memory-conversation-storage';
 
 const runtimeMocks = vi.hoisted(() => ({
   latestFactoryConfig: undefined as Record<string, unknown> | undefined,
@@ -44,7 +56,11 @@ const platformMocks = vi.hoisted(() => ({
   saveOutputs: vi.fn(),
   onProgress: vi.fn(),
   createCLIPlatform: vi.fn(),
+  perceptionPipeline: { perceive: vi.fn() },
+  createNodePerceptionPipeline: vi.fn(),
 }));
+
+const mountedRuntimes: TuiTestRuntime[] = [];
 
 vi.mock('@neko/agent/runtime', async () => {
   const actual = await vi.importActual<typeof import('@neko/agent/runtime')>('@neko/agent/runtime');
@@ -76,6 +92,10 @@ vi.mock('../../core/platform-bootstrap', async () => {
     createCLIPlatform: platformMocks.createCLIPlatform,
   };
 });
+
+vi.mock('../../host/node-perception-pipeline', () => ({
+  createNodePerceptionPipeline: platformMocks.createNodePerceptionPipeline,
+}));
 
 let tempRoot: string;
 
@@ -162,27 +182,32 @@ beforeEach(async () => {
       platform: createMockPlatform(),
       service: createNoopService(),
       taskManager: options.taskManager,
+      perceptionAssetLoader: { load: vi.fn() },
     }),
   );
+  platformMocks.createNodePerceptionPipeline.mockReturnValue(platformMocks.perceptionPipeline);
   tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'neko-tui-runtime-assembly-'));
 });
 
 afterEach(async () => {
   cleanup();
-  useAgentStore.getState().reset();
-  useConversationStore.getState().clearMessages();
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  for (const runtime of mountedRuntimes.splice(0)) {
+    runtime.application.dispose();
+  }
   await fs.rm(tempRoot, { recursive: true, force: true });
   runtimeMocks.createAgentRuntimeSession.mockReset();
   runtimeMocks.recordTaskResultObservation.mockReset();
   runtimeMocks.patchToolResult.mockReset();
   platformMocks.createCLIPlatform.mockReset();
+  platformMocks.createNodePerceptionPipeline.mockReset();
 });
 
 describe('useAgentSession runtime assembly', () => {
   it('routes TUI context, memory, read roots, and capability fragments through the shared factory', async () => {
     const readyStates: boolean[] = [];
 
-    render(
+    renderWithSessionRuntime(
       React.createElement(RuntimeAssemblyProbe, {
         config: {
           ...DEFAULT_CLI_CONFIG,
@@ -213,10 +238,45 @@ describe('useAgentSession runtime assembly', () => {
     );
   });
 
+  it('installs the configured media perception pipeline into standalone TUI sessions', async () => {
+    const readyStates: boolean[] = [];
+
+    renderWithSessionRuntime(
+      React.createElement(RuntimeAssemblyProbe, {
+        config: {
+          ...DEFAULT_CLI_CONFIG,
+          workDir: tempRoot,
+          providerRequiresApiKey: false,
+        },
+        useStandalonePlatform: true,
+        capabilityProviders: [],
+        onReady: (ready: boolean) => {
+          readyStates.push(ready);
+        },
+      }),
+    );
+
+    await waitFor(() => readyStates.includes(true));
+
+    expect(platformMocks.createNodePerceptionPipeline).toHaveBeenCalledWith(
+      expect.objectContaining({
+        platform: expect.any(Object),
+        service: expect.any(Object),
+        assetLoader: expect.any(Object),
+        workspaceRoot: tempRoot,
+        assetIndex: expect.any(Object),
+      }),
+    );
+    expect(runtimeMocks.latestFactoryConfig).toEqual(
+      expect.objectContaining({
+        perceptionPipeline: platformMocks.perceptionPipeline,
+      }),
+    );
+  });
   it('keeps UI locale independent while propagating prompt locale into runtime assembly', async () => {
     const snapshots: Array<{ readonly ready: boolean; readonly modeDescription?: string }> = [];
 
-    render(
+    renderWithSessionRuntime(
       React.createElement(LocaleSeparationProbe, {
         config: {
           ...DEFAULT_CLI_CONFIG,
@@ -238,7 +298,7 @@ describe('useAgentSession runtime assembly', () => {
   });
 
   it('projects StageGuardian diagnostics through the invocation-local translator', async () => {
-    render(
+    renderWithSessionRuntime(
       React.createElement(StageGuardianPresentationProbe, {
         config: {
           ...DEFAULT_CLI_CONFIG,
@@ -255,7 +315,9 @@ describe('useAgentSession runtime assembly', () => {
       at: 1,
     });
 
-    expect(useConversationStore.getState().messages.at(-1)?.content).toBe(
+    expect(
+      currentRuntime().conversation.stores.conversation.getState().messages.at(-1)?.content,
+    ).toBe(
       '[stage-out-of-order] 未先进入 Draft / Plan 就进入了 Apply；高风险工具调用应按 ADR §3.2 先经过前置阶段。',
     );
   });
@@ -264,7 +326,7 @@ describe('useAgentSession runtime assembly', () => {
     const observedContextTokens: Array<number | null> = [];
     runtimeMocks.tokenCount = 12345;
 
-    render(
+    renderWithSessionRuntime(
       React.createElement(RuntimeTokenProbe, {
         config: {
           ...DEFAULT_CLI_CONFIG,
@@ -279,13 +341,57 @@ describe('useAgentSession runtime assembly', () => {
 
     await waitFor(() => observedContextTokens.includes(12345));
 
-    expect(useAgentStore.getState().contextTokens.count).toBe(12345);
+    expect(currentRuntime().conversation.stores.agent.getState().contextTokens.count).toBe(12345);
+  });
+
+  it('passes configured perception model selections as turn metadata', async () => {
+    const submitDone: boolean[] = [];
+    runtimeMocks.executeEvents = [
+      { type: 'done', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
+    ];
+
+    renderWithSessionRuntime(
+      React.createElement(RuntimeSubmitProbe, {
+        config: {
+          ...DEFAULT_CLI_CONFIG,
+          workDir: tempRoot,
+          provider: 'deepseek-chat',
+          model: 'deepseek-v4-flash',
+          providerRequiresApiKey: false,
+          chatModel: {
+            providerId: 'deepseek-chat',
+            modelId: 'deepseek-v4-flash',
+            capabilities: ['chat'],
+          },
+          perceptionModels: { image: 'nekoapi-chat:gpt-5.5' },
+        },
+        prompt: 'Analyze the generated image.',
+        onDone: () => submitDone.push(true),
+      }),
+    );
+
+    await waitFor(() => submitDone.includes(true));
+    const session = runtimeMocks.latestSession as { execute: ReturnType<typeof vi.fn> };
+
+    expect(session.execute.mock.calls[0]?.[1]).toEqual(
+      expect.objectContaining({
+        metadata: expect.objectContaining({
+          understandingModels: {
+            image: expect.objectContaining({ providerId: 'nekoapi-chat', modelId: 'gpt-5.5' }),
+          },
+        }),
+      }),
+    );
   });
 
   it('waits for generated media tasks and records task-result observations through the shared runtime', async () => {
     const submitDone: boolean[] = [];
-    const completedTask = createCompletedMediaTask();
+    const conversationId = createTuiConversationId(tempRoot);
+    const taskScope = createRuntimeTaskScope('task-1', conversationId);
+    const completedTask = createCompletedMediaTask({ taskScope });
     const savedPath = path.join(tempRoot, 'neko', 'generated', 'image', 'task-1.png');
+    await fs.mkdir(path.dirname(savedPath), { recursive: true });
+    await fs.writeFile(savedPath, Buffer.from('png-fixture'));
     runtimeMocks.executeEvents = [
       {
         type: 'tool_result',
@@ -294,9 +400,11 @@ describe('useAgentSession runtime assembly', () => {
           success: true,
           data: {
             backgroundMode: true,
+            conversationId: taskScope.conversationId,
+            runId: taskScope.runId,
             taskId: 'task-1',
+            taskScope,
             type: 'image',
-            runId: 'run-1',
             message: 'Generate a cat',
             routedTo: { provider: 'openai' },
           },
@@ -307,7 +415,7 @@ describe('useAgentSession runtime assembly', () => {
     platformMocks.waitForTask.mockResolvedValue(completedTask);
     platformMocks.saveOutputs.mockResolvedValue([savedPath]);
 
-    render(
+    renderWithSessionRuntime(
       React.createElement(RuntimeSubmitProbe, {
         config: {
           ...DEFAULT_CLI_CONFIG,
@@ -319,25 +427,55 @@ describe('useAgentSession runtime assembly', () => {
           submitDone.push(true);
         },
       }),
+      conversationId,
     );
 
     await waitFor(() => submitDone.includes(true));
-
-    expect(platformMocks.waitForTask).toHaveBeenCalledWith('task-1');
+    expect(
+      currentRuntime()
+        .conversation.stores.conversation.getState()
+        .messages.filter((message) => message.isError)
+        .map((message) => message.content),
+    ).toEqual([]);
+    expect(platformMocks.waitForTask).toHaveBeenCalledWith(taskScope);
     expect(platformMocks.saveOutputs).toHaveBeenCalledWith(
-      'task-1',
+      taskScope,
       path.join(tempRoot, 'neko', 'generated', 'image'),
       expect.any(Object),
     );
+    await waitFor(() => runtimeMocks.patchToolResult.mock.calls.length > 0);
+
     expect(runtimeMocks.patchToolResult).toHaveBeenCalledWith(
       expect.objectContaining({
         toolCallId: 'tool-1',
         dataPatch: expect.objectContaining({
           taskId: 'task-1',
-          resultUrls: expect.arrayContaining([
-            expect.stringMatching(/^generated-assets\/.+\.png$/),
-          ]),
+          resultUrls: expect.arrayContaining([expect.any(String)]),
+          resultAssetRefs: [
+            expect.objectContaining({
+              assetId: expect.any(String),
+              uri: expect.stringMatching(/^generated-assets\//),
+              mimeType: 'image/png',
+            }),
+          ],
+          thumbnailAssetRef: expect.objectContaining({
+            assetId: expect.any(String),
+            uri: expect.stringMatching(/^generated-assets\//),
+            mimeType: 'image/png',
+          }),
         }),
+        perceptionCards: [
+          expect.objectContaining({
+            modality: 'image',
+            perceptual: expect.objectContaining({
+              thumbnailRef: expect.objectContaining({
+                assetId: expect.any(String),
+                uri: expect.stringMatching(/^generated-assets\//),
+                mimeType: 'image/png',
+              }),
+            }),
+          }),
+        ],
       }),
     );
     expect(runtimeMocks.recordTaskResultObservation).toHaveBeenCalledWith(
@@ -348,29 +486,17 @@ describe('useAgentSession runtime assembly', () => {
           taskId: 'task-1',
           status: 'completed',
           source: 'media-task',
-          resultRefs: expect.arrayContaining([
-            expect.objectContaining({
-              kind: 'resource',
-              resourceRef: expect.objectContaining({
-                provider: 'generated-asset',
-                source: expect.objectContaining({ filePath: savedPath }),
-              }),
-            }),
-          ]),
         }),
         outputData: expect.objectContaining({
           mediaTaskId: 'task-1',
-          hostOutputPaths: [savedPath],
-          assets: expect.arrayContaining([
-            expect.objectContaining({
-              localPath: savedPath,
-              resourceRef: expect.objectContaining({ provider: 'generated-asset' }),
-            }),
-          ]),
         }),
       }),
     );
-    expect(useAgentStore.getState().usage).toEqual({ input: 1, output: 2, total: 3 });
+    expect(currentRuntime().conversation.stores.agent.getState().usage).toEqual({
+      input: 1,
+      output: 2,
+      total: 3,
+    });
   });
 
   it('routes running task-result continuations through the runtime queue with continuation authorship', async () => {
@@ -379,7 +505,7 @@ describe('useAgentSession runtime assembly', () => {
     });
     let sessionHandle: AgentSessionHandle | undefined;
 
-    render(
+    renderWithSessionRuntime(
       React.createElement(RuntimeSessionProbe, {
         config: {
           ...DEFAULT_CLI_CONFIG,
@@ -394,7 +520,7 @@ describe('useAgentSession runtime assembly', () => {
 
     await waitFor(() => Boolean(sessionHandle));
     const activeTurn = sessionHandle!.submit('Active turn');
-    await waitFor(() => useAgentStore.getState().status === 'running');
+    await waitFor(() => currentRuntime().conversation.stores.agent.getState().status === 'running');
 
     const queue = runtimeMocks.latestMessageQueue!;
     const agent = runtimeMocks.latestTaskResultObservationRuntimeOptions?.agents.get(
@@ -421,8 +547,8 @@ describe('useAgentSession runtime assembly', () => {
       expect.objectContaining({ source: 'task-result-continuation' }),
     ]);
     expect(
-      useConversationStore
-        .getState()
+      currentRuntime()
+        .conversation.stores.conversation.getState()
         .messages.some((message) => message.content === 'Continue from task result'),
     ).toBe(false);
 
@@ -436,7 +562,7 @@ describe('useAgentSession runtime assembly', () => {
     });
     let sessionHandle: AgentSessionHandle | undefined;
 
-    render(
+    renderWithSessionRuntime(
       React.createElement(RuntimeSessionProbe, {
         config: {
           ...DEFAULT_CLI_CONFIG,
@@ -451,7 +577,7 @@ describe('useAgentSession runtime assembly', () => {
 
     await waitFor(() => Boolean(sessionHandle));
     const activeTurn = sessionHandle!.submit('Active turn');
-    await waitFor(() => useAgentStore.getState().status === 'running');
+    await waitFor(() => currentRuntime().conversation.stores.agent.getState().status === 'running');
     await sessionHandle!.submit('Queued follow-up');
 
     const queuedItem = sessionHandle!.getMessageQueueSnapshot()?.items[0];
@@ -460,8 +586,8 @@ describe('useAgentSession runtime assembly', () => {
       expect.objectContaining({ content: 'Queued follow-up', source: 'user' }),
     );
     expect(
-      useConversationStore
-        .getState()
+      currentRuntime()
+        .conversation.stores.conversation.getState()
         .messages.some((message) => message.content === 'Queued follow-up'),
     ).toBe(false);
 
@@ -474,7 +600,9 @@ describe('useAgentSession runtime assembly', () => {
     };
     expect(runtimeSession.cancel).toHaveBeenCalledTimes(1);
     expect(runtimeSession.execute).toHaveBeenCalledTimes(1);
-    expect(useAgentStore.getState().messageQueue.pausedAfterCancel).toBe(true);
+    expect(
+      currentRuntime().conversation.stores.agent.getState().messageQueue.pausedAfterCancel,
+    ).toBe(true);
     expect(sessionHandle!.getMessageQueueSnapshot()?.items).toEqual([
       expect.objectContaining({ id: queuedItem!.id, content: 'Queued follow-up' }),
     ]);
@@ -484,12 +612,14 @@ describe('useAgentSession runtime assembly', () => {
     await waitFor(() => runtimeSession.execute.mock.calls.length === 2);
     await waitFor(() => sessionHandle!.getMessageQueueSnapshot()?.pendingCount === 0);
 
-    expect(useAgentStore.getState().messageQueue.pausedAfterCancel).toBe(false);
+    expect(
+      currentRuntime().conversation.stores.agent.getState().messageQueue.pausedAfterCancel,
+    ).toBe(false);
     expect(runtimeMocks.queueDrain).toHaveBeenCalled();
     expect(runtimeSession.execute.mock.calls[1]?.[0]).toBe('Queued follow-up');
     expect(
-      useConversationStore
-        .getState()
+      currentRuntime()
+        .conversation.stores.conversation.getState()
         .messages.some(
           (message) => message.role === 'user' && message.content === 'Queued follow-up',
         ),
@@ -502,7 +632,7 @@ describe('useAgentSession runtime assembly', () => {
       { type: 'done', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
     ];
 
-    render(
+    renderWithSessionRuntime(
       React.createElement(RuntimeAssemblyProbe, {
         config: {
           ...DEFAULT_CLI_CONFIG,
@@ -536,8 +666,8 @@ describe('useAgentSession runtime assembly', () => {
       expect.any(Object),
     );
     expect(
-      useConversationStore
-        .getState()
+      currentRuntime()
+        .conversation.stores.conversation.getState()
         .messages.some(
           (message) =>
             message.role === 'user' &&
@@ -545,8 +675,8 @@ describe('useAgentSession runtime assembly', () => {
         ),
     ).toBe(false);
     expect(
-      useConversationStore
-        .getState()
+      currentRuntime()
+        .conversation.stores.conversation.getState()
         .messages.some(
           (message) => message.role === 'system' && message.source === 'task-result-continuation',
         ),
@@ -558,13 +688,19 @@ function RuntimeAssemblyProbe(props: {
   readonly config: CLIConfig;
   readonly capabilityProviders: readonly AgentCapabilityProvider[];
   readonly onReady: (ready: boolean) => void;
+  readonly service?: IService;
+  readonly useStandalonePlatform?: boolean;
 }): React.JSX.Element {
+  const injectedService = props.useStandalonePlatform
+    ? undefined
+    : (props.service ?? createNoopService());
   const session = useAgentSession({
     config: props.config,
     presentation: createTestAgentTerminalPresentation('en'),
     promptLocale: 'en',
-    service: createNoopService(),
+    ...(injectedService ? { service: injectedService } : {}),
     capabilityProviders: props.capabilityProviders,
+    createConversationStorage: createMemoryConversationStorageBinding,
   });
 
   useEffect(() => {
@@ -587,6 +723,7 @@ function LocaleSeparationProbe(props: {
     promptLocale: 'zh-cn',
     service: createNoopService(),
     capabilityProviders: [],
+    createConversationStorage: createMemoryConversationStorageBinding,
   });
 
   useEffect(() => {
@@ -607,6 +744,7 @@ function StageGuardianPresentationProbe(props: { readonly config: CLIConfig }): 
     promptLocale: 'zh-cn',
     service: createNoopService(),
     capabilityProviders: [],
+    createConversationStorage: createMemoryConversationStorageBinding,
   });
 
   return React.createElement(Text, null, 'stage-guardian-presentation-probe');
@@ -616,12 +754,14 @@ function RuntimeTokenProbe(props: {
   readonly config: CLIConfig;
   readonly onContextTokens: (count: number | null) => void;
 }): React.JSX.Element {
+  const stores = useTuiConversationStores();
   const session = useAgentSession({
     config: props.config,
     presentation: createTestAgentTerminalPresentation('en'),
     promptLocale: 'en',
     service: createNoopService(),
     capabilityProviders: [],
+    createConversationStorage: createMemoryConversationStorageBinding,
   });
 
   useEffect(() => {
@@ -629,8 +769,8 @@ function RuntimeTokenProbe(props: {
       return;
     }
     session.syncRuntimeState();
-    props.onContextTokens(useAgentStore.getState().contextTokens.count);
-  }, [props, session]);
+    props.onContextTokens(stores.agent.getState().contextTokens.count);
+  }, [props, session, stores]);
 
   return React.createElement(Text, null, 'runtime-token-probe');
 }
@@ -645,6 +785,7 @@ function RuntimeSubmitProbe(props: {
     presentation: createTestAgentTerminalPresentation('en'),
     promptLocale: 'en',
     capabilityProviders: [],
+    createConversationStorage: createMemoryConversationStorageBinding,
   });
 
   useEffect(() => {
@@ -668,12 +809,17 @@ function RuntimeSubmitProbe(props: {
 function RuntimeSessionProbe(props: {
   readonly config: CLIConfig;
   readonly onReady: (session: AgentSessionHandle) => void;
+  readonly createConversationStorage?: NonNullable<
+    UseAgentSessionOptions['createConversationStorage']
+  >;
 }): React.JSX.Element {
   const session = useAgentSession({
     config: props.config,
     presentation: createTestAgentTerminalPresentation('en'),
     promptLocale: 'en',
     capabilityProviders: [],
+    createConversationStorage:
+      props.createConversationStorage ?? createMemoryConversationStorageBinding,
   });
 
   useEffect(() => {
@@ -756,6 +902,10 @@ function createMockPlatform(): Record<string, unknown> {
   return {
     media: {
       waitForTask: platformMocks.waitForTask,
+      config: {
+        resolveModelRefForPurpose: vi.fn(),
+        getModel: vi.fn(),
+      },
       saveOutputs: platformMocks.saveOutputs,
       onProgress: platformMocks.onProgress.mockReturnValue(() => undefined),
     },
@@ -763,10 +913,35 @@ function createMockPlatform(): Record<string, unknown> {
   };
 }
 
-function createCompletedMediaTask(options: { readonly deliveryPolicy?: unknown } = {}): MediaTask {
+function renderWithSessionRuntime(
+  node: React.ReactElement<{ readonly config: CLIConfig }>,
+  conversationId = createTuiConversationId(node.props.config.workDir),
+): ReturnType<typeof render> {
+  const runtime = createTuiTestRuntime(node.props.config, conversationId);
+  mountedRuntimes.push(runtime);
+  return render(
+    React.createElement(TuiApplicationRuntimeProvider, {
+      runtime: runtime.application,
+      children: node,
+    }),
+  );
+}
+
+function currentRuntime(): TuiTestRuntime {
+  const runtime = mountedRuntimes.at(-1);
+  if (!runtime) {
+    throw new Error('Expected a mounted TUI test runtime.');
+  }
+  return runtime;
+}
+
+function createCompletedMediaTask(
+  options: { readonly deliveryPolicy?: unknown; readonly taskScope?: TaskRunScope } = {},
+): MediaTask {
   const createdAt = new Date('2026-01-01T00:00:00.000Z');
   const completedAt = new Date('2026-01-01T00:00:03.000Z');
   return {
+    scope: options.taskScope ?? createRuntimeTaskScope('task-1'),
     id: 'task-1',
     type: 'text-to-image',
     status: 'completed',
@@ -785,6 +960,19 @@ function createCompletedMediaTask(options: { readonly deliveryPolicy?: unknown }
         resultDeliveryPolicy: options.deliveryPolicy ?? { kind: 'append-observation' },
       },
     },
+  };
+}
+
+function createRuntimeTaskScope(
+  childRunId: string,
+  conversationId = createTuiConversationId(tempRoot),
+): TaskRunScope {
+  return {
+    conversationId,
+    runId: 'run-1',
+    parentRunId: 'run-1',
+    childRunId,
+    childKind: 'task',
   };
 }
 

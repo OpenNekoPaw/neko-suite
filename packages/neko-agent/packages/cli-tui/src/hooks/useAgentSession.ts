@@ -18,11 +18,11 @@ import {
   createSystemPromptBuilder,
   createInputProcessor,
   createFileAgentWorkspaceRuntimeStateRuntime,
-  createFileConversationStorage,
   mergeCreationExecutionMetadata,
   ProviderCardRegistry,
   type AgentSessionConfig,
   type IAgentSession,
+  type PromptCompositionFragmentProjection,
   type InputProcessor,
   type SystemPromptBuilder,
   type SkillService,
@@ -33,7 +33,7 @@ import {
   type AgentWorkspaceRuntimeStateRuntime,
   type AgentWorkspaceRuntimeStatus,
   type ConversationRecord,
-  type FileConversationStorage,
+  type ConversationResumeStorage,
   createAgentTaskResultObservationRuntime,
   type AgentTaskResultObservationRuntime,
 } from '@neko/agent';
@@ -52,7 +52,9 @@ import {
 import {
   projectLlmParameters,
   ConfigManager,
+  createResourceCacheGeneratedAssetIndex,
   FileUserConfigManager,
+  type GeneratedAssetIndex,
   type MediaTask,
   type Platform,
 } from '@neko/platform';
@@ -67,6 +69,7 @@ import type {
 } from '@neko-agent/types';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
+import * as os from 'node:os';
 import type { CLIConfig } from '../core/types';
 import type { SupportedLocale } from '@neko/shared/i18n';
 import type { AgentTerminalPresentationContext } from '../presentation/context';
@@ -93,9 +96,17 @@ import type { ExecutionMode, Message as TuiMessage } from '../types/state';
 import {
   type AgentCapabilityProvider,
   type ChatMessage,
+  type GeneratedAsset,
   type IService,
+  type PerceptionCard,
+  type PerceptualAssetRef,
   type Task,
   type TaskStatus,
+  type ToolResultBackfillPayload,
+  type ResourceCacheManifestStore,
+  type SearchDocumentRecord,
+  formatLocalMetadataUserDiagnostic,
+  projectLocalMetadataUserDiagnostic,
 } from '@neko/shared';
 import type {
   TuiCapabilityPorts,
@@ -105,6 +116,11 @@ import type {
 } from '../core/tui-command-router';
 import { createCLIPlatform, createCLITaskManager } from '../core/platform-bootstrap';
 import { createCliAgentRuntime, createCliToolGroupRegistry } from '../core/runtime-bootstrap';
+import {
+  createTuiSqliteConversationStorage,
+  type TuiConversationPersistenceSnapshot,
+  type TuiSqliteConversationStorageBinding,
+} from '../host/tui-sqlite-conversation-storage';
 import {
   createTuiCapabilityLoader,
   type TuiCapabilityLoaderResult,
@@ -151,6 +167,7 @@ import {
 } from '../host/node-workspace-content-host';
 import { runNodeResourceCacheStartupGc } from '../host/node-resource-cache-startup-gc';
 import { NodeMediaTaskDeliveryHost } from '../host/node-media-task-delivery-host';
+import { createNodePerceptionPipeline } from '../host/node-perception-pipeline';
 import { createTuiMediaBackgroundTasks } from '../core/tui-media-background-tasks';
 import type { TerminalTimelineMessage } from '../core/timeline-projector';
 
@@ -193,6 +210,13 @@ export interface UseAgentSessionOptions {
   readonly presentation: AgentTerminalPresentationContext<AgentTerminalMessageKey>;
   /** Concrete built-in prompt locale resolved once during CLI bootstrap. */
   readonly promptLocale: SupportedLocale;
+  /** User metadata root; tests must point this at an isolated temporary directory. */
+  readonly localMetadataHome?: string;
+  /** Host composition override for isolated storage tests. */
+  readonly createConversationStorage?: (
+    homedir: string,
+    workDir: string,
+  ) => Promise<TuiSqliteConversationStorageBinding>;
 }
 
 export interface AgentSessionHandle {
@@ -234,6 +258,8 @@ export interface AgentSessionHandle {
   ) => import('@neko-agent/types').AgentQueuedMessageItem;
   /** List async runtime tasks owned by the shared task plane. */
   listTasks: (status?: TaskStatus) => Promise<readonly Task[]>;
+  /** Refresh shared metadata at a TUI command/session boundary. */
+  refreshSharedMetadataAtBoundary: () => Promise<void>;
   /** Validate and apply LLM parameter config. */
   validateLlmConfig: (config: AgentLlmConfig) => TuiParameterValidationResult;
   /** Apply a previously validated LLM parameter config. */
@@ -268,14 +294,23 @@ export interface AgentSessionHandle {
   readonly listCapabilityTools: TuiCapabilityPorts['listTools'];
   /** Terminal-safe `@` reference contributors loaded from capability providers. */
   readonly getReferenceContributors: () => TuiCapabilityLoaderResult['referenceContributors'];
+  /** Query portable search projections shared with the Extension Host. */
+  readonly querySearchDocuments: (
+    query: string,
+    limit: number,
+  ) => Promise<readonly SearchDocumentRecord[]>;
   /** Shared resume-layer conversation storage for command handlers. */
-  readonly getConversationStorage: () => FileConversationStorage | undefined;
+  readonly getConversationStorage: () => ConversationResumeStorage | undefined;
   /** Current conversation id bound to the Agent session journal. */
   readonly getCurrentConversationId: () => string;
   /** Load a persisted conversation into the current Agent session. */
   readonly resumeConversation: (record: ConversationRecord) => Promise<void>;
   /** Current Agent history for history commands. */
   readonly getHistory: () => ChatMessage[];
+  /** Secret-free persistence path evidence for Host diagnostics and debug automation. */
+  readonly getConversationPersistenceSnapshot: () => TuiConversationPersistenceSnapshot | null;
+  /** Secret-free prompt composition facts from the canonical AgentSession composer. */
+  readonly getPromptCompositionProjection: () => readonly PromptCompositionFragmentProjection[];
   /** Flush the current TUI runtime projection into shared workspace state. */
   readonly syncRuntimeState: () => void;
   /** Slash command catalog for TUI autocomplete */
@@ -356,10 +391,15 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
   );
   const taskResultObservationRuntimeRef = useRef<AgentTaskResultObservationRuntime | null>(null);
   const mediaDeliveryHostRef = useRef<NodeMediaTaskDeliveryHost | null>(null);
+  const generatedAssetIndexRef = useRef<GeneratedAssetIndex | null>(null);
   const taskTerminalUnsubscribeRef = useRef<(() => void) | null>(null);
   const stageGuardianUnsubscribeRef = useRef<(() => void) | null>(null);
   const capabilityLoadResultRef = useRef<TuiCapabilityLoaderResult | null>(null);
-  const conversationStorageRef = useRef<FileConversationStorage | null>(null);
+  const conversationStorageRef = useRef<ConversationResumeStorage | null>(null);
+  const conversationStorageBindingRef = useRef<TuiSqliteConversationStorageBinding | null>(null);
+  const conversationPersistenceSnapshotRef = useRef<TuiConversationPersistenceSnapshot | null>(
+    null,
+  );
   const workspaceRuntimeStateRef = useRef<AgentWorkspaceRuntimeStateRuntime | null>(null);
   const runtimeConfigRef = useRef<ReturnType<typeof createCliAgentRuntime> | null>(null);
   const conversationIdRef = useRef(initialConversationId);
@@ -391,6 +431,33 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
       .getState()
       .addError(new Error(presentWorkspaceRuntimeStateFailure(message, presentation)));
   }, []);
+
+  const requireGeneratedAssetIndex = useCallback(
+    async (
+      workDir: string,
+      manifestStore: ResourceCacheManifestStore,
+    ): Promise<GeneratedAssetIndex> => {
+      if (!generatedAssetIndexRef.current) {
+        const binding = await createResourceCacheGeneratedAssetIndex({
+          manifestStore,
+          workspaceRoot: workDir,
+          homedir: options.localMetadataHome ?? os.homedir(),
+        });
+        generatedAssetIndexRef.current = binding.index;
+        if (binding.migrationReport.sourceStatus === 'quarantined') {
+          stores.conversation
+            .getState()
+            .addError(
+              new Error(
+                `Generated asset index was quarantined: ${binding.migrationReport.sourceDiagnostic ?? 'invalid legacy index'}`,
+              ),
+            );
+        }
+      }
+      return generatedAssetIndexRef.current;
+    },
+    [options.localMetadataHome],
+  );
 
   const refreshTaskSummary = useCallback(async (): Promise<void> => {
     const taskManager = taskManagerRef.current;
@@ -508,6 +575,10 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
       createdAt: conversationCreatedAtRef.current,
       updatedAt: Date.now(),
       source: 'tui',
+      chatModelSelection: {
+        providerId: currentConfig.chatModel?.providerId ?? currentConfig.provider,
+        modelId: currentConfig.chatModel?.modelId ?? currentConfig.model,
+      },
       ...(mediaModelSelection && Object.keys(mediaModelSelection).length > 0
         ? { mediaModelSelection }
         : {}),
@@ -544,6 +615,8 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
       taskResultObservationRuntimeRef.current = null;
       mediaDeliveryHostRef.current?.dispose();
       mediaDeliveryHostRef.current = null;
+      generatedAssetIndexRef.current?.dispose();
+      generatedAssetIndexRef.current = null;
       if (!streamDisposed) {
         streamRuntimeRef.current.dispose();
         streamDisposed = true;
@@ -558,6 +631,11 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
       sessionRef.current = null;
       platformRef.current?.dispose();
       platformRef.current = null;
+      const conversationStorageBinding = conversationStorageBindingRef.current;
+      conversationStorageBindingRef.current = null;
+      conversationStorageRef.current = null;
+      conversationPersistenceSnapshotRef.current = null;
+      void conversationStorageBinding?.dispose().catch(() => undefined);
       const mcpManager = mcpManagerRef.current;
       mcpManagerRef.current = null;
       void mcpManager?.disconnectAll().catch(() => undefined);
@@ -590,8 +668,26 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
 
         const contentPolicy = createNodeWorkspaceContentPolicy({ workDir: config.workDir });
         const memoryFilePath = path.join(config.workDir, '.neko', 'memory.md');
+        const localMetadataHome = options.localMetadataHome ?? os.homedir();
+        const conversationStorageBinding = options.createConversationStorage
+          ? await options.createConversationStorage(localMetadataHome, config.workDir)
+          : await createTuiSqliteConversationStorage({
+              homedir: localMetadataHome,
+              workDir: config.workDir,
+            });
+        conversationStorageBindingRef.current = conversationStorageBinding;
+        conversationStorageRef.current = conversationStorageBinding.storage;
+        conversationPersistenceSnapshotRef.current = {
+          ...conversationStorageBinding.persistenceBackend,
+          resume: { status: 'new', restoredMessageCount: 0 },
+        };
+        const generatedAssetIndex = await requireGeneratedAssetIndex(
+          config.workDir,
+          conversationStorageBinding.resourceCacheManifestStore,
+        );
         const resourceCacheGcResults = await runNodeResourceCacheStartupGc({
           workDir: config.workDir,
+          manifestStore: conversationStorageBinding.resourceCacheManifestStore,
         });
         for (const result of resourceCacheGcResults) {
           if (result.error) {
@@ -602,7 +698,6 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
               .addError(new Error(presentResourceCacheGcFailure(message, presentation)));
           }
         }
-        conversationStorageRef.current = createFileConversationStorage(config.workDir);
         workspaceRuntimeStateRef.current = createFileAgentWorkspaceRuntimeStateRuntime({
           workDir: config.workDir,
           source: 'tui',
@@ -619,7 +714,25 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
             conversationIdRef.current = resumeRecord.id;
             conversationCreatedAtRef.current = resumeRecord.createdAt;
             conversationTitleRef.current = resumeRecord.title;
+            conversationPersistenceSnapshotRef.current = {
+              ...conversationStorageBinding.persistenceBackend,
+              resume: {
+                status: 'restored',
+                requestedConversationId: canonicalResumeId,
+                restoredConversationId: resumeRecord.id,
+                recordSource: resumeRecord.source,
+                restoredMessageCount: resumeRecord.messages.length,
+              },
+            };
           } else if (explicitResumeId) {
+            conversationPersistenceSnapshotRef.current = {
+              ...conversationStorageBinding.persistenceBackend,
+              resume: {
+                status: 'not-found',
+                requestedConversationId: canonicalResumeId,
+                restoredMessageCount: 0,
+              },
+            };
             stores.conversation
               .getState()
               .addSystemMessage(presentResumeFallback(requestedResumeId, presentation));
@@ -675,8 +788,13 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
 
         // 4. LLM Service — use Platform for multi-provider routing
         let llmService: IService;
+        let perceptionPipeline: AgentSessionConfig['perceptionPipeline'];
         const taskManager =
-          providedTaskManager ?? createCLITaskManager({ workspacePath: config.workDir });
+          providedTaskManager ??
+          createCLITaskManager({
+            taskStorage: conversationStorageBinding.taskStorage,
+            taskRecoveryStorage: conversationStorageBinding.taskRecoveryStorage,
+          });
         await taskManager.initialize();
         taskManagerRef.current = taskManager;
         taskTerminalUnsubscribeRef.current?.();
@@ -696,9 +814,18 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
             toolRegistry,
             taskManager,
             providerCardRegistry,
+            generatedAssetIndex,
+            resourceCacheManifestStore: conversationStorageBinding.resourceCacheManifestStore,
           });
           platformRef.current = cliPlatform.platform;
           llmService = cliPlatform.service;
+          perceptionPipeline = createNodePerceptionPipeline({
+            platform: cliPlatform.platform,
+            service: cliPlatform.service,
+            assetLoader: cliPlatform.perceptionAssetLoader,
+            workspaceRoot: config.workDir,
+            assetIndex: generatedAssetIndex,
+          });
         }
 
         // 5. System Prompt
@@ -753,6 +880,7 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
           creationGuidance: runtimeConfig.creationGuidance,
           artifactStore: runtimeConfig.artifactStore,
           validationLoop: runtimeConfig.validationLoop,
+          ...(perceptionPipeline ? { getPerceptionPipeline: () => perceptionPipeline } : {}),
           projectMemoryFilePath: memoryFilePath,
           onConfirmTool: async (request) => {
             // Show approval UI and wait for user decision
@@ -793,6 +921,7 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
         const mediaDeliveryHost = new NodeMediaTaskDeliveryHost({
           ...(platformRef.current ? { platform: platformRef.current } : {}),
           workspaceRoot: config.workDir,
+          assetIndex: generatedAssetIndex,
         });
         mediaDeliveryHostRef.current = mediaDeliveryHost;
         taskResultObservationRuntimeRef.current?.dispose();
@@ -929,14 +1058,19 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
         if (disposed) {
           return;
         }
+        const localMetadataDiagnostic = projectLocalMetadataUserDiagnostic(error);
         const err =
           error instanceof NodeWorkspaceContentError
             ? new Error(presentWorkspaceContentDiagnostic(error.diagnostic, presentation))
             : error instanceof TuiConversationIdError
               ? new Error(presentTuiConversationIdDiagnostic(error.diagnostic, presentation))
-              : error instanceof Error
-                ? error
-                : new Error(String(error));
+              : localMetadataDiagnostic
+                ? new Error(formatLocalMetadataUserDiagnostic(localMetadataDiagnostic), {
+                    cause: error,
+                  })
+                : error instanceof Error
+                  ? error
+                  : new Error(String(error));
         stores.agent.getState().setError(err);
         stores.conversation.getState().addError(err);
       } finally {
@@ -1039,25 +1173,20 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
               ...(platformRef.current ? { platform: platformRef.current } : {}),
               deliveryHost: mediaDeliveryHostRef.current,
               taskResultObservations: taskResultObservationRuntimeRef.current,
-              persistResultUrls: ({ toolCallId, taskId, urls }) => {
+              persistResultUrls: ({ toolCallId, taskId, urls, deliveryPlan }) => {
                 if (!toolCallId || urls.length === 0) return;
-                void session
-                  .patchToolResult({
-                    toolCallId,
-                    timestamp: Date.now(),
-                    dataPatch: {
-                      status: 'completed',
-                      taskId,
-                      resultUrls: [...urls],
-                    },
-                  })
-                  .catch((error: unknown) => {
-                    stores.conversation
-                      .getState()
-                      .addError(
-                        new Error(presentMediaResultPersistenceFailure(error, presentation)),
-                      );
-                  });
+                const backfill = createGeneratedMediaToolResultBackfill({
+                  toolCallId,
+                  taskId,
+                  urls,
+                  timestamp: Date.now(),
+                  deliveryPlan,
+                });
+                void session.patchToolResult(backfill).catch((error: unknown) => {
+                  stores.conversation
+                    .getState()
+                    .addError(new Error(presentMediaResultPersistenceFailure(error, presentation)));
+                });
               },
               onTaskProgress: () => {
                 void refreshTaskSummary();
@@ -1305,6 +1434,19 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
     return runtimeSessionRef.current?.messageQueue.current()?.snapshot() ?? null;
   }, []);
 
+  const refreshSharedMetadataAtBoundary = useCallback(async (): Promise<void> => {
+    const binding = conversationStorageBindingRef.current;
+    if (!binding) return;
+    const result = await binding.pollRevisions();
+    if (result.changedDomains.includes('tasks')) {
+      const taskManager = taskManagerRef.current;
+      if (!taskManager) {
+        throw new Error('Task manager is not initialized for shared metadata refresh');
+      }
+      await taskManager.initialize();
+    }
+  }, []);
+
   const listTasks = useCallback(
     async (status?: TaskStatus): Promise<readonly Task[]> => {
       if (initPromiseRef.current) {
@@ -1314,11 +1456,12 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
       if (!taskManager) {
         throw new Error('Task manager is not initialized');
       }
+      await refreshSharedMetadataAtBoundary();
       const tasks = await taskManager.list(status);
       void refreshTaskSummary();
       return tasks;
     },
-    [refreshTaskSummary],
+    [refreshSharedMetadataAtBoundary, refreshTaskSummary],
   );
 
   const resumeQueuedMessages = useCallback(async (): Promise<void> => {
@@ -1673,6 +1816,20 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
     return capabilityLoadResultRef.current?.referenceContributors ?? [];
   }, [capabilityRevision]);
 
+  const querySearchDocuments = useCallback(
+    async (query: string, limit: number): Promise<readonly SearchDocumentRecord[]> => {
+      if (initPromiseRef.current) await initPromiseRef.current;
+      const binding = conversationStorageBindingRef.current;
+      if (!binding || !(await binding.readSearchRevision())) return [];
+      return binding.searchDocuments.query({
+        partition: binding.searchPartition,
+        text: query,
+        limit,
+      });
+    },
+    [],
+  );
+
   useEffect(() => {
     submitRef.current = submit;
     submitInternalContinuationRef.current = submitInternalContinuation;
@@ -1697,6 +1854,7 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
     compactContext,
     getMessageQueueSnapshot,
     listTasks,
+    refreshSharedMetadataAtBoundary,
     resumeQueuedMessages,
     promoteQueuedMessage,
     cancelQueuedMessage,
@@ -1717,10 +1875,14 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
     getCapabilityDiagnostics,
     listCapabilityTools,
     getReferenceContributors,
+    querySearchDocuments,
     getConversationStorage: () => conversationStorageRef.current ?? undefined,
     getCurrentConversationId: () => conversationIdRef.current,
     resumeConversation,
     getHistory: () => sessionRef.current?.getHistory() ?? [],
+    getConversationPersistenceSnapshot: () => conversationPersistenceSnapshotRef.current,
+    getPromptCompositionProjection: () =>
+      sessionRef.current?.getPromptCompositionProjection() ?? [],
     syncRuntimeState: () => syncWorkspaceRuntimeState(),
     slashCommands,
     isReady,
@@ -1851,6 +2013,129 @@ function isTerminalTimelineMessage(
     message.type === 'taskCreated' ||
     message.type === 'taskUpdated'
   );
+}
+
+function createGeneratedMediaToolResultBackfill(input: {
+  readonly toolCallId: string;
+  readonly taskId: string;
+  readonly urls: readonly string[];
+  readonly timestamp: number;
+  readonly deliveryPlan?: MediaTaskProgressDeliveryPlan;
+}): ToolResultBackfillPayload {
+  const resultAssetRefs = input.deliveryPlan?.generatedAssets
+    .map((asset) => asset.assetRef)
+    .filter((ref): ref is PerceptualAssetRef => ref !== undefined);
+  const primaryAsset = input.deliveryPlan?.generatedAssets.find((asset) => asset.assetRef);
+  const primaryAssetRef = primaryAsset?.assetRef;
+
+  return {
+    toolCallId: input.toolCallId,
+    timestamp: input.timestamp,
+    dataPatch: {
+      status: 'completed',
+      taskId: input.taskId,
+      resultUrls: [...input.urls],
+      ...(resultAssetRefs && resultAssetRefs.length > 0 ? { resultAssetRefs } : {}),
+      ...(primaryAssetRef ? { thumbnailAssetRef: primaryAssetRef } : {}),
+    },
+    ...(primaryAsset && primaryAssetRef
+      ? {
+          perceptionCards: [
+            createGeneratedMediaPerceptionCard({
+              toolCallId: input.toolCallId,
+              asset: primaryAsset,
+              ref: primaryAssetRef,
+              createdAt: input.timestamp,
+            }),
+          ],
+        }
+      : {}),
+  };
+}
+
+function createGeneratedMediaPerceptionCard(input: {
+  readonly toolCallId: string;
+  readonly asset: GeneratedAsset;
+  readonly ref: PerceptualAssetRef;
+  readonly createdAt: number;
+}): PerceptionCard {
+  const structural = createGeneratedMediaPerceptionStructural(input.asset);
+  return {
+    version: 1,
+    assetId: input.asset.id,
+    sourceToolCallId: input.toolCallId,
+    modality: toGeneratedMediaPerceptionModality(input.asset),
+    createdAt: input.createdAt,
+    layerStatus: { layer0: 'complete', layer1: 'skipped', layer2: 'complete' },
+    structural,
+    perceptual: toGeneratedMediaPerceptualRefs(input.asset, input.ref),
+    cacheKey: `generated-media:${input.asset.id}:provider-ref`,
+  };
+}
+
+function createGeneratedMediaPerceptionStructural(
+  asset: GeneratedAsset,
+): PerceptionCard['structural'] {
+  const base = {
+    format: inferPerceptionFormat(asset.mimeType),
+    mimeType: asset.mimeType,
+    byteSize: 0,
+  };
+
+  switch (asset.type) {
+    case 'generated-image':
+      return { ...base, width: asset.width, height: asset.height };
+    case 'generated-video':
+      return {
+        ...base,
+        width: asset.width,
+        height: asset.height,
+        durationMs: Math.round(asset.duration * 1000),
+        frameRate: asset.fps,
+      };
+    case 'generated-audio':
+      return {
+        ...base,
+        durationMs: Math.round(asset.duration * 1000),
+        channels: asset.channels,
+        sampleRate: asset.sampleRate,
+      };
+    case 'generated-storyboard':
+      return base;
+  }
+}
+
+function toGeneratedMediaPerceptualRefs(
+  asset: GeneratedAsset,
+  ref: PerceptualAssetRef,
+): NonNullable<PerceptionCard['perceptual']> {
+  switch (asset.type) {
+    case 'generated-video':
+      return { keyframeRefs: [ref], multiViewRefs: [ref], thumbnailRef: ref };
+    case 'generated-audio':
+      return { waveformRef: ref };
+    case 'generated-image':
+    case 'generated-storyboard':
+      return { thumbnailRef: ref };
+  }
+}
+
+function toGeneratedMediaPerceptionModality(asset: GeneratedAsset): PerceptionCard['modality'] {
+  switch (asset.type) {
+    case 'generated-video':
+      return 'video';
+    case 'generated-audio':
+      return 'audio';
+    case 'generated-image':
+      return 'image';
+    case 'generated-storyboard':
+      return 'mixed';
+  }
+}
+
+function inferPerceptionFormat(mimeType: string): string {
+  const [, subtype] = mimeType.split('/');
+  return subtype?.split(';')[0]?.trim() || 'unknown';
 }
 
 function projectRuntimeStateFromEvent(

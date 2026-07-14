@@ -1,20 +1,9 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { afterEach, describe, expect, it } from 'vitest';
+import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { SerializableTask, TaskRecoveryInfo } from '@neko/shared';
-import {
-  createExtensionAgentTaskRecoveryStorage,
-  createExtensionAgentTaskStorage,
-} from '../serviceBootstrap';
-
-vi.mock('vscode', () => ({
-  ExtensionMode: {
-    Production: 1,
-    Development: 2,
-    Test: 3,
-  },
-}));
+import type { SerializableTask, TaskRunScope } from '@neko/shared';
+import { createExtensionConversationResume } from '../../chat/extensionConversationResume';
 
 const tempRoots: string[] = [];
 
@@ -24,75 +13,48 @@ afterEach(() => {
   }
 });
 
-describe('serviceBootstrap task storage scope', () => {
-  it('stores workspace task facts in the workspace-visible task plane', async () => {
-    const workspaceRoot = mkdtempSync(join(tmpdir(), 'neko-agent-extension-task-workspace-'));
-    tempRoots.push(workspaceRoot);
-    const context = createMockExtensionContext();
-    const storage = createExtensionAgentTaskStorage({
-      context: context as never,
-      workspacePath: workspaceRoot,
+describe('Extension Agent persistence bootstrap', () => {
+  it('assembles the canonical SQLite Task stores without a migration facade', async () => {
+    const homedir = mkdtempSync(join(tmpdir(), 'neko-agent-extension-home-'));
+    const workDir = join(homedir, 'workspace');
+    mkdirSync(workDir);
+    tempRoots.push(homedir);
+    const task = createSerializableTask('workspace-task');
+    const binding = await createExtensionConversationResume({ homedir, workDir });
+
+    expect(binding).not.toHaveProperty('taskMigration');
+    await binding.taskStorage.save(task);
+    await expect(binding.taskStorage.load(task.scope)).resolves.toEqual(task);
+    expect(binding.resourceCacheMigrationReport).toMatchObject({ sourceStatus: 'absent' });
+    expect(binding.proxyMigrationReport).toMatchObject({ sourceStatus: 'absent' });
+    await expect(binding.workspaceResourceCacheManifestStore.load()).resolves.toMatchObject({
+      projectRoot: workDir,
+      entries: {},
     });
 
-    await storage.save(createSerializableTask('workspace-task'));
-    if ('flush' in storage) {
-      await storage.flush();
-    }
-
-    const workspaceTaskPath = join(workspaceRoot, '.neko', 'tasks.json');
-    expect(existsSync(workspaceTaskPath)).toBe(true);
-    expect(readFileSync(workspaceTaskPath, 'utf-8')).toContain('workspace-task');
-    expect(context.values.has('neko.agent.tasks')).toBe(false);
-  });
-
-  it('keeps recovery handles in VS Code state instead of the workspace task file', async () => {
-    const context = createMockExtensionContext();
-    const recoveryStorage = createExtensionAgentTaskRecoveryStorage(context as never);
-    const recovery: TaskRecoveryInfo = {
-      taskId: 'workspace-task',
-      externalTaskId: 'provider-task',
-      providerId: 'provider',
-      taskType: 'workflow',
-      payload: {},
-      createdAt: 1,
-      updatedAt: 2,
-    };
-
-    await recoveryStorage.save(recovery);
-
-    expect(context.values.get('neko.agent.taskRecovery')).toEqual([recovery]);
+    await binding.disposeHost();
   });
 });
 
 function createSerializableTask(id: string): SerializableTask {
   return {
+    scope: taskScope(id),
     id,
-    type: 'workflow',
+    type: 'custom',
     status: 'running',
-    input: { type: 'workflow', payload: {} },
+    input: { type: 'custom', payload: {} },
     progress: 50,
     createdAt: 1,
     updatedAt: 2,
   };
 }
 
-function createMockExtensionContext(): {
-  readonly values: Map<string, unknown>;
-  readonly globalState: {
-    get<T>(key: string, defaultValue?: T): T | undefined;
-    update(key: string, value: unknown): Promise<void>;
-  };
-} {
-  const values = new Map<string, unknown>();
+function taskScope(childRunId: string): TaskRunScope {
   return {
-    values,
-    globalState: {
-      get<T>(key: string, defaultValue?: T): T | undefined {
-        return values.has(key) ? (values.get(key) as T) : defaultValue;
-      },
-      async update(key: string, value: unknown): Promise<void> {
-        values.set(key, value);
-      },
-    },
+    conversationId: 'conv-extension-task',
+    runId: 'run-extension-task',
+    parentRunId: 'run-extension-task',
+    childRunId,
+    childKind: 'task',
   };
 }

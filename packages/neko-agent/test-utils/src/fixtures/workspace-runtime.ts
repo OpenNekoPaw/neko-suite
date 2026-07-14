@@ -1,6 +1,6 @@
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
-import type { SerializableTask, UnifiedConfig } from '@neko/shared';
+import type { UnifiedConfig } from '@neko/shared';
 import { serializeUnifiedConfigToToml } from '@neko/shared/config/toml-config';
 
 export interface AgentWorkspaceRuntimeFixturePaths {
@@ -13,7 +13,6 @@ export interface AgentWorkspaceRuntimeFixturePaths {
   readonly userCommandsDir: string;
   readonly workspaceSkillsDir: string;
   readonly workspaceCommandsDir: string;
-  readonly taskRecordsPath: string;
   readonly hostPrivateLeasePath: string;
   readonly resourceCacheRoot: string;
   readonly resourceCacheManifestPath: string;
@@ -23,7 +22,6 @@ export interface AgentWorkspaceRuntimeFixture {
   readonly paths: AgentWorkspaceRuntimeFixturePaths;
   readonly userConfig: UnifiedConfig;
   readonly workspaceConfig: UnifiedConfig;
-  readonly taskRecords: readonly SerializableTask[];
   readonly files: Readonly<Record<string, string>>;
 }
 
@@ -31,7 +29,6 @@ export interface AgentWorkspaceRuntimeFixtureOptions {
   readonly rootDir: string;
   readonly userConfig?: UnifiedConfig;
   readonly workspaceConfig?: UnifiedConfig;
-  readonly taskRecords?: readonly SerializableTask[];
 }
 
 export function createAgentWorkspaceRuntimeFixturePaths(
@@ -53,7 +50,6 @@ export function createAgentWorkspaceRuntimeFixturePaths(
     userCommandsDir: path.join(userNekoDir, 'commands'),
     workspaceSkillsDir: path.join(workspaceNekoDir, 'skills'),
     workspaceCommandsDir: path.join(workspaceNekoDir, 'commands'),
-    taskRecordsPath: path.join(workspaceNekoDir, 'tasks.json'),
     hostPrivateLeasePath: path.join(homeDir, '.neko', 'host-private', 'leases.json'),
     resourceCacheRoot,
     resourceCacheManifestPath: path.join(resourceCacheRoot, 'manifest.json'),
@@ -67,13 +63,10 @@ export function createAgentWorkspaceRuntimeFixture(
   const userConfig = options.userConfig ?? createDefaultAgentWorkspaceRuntimeUserConfig();
   const workspaceConfig =
     options.workspaceConfig ?? createDefaultAgentWorkspaceRuntimeWorkspaceConfig();
-  const taskRecords = options.taskRecords ?? [createAgentWorkspaceRuntimeTaskRecord()];
-
   return {
     paths,
     userConfig,
     workspaceConfig,
-    taskRecords,
     files: {
       [paths.userConfigPath]: serializeUnifiedConfigToToml(userConfig),
       [paths.workspaceConfigPath]: serializeUnifiedConfigToToml(workspaceConfig),
@@ -89,7 +82,6 @@ export function createAgentWorkspaceRuntimeFixture(
         '# Personal check\n\nCheck globally.',
       [path.join(paths.workspaceCommandsDir, 'project-check.md')]:
         '# Project check\n\nCheck project.',
-      [paths.taskRecordsPath]: JSON.stringify({ tasks: taskRecords }, null, 2),
       [paths.hostPrivateLeasePath]: JSON.stringify({ leases: [] }, null, 2),
       [paths.resourceCacheManifestPath]: JSON.stringify({ version: 1, entries: [] }, null, 2),
     },
@@ -187,41 +179,6 @@ export function createDefaultAgentWorkspaceRuntimeWorkspaceConfig(): UnifiedConf
       },
     ],
   };
-}
-
-export function createAgentWorkspaceRuntimeTaskRecord(
-  overrides: Partial<SerializableTask> = {},
-): SerializableTask {
-  const now = 1_800_000_000_000;
-  const id = overrides.id ?? 'workspace-task-1';
-  return {
-    id,
-    type: 'workflow',
-    status: 'running',
-    progress: 25,
-    createdAt: now,
-    updatedAt: now,
-    input: {
-      type: 'workflow',
-      payload: { prompt: 'create a project artifact' },
-      lifecycle: {
-        ownerConversationId: 'workspace-conversation-1',
-        ownerRunId: 'workspace-run-1',
-        runMode: 'background',
-        costPhase: 'external-wait',
-        interruptPolicy: 'detach-and-continue',
-        recoverPolicy: 'snapshot-only',
-      },
-    },
-    ...overrides,
-    scope: overrides.scope ?? {
-      conversationId: 'workspace-conversation-1',
-      runId: 'workspace-run-1',
-      parentRunId: 'workspace-run-1',
-      childRunId: id,
-      childKind: 'task',
-    },
-  } satisfies SerializableTask;
 }
 
 function createSkillMarkdown(name: string, description: string): string {

@@ -21,6 +21,7 @@ import {
   type DocumentResourceCacheFsOps,
   type ResourceCacheFileOps,
   type ResourceCacheFsOps,
+  type ResourceCacheManifestStore,
   type ResourceCacheService,
 } from '@neko/shared/content-access';
 import {
@@ -43,6 +44,7 @@ const DEFAULT_PROVIDER_ASSET_RANGE_BYTES = 20 * 1024 * 1024;
 export interface CreateNodeContentAccessRuntimeOptions {
   readonly host: NekoHostPorts;
   readonly maxProviderAssetBytes?: number;
+  readonly resourceCacheManifestStore?: ResourceCacheManifestStore;
 }
 
 export interface NodeContentAccessRuntimeServices {
@@ -130,6 +132,10 @@ class NodeContentAccessRuntimeBuilder {
     const resourceCacheFsOps = this.createResourceCacheFsOps();
     const resourceCacheProviderFsOps = this.createResourceCacheProviderFsOps();
     const documentResourceCacheFsOps = this.createDocumentResourceCacheFsOps();
+    const resourceCacheManifestStore = this.options.resourceCacheManifestStore;
+    if (workspace.storageLayout && !resourceCacheManifestStore) {
+      throw new Error('TUI ResourceCache requires a LocalMetadata manifest store.');
+    }
     const resourceCache = workspace.storageLayout
       ? this.createResourceCache({
           workspaceRoot,
@@ -139,7 +145,7 @@ class NodeContentAccessRuntimeBuilder {
           resourceCacheProviderFsOps,
           documentResourceCacheFsOps,
           cacheRoot: workspace.storageLayout.project.local.cache.resources,
-          manifestPath: workspace.storageLayout.project.local.cache.resourceManifest,
+          manifestStore: resourceCacheManifestStore,
         })
       : undefined;
     const contentAccess = this.createContentAccess({
@@ -222,11 +228,11 @@ class NodeContentAccessRuntimeBuilder {
     readonly resourceCacheProviderFsOps: ResourceCacheFileOps;
     readonly documentResourceCacheFsOps: DocumentResourceCacheFsOps;
     readonly cacheRoot: string;
-    readonly manifestPath: string;
+    readonly manifestStore: ResourceCacheManifestStore;
   }): ResourceCacheService {
     return new HostResourceCacheService({
       cacheRoot: input.cacheRoot,
-      manifestPath: input.manifestPath,
+      manifestStore: input.manifestStore,
       projectRoot: input.workspaceRoot,
       fsOps: input.resourceCacheFsOps,
       providers: [

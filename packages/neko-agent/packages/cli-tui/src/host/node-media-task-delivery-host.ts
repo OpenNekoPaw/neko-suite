@@ -1,9 +1,6 @@
 import * as path from 'node:path';
 import type { GeneratedAsset, RenderableGeneratedAsset, TaskRunScope } from '@neko/shared';
-import {
-  WORKSPACE_GENERATED_ASSET_ROOT,
-  resolveWorkspaceGeneratedAssetRelativeDirectory,
-} from '@neko/shared';
+import { resolveWorkspaceGeneratedAssetRelativeDirectory } from '@neko/shared';
 import {
   buildMediaTaskDeliverySettingsPlan,
   buildMediaTaskProgressViewDelivery,
@@ -21,26 +18,17 @@ import type { GeneratedMediaTaskType } from '@neko/platform/media/media-generate
 export interface NodeMediaTaskDeliveryHostDeps {
   readonly platform?: Platform;
   readonly workspaceRoot: string;
-  readonly assetIndex?: GeneratedAssetIndex;
+  readonly assetIndex: GeneratedAssetIndex;
 }
 
 export class NodeMediaTaskDeliveryHost {
   private readonly assetIndex: GeneratedAssetIndex;
-  private readonly ownsAssetIndex: boolean;
 
   constructor(private readonly deps: NodeMediaTaskDeliveryHostDeps) {
-    this.assetIndex =
-      deps.assetIndex ??
-      new GeneratedAssetIndex(path.join(deps.workspaceRoot, WORKSPACE_GENERATED_ASSET_ROOT));
-    this.ownsAssetIndex = deps.assetIndex === undefined;
-    void this.assetIndex.load();
+    this.assetIndex = deps.assetIndex;
   }
 
-  dispose(): void {
-    if (this.ownsAssetIndex) {
-      this.assetIndex.dispose();
-    }
-  }
+  dispose(): void {}
 
   createTaskViewDelivery(task: MediaTask): Promise<MediaTaskViewDelivery> {
     return buildMediaTaskViewDelivery({

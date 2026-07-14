@@ -8,7 +8,12 @@ import {
   type WebviewKeyboardEditableOwnerUpdate,
 } from '@neko/shared/vscode/extension';
 import type { ILogger } from '@neko/shared';
-import { ChatViewProvider, createChatLocalResourceAccess } from '../chatProvider';
+import type { ConversationRecord, ConversationResumeStorage } from '@neko/agent';
+import {
+  ChatViewProvider,
+  createChatLocalResourceAccess,
+  type ChatViewProviderOptions,
+} from '../chatProvider';
 import { setRootLogger } from '../../base';
 
 describe('chatProvider', () => {
@@ -329,24 +334,18 @@ describe('chatProvider', () => {
 
   it('preserves the active conversation when an empty tab state arrives during an agent turn', async () => {
     const now = Date.now();
-    const historicalConversation = {
+    const historicalConversation = createJournalConversationRecord({
       id: 'conv-history',
       title: 'History',
-      messages: [{ id: 'msg-1', role: 'user', content: 'hi', timestamp: now }],
-      createdAt: now,
-      updatedAt: now,
-      resumable: false,
-      tokenCount: 1,
-    };
-    const context = createMockContext({
-      conversations: {
-        conversations: [['conv-history', historicalConversation]],
-        activeId: null,
-      },
+      messageId: 'msg-1',
+      content: 'hi',
+      now,
     });
+    const context = createMockContext();
     const webview = vscode.createMockWebview();
     const provider = new ChatViewProvider(vscode.Uri.file('/ext/neko-agent'), context, {
       localResourceAccess: createImmediateLocalResourceAccess(),
+      conversationResume: createConversationResume([historicalConversation]),
     });
 
     provider.resolveWebviewView(
@@ -406,24 +405,18 @@ describe('chatProvider', () => {
 
   it('preserves same-session open tabs when the webview is recreated', async () => {
     const now = Date.now();
-    const historicalConversation = {
+    const historicalConversation = createJournalConversationRecord({
       id: 'conv-history',
       title: 'History',
-      messages: [{ id: 'msg-1', role: 'user', content: 'persisted transcript', timestamp: now }],
-      createdAt: now,
-      updatedAt: now,
-      resumable: false,
-      tokenCount: 1,
-    };
-    const context = createMockContext({
-      conversations: {
-        conversations: [['conv-history', historicalConversation]],
-        activeId: null,
-      },
+      messageId: 'msg-1',
+      content: 'persisted transcript',
+      now,
     });
+    const context = createMockContext();
     const firstWebview = vscode.createMockWebview();
     const provider = new ChatViewProvider(vscode.Uri.file('/ext/neko-agent'), context, {
       localResourceAccess: createImmediateLocalResourceAccess(),
+      conversationResume: createConversationResume([historicalConversation]),
     });
 
     provider.resolveWebviewView(
@@ -498,20 +491,14 @@ describe('chatProvider', () => {
 
   it('atomically activates a history conversation and echoes activation correlation', async () => {
     const now = Date.now();
-    const historicalConversation = {
+    const historicalConversation = createJournalConversationRecord({
       id: 'conv-history',
       title: 'History',
-      messages: [{ id: 'msg-1', role: 'user', content: 'persisted transcript', timestamp: now }],
-      createdAt: now,
-      updatedAt: now,
-      resumable: false,
-      tokenCount: 1,
-    };
+      messageId: 'msg-1',
+      content: 'persisted transcript',
+      now,
+    });
     const context = createMockContext({
-      conversations: {
-        conversations: [['conv-history', historicalConversation]],
-        activeId: null,
-      },
       'neko.tabState': {
         openTabs: [],
         activeTabId: null,
@@ -520,6 +507,7 @@ describe('chatProvider', () => {
     const webview = vscode.createMockWebview();
     const provider = new ChatViewProvider(vscode.Uri.file('/ext/neko-agent'), context, {
       localResourceAccess: createImmediateLocalResourceAccess(),
+      conversationResume: createConversationResume([historicalConversation]),
     });
 
     provider.resolveWebviewView(
@@ -727,24 +715,18 @@ describe('chatProvider', () => {
     const logger = createSpyLogger();
     setRootLogger(logger);
     const now = Date.now();
-    const historicalConversation = {
+    const historicalConversation = createJournalConversationRecord({
       id: 'conv-history',
       title: 'History',
-      messages: [{ id: 'msg-1', role: 'user', content: 'persisted transcript', timestamp: now }],
-      createdAt: now,
-      updatedAt: now,
-      resumable: false,
-      tokenCount: 1,
-    };
-    const context = createMockContext({
-      conversations: {
-        conversations: [['conv-history', historicalConversation]],
-        activeId: null,
-      },
+      messageId: 'msg-1',
+      content: 'persisted transcript',
+      now,
     });
+    const context = createMockContext();
     const webview = vscode.createMockWebview();
     const provider = new ChatViewProvider(vscode.Uri.file('/ext/neko-agent'), context, {
       localResourceAccess: createImmediateLocalResourceAccess(),
+      conversationResume: createConversationResume([historicalConversation]),
     });
 
     provider.resolveWebviewView(
@@ -789,20 +771,14 @@ describe('chatProvider', () => {
     const logger = createSpyLogger();
     setRootLogger(logger);
     const now = Date.now();
-    const historicalConversation = {
+    const historicalConversation = createJournalConversationRecord({
       id: 'conv-history',
       title: 'History',
-      messages: [{ id: 'msg-1', role: 'user', content: 'persisted transcript', timestamp: now }],
-      createdAt: now,
-      updatedAt: now,
-      resumable: false,
-      tokenCount: 1,
-    };
+      messageId: 'msg-1',
+      content: 'persisted transcript',
+      now,
+    });
     const context = createMockContext({
-      conversations: {
-        conversations: [['conv-history', historicalConversation]],
-        activeId: null,
-      },
       'neko.tabState.writeMetadata': {
         ownerId: 'other-window',
         revision: 5,
@@ -812,6 +788,7 @@ describe('chatProvider', () => {
     const webview = vscode.createMockWebview();
     const provider = new ChatViewProvider(vscode.Uri.file('/ext/neko-agent'), context, {
       localResourceAccess: createImmediateLocalResourceAccess(),
+      conversationResume: createConversationResume([historicalConversation]),
     });
 
     await context.workspaceState.update('neko.tabState.writeMetadata', {
@@ -1479,36 +1456,25 @@ describe('chatProvider', () => {
 
   it('serves cache-only snapshots requested after Tab bindings restore', async () => {
     const now = Date.now();
-    const conversationA = {
+    const conversationA = createJournalConversationRecord({
       id: 'conv-a',
       title: 'A',
-      messages: [{ id: 'msg-a', role: 'user', content: 'message-a', timestamp: now }],
-      createdAt: now,
-      updatedAt: now,
-      resumable: false,
-      tokenCount: 1,
-    };
-    const conversationB = {
+      messageId: 'msg-a',
+      content: 'message-a',
+      now,
+    });
+    const conversationB = createJournalConversationRecord({
       id: 'conv-b',
       title: 'B',
-      messages: [{ id: 'msg-b', role: 'user', content: 'message-b', timestamp: now }],
-      createdAt: now,
-      updatedAt: now,
-      resumable: false,
-      tokenCount: 1,
-    };
-    const context = createMockContext({
-      conversations: {
-        conversations: [
-          ['conv-a', conversationA],
-          ['conv-b', conversationB],
-        ],
-        activeId: null,
-      },
+      messageId: 'msg-b',
+      content: 'message-b',
+      now,
     });
+    const context = createMockContext();
     const webview = vscode.createMockWebview();
     const provider = new ChatViewProvider(vscode.Uri.file('/ext/neko-agent'), context, {
       localResourceAccess: createImmediateLocalResourceAccess(),
+      conversationResume: createConversationResume([conversationA, conversationB]),
     });
 
     provider.resolveWebviewView(
@@ -1628,6 +1594,55 @@ describe('chatProvider', () => {
     provider.dispose();
   });
 });
+
+function createJournalConversationRecord(input: {
+  readonly id: string;
+  readonly title: string;
+  readonly messageId: string;
+  readonly content: string;
+  readonly now: number;
+}): ConversationRecord {
+  return {
+    id: input.id,
+    version: 2,
+    title: input.title,
+    workDir: '/workspace/project-a',
+    messages: [{ role: 'user', content: input.content }],
+    messageEventIds: [[input.messageId]],
+    createdAt: input.now,
+    updatedAt: input.now,
+    source: 'journal-projection',
+  };
+}
+
+function createConversationResume(
+  initialRecords: readonly ConversationRecord[],
+): NonNullable<ChatViewProviderOptions['conversationResume']> {
+  const records = new Map(initialRecords.map((record) => [record.id, record]));
+  const storage: ConversationResumeStorage = {
+    save: vi.fn(async (record) => {
+      records.set(record.id, record);
+    }),
+    load: vi.fn(async (conversationId) => records.get(conversationId)),
+    list: vi.fn(async () => [...records.values()]),
+    search: vi.fn(async (text) =>
+      [...records.values()].filter(
+        (record) =>
+          record.title.includes(text) || record.messages.some((item) => item.content === text),
+      ),
+    ),
+    delete: vi.fn(async (conversationId) => {
+      records.delete(conversationId);
+    }),
+    flush: vi.fn(async () => {}),
+    dispose: vi.fn(async () => {}),
+  };
+  return {
+    storage,
+    initialRecords,
+    disposeHost: vi.fn(async () => {}),
+  };
+}
 
 function createMockContext(
   initialWorkspaceState: Readonly<Record<string, unknown>> = {},

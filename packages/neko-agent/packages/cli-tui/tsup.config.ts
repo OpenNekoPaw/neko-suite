@@ -5,7 +5,9 @@ export default defineConfig({
   format: ['esm'],
   dts: false,
   clean: true,
-  target: 'node18',
+  splitting: true,
+  removeNodeProtocol: false,
+  target: 'node24',
   outDir: 'dist',
   // Bundle workspace packages since they export raw .ts files
   noExternal: [
@@ -16,6 +18,7 @@ export default defineConfig({
     '@neko/content',
     '@neko/entity',
     '@neko/host',
+    '@neko/markdown',
     '@neko/market-core',
     '@neko/platform',
     '@neko/search',
@@ -24,7 +27,7 @@ export default defineConfig({
     'neko-assets',
   ],
   // Keep heavy/optional deps external
-  external: ['ink', 'react', 'yoga-wasm-web', 'mermaid', 'ajv'],
+  external: ['ink', 'react', 'yoga-wasm-web', 'mermaid', 'ajv', 'bun:sqlite', 'node:sqlite'],
   esbuildOptions(options) {
     options.loader = {
       ...options.loader,
@@ -32,6 +35,10 @@ export default defineConfig({
     };
   },
   banner: {
-    js: '#!/usr/bin/env node',
+    js: [
+      '#!/usr/bin/env node',
+      "import { createRequire } from 'node:module';",
+      'const require = createRequire(import.meta.url);',
+    ].join('\n'),
   },
 });

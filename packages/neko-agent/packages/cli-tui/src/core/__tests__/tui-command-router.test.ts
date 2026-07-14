@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { AGENT_COMMAND_MESSAGE_SOURCE } from '@neko/agent/commands/terminal-messages';
-import { FileConversationStorage, type ConversationRecord } from '@neko/agent';
+import type { ConversationRecord, ConversationResumeStorage } from '@neko/agent';
 import type { ActiveSkillLifecycleRecordProjection, ChatModelOption, Task } from '@neko/shared';
 import {
   handleTuiControlCommand,
@@ -921,7 +921,7 @@ describe('handleTuiControlCommand', () => {
   });
 
   it('resumes a full conversation through the canonical router without rewriting history', async () => {
-    const storage = createMemoryConversationStorage('/workspace/demo');
+    const storage = createMemoryConversationStorage();
     const record: ConversationRecord = {
       id: 'conv-原文',
       version: 1,
@@ -958,7 +958,7 @@ describe('handleTuiControlCommand', () => {
   });
 
   it('wraps conversation storage failures without translating external detail', async () => {
-    const storage = createMemoryConversationStorage('/workspace/demo');
+    const storage = createMemoryConversationStorage();
     vi.spyOn(storage, 'list').mockRejectedValue(new Error('EACCES external-detail 原文'));
     const base = createContext({ uiLocale: 'zh-cn' });
     const context: TuiCommandRouterContext = {
@@ -994,21 +994,26 @@ describe('handleTuiControlCommand', () => {
   });
 });
 
-function createMemoryConversationStorage(workDir: string): FileConversationStorage {
-  const files = new Map<string, string>();
-  return new FileConversationStorage({
-    indexFilePath: '/tmp/conversations-index.json',
-    workDir,
-    readFile: async (filePath) => {
-      const content = files.get(filePath);
-      if (content === undefined) throw new Error(`File not found: ${filePath}`);
-      return content;
+function createMemoryConversationStorage(): ConversationResumeStorage {
+  const records = new Map<string, ConversationRecord>();
+  return {
+    save: async (record) => {
+      records.set(record.id, record);
     },
-    writeFile: async (filePath, content) => {
-      files.set(filePath, content);
+    load: async (conversationId) => records.get(conversationId),
+    list: async () => [...records.values()],
+    search: async (text) => {
+      const normalized = text.trim().toLocaleLowerCase();
+      return [...records.values()].filter((record) =>
+        record.title.toLocaleLowerCase().includes(normalized),
+      );
     },
-    exists: async (filePath) => files.has(filePath),
-  });
+    delete: async (conversationId) => {
+      records.delete(conversationId);
+    },
+    flush: async () => {},
+    dispose: async () => {},
+  };
 }
 
 function createContext(

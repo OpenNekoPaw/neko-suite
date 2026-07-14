@@ -11,7 +11,8 @@ import type { CreativeAiConversationProjection } from '@neko-agent/types';
 import {
   createConversationId,
   createFileAgentWorkspaceRuntimeStateRuntime,
-  createFileConversationPersistenceRuntime,
+  createConversationPersistenceRuntime,
+  projectJournalHistoryWithToolContext,
   ConversationManager,
   type AgentHistoryEntry,
   type AgentWorkspaceRuntimeStateRuntime,
@@ -21,7 +22,9 @@ import {
   type ConversationPersistenceFlushResult,
   type ConversationPersistenceRuntime,
   type ConversationPersistenceRuntimeResult,
-  type ConversationStorage,
+  type ConversationRecord,
+  type ConversationReconcileResult,
+  type ConversationResumeStorage,
   type DeleteConversationOptions,
 } from '@neko/agent';
 import { buildAgentSessionDiagnosticMessage, type Message } from '@neko-agent/types';
@@ -34,19 +37,22 @@ export type ConversationTerminalPersistenceResult =
   | ConversationPersistenceRuntimeResult
   | { readonly kind: 'unavailable'; readonly conversationId: string };
 
-/**
- * VSCode Memento storage adapter for ConversationManager
- */
-class VscodeConversationStorage implements ConversationStorage {
-  constructor(private readonly state: vscode.Memento) {}
+interface ConversationBridgeContext {
+  readonly workspaceState: Pick<vscode.Memento, 'get' | 'update'>;
+}
 
-  get<T>(key: string): T | undefined {
-    return this.state.get(key);
-  }
+export interface ConversationBridgeResumeOptions {
+  readonly resumeStorage: ConversationResumeStorage;
+  readonly initialRecords: readonly ConversationRecord[];
+  readonly getChatModelSelection?: (
+    conversationId: string,
+  ) => ConversationRecord['chatModelSelection'];
+}
 
-  update(key: string, value: unknown): Promise<void> {
-    return Promise.resolve(this.state.update(key, value));
-  }
+export interface ConversationResumeDiagnostic {
+  readonly code: 'conversation-history-hydration-failed';
+  readonly conversationId: string;
+  readonly message: string;
 }
 
 export class ConversationBridge {
@@ -58,26 +64,37 @@ export class ConversationBridge {
   private readonly getWorkspaceRoot: (() => string | undefined) | undefined;
   private readonly initialWorkspaceRoot: string | undefined;
   private readonly deletedConversationIds = new Set<string>();
+  private readonly hydratedAgentHistory = new Map<string, AgentHistoryEntry[]>();
+  private readonly resumeDiagnostics = new Map<string, ConversationResumeDiagnostic>();
+  private readonly resumeStorage: ConversationResumeStorage | undefined;
   private persistenceDisposePromise:
     Promise<ConversationPersistenceDisposeResult | null> | undefined;
 
   constructor(
-    context: vscode.ExtensionContext,
+    _context: ConversationBridgeContext,
     workspaceRoot?: string | (() => string | undefined),
     private readonly localResourceAccess?: AgentLocalResourceAccess,
     private readonly getContentAccessRuntime?: () => AgentContentAccessRuntime | undefined,
+    resumeOptions?: ConversationBridgeResumeOptions,
   ) {
+    this.resumeStorage = resumeOptions?.resumeStorage;
     const initialWorkspaceRoot =
       typeof workspaceRoot === 'function' ? workspaceRoot() : workspaceRoot;
     this.initialWorkspaceRoot = initialWorkspaceRoot;
     this.getWorkspaceRoot = typeof workspaceRoot === 'function' ? workspaceRoot : undefined;
-    const storage = new VscodeConversationStorage(context.workspaceState);
-    this._conversationManager = new ConversationManager(storage, undefined, {
+    this._conversationManager = new ConversationManager(undefined, undefined, {
       generateId: () => {
         const root = this.getWorkspaceRoot?.() ?? initialWorkspaceRoot;
         return root ? createConversationId(root) : undefined;
       },
     });
+    if (resumeOptions) {
+      const projected = this._projectResumeRecords(resumeOptions.initialRecords);
+      this._conversationManager.hydrate(projected.managerRecords);
+      for (const [conversationId, history] of projected.agentHistoryById) {
+        this.hydratedAgentHistory.set(conversationId, history);
+      }
+    }
 
     // Clean up empty conversations from previous sessions
     const cleaned = this._conversationManager.cleanupEmpty();
@@ -87,17 +104,21 @@ export class ConversationBridge {
 
     // Initialize shared resume-layer file storage if workspace root is known
     if (initialWorkspaceRoot) {
-      this._persistenceRuntime = createFileConversationPersistenceRuntime({
-        workspaceRoot: initialWorkspaceRoot,
-        source: 'extension',
-        getConversation: (conversationId) => this._conversationManager.get(conversationId),
-        onWarning: (warning) => {
-          logger.warn('Failed to sync conversation to file', {
-            conversationId: warning.conversationId,
-            err: warning.error,
-          });
-        },
-      });
+      this._persistenceRuntime = resumeOptions
+        ? createConversationPersistenceRuntime({
+            workDir: initialWorkspaceRoot,
+            source: 'extension',
+            storage: resumeOptions.resumeStorage,
+            getChatModelSelection: resumeOptions.getChatModelSelection,
+            getConversation: (conversationId) => this._conversationManager.get(conversationId),
+            onWarning: (warning) => {
+              logger.warn('Failed to sync conversation to SQLite catalog', {
+                conversationId: warning.conversationId,
+                err: warning.error,
+              });
+            },
+          })
+        : null;
       this._workspaceRuntimeState = createFileAgentWorkspaceRuntimeStateRuntime({
         workDir: initialWorkspaceRoot,
         source: 'extension',
@@ -176,7 +197,10 @@ export class ConversationBridge {
    * Project a conversation into agent history for runtime hydration.
    */
   toAgentHistory(conversationId: string): AgentHistoryEntry[] {
-    return this._conversationManager.toAgentHistory(conversationId);
+    const hydrated = this.hydratedAgentHistory.get(conversationId);
+    return hydrated
+      ? hydrated.map((message) => ({ ...message }))
+      : this._conversationManager.toAgentHistory(conversationId);
   }
 
   /**
@@ -207,6 +231,7 @@ export class ConversationBridge {
    */
   delete(conversationId: string, options?: DeleteConversationOptions): void {
     this._conversationManager.delete(conversationId, options);
+    this.hydratedAgentHistory.delete(conversationId);
     this.deletedConversationIds.add(conversationId);
     this._queueConversationDelete(conversationId);
     this._queueWorkspaceRuntimeStateDelete(conversationId);
@@ -218,6 +243,7 @@ export class ConversationBridge {
   clearAll(): void {
     const conversationIds = this._conversationManager.list().map((conversation) => conversation.id);
     this._conversationManager.clear();
+    this.hydratedAgentHistory.clear();
     for (const conversationId of conversationIds) {
       this.deletedConversationIds.add(conversationId);
       this._queueConversationDelete(conversationId);
@@ -242,6 +268,63 @@ export class ConversationBridge {
     return this._conversationManager.list();
   }
 
+  getResumeDiagnostics(): readonly ConversationResumeDiagnostic[] {
+    return [...this.resumeDiagnostics.values()].map((diagnostic) => ({ ...diagnostic }));
+  }
+
+  async refreshFromResumeStorage(): Promise<ConversationReconcileResult> {
+    if (!this.resumeStorage) return { upsertedIds: [], removedIds: [] };
+    await this.flushConversationPersistence();
+    const records = await this.resumeStorage.list();
+    const durableIds = new Set(records.map((record) => record.id));
+    for (const conversationId of this.resumeDiagnostics.keys()) {
+      if (!durableIds.has(conversationId)) this.resumeDiagnostics.delete(conversationId);
+    }
+    const projected = this._projectResumeRecords(records);
+    const result = this._conversationManager.reconcileHydrated(projected.managerRecords);
+    for (const conversationId of result.upsertedIds) {
+      const history = projected.agentHistoryById.get(conversationId);
+      if (!history) {
+        throw new Error(`Conversation refresh lost projected history ${conversationId}.`);
+      }
+      this.hydratedAgentHistory.set(conversationId, history);
+      this.deletedConversationIds.delete(conversationId);
+    }
+    for (const conversationId of result.removedIds) {
+      this.hydratedAgentHistory.delete(conversationId);
+      if (!this.resumeDiagnostics.has(conversationId)) {
+        this.deletedConversationIds.add(conversationId);
+      }
+    }
+    return result;
+  }
+
+  private _projectResumeRecords(records: readonly ConversationRecord[]): {
+    readonly managerRecords: ReturnType<typeof projectConversationRecordForManager>[];
+    readonly agentHistoryById: ReadonlyMap<string, AgentHistoryEntry[]>;
+  } {
+    const managerRecords: ReturnType<typeof projectConversationRecordForManager>[] = [];
+    const agentHistoryById = new Map<string, AgentHistoryEntry[]>();
+    for (const record of records) {
+      try {
+        const managerRecord = projectConversationRecordForManager(record);
+        const agentHistory = projectJournalHistoryWithToolContext(record.messages);
+        managerRecords.push(managerRecord);
+        agentHistoryById.set(record.id, agentHistory);
+        this.resumeDiagnostics.delete(record.id);
+      } catch (error) {
+        const diagnostic: ConversationResumeDiagnostic = {
+          code: 'conversation-history-hydration-failed',
+          conversationId: record.id,
+          message: getErrorMessage(error),
+        };
+        this.resumeDiagnostics.set(record.id, diagnostic);
+        logger.warn('Persisted conversation history could not be hydrated', diagnostic);
+      }
+    }
+    return { managerRecords, agentHistoryById };
+  }
+
   /**
    * Add message to active conversation
    */
@@ -255,6 +338,7 @@ export class ConversationBridge {
    * Add message to a specific conversation (for background execution)
    */
   addMessageToConversation(conversationId: string, message: Message): void {
+    this.hydratedAgentHistory.delete(conversationId);
     // Use incremental addMessage instead of full array copy via updateMessages
     this._conversationManager.addMessage(conversationId, message);
     this._conversationManager.flush();
@@ -308,6 +392,7 @@ export class ConversationBridge {
    * Replace messages for a specific conversation and keep the shared resume layer in sync.
    */
   updateMessagesForConversation(conversationId: string, messages: Message[]): void {
+    this.hydratedAgentHistory.delete(conversationId);
     this._conversationManager.updateMessages(conversationId, messages);
     this._conversationManager.flush();
     this._queueConversationPersistence(conversationId);
@@ -553,4 +638,41 @@ export class ConversationBridge {
       },
     );
   }
+}
+
+function projectConversationRecordForManager(record: ConversationRecord) {
+  const messages: Message[] = [];
+  for (const [index, message] of record.messages.entries()) {
+    if (message.role === 'tool') continue;
+    messages.push({
+      id: record.messageEventIds?.[index]?.[0] ?? `${record.id}-journal-${index}`,
+      role: message.role,
+      content: projectJournalMessageContent(message.content),
+      timestamp: Math.min(record.updatedAt, record.createdAt + index),
+    });
+  }
+  return {
+    id: record.id,
+    title: record.title,
+    messages,
+    createdAt: record.createdAt,
+    updatedAt: record.updatedAt,
+    resumable: false,
+  };
+}
+
+function projectJournalMessageContent(
+  content: ConversationRecord['messages'][number]['content'],
+): string {
+  if (typeof content === 'string') return content;
+  return content
+    .map((part) => {
+      if (part.type === 'text') return part.text;
+      return JSON.stringify(part);
+    })
+    .join('\n');
+}
+
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }

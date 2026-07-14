@@ -5,6 +5,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { TaskHandler } from '../taskHandler';
 import * as vscode from 'vscode';
+import type { TaskRunScope } from '@neko/shared';
 
 vi.mock('vscode', async () => await import('../../../__mocks__/vscode'));
 
@@ -17,8 +18,18 @@ function createMockTaskManager() {
     list: vi.fn().mockResolvedValue([]),
     cancel: vi.fn().mockResolvedValue(undefined),
     get: vi.fn().mockResolvedValue(null),
-    submit: vi.fn().mockResolvedValue('retry-task-1'),
+    submit: vi.fn().mockResolvedValue(taskScope('retry-task-1')),
     delete: vi.fn().mockResolvedValue(undefined),
+  };
+}
+
+function taskScope(childRunId: string, ownerConversationId = 'conv-1'): TaskRunScope {
+  return {
+    conversationId: ownerConversationId,
+    runId: 'run-1',
+    parentRunId: 'run-1',
+    childRunId,
+    childKind: 'task',
   };
 }
 
@@ -60,6 +71,7 @@ describe('TaskHandler', () => {
 
     it('should send mapped task views when tasks exist', async () => {
       const mockTask = {
+        scope: taskScope('task-1'),
         id: 'task-1',
         type: 'image_generation',
         status: 'completed',
@@ -98,6 +110,7 @@ describe('TaskHandler', () => {
     it('should truncate long prompt names to 50 chars', async () => {
       const longPrompt = 'A'.repeat(60);
       const mockTask = {
+        scope: taskScope('task-2'),
         id: 'task-2',
         type: 'text_generation',
         status: 'running',
@@ -121,6 +134,7 @@ describe('TaskHandler', () => {
 
     it('should format task type as display name when no prompt', async () => {
       const mockTask = {
+        scope: taskScope('task-3'),
         id: 'task-3',
         type: 'image_generation',
         status: 'pending',
@@ -143,6 +157,7 @@ describe('TaskHandler', () => {
 
     it('should fall back to payload.content when payload.name is absent', async () => {
       const mockTask = {
+        scope: taskScope('task-content'),
         id: 'task-content',
         type: 'workflow',
         status: 'completed',
@@ -167,23 +182,24 @@ describe('TaskHandler', () => {
   describe('handleCancelTask', () => {
     it('should do nothing when taskManager is unavailable', async () => {
       handler = new TaskHandler({});
-      await handler.handleCancelTask(webview as any, 'task-1', conversationId);
+      await handler.handleCancelTask(webview as any, taskScope('task-1'));
       expect(webview.postMessage).not.toHaveBeenCalled();
     });
 
     it('should cancel task and refresh list', async () => {
       taskManager.get.mockResolvedValue({
+        scope: taskScope('task-1'),
         id: 'task-1',
         input: { payload: { conversationId } },
       });
       handler = new TaskHandler({ taskManager: taskManager as any });
-      await handler.handleCancelTask(webview as any, 'task-1', conversationId);
+      await handler.handleCancelTask(webview as any, taskScope('task-1'));
 
-      expect(taskManager.cancel).toHaveBeenCalledWith('task-1');
+      expect(taskManager.cancel).toHaveBeenCalledWith(taskScope('task-1'));
       expect(taskManager.list).toHaveBeenCalled();
     });
 
-    it('should cancel media task when taskManager storage does not contain it', async () => {
+    it('should not fall back to an unscoped media task outside TaskManager', async () => {
       const mediaTask = {
         id: 'media-1',
         type: 'text-to-image',
@@ -197,17 +213,13 @@ describe('TaskHandler', () => {
         status: 'cancelled',
       });
 
-      handler = new TaskHandler({ taskManager: taskManager as any, platform: platform as any });
-      await handler.handleCancelTask(webview as any, 'media-1', conversationId);
+      handler = new TaskHandler({ taskManager: taskManager as any });
+      await handler.handleCancelTask(webview as any, taskScope('media-1'));
 
       expect(taskManager.cancel).not.toHaveBeenCalled();
-      expect(platform.media.cancelTask).toHaveBeenCalledWith('media-1');
-      expect(webview.postMessage).toHaveBeenCalledWith(
-        expect.objectContaining({
-          type: 'mediaTaskProgress',
-          conversationId,
-        }),
-      );
+      expect(platform.media.getTask).not.toHaveBeenCalled();
+      expect(platform.media.cancelTask).not.toHaveBeenCalled();
+      expect(webview.postMessage).not.toHaveBeenCalled();
     });
 
     it('should surface host-private lease diagnostics without touching task handles', async () => {
@@ -222,14 +234,13 @@ describe('TaskHandler', () => {
       });
       handler = new TaskHandler({
         taskManager: taskManager as any,
-        platform: platform as any,
         hostPrivateTaskLeaseGuard: { getDiagnostic },
       });
 
-      await handler.handleCancelTask(webview as any, 'task-lease', conversationId);
+      await handler.handleCancelTask(webview as any, taskScope('task-lease'));
 
       expect(getDiagnostic).toHaveBeenCalledWith({
-        taskId: 'task-lease',
+        scope: taskScope('task-lease'),
         control: 'cancel',
       });
       expect(taskManager.get).not.toHaveBeenCalled();
@@ -241,12 +252,13 @@ describe('TaskHandler', () => {
 
     it('should refuse tasks from another conversation', async () => {
       taskManager.get.mockResolvedValue({
+        scope: taskScope('task-1', 'conv-other'),
         id: 'task-1',
         input: { payload: { conversationId: 'conv-other' } },
       });
       handler = new TaskHandler({ taskManager: taskManager as any });
 
-      await handler.handleCancelTask(webview as any, 'task-1', conversationId);
+      await handler.handleCancelTask(webview as any, taskScope('task-1'));
 
       expect(taskManager.cancel).not.toHaveBeenCalled();
       expect(webview.postMessage).not.toHaveBeenCalled();
@@ -257,6 +269,7 @@ describe('TaskHandler', () => {
     it('should retry failed task-manager tasks and refresh list', async () => {
       const taskInput = { type: 'image_generation', payload: { conversationId } };
       taskManager.get.mockResolvedValue({
+        scope: taskScope('task-1'),
         id: 'task-1',
         type: 'image_generation',
         status: 'failed',
@@ -269,14 +282,19 @@ describe('TaskHandler', () => {
       });
 
       handler = new TaskHandler({ taskManager: taskManager as any });
-      await handler.handleRetryTask(webview as any, 'task-1', conversationId);
+      await handler.handleRetryTask(webview as any, taskScope('task-1'));
 
-      expect(taskManager.submit).toHaveBeenCalledWith(taskInput);
+      expect(taskManager.submit).toHaveBeenCalledWith(taskInput, {
+        conversationId,
+        runId: 'run-1',
+        parentRunId: 'run-1',
+      });
       expect(taskManager.list).toHaveBeenCalled();
     });
 
     it('should send an agent-projected failed update when retry submit fails', async () => {
       taskManager.get.mockResolvedValue({
+        scope: taskScope('task-1'),
         id: 'task-1',
         type: 'image_generation',
         status: 'failed',
@@ -293,7 +311,7 @@ describe('TaskHandler', () => {
       taskManager.submit.mockRejectedValue(new Error('quota exceeded'));
 
       handler = new TaskHandler({ taskManager: taskManager as any });
-      await handler.handleRetryTask(webview as any, 'task-1', conversationId);
+      await handler.handleRetryTask(webview as any, taskScope('task-1'));
 
       expect(webview.postMessage).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -313,6 +331,7 @@ describe('TaskHandler', () => {
   describe('handleViewTaskResult', () => {
     it('opens generated asset refs from task-manager output in VSCode', async () => {
       taskManager.get.mockResolvedValue({
+        scope: taskScope('task-1'),
         id: 'task-1',
         type: 'image_generation',
         status: 'completed',
@@ -332,7 +351,7 @@ describe('TaskHandler', () => {
         },
       });
 
-      await handler.handleViewTaskResult('task-1', conversationId);
+      await handler.handleViewTaskResult(taskScope('task-1'));
 
       expect(vscode.commands.executeCommand).toHaveBeenCalledWith(
         'vscode.open',
@@ -343,6 +362,7 @@ describe('TaskHandler', () => {
 
     it('opens workspace-relative generated files in VSCode', async () => {
       taskManager.get.mockResolvedValue({
+        scope: taskScope('task-1'),
         id: 'task-1',
         type: 'image_generation',
         status: 'completed',
@@ -354,7 +374,7 @@ describe('TaskHandler', () => {
       });
       handler = new TaskHandler({ taskManager: taskManager as any });
 
-      await handler.handleViewTaskResult('task-1', conversationId);
+      await handler.handleViewTaskResult(taskScope('task-1'));
 
       expect(vscode.commands.executeCommand).toHaveBeenCalledWith(
         'vscode.open',
@@ -365,6 +385,7 @@ describe('TaskHandler', () => {
 
     it('opens persisted task-manager results in VSCode instead of media provider urls', async () => {
       taskManager.get.mockResolvedValue({
+        scope: taskScope('task-1'),
         id: 'task-1',
         type: 'image_generation',
         status: 'completed',
@@ -384,7 +405,6 @@ describe('TaskHandler', () => {
       });
       handler = new TaskHandler({
         taskManager: taskManager as any,
-        platform: platform as any,
         generatedAssetLookup: {
           get: vi.fn().mockReturnValue({
             id: 'asset-1',
@@ -393,7 +413,7 @@ describe('TaskHandler', () => {
         },
       });
 
-      await handler.handleViewTaskResult('task-1', conversationId);
+      await handler.handleViewTaskResult(taskScope('task-1'));
 
       expect(vscode.commands.executeCommand).toHaveBeenCalledWith(
         'vscode.open',
@@ -404,6 +424,7 @@ describe('TaskHandler', () => {
 
     it('does not open webview render URIs through external applications', async () => {
       taskManager.get.mockResolvedValue({
+        scope: taskScope('task-1'),
         id: 'task-1',
         type: 'image_generation',
         status: 'completed',
@@ -415,7 +436,7 @@ describe('TaskHandler', () => {
       });
       handler = new TaskHandler({ taskManager: taskManager as any });
 
-      await handler.handleViewTaskResult('task-1', conversationId);
+      await handler.handleViewTaskResult(taskScope('task-1'));
 
       expect(vscode.commands.executeCommand).not.toHaveBeenCalledWith(
         'vscode.open',
@@ -426,6 +447,7 @@ describe('TaskHandler', () => {
 
     it('opens the displayed result ref when stored task data is not directly openable', async () => {
       taskManager.get.mockResolvedValue({
+        scope: taskScope('task-1'),
         id: 'task-1',
         type: 'image_generation',
         status: 'completed',
@@ -445,7 +467,6 @@ describe('TaskHandler', () => {
       });
       handler = new TaskHandler({
         taskManager: taskManager as any,
-        platform: platform as any,
         generatedAssetLookup: {
           get: vi.fn().mockReturnValue({
             id: 'asset-1',
@@ -454,7 +475,7 @@ describe('TaskHandler', () => {
         },
       });
 
-      await handler.handleViewTaskResult('task-1', conversationId, 'generated-assets/asset-1.png');
+      await handler.handleViewTaskResult(taskScope('task-1'), 'generated-assets/asset-1.png');
 
       expect(vscode.commands.executeCommand).toHaveBeenCalledWith(
         'vscode.open',
@@ -463,7 +484,7 @@ describe('TaskHandler', () => {
       expect(vscode.env.openExternal).not.toHaveBeenCalled();
     });
 
-    it('opens generated media task refs through the generated asset index', async () => {
+    it('does not open platform-only media task refs outside TaskManager', async () => {
       taskManager.get.mockResolvedValue(null);
       platform.media.getTask.mockResolvedValue({
         id: 'media-1',
@@ -475,7 +496,6 @@ describe('TaskHandler', () => {
       });
       handler = new TaskHandler({
         taskManager: taskManager as any,
-        platform: platform as any,
         generatedAssetLookup: {
           get: vi.fn().mockReturnValue({
             id: 'asset-1',
@@ -484,13 +504,11 @@ describe('TaskHandler', () => {
         },
       });
 
-      await handler.handleViewTaskResult('media-1', conversationId);
+      await handler.handleViewTaskResult(taskScope('media-1'));
 
-      expect(vscode.commands.executeCommand).toHaveBeenCalledWith(
-        'vscode.open',
-        expect.objectContaining({ fsPath: '/workspace/demo/neko/generated/image/task_1.png' }),
-      );
+      expect(vscode.commands.executeCommand).not.toHaveBeenCalled();
       expect(vscode.env.openExternal).not.toHaveBeenCalled();
+      expect(platform.media.getTask).not.toHaveBeenCalled();
     });
   });
 });

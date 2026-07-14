@@ -47,6 +47,15 @@ export const env = {
   openExternal: vi.fn().mockResolvedValue(true),
 };
 
+export const l10n = {
+  t: vi.fn((message: string, ...args: readonly unknown[]) =>
+    message.replace(/\{(\d+)\}/g, (placeholder, index) => {
+      const value = args[Number(index)];
+      return value === undefined ? placeholder : String(value);
+    }),
+  ),
+};
+
 // window mock
 export const window = {
   activeTextEditor: undefined as any,

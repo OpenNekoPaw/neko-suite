@@ -1,4 +1,5 @@
 import type { PerceptionAssetLoader, ProviderReadyAssetPayload } from '@neko/ai-sdk';
+import type { GeneratedAssetIndex } from '@neko/platform';
 import {
   getMimeType,
   type ContentDocumentSourceRef,
@@ -10,29 +11,34 @@ import type { AgentContentAccessRuntime } from '@neko/agent/runtime';
 
 export function createNodePerceptionAssetLoader(
   contentAccessRuntime: AgentContentAccessRuntime,
+  options: { readonly assetIndex?: GeneratedAssetIndex } = {},
 ): PerceptionAssetLoader {
   return {
-    load: async (ref) => loadPerceptionAsset(ref, contentAccessRuntime),
+    load: async (ref) => loadPerceptionAsset(ref, contentAccessRuntime, options),
   };
 }
 
 async function loadPerceptionAsset(
   ref: PerceptualAssetRef,
   contentAccessRuntime: AgentContentAccessRuntime,
+  options: { readonly assetIndex?: GeneratedAssetIndex },
 ): Promise<ProviderReadyAssetPayload> {
+  const resolvedRef = await resolveGeneratedAssetPerceptualRef(ref, options.assetIndex);
   const mimeType = ref.mimeType || getMimeType(ref.uri);
-  const hasStableResourceRef =
-    ref.resourceRef !== undefined || ref.documentResourceRef !== undefined;
-  if (!hasStableResourceRef && ref.uri.startsWith('data:')) {
-    return { kind: resolveProviderPayloadKind(mimeType), url: ref.uri, mimeType };
+  const hasStableResourceRef = hasStableProviderResourceRef(resolvedRef);
+  if (!hasStableResourceRef && resolvedRef.uri.startsWith('data:')) {
+    return { kind: resolveProviderPayloadKind(mimeType), url: resolvedRef.uri, mimeType };
   }
-  if (!hasStableResourceRef && (ref.uri.startsWith('http://') || ref.uri.startsWith('https://'))) {
-    return { kind: resolveProviderPayloadKind(mimeType), url: ref.uri, mimeType };
+  if (
+    !hasStableResourceRef &&
+    (resolvedRef.uri.startsWith('http://') || resolvedRef.uri.startsWith('https://'))
+  ) {
+    return { kind: resolveProviderPayloadKind(mimeType), url: resolvedRef.uri, mimeType };
   }
 
   const loaded = await contentAccessRuntime.loadProviderAsset({
     caller: 'perception-asset-loader',
-    source: createPerceptionAssetSource(ref),
+    source: createPerceptionAssetSource(resolvedRef),
     preferredTarget: 'bytes',
     mimeTypeHint: mimeType,
   });
@@ -49,6 +55,38 @@ async function loadPerceptionAsset(
     url: `data:${loadedMimeType};base64,${Buffer.from(loaded.bytes).toString('base64')}`,
     mimeType: loadedMimeType,
   };
+}
+
+async function resolveGeneratedAssetPerceptualRef(
+  ref: PerceptualAssetRef,
+  assetIndex: GeneratedAssetIndex | undefined,
+): Promise<PerceptualAssetRef> {
+  if (hasStableProviderResourceRef(ref) || !assetIndex) {
+    return ref;
+  }
+
+  let asset = assetIndex.get(ref.assetId);
+  if (!asset) {
+    await assetIndex.load();
+    asset = assetIndex.get(ref.assetId);
+  }
+  if (!asset) {
+    return ref;
+  }
+
+  return {
+    ...ref,
+    uri: asset.path || asset.assetRef?.uri || ref.uri,
+    mimeType: asset.assetRef?.mimeType ?? asset.mimeType ?? ref.mimeType,
+    ...(asset.assetRef?.resourceRef ? { resourceRef: asset.assetRef.resourceRef } : {}),
+    ...(asset.assetRef?.documentResourceRef
+      ? { documentResourceRef: asset.assetRef.documentResourceRef }
+      : {}),
+  };
+}
+
+function hasStableProviderResourceRef(ref: PerceptualAssetRef): boolean {
+  return ref.resourceRef !== undefined || ref.documentResourceRef !== undefined;
 }
 
 function createPerceptionAssetSource(ref: PerceptualAssetRef): ContentSourceRef {

@@ -208,6 +208,25 @@ describe('useSlashCommands Skill lifecycle commands', () => {
     expect(lastSystemMessage()).toBe('No tasks.');
   });
 
+  it('refreshes shared metadata before querying a command boundary', async () => {
+    const order: string[] = [];
+    const handleCommand = renderHarness({
+      activateSkill: vi.fn(() => true),
+      deactivateSkill: vi.fn(),
+      refreshSharedMetadataAtBoundary: vi.fn(async () => {
+        order.push('refresh');
+      }),
+      listTasks: vi.fn(async () => {
+        order.push('list');
+        return [];
+      }),
+    });
+
+    await handleCommand('/tasks');
+
+    expect(order).toEqual(['refresh', 'list']);
+  });
+
   it('captures each owning status store once per snapshot and shows the captured user config path', async () => {
     const originalAgentGetState = useAgentStore.getState;
     const originalConfigGetState = useConfigStore.getState;
@@ -295,6 +314,7 @@ function renderHarness(actions: {
     import('../useAgentSession').AgentSessionHandle['getMessageQueueSnapshot']
   >;
   readonly listTasks?: import('../useAgentSession').AgentSessionHandle['listTasks'];
+  readonly refreshSharedMetadataAtBoundary?: import('../useAgentSession').AgentSessionHandle['refreshSharedMetadataAtBoundary'];
 }): (input: string) => Promise<void> {
   let handleCommand: ((input: string) => Promise<void>) | undefined;
 
@@ -310,6 +330,7 @@ function renderHarness(actions: {
       deactivateSkill: actions.deactivateSkill,
       getMessageQueueSnapshot: actions.getMessageQueueSnapshot,
       listTasks: actions.listTasks,
+      refreshSharedMetadataAtBoundary: actions.refreshSharedMetadataAtBoundary,
       getSkillService: () => createSkillServiceMock(),
       presentation: createAgentTerminalPresentationContext({
         translator: createStrictTranslator('en', [

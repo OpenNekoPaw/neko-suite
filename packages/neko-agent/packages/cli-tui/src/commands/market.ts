@@ -20,24 +20,20 @@ import {
   CacheManager,
   VersionResolver,
   LicenseManager,
-  InstalledRegistry,
   InstallTargetRegistry,
 } from '@neko/market-core';
 import type { MarketCommandSemanticResult } from '../presentation/market-presentation';
+import { createTuiMarketStorage, type TuiMarketStorage } from '../host/tui-market-storage';
 
 // ============================================================================
 // Setup
 // ============================================================================
 
-const NEKO_HOME = path.join(os.homedir(), '.neko');
-const CACHE_DIR = path.join(NEKO_HOME, 'market-cache');
-const INSTALLED_FILE = path.join(NEKO_HOME, 'market-installed.json');
-const SKILLS_BASE = path.join(NEKO_HOME, 'skills');
-
 /** Lazy-initialized shared instances */
 let _client: MarketClient | undefined;
 let _installManager: InstallManager | undefined;
-let _registry: InstalledRegistry | undefined;
+let _storage: TuiMarketStorage | undefined;
+let _storagePromise: Promise<TuiMarketStorage> | undefined;
 
 function getClient(): MarketClient {
   if (!_client) _client = new MarketClient();
@@ -46,8 +42,7 @@ function getClient(): MarketClient {
 
 async function getInstallManager(): Promise<InstallManager> {
   if (!_installManager) {
-    _registry = new InstalledRegistry(INSTALLED_FILE);
-    await _registry.load();
+    const storage = await getMarketStorage();
 
     const targets = new InstallTargetRegistry();
     // Inline skill install target (no SkillFileService needed in CLI)
@@ -55,21 +50,45 @@ async function getInstallManager(): Promise<InstallManager> {
       type: 'skill' as const,
       getInstallPath: (manifest: { name: string; distribution?: { publisherId?: string } }) => {
         const pub = manifest.distribution?.publisherId ?? 'unknown';
-        return path.join(SKILLS_BASE, pub, manifest.name);
+        return path.join(storage.skillsBase, pub, manifest.name);
       },
     });
 
     _installManager = new InstallManager(
       getClient(),
-      new CacheManager(CACHE_DIR),
+      new CacheManager(storage.cacheDir),
       new LicenseManager(),
       new VersionResolver(),
       targets,
-      _registry,
-      { nekoSuiteVersion: '0.0.1', downloadTempDir: path.join(CACHE_DIR, '.downloads') },
+      storage.registry,
+      {
+        nekoSuiteVersion: '0.0.1',
+        downloadTempDir: path.join(storage.cacheDir, '.downloads'),
+        getWorkspaceTrustLevel: () => 'restricted',
+      },
     );
   }
   return _installManager;
+}
+
+async function getMarketStorage(): Promise<TuiMarketStorage> {
+  if (_storage) return _storage;
+  _storagePromise ??= createTuiMarketStorage({ homedir: os.homedir() });
+  try {
+    _storage = await _storagePromise;
+    return _storage;
+  } catch (error) {
+    _storagePromise = undefined;
+    throw error;
+  }
+}
+
+export async function disposeMarketCommandStorage(): Promise<void> {
+  const storage = _storage ?? (await _storagePromise);
+  _storage = undefined;
+  _storagePromise = undefined;
+  _installManager = undefined;
+  if (storage) await storage.dispose();
 }
 
 // ============================================================================

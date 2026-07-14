@@ -9,7 +9,7 @@ import type {
   ChatMessage,
   CompressionResult,
   ConversationRecord,
-  FileConversationStorage,
+  ConversationResumeStorage,
   SkillService,
   ToolRegistry,
 } from '@neko/agent';
@@ -90,6 +90,7 @@ interface SlashCommandSessionActions {
     import('./useAgentSession').AgentSessionHandle['editQueuedMessage']
   >;
   listTasks?: import('./useAgentSession').AgentSessionHandle['listTasks'];
+  refreshSharedMetadataAtBoundary?: import('./useAgentSession').AgentSessionHandle['refreshSharedMetadataAtBoundary'];
   activateSkill?: (name: string, args?: string) => boolean | Promise<boolean>;
   deactivateSkill?: (input?: TuiSkillClearTarget) => boolean | Promise<boolean>;
   getSkillService?: () => SkillService | undefined;
@@ -102,7 +103,7 @@ interface SlashCommandSessionActions {
   getCapabilityProviderSummaries?: TuiCapabilityPorts['getProviderSummaries'];
   getCapabilityDiagnostics?: TuiCapabilityPorts['getDiagnostics'];
   listCapabilityTools?: TuiCapabilityPorts['listTools'];
-  getConversationStorage?: () => FileConversationStorage | undefined;
+  getConversationStorage?: () => ConversationResumeStorage | undefined;
   getCurrentConversationId?: () => string;
   resumeConversation?: (record: ConversationRecord) => Promise<void>;
   getHistory?: () => ChatMessage[];
@@ -122,6 +123,22 @@ export function useSlashCommands(sessionActions: SlashCommandSessionActions): Sl
   const stores = useTuiConversationStores();
   const handleCommand = useCallback(
     async (input: string) => {
+      try {
+        await sessionActions.refreshSharedMetadataAtBoundary?.();
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : String(error);
+        const projection = presentCommandShellDiagnostic(
+          { kind: 'command-failed', detail },
+          sessionActions.presentation,
+        );
+        if (projection.kind !== 'error') {
+          throw new Error(
+            'Command boundary refresh failure must project to a terminal diagnostic.',
+          );
+        }
+        stores.conversation.getState().addError(new Error(projection.error));
+        return;
+      }
       if (!isAllowedRunningCommand(input) && isAgentRunning(stores)) {
         const error = isSkillInvocation(input)
           ? new AgentMessageQueueOperationError(

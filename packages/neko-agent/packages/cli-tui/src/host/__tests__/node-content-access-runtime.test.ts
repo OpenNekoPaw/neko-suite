@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import {
   createDocumentResourceRef,
   createGeneratedAssetResourceRef,
+  type ResourceCacheManifestStore,
 } from '@neko/shared/content-access';
 import {
   createNodeContentAccessRuntime,
@@ -66,9 +67,7 @@ describe('node content access runtime path variables', () => {
     );
     fs.writeFileSync(path.join(mediaRoot, 'epub', 'sample.txt'), 'from-media-library', 'utf8');
 
-    const runtime = createNodeContentAccessRuntime({
-      host: createNodeWorkspaceContentHostAdapter({ workDir }),
-    });
+    const runtime = createTestContentAccessRuntime(workDir);
 
     const result = await runtime.loadProviderAsset({
       caller: 'read-image',
@@ -86,15 +85,14 @@ describe('node content access runtime path variables', () => {
   it('materializes document resource refs through the shared resource cache', async () => {
     const workDir = createTempDir();
     const cacheTarget = createNodeProjectResourceCacheStartupGcTarget({ workDir });
+    const manifestStore = createMemoryManifestStore();
     const archivePath = path.join(workDir, 'book.epub');
     const imageBytes = Buffer.from('cached-document-image');
     const archive = new (AdmZipModule as unknown as AdmZipConstructor)();
     archive.addFile('OPS/images/page-1.png', imageBytes);
     archive.writeZip(archivePath);
 
-    const runtime = createNodeContentAccessRuntime({
-      host: createNodeWorkspaceContentHostAdapter({ workDir }),
-    });
+    const runtime = createTestContentAccessRuntime(workDir, manifestStore);
     const resourceRef = createDocumentResourceRef({
       source: { filePath: archivePath, format: 'epub' },
       entryPath: 'OPS/images/page-1.png',
@@ -110,7 +108,8 @@ describe('node content access runtime path variables', () => {
 
     expect(result.status).toBe('ready');
     expect(result.uri).toContain(cacheTarget.cacheRoot);
-    expect(fs.existsSync(cacheTarget.manifestPath)).toBe(true);
+    expect(Object.keys((await manifestStore.load()).entries)).toHaveLength(1);
+    expect(fs.existsSync(cacheTarget.manifestPath)).toBe(false);
     expect(Buffer.from(fs.readFileSync(result.uri ?? '')).toString('utf8')).toBe(
       'cached-document-image',
     );
@@ -122,9 +121,7 @@ describe('node content access runtime path variables', () => {
     const imageBytes = Buffer.from('generated-image-bytes');
     fs.mkdirSync(path.dirname(generatedPath), { recursive: true });
     fs.writeFileSync(generatedPath, imageBytes);
-    const runtime = createNodeContentAccessRuntime({
-      host: createNodeWorkspaceContentHostAdapter({ workDir }),
-    });
+    const runtime = createTestContentAccessRuntime(workDir);
     const resourceRef = createGeneratedAssetResourceRef({
       assetId: 'asset-1',
       path: '${WORKSPACE}/neko/generated/image/asset-1.png',
@@ -147,6 +144,36 @@ function createTempDir(): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'neko-content-access-'));
   createdPaths.push(dir);
   return dir;
+}
+
+function createTestContentAccessRuntime(
+  workDir: string,
+  resourceCacheManifestStore: ResourceCacheManifestStore = createMemoryManifestStore(),
+) {
+  return createNodeContentAccessRuntime({
+    host: createNodeWorkspaceContentHostAdapter({ workDir }),
+    resourceCacheManifestStore,
+  });
+}
+
+function createMemoryManifestStore(): ResourceCacheManifestStore {
+  let manifest = {
+    version: 1 as const,
+    createdAt: '2026-07-13T00:00:00.000Z',
+    updatedAt: '2026-07-13T00:00:00.000Z',
+    entries: {},
+  };
+  return {
+    load: async () => manifest,
+    save: async (next) => {
+      manifest = next;
+    },
+    update: async (operation) => {
+      manifest = await operation(manifest);
+      return manifest;
+    },
+    invalidateCache: () => undefined,
+  };
 }
 
 interface AdmZipConstructor {

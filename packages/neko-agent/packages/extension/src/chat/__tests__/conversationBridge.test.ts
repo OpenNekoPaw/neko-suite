@@ -1,6 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ConversationBridge } from '../conversationBridge';
-import { getConversationWorkDirHash } from '@neko/agent';
+import {
+  getConversationWorkDirHash,
+  type ConversationRecord,
+  type ConversationResumeStorage,
+} from '@neko/agent';
 
 function createMockContext() {
   const store = new Map<string, unknown>();
@@ -45,6 +49,269 @@ describe('ConversationBridge', () => {
   });
 
   describe('create and ensureActive', () => {
+    it('never uses workspaceState as conversation persistence', () => {
+      const conversationId = handler.ensureActive();
+      handler.addMessage({
+        id: 'workspace-state-poison',
+        role: 'user',
+        content: 'Persist through the canonical conversation storage',
+        timestamp: Date.now(),
+      });
+
+      expect(conversationId).toEqual(expect.any(String));
+      expect(ctx.workspaceState.get).not.toHaveBeenCalledWith('conversations');
+      expect(ctx.workspaceState.update).not.toHaveBeenCalledWith(
+        'conversations',
+        expect.anything(),
+      );
+    });
+
+    it('hydrates from catalog records without reading conversation data from workspaceState', () => {
+      const catalogContext = createMockContext();
+      const initialRecords: ConversationRecord[] = [
+        {
+          id: 'catalog-conversation',
+          version: 2,
+          title: 'Catalog conversation',
+          workDir: '/workspace/demo',
+          messages: [
+            { role: 'user', content: 'Question from Journal' },
+            { role: 'assistant', content: 'Answer from Journal' },
+          ],
+          createdAt: 1_000,
+          updatedAt: 2_000,
+          source: 'journal-projection',
+        },
+      ];
+      const resumeStorage: ConversationResumeStorage = {
+        save: vi.fn(),
+        load: vi.fn(),
+        list: vi.fn(),
+        search: vi.fn(),
+        delete: vi.fn(),
+        flush: vi.fn(),
+        dispose: vi.fn(),
+      };
+
+      const catalogHandler = new ConversationBridge(
+        catalogContext,
+        '/workspace/demo',
+        undefined,
+        undefined,
+        { resumeStorage, initialRecords },
+      );
+
+      expect(catalogContext.workspaceState.get).not.toHaveBeenCalledWith('conversations');
+      expect(catalogHandler.list()).toEqual([
+        expect.objectContaining({
+          id: 'catalog-conversation',
+          title: 'Catalog conversation',
+          messages: [
+            expect.objectContaining({ role: 'user', content: 'Question from Journal' }),
+            expect.objectContaining({ role: 'assistant', content: 'Answer from Journal' }),
+          ],
+        }),
+      ]);
+      expect(catalogHandler.toAgentHistory('catalog-conversation')).toEqual(
+        initialRecords[0]?.messages,
+      );
+    });
+
+    it('isolates an invalid persisted conversation without blocking valid resume history', () => {
+      const validRecord: ConversationRecord = {
+        id: 'valid-conversation',
+        version: 2,
+        title: 'Valid conversation',
+        workDir: '/workspace/demo',
+        messages: [{ role: 'user', content: 'Valid Journal history' }],
+        createdAt: 1_000,
+        updatedAt: 2_000,
+        source: 'journal-projection',
+      };
+      const invalidRecord: ConversationRecord = {
+        ...validRecord,
+        id: 'invalid-conversation',
+        title: 'Invalid conversation',
+        messages: [
+          {
+            role: 'assistant',
+            content: 'Inspecting.',
+            toolCalls: [
+              {
+                id: 'call-invalid',
+                type: 'function',
+                function: { name: 'Read', arguments: '{}' },
+              },
+            ],
+          },
+          {
+            role: 'tool',
+            toolCallId: 'call-invalid',
+            content: JSON.stringify({ legacyPayload: true }),
+          },
+        ],
+      };
+      const resumeStorage: ConversationResumeStorage = {
+        save: vi.fn(),
+        load: vi.fn(),
+        list: vi.fn(),
+        search: vi.fn(),
+        delete: vi.fn(),
+        flush: vi.fn(),
+        dispose: vi.fn(),
+      };
+
+      const catalogHandler = new ConversationBridge(
+        createMockContext(),
+        '/workspace/demo',
+        undefined,
+        undefined,
+        { resumeStorage, initialRecords: [validRecord, invalidRecord] },
+      );
+
+      expect(catalogHandler.list()).toEqual([
+        expect.objectContaining({ id: 'valid-conversation' }),
+      ]);
+      expect(catalogHandler.getResumeDiagnostics()).toEqual([
+        expect.objectContaining({
+          code: 'conversation-history-hydration-failed',
+          conversationId: 'invalid-conversation',
+          message: expect.stringContaining('missing boolean success'),
+        }),
+      ]);
+      expect(resumeStorage.save).not.toHaveBeenCalled();
+      expect(resumeStorage.delete).not.toHaveBeenCalled();
+    });
+
+    it('refreshes durable conversation records at a Host revision boundary', async () => {
+      const initialRecord: ConversationRecord = {
+        id: 'catalog-conversation',
+        version: 2,
+        title: 'Initial title',
+        workDir: '/workspace/demo',
+        messages: [{ role: 'user', content: 'Initial history' }],
+        createdAt: 1_000,
+        updatedAt: 2_000,
+        source: 'journal-projection',
+      };
+      const externalRecord: ConversationRecord = {
+        ...initialRecord,
+        title: 'Updated by TUI',
+        messages: [{ role: 'user', content: 'Updated by TUI' }],
+        updatedAt: 3_000,
+      };
+      const resumeStorage: ConversationResumeStorage = {
+        save: vi.fn(),
+        load: vi.fn(),
+        list: vi.fn().mockResolvedValue([externalRecord]),
+        search: vi.fn(),
+        delete: vi.fn(),
+        flush: vi.fn(),
+        dispose: vi.fn(),
+      };
+      const catalogHandler = new ConversationBridge(
+        createMockContext(),
+        '/workspace/demo',
+        undefined,
+        undefined,
+        { resumeStorage, initialRecords: [initialRecord] },
+      );
+
+      await expect(catalogHandler.refreshFromResumeStorage()).resolves.toEqual({
+        upsertedIds: ['catalog-conversation'],
+        removedIds: [],
+      });
+      expect(catalogHandler.get('catalog-conversation')).toMatchObject({
+        title: 'Updated by TUI',
+      });
+      expect(catalogHandler.toAgentHistory('catalog-conversation')).toEqual([
+        { role: 'user', content: 'Updated by TUI' },
+      ]);
+    });
+
+    it('isolates an invalid durable record during refresh and clears the diagnostic after repair', async () => {
+      const initialRecord: ConversationRecord = {
+        id: 'catalog-conversation',
+        version: 2,
+        title: 'Initial title',
+        workDir: '/workspace/demo',
+        messages: [{ role: 'user', content: 'Initial history' }],
+        createdAt: 1_000,
+        updatedAt: 2_000,
+        source: 'journal-projection',
+      };
+      const invalidRecord: ConversationRecord = {
+        ...initialRecord,
+        messages: [
+          {
+            role: 'assistant',
+            content: 'Inspecting.',
+            toolCalls: [
+              {
+                id: 'call-invalid-refresh',
+                type: 'function',
+                function: { name: 'Read', arguments: '{}' },
+              },
+            ],
+          },
+          {
+            role: 'tool',
+            toolCallId: 'call-invalid-refresh',
+            content: JSON.stringify({ legacyPayload: true }),
+          },
+        ],
+        updatedAt: 3_000,
+      };
+      const repairedRecord: ConversationRecord = {
+        ...initialRecord,
+        messages: [{ role: 'user', content: 'Repaired history' }],
+        updatedAt: 4_000,
+      };
+      const resumeStorage: ConversationResumeStorage = {
+        save: vi.fn(),
+        load: vi.fn(),
+        list: vi
+          .fn()
+          .mockResolvedValueOnce([invalidRecord])
+          .mockResolvedValueOnce([repairedRecord]),
+        search: vi.fn(),
+        delete: vi.fn(),
+        flush: vi.fn(),
+        dispose: vi.fn(),
+      };
+      const catalogHandler = new ConversationBridge(
+        createMockContext(),
+        '/workspace/demo',
+        undefined,
+        undefined,
+        { resumeStorage, initialRecords: [initialRecord] },
+      );
+
+      await expect(catalogHandler.refreshFromResumeStorage()).resolves.toEqual({
+        upsertedIds: [],
+        removedIds: ['catalog-conversation'],
+      });
+      expect(catalogHandler.list()).toEqual([]);
+      expect(catalogHandler.getResumeDiagnostics()).toEqual([
+        expect.objectContaining({
+          code: 'conversation-history-hydration-failed',
+          conversationId: 'catalog-conversation',
+          message: expect.stringContaining('missing boolean success'),
+        }),
+      ]);
+      expect(resumeStorage.save).not.toHaveBeenCalled();
+      expect(resumeStorage.delete).not.toHaveBeenCalled();
+
+      await expect(catalogHandler.refreshFromResumeStorage()).resolves.toEqual({
+        upsertedIds: ['catalog-conversation'],
+        removedIds: [],
+      });
+      expect(catalogHandler.getResumeDiagnostics()).toEqual([]);
+      expect(catalogHandler.toAgentHistory('catalog-conversation')).toEqual([
+        { role: 'user', content: 'Repaired history' },
+      ]);
+    });
+
     it('should create a conversation and return its ID', () => {
       const id = handler.create();
       expect(typeof id).toBe('string');
@@ -106,24 +373,15 @@ describe('ConversationBridge', () => {
       expect(active?.messages[0]?.content).toBe('hello');
     });
 
-    it('should flush workspace state after adding a message', () => {
+    it('does not write conversation messages to workspace state', () => {
       handler.ensureActive();
       vi.mocked(ctx.workspaceState.update).mockClear();
 
       handler.addMessage({ id: 'm1', role: 'user', content: 'hello', timestamp: Date.now() });
 
-      expect(ctx.workspaceState.update).toHaveBeenCalledWith(
+      expect(ctx.workspaceState.update).not.toHaveBeenCalledWith(
         'conversations',
-        expect.objectContaining({
-          conversations: expect.arrayContaining([
-            [
-              expect.any(String),
-              expect.objectContaining({
-                messages: [expect.objectContaining({ id: 'm1', content: 'hello' })],
-              }),
-            ],
-          ]),
-        }),
+        expect.anything(),
       );
     });
 
@@ -167,7 +425,7 @@ describe('ConversationBridge', () => {
       ]);
     });
 
-    it('should flush workspace state after replacing messages', () => {
+    it('does not write replaced conversation messages to workspace state', () => {
       const id = handler.ensureActive();
       vi.mocked(ctx.workspaceState.update).mockClear();
 
@@ -175,18 +433,9 @@ describe('ConversationBridge', () => {
         { id: 'm1', role: 'assistant', content: 'partial', timestamp: Date.now(), isError: true },
       ]);
 
-      expect(ctx.workspaceState.update).toHaveBeenCalledWith(
+      expect(ctx.workspaceState.update).not.toHaveBeenCalledWith(
         'conversations',
-        expect.objectContaining({
-          conversations: expect.arrayContaining([
-            [
-              id,
-              expect.objectContaining({
-                messages: [expect.objectContaining({ id: 'm1', isError: true })],
-              }),
-            ],
-          ]),
-        }),
+        expect.anything(),
       );
     });
   });

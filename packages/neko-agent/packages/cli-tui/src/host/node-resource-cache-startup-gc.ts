@@ -4,6 +4,7 @@ import {
   type AgentProjectResourceCacheTarget,
 } from '@neko/agent/runtime';
 import type { ResourceCacheSettings } from '@neko/shared';
+import type { ResourceCacheManifestStore } from '@neko/shared';
 import {
   resolveResourceCacheQuotaPolicy,
   type ResourceCacheGcResult,
@@ -33,6 +34,7 @@ export interface NodeResourceCacheStartupGcOptions {
     target: NodeResourceCacheStartupGcTarget,
   ) => ResourceCacheService | Promise<ResourceCacheService>;
   readonly logger?: NodeResourceCacheStartupGcLogger;
+  readonly manifestStore?: ResourceCacheManifestStore;
 }
 
 export async function runNodeResourceCacheStartupGc(
@@ -90,6 +92,7 @@ async function createDefaultNodeResourceCacheService(
       workDir: target.projectRoot,
       ...(options.homedir ? { homedir: options.homedir } : {}),
     }),
+    ...(options.manifestStore ? { resourceCacheManifestStore: options.manifestStore } : {}),
   });
   if (!services.resourceCache) {
     throw new Error('TUI resource cache startup GC requires ResourceCacheService.');

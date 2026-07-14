@@ -3,6 +3,10 @@
   "version": "0.0.1",
   "description": "Terminal TUI and developer utilities for Neko AI Agent",
   "type": "module",
+  "engines": {
+    "node": ">=24.0.0",
+    "bun": ">=1.3.10"
+  },
   "bin": {
     "nekoagent": "./dist/cli.js",
     "neko": "./dist/cli.js"
@@ -14,10 +18,11 @@
   "scripts": {
     "build": "tsup",
     "build:exe": "sh scripts/build-exe.sh",
-    "build:bundle": "esbuild src/cli.tsx --bundle --platform=node --target=node18 --format=esm --outfile=dist/cli.bundle.js --minify --external:fsevents --external:ink --external:react --external:yoga-wasm-web",
+    "build:bundle": "esbuild src/cli.tsx --bundle --splitting --platform=node --target=node24 --format=esm --outdir=dist --entry-names=cli --chunk-names=chunks/[name]-[hash] --minify --external:fsevents --external:ink --external:react --external:yoga-wasm-web --external:bun:sqlite --external:node:sqlite \"--banner:js=import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\"",
     "dev": "tsx src/cli.tsx",
-    "test": "vitest --root ../.. packages/cli-tui/src",
-    "test:run": "vitest --root ../.. --run packages/cli-tui/src"
+    "test": "vitest",
+    "test:run": "vitest --run",
+    "test:sqlite:bun": "bun test src/host/__tests__/bun-sqlite-local-metadata-store.bun.test.ts"
   },
   "pkg": {
     "assets": [],
@@ -50,6 +55,7 @@
     "zustand": "^5.0.0"
   },
   "devDependencies": {
+    "@types/bun": "^1.3.10",
     "@types/react": "^18.3.0",
     "esbuild": "^0.20.0",
     "ink-testing-library": "^4.0.0",

@@ -57,6 +57,8 @@ import {
   SkillRegistry,
   type IRuntimeTaskManager,
   type ISubpackageResolver,
+  type ConversationRecord,
+  type ConversationResumeStorage,
 } from '@neko/agent';
 import { getBuiltinSkills } from '@neko/skills';
 import { getSkillFileService } from '../services/SkillFileService';
@@ -69,7 +71,6 @@ import {
   createAgentLocalResourceAccess,
   type AgentLocalResourceAccess,
 } from '../services/localResourceAccess';
-import { createWorkspaceGeneratedAssetIndex } from '../services/generatedAssetOpenResolver';
 import type { GeneratedAssetIndex } from '@neko/platform/media/generated-asset-index';
 import { StateTaskDeliveryCursorStorage, TaskDeliveryBridge } from '../services/taskDeliveryBridge';
 import type { TaskResultObservationCoordinator } from '../services/taskResultObservationCoordinator';
@@ -321,6 +322,15 @@ export function createChatLocalResourceAccess(
 
 export interface ChatViewProviderOptions {
   readonly localResourceAccess?: AgentLocalResourceAccess;
+  readonly generatedAssetIndex?: GeneratedAssetIndex;
+  readonly conversationResume?: {
+    readonly storage: ConversationResumeStorage;
+    readonly initialRecords: readonly ConversationRecord[];
+    readonly pollRevisions?: () => Promise<{
+      readonly changedDomains: readonly string[];
+    }>;
+    readonly disposeHost: () => Promise<void>;
+  };
 }
 
 export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disposable {
@@ -399,6 +409,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
     readonly conversationId: string;
   } | null = null;
   private _pendingExternalMessage: { message: string; autoSend: boolean } | null = null;
+  private _metadataRefreshPromise: Promise<void> | undefined;
 
   constructor(
     private readonly _extensionUri: vscode.Uri,
@@ -415,12 +426,27 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
     });
     this._localResourceAccess =
       this._options.localResourceAccess ?? createChatLocalResourceAccess(_extensionUri, _context);
-    this._generatedAssetIndex = createWorkspaceGeneratedAssetIndex({ logger });
+    this._generatedAssetIndex = this._options.generatedAssetIndex;
     this._conversations = new ConversationBridge(
       _context,
       getCurrentWorkspaceRoot,
       this._localResourceAccess,
       () => getCapabilityRuntimeBindings().contentAccessRuntime,
+      this._options.conversationResume
+        ? {
+            resumeStorage: this._options.conversationResume.storage,
+            initialRecords: this._options.conversationResume.initialRecords,
+            getChatModelSelection: (conversationId: string) => {
+              const settings = this._settings.snapshotForConversation(conversationId);
+              return settings.selectedProviderId && settings.selectedModelId
+                ? {
+                    providerId: settings.selectedProviderId,
+                    modelId: settings.selectedModelId,
+                  }
+                : undefined;
+            },
+          }
+        : undefined,
     );
 
     this._taskDeliveryBridge = new TaskDeliveryBridge({
@@ -680,7 +706,6 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
 
         // Update handler dependencies via type-safe updateDeps()
         this._taskHandler.updateDeps({
-          platform: this._platform,
           taskManager: this._taskManager,
           dashboardWorkItems: this._dashboardWorkItems,
           localResourceAccess: this._localResourceAccess,
@@ -1250,6 +1275,10 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
     });
   }
 
+  getConversationResumeDiagnostics() {
+    return this._conversations.getResumeDiagnostics();
+  }
+
   private _sendTabState(): void {
     if (!this._view) return;
     this._view.webview.postMessage(
@@ -1484,6 +1513,35 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
     return this._characterDialogue.launch(request);
   }
 
+  public refreshSharedMetadata(): Promise<void> {
+    if (this._metadataRefreshPromise) return this._metadataRefreshPromise;
+    this._metadataRefreshPromise = this._refreshSharedMetadata().finally(() => {
+      this._metadataRefreshPromise = undefined;
+    });
+    return this._metadataRefreshPromise;
+  }
+
+  private async _refreshSharedMetadata(): Promise<void> {
+    const pollRevisions = this._options.conversationResume?.pollRevisions;
+    if (!pollRevisions) return;
+    const result = await pollRevisions();
+    const changedDomains = new Set(result.changedDomains);
+    if (changedDomains.has('conversations')) {
+      const reconciled = await this._conversations.refreshFromResumeStorage();
+      if (reconciled.upsertedIds.length > 0 || reconciled.removedIds.length > 0) {
+        this._conversationMessageHandler.sendConversationList();
+      }
+    }
+    if (changedDomains.has('tasks') && this._taskManager) {
+      await this._taskManager.initialize();
+      const webview = this._view?.webview;
+      const conversationId = this._conversations.getActiveId();
+      if (webview && conversationId) {
+        await this._taskHandler.sendTasks(webview, conversationId);
+      }
+    }
+  }
+
   public async startCharacterDialogueFromSlash(args?: string): Promise<void> {
     await vscode.commands.executeCommand(NEKO_AI_ASSISTANT_FOCUS_COMMAND);
     await this._characterDialogue.launchFromSlash({
@@ -1564,7 +1622,17 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
     this._messages?.dispose();
     this._characterDialogue.dispose();
     this._embodyCharacter.dispose();
-    this._conversations.dispose();
+    const conversationResume = this._options.conversationResume;
+    if (conversationResume) {
+      void this._conversations
+        .disposeAsync()
+        .then(() => conversationResume.disposeHost())
+        .catch((error: unknown) => {
+          logger.warn('Failed to dispose conversation metadata storage', error);
+        });
+    } else {
+      this._conversations.dispose();
+    }
     this._localResourceAccess.dispose();
     this._generatedAssetIndex?.dispose();
     this._configBridge?.dispose();
