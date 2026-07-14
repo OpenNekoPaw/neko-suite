@@ -14,10 +14,10 @@ const CONFIG_DIGEST = `sha256:${'d'.repeat(64)}`;
 function plan() {
   return {
     schema: ABLATION_SCHEMAS.plan,
-    id: 'creation-guidance-pilot',
+    id: 'media-production-guidance-pilot',
     mode: 'implementation',
-    suiteId: 'skill.creation-persona',
-    caseId: 'draft-rain-station-concept',
+    suiteId: 'skill.media-production',
+    caseId: 'animation-production-plan',
     baselineVariantId: 'base-guidance',
     matrix: { strategy: 'focused', maxVariants: 2 },
     repetitions: 2,
@@ -25,10 +25,7 @@ function plan() {
       retainEverySample: true,
       correctnessDominates: true,
       metrics: [...ABLATION_METRICS],
-      quality: {
-        kind: 'scenario-rubric',
-        rubricRef: 'rubrics/rain-station-draft-quality.json',
-      },
+      quality: { kind: 'hard-gates-only', reason: 'No content Judge is configured.' },
     },
     variants: ['base-guidance', 'without-rationale-guidance'].map((id, index) => ({
       id,
@@ -37,11 +34,11 @@ function plan() {
       description: index === 0 ? 'Canonical guidance.' : 'Guidance removed in an isolated patch.',
       changes: index === 0 ? [] : ['skill-content'],
       skillIdentity: {
-        name: 'creation-persona',
+        name: 'media-production',
         source: 'builtin',
         provenance: 'builtin',
         rootId: 'builtin-skills',
-        relativePath: 'creation-persona',
+        relativePath: 'media-production',
         fingerprint: index === 0 ? HASH_A : HASH_B,
       },
       developmentCheckpoint: {
@@ -87,16 +84,6 @@ function fakeRun(selected, executableFingerprint) {
         evidenceRefs: [assertion.evidenceRef],
       })),
     },
-    judge: {
-      overallScore: selected.suite.target.identity.fingerprint === HASH_A ? 4.5 : 3.5,
-      providerId: 'openai',
-      modelId: 'gpt-5-mini',
-      profileId: 'content-quality-judge',
-      rubricId: 'rain-station-draft-quality',
-      rubricVersion: 'v1',
-      promptHash: `sha256:${'f'.repeat(64)}`,
-      sampling: { temperature: 0, maxTokens: 1800 },
-    },
   }));
   const qualityMean = selected.suite.target.identity.fingerprint === HASH_A ? 4.5 : 3.5;
   return {
@@ -112,15 +99,15 @@ function fakeRun(selected, executableFingerprint) {
       tools: { calls: 0, successes: 0, failures: 0 },
       retries: { count: 0 },
       tasks: { total: 0, completed: 0, failed: 0, cancelled: 0 },
-      scoreDistribution: { samples: 2, passRate: 1, mean: qualityMean, variance: 0 },
+      scoreDistribution: { samples: 0, passRate: 0 },
     },
   };
 }
 
 async function selection() {
   return selectSuiteCases(await discoverSuites(), {
-    suiteId: 'skill.creation-persona',
-    caseId: 'draft-rain-station-concept',
+    suiteId: 'skill.media-production',
+    caseId: 'animation-production-plan',
   })[0];
 }
 
@@ -237,10 +224,9 @@ describe('implementation ablation runner', () => {
     expect(dryRun).toMatchObject({
       ok: true,
       dryRun: true,
-      planId: 'creation-guidance-pilot',
+      planId: 'media-production-guidance-pilot',
       quality: {
-        kind: 'scenario-rubric',
-        rubricRef: 'rubrics/rain-station-draft-quality.json',
+        kind: 'hard-gates-only',
       },
       variants: [
         { id: 'base-guidance', repetitions: 2 },

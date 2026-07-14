@@ -1,9 +1,6 @@
 {
   "schema": "neko.agent-eval.coverage-index.v2",
   "targets": [
-    { "kind": "builtin-skill", "id": "creation-persona", "disposition": "suite", "suiteIds": ["skill.creation-persona"] },
-    { "kind": "builtin-skill", "id": "execution-persona", "disposition": "suite", "suiteIds": ["skill.execution-persona"] },
-    { "kind": "builtin-skill", "id": "iteration-persona", "disposition": "suite", "suiteIds": ["skill.iteration-persona"] },
     { "kind": "builtin-skill", "id": "skill-creator", "disposition": "suite", "suiteIds": ["skill.skill-creator"] },
     { "kind": "builtin-skill", "id": "storyboard", "disposition": "suite", "suiteIds": ["skill.storyboard"] },
     { "kind": "builtin-skill", "id": "image", "disposition": "suite", "suiteIds": ["skill.image"] },

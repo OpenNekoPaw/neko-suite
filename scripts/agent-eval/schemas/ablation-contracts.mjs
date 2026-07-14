@@ -25,6 +25,7 @@ const CONFIGURATION_DIMENSIONS = Object.freeze([
   'runtime.max-tokens',
   'runtime.thinking-budget',
   'runtime.output-format',
+  'runtime.execution-mode',
   'model-profile',
 ]);
 const IMPLEMENTATION_DIMENSIONS = Object.freeze([

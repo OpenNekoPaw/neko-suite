@@ -154,7 +154,9 @@ function assertFieldPaths(assertion, value) {
 
 function assertNamedFields(assertion, container, label) {
   const contains = (field) =>
-    Array.isArray(container) ? container.includes(field) : container.includes(field);
+    Array.isArray(container)
+      ? container.includes(field)
+      : container.toLocaleLowerCase().includes(field.toLocaleLowerCase());
   const missing = (assertion.requiredFields ?? []).filter((field) => !contains(field));
   if (missing.length > 0) throw new Error(`required ${label}(s) missing: ${missing.join(', ')}`);
   const forbidden = (assertion.forbiddenFields ?? []).filter((field) => contains(field));

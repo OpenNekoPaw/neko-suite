@@ -82,7 +82,7 @@ describe('deterministic structured output gates', () => {
 
   it('distinguishes Markdown block output from deterministic plain text', () => {
     expect(
-      evaluateStructuredOutput({ format: 'markdown', requiredFields: ['Result'] }, facts('# Result\n\nDone.')),
+      evaluateStructuredOutput({ format: 'markdown', requiredFields: ['result'] }, facts('# Result\n\nDone.')),
     ).toMatchObject({ blockStructured: true });
     expect(
       evaluateStructuredOutput({ format: 'text', requiredFields: ['Result'] }, facts('Result: Done.')),

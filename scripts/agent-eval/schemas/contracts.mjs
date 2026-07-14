@@ -139,6 +139,7 @@ export const AUTHORING_DECISION_SCHEMA = s.union([
 const RUNTIME_SETTINGS_SCHEMA = s.object(
   {},
   {
+    executionMode: s.enum(['auto', 'ask', 'plan']),
     temperature: s.number({ min: 0, max: 2 }),
     maxTokens: s.integer({ min: 1 }),
     thinkingBudget: s.integer({ min: 0 }),
@@ -362,6 +363,20 @@ const ASSERTION_SCHEMA = s.union([
     taskType: ID,
     status: s.enum(['completed', 'failed', 'cancelled']),
   }),
+  s.object(
+    {
+      ...ASSERTION_COMMON,
+      kind: s.literal('todo-projection'),
+      maxItems: s.integer({ min: 1, max: 20 }),
+      atMostOneInProgress: s.boolean(),
+    },
+    {
+      requiredStatuses: s.array(
+        s.enum(['pending', 'in_progress', 'completed', 'blocked']),
+        { minLength: 1, maxLength: 4 },
+      ),
+    },
+  ),
   s.object({
     ...ASSERTION_COMMON,
     kind: s.literal('process-order'),
@@ -827,6 +842,7 @@ export const DEFAULT_EXECUTION_SUPPORT = Object.freeze({
     'model',
     'tool-call',
     'task-terminal',
+    'todo-projection',
     'process-order',
     'queue-state',
     'cancellation',

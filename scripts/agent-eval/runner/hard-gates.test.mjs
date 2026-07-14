@@ -42,6 +42,26 @@ describe('M1 deterministic hard gates', () => {
     expect(classifyEvaluation({ hardGates: results })).toEqual({ outcome: 'pass' });
   });
 
+  it('validates bounded derived TODO facts without treating them as completion evidence', () => {
+    const facts = passingFacts();
+    facts.turns[1].todos = [
+      { content: 'Read source', status: 'completed' },
+      { content: 'Render shot', status: 'in_progress' },
+      { content: 'Review output', status: 'pending' },
+    ];
+    const assertion = {
+      id: 'todo',
+      kind: 'todo-projection',
+      maxItems: 6,
+      atMostOneInProgress: true,
+      requiredStatuses: ['completed', 'in_progress', 'pending'],
+      evidenceRef: 'turn-facts',
+    };
+    expect(evaluateHardGates([assertion], facts)[0]).toMatchObject({ status: 'pass' });
+    facts.turns[1].todos.push({ content: 'Second active item', status: 'in_progress' });
+    expect(evaluateHardGates([assertion], facts)[0]).toMatchObject({ status: 'fail' });
+  });
+
   it.each([
     [
       'runtime errors',

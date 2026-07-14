@@ -154,7 +154,7 @@ worktree:
 
 ```bash
 node scripts/agent-eval/ablation/run.mjs --plan thinking-budget --dry-run
-node scripts/agent-eval/ablation/run.mjs --plan creation-persona-guidance --dry-run
+node scripts/agent-eval/ablation/run.mjs --plan media-production-guidance --dry-run
 ```
 
 Run the same plans against real targets by removing `--dry-run`. Configuration

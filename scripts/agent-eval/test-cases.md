@@ -185,8 +185,6 @@ policy、hard gates、score distribution、approver 与时间。输入维度不�
 
 Skill suites：
 
-- `skill.creation-persona`、`skill.execution-persona`、
-  `skill.iteration-persona`；
 - `skill.skill-creator`、`skill.storyboard`、`skill.image`、`skill.video`、
   `skill.media-production`、`skill.media-quality-review`；
 - `skill.scene-to-music`、`skill.video-editing`、`skill.color-grading`、

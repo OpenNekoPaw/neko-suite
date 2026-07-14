@@ -69,6 +69,8 @@ function runGate(assertion, facts, context) {
       return assertToolCall(assertion, facts);
     case 'task-terminal':
       return assertTaskTerminal(assertion, facts);
+    case 'todo-projection':
+      return assertTodoProjection(assertion, facts);
     case 'process-order':
       return assertProcessOrder(assertion, facts);
     case 'queue-state':
@@ -118,6 +120,38 @@ function assertFullyIdle(facts) {
     throw new Error(`session is not fully idle${busy.length > 0 ? `: ${busy.join(', ')}` : ''}`);
   }
   return { fullyIdle: true };
+}
+
+function assertTodoProjection(assertion, facts) {
+  assertCompleteEvidence(facts, ['turns']);
+  const turns = arrayOrEmpty(facts?.turns).filter((turn) => turn?.role === 'assistant');
+  const todos = turns.flatMap((turn) => arrayOrEmpty(turn?.todos));
+  const invalid = todos.filter(
+    (todo) =>
+      !['pending', 'in_progress', 'completed', 'blocked'].includes(todo?.status) ||
+      typeof todo?.content !== 'string' ||
+      todo.content.trim().length === 0,
+  );
+  if (invalid.length > 0) throw new Error('invalid TODO projection item observed');
+  if (todos.length > assertion.maxItems) {
+    throw new Error(`TODO projection exceeds ${assertion.maxItems} items: ${todos.length}`);
+  }
+  if (assertion.atMostOneInProgress) {
+    for (const turn of turns) {
+      const running = arrayOrEmpty(turn?.todos).filter((todo) => todo?.status === 'in_progress');
+      if (running.length > 1) {
+        throw new Error(`assistant turn ${turn.id ?? '(unknown)'} has multiple in-progress TODO items`);
+      }
+    }
+  }
+  const observedStatuses = new Set(todos.map((todo) => todo.status));
+  const missingStatuses = arrayOrEmpty(assertion.requiredStatuses).filter(
+    (status) => !observedStatuses.has(status),
+  );
+  if (missingStatuses.length > 0) {
+    throw new Error(`TODO projection is missing status(es): ${missingStatuses.join(', ')}`);
+  }
+  return { itemCount: todos.length, statuses: [...observedStatuses].sort() };
 }
 
 function assertFinalAnswer(assertion, facts) {
