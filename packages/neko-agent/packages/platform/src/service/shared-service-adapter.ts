@@ -195,12 +195,18 @@ interface ProviderAwareMessageProjectionInput {
 export async function projectProviderAwareMessages(
   input: ProviderAwareMessageProjectionInput,
 ): Promise<readonly ChatMessage[]> {
-  const perceptionCards = collectPerceptionCards(input.messages);
+  const currentTurnStart = findCurrentTurnStart(input.messages);
+  const currentTurnMessages = input.messages.slice(currentTurnStart);
+  const perceptionCards = collectPerceptionCards(currentTurnMessages);
   const packet =
-    readLatestMultimodalContextPacket(input.messages) ??
+    readLatestMultimodalContextPacket(currentTurnMessages) ??
     createPacketForPerceptionCards(perceptionCards);
+  const messagesWithoutHistoricalPackets = removeHistoricalMultimodalContextPackets(
+    input.messages,
+    currentTurnStart,
+  );
   if (!packet || !needsProviderAwareProjection(packet, perceptionCards)) {
-    return input.messages;
+    return messagesWithoutHistoricalPackets;
   }
 
   const result = await projectMultimodalPacketToChatMessageAsync(packet, {
@@ -388,6 +394,27 @@ function readLatestMultimodalContextPacket(
     }
   }
   return undefined;
+}
+
+function findCurrentTurnStart(messages: readonly ChatMessage[]): number {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (message?.role === 'user' && readMultimodalContextPacket(message) === undefined) {
+      return index;
+    }
+  }
+  return 0;
+}
+
+function removeHistoricalMultimodalContextPackets(
+  messages: readonly ChatMessage[],
+  currentTurnStart: number,
+): readonly ChatMessage[] {
+  const filtered = messages.filter(
+    (message, index) =>
+      index >= currentTurnStart || readMultimodalContextPacket(message) === undefined,
+  );
+  return filtered.length === messages.length ? messages : filtered;
 }
 
 function readMultimodalContextPacket(

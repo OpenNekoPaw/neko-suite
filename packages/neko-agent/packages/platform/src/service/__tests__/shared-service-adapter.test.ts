@@ -606,6 +606,168 @@ describe('projectProviderAwareMessages', () => {
       ],
     });
   });
+
+  it.each(['continue', 'internal task continuation'])(
+    'does not replay historical packet or tool media for a later %s turn',
+    async (followUp) => {
+      const packet = {
+        id: 'packet-image',
+        selection: [],
+        artifactRefs: [],
+        projectRefs: [],
+        perceptionInputs: [
+          {
+            id: 'input-image',
+            kind: 'image-file',
+            modality: 'image' as const,
+            uri: 'data:image/png;base64,historical',
+          },
+        ],
+        uiContext: { activePanel: 'asset-browser', selectionIds: [] },
+        createdAt: 1,
+      };
+      const historicalCard = imageCard();
+      const messages: ChatMessage[] = [
+        { role: 'user', content: 'analyze this image' },
+        { role: 'user', content: JSON.stringify(packet) },
+        {
+          role: 'tool',
+          toolCallId: 'call-read-image',
+          content: JSON.stringify({
+            schema: 'neko.tool-result.v1',
+            data: { mode: 'metadata' },
+            perceptionCards: [historicalCard],
+          }),
+        },
+        { role: 'assistant', content: 'The image shows a rainy street.' },
+        { role: 'user', content: followUp },
+      ];
+      const assetLoader = {
+        load: vi.fn(async () => {
+          throw new Error('historical media must not be loaded');
+        }),
+      };
+
+      const projected = await projectProviderAwareMessages({
+        messages,
+        providerId: 'openai',
+        modelId: 'gpt-vision',
+        modelCapabilities: ['chat', 'vision'],
+        assetLoader,
+      });
+
+      expect(projected).toHaveLength(messages.length - 1);
+      expect(assetLoader.load).not.toHaveBeenCalled();
+      expect(JSON.stringify(projected)).toContain('rainy street');
+      expect(JSON.stringify(projected)).not.toContain('packet-image');
+      expect(JSON.stringify(projected.at(-1))).not.toContain('imageUrl');
+    },
+  );
+
+  it('does not replay a historical native multimodal packet without tool cards', async () => {
+    const messages: ChatMessage[] = [
+      { role: 'user', content: 'analyze this image' },
+      {
+        role: 'user',
+        content: JSON.stringify({
+          id: 'packet-image',
+          selection: [],
+          artifactRefs: [],
+          projectRefs: [],
+          perceptionInputs: [
+            {
+              id: 'input-image',
+              kind: 'image-file',
+              modality: 'image',
+              uri: 'data:image/png;base64,historical',
+            },
+          ],
+          uiContext: { activePanel: 'asset-browser', selectionIds: [] },
+          createdAt: 1,
+        }),
+      },
+      { role: 'assistant', content: 'Initial analysis.' },
+      { role: 'user', content: 'continue without reinspecting the image' },
+    ];
+
+    const projected = await projectProviderAwareMessages({
+      messages,
+      providerId: 'openai',
+      modelId: 'gpt-vision',
+      modelCapabilities: ['chat', 'vision'],
+    });
+
+    expect(projected).toEqual([
+      { role: 'user', content: 'analyze this image' },
+      { role: 'assistant', content: 'Initial analysis.' },
+      { role: 'user', content: 'continue without reinspecting the image' },
+    ]);
+    expect(JSON.stringify(projected)).not.toContain('historical');
+  });
+
+  it('projects only explicitly reinspected media in a later turn', async () => {
+    const historicalCard = imageCard();
+    const currentCard: PerceptionCard = {
+      ...imageCard(),
+      assetId: 'asset-2',
+      createdAt: 2,
+      semantic: {
+        evidences: [{ kind: 'description', confidence: 0.95, value: 'current selected frame' }],
+      },
+      perceptual: {
+        thumbnailRef: {
+          assetId: 'thumb-2',
+          uri: '${WORKSPACE}/current.png',
+          mimeType: 'image/png',
+        },
+      },
+    };
+    const messages: ChatMessage[] = [
+      { role: 'user', content: 'analyze the first image' },
+      {
+        role: 'tool',
+        toolCallId: 'call-old',
+        content: JSON.stringify({
+          schema: 'neko.tool-result.v1',
+          data: { mode: 'metadata' },
+          perceptionCards: [historicalCard],
+        }),
+      },
+      { role: 'assistant', content: 'The first image shows a rainy street.' },
+      { role: 'user', content: 'reinspect only the selected frame' },
+      {
+        role: 'tool',
+        toolCallId: 'call-current',
+        content: JSON.stringify({
+          schema: 'neko.tool-result.v1',
+          data: { mode: 'metadata' },
+          perceptionCards: [currentCard],
+        }),
+      },
+    ];
+    const assetLoader = {
+      load: vi.fn(async (ref: { readonly assetId: string }) => ({
+        kind: 'image' as const,
+        url: `data:image/png;base64,${ref.assetId}`,
+      })),
+    };
+
+    const projected = await projectProviderAwareMessages({
+      messages,
+      providerId: 'openai',
+      modelId: 'gpt-vision',
+      modelCapabilities: ['chat', 'vision'],
+      assetLoader,
+    });
+
+    expect(assetLoader.load).toHaveBeenCalledTimes(1);
+    expect(assetLoader.load).toHaveBeenCalledWith(
+      expect.objectContaining({ assetId: 'thumb-2' }),
+      undefined,
+    );
+    expect(JSON.stringify(projected.at(-1))).toContain('current selected frame');
+    expect(JSON.stringify(projected.at(-1))).not.toContain('rainy street');
+  });
 });
 
 function imageCard(): PerceptionCard {
