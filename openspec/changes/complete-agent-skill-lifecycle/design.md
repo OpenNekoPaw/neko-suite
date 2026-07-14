@@ -200,6 +200,21 @@ Rationale: Incremental allow-rule add/remove is the highest-risk part of current
 
 Rejected alternative: union all `allowedTools` across Skills. That can accidentally widen permissions when a restrictive Skill is combined with a broad Skill.
 
+#### Slot policy and activation invariant
+
+- `referenceSkill` remains prompt/ToolSet guidance and does not restrict the executable allow-list.
+- A `stagePersona` may declare an allow-list when the stage intentionally narrows execution, such as Draft/Plan read-only behavior. Apply's `execution-persona` does not enumerate every domain Tool: absence of an allow-list means the persona adds no Skill-level restriction, while the active `domainSkill` supplies the domain boundary and stage/permission/approval gates remain authoritative above it.
+- Every record that does declare an executable restriction participates in the conservative intersection. Activation SHALL compute the post-replacement policy before committing the new record and reject an empty intersection with `tool-policy-conflict`; projection retains the same check as an invariant guard for restored or otherwise invalid state.
+- Tool-name union, default-unrestricted fallback after conflict, and silent record removal remain forbidden.
+
+Rationale: stage persona is not a second catalog of all domain capabilities. Requiring `execution-persona` to duplicate every current and future domain Tool makes valid Apply combinations fail whenever a domain grows. Conversely, Draft/Plan restrictions remain expressible without weakening permission or approval gates.
+
+### Decision 6A: Mutable Meta Tool bindings are session scoped
+
+The Extension may share one Host Tool registry for stateless/capability Tools, but conversation-bound Meta Tools (`GetContext`, Skill lifecycle controls, and execution-mode controls) SHALL execute through a session-scoped registry view whose local instances own that conversation's provider binding. Creating or configuring another `AgentSession` must not replace the provider used by an existing session.
+
+Rationale: the Meta Tool classes hold mutable provider state. Registering the first session's instance in a shared registry while wiring later providers into unregistered local instances routes later Tool calls to the wrong conversation. A session-local overlay preserves the shared Host registry without introducing a second global registry or active-conversation fallback.
+
 ### Decision 7: UI shows lifecycle records, not one active Skill string
 
 Webview and CLI/TUI receive a projection:
@@ -271,7 +286,7 @@ Rationale: Prelaunch cleanup is allowed here because the old single-slot runtime
 - Unit tests for lifecycle state transitions, deactivation policy, conflict resolution, and projection ordering.
 - Integration tests for `$skill`, `invokeSkill`, `ActivateSkill`, and `DeactivateSkill`.
 - Runtime tests proving every turn recomputes prompt/tool policy from records.
-- Webview protocol tests and VS Code Webview runtime smoke for multiple active indicators and clear buttons.
+- Webview protocol tests and real VS Code Webview functional scenarios for multiple active indicators, clear buttons, host projection, and runtime errors.
 - Legacy path tests proving single-slot state cannot produce success after canonical projection is introduced.
 
 ## Risks / Trade-offs

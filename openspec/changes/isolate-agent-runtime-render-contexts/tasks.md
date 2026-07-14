@@ -68,5 +68,5 @@
 - [ ] 7.5 Run affected package typecheck/build plus `pnpm build`, `pnpm test`, and `pnpm check` for the cross-package contract migration.
 - [ ] 7.6 Run `pnpm check:legacy-debt`, `pnpm check:unused`, and `git diff --check`; resolve new debt without modifying unrelated workspace changes.
 - [x] 7.7 Plan and run focused script-driven Agent evaluation for session/run/config/projection behavior and record evidence.
-- [ ] 7.8 Run Extension Development Host Webview acceptance with `pnpm smoke:webview:runtime` or `vscode-extension-debugger`, including concurrent background Tabs, switching, reload, and continued input/config isolation.
+- [ ] 7.8 Run Extension Development Host Webview acceptance with a focused `pnpm test:webview:functional` scenario and `vscode-extension-debugger` evidence, including concurrent background Tabs, switching, reload, and continued input/config isolation.
 - [x] 7.9 Record executed commands, path assertions, runtime evidence, remaining risks, and any blocked validation in the OpenSpec verification artifact/report.

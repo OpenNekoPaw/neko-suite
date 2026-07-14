@@ -38,5 +38,5 @@
 - [x] 6.1 Run `pnpm --filter @neko/ui check` and `pnpm --filter @neko/ui test`.
 - [x] 6.2 Run focused Canvas Webview tests for migrated semantic prompt editor behavior.
 - [x] 6.3 Run package boundary or dependency checks covering `@neko/ui`, `@neko/markdown`, Canvas Webview, and Agent Webview imports.
-- [x] 6.4 Run VS Code Extension Development Host Webview runtime smoke for the migrated Canvas prompt editing path, or record why it is deferred with residual risk.
+- [x] 6.4 Run a real VS Code Extension Development Host Webview functional scenario for the migrated Canvas prompt editing path, or record why it is blocked with residual risk.
 - [x] 6.5 Run `openspec validate introduce-ui-markdown-editor --strict`.

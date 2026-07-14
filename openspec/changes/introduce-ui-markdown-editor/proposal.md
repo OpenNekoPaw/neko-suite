@@ -70,5 +70,5 @@ file format, Agent capability payload, Canvas authoring capability, or
   policy.
 - Validation: `@neko/ui` unit tests for rendering, overlay scroll sync,
   completions, keyboard boundaries, and boundary guards; Canvas focused tests for
-  adapter behavior; VS Code Webview runtime smoke when Canvas prompt editing is
+  adapter behavior; a real VS Code Webview functional scenario when Canvas prompt editing is
   migrated.

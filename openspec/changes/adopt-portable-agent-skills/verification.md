@@ -304,13 +304,54 @@ Extension Development Host acceptance used the `vscode-extension-debugger` Skill
 6. Instrumented the Webview-to-Host `postMessage` boundary for a repeated selection and observed an empty capture (`[]`), proving selection did not invoke the Host.
 
 ```bash
-pnpm smoke:webview:runtime
+pnpm smoke:webview:targets
 ```
 
 - Result: passed; two VS Code page targets and two Webview targets were observed, including `extensionId=neko.neko-agent`.
 - Console observation contained only VS Code's known benign `Unrecognized feature: 'local-network-access'` warning.
 
 No new real Agent evaluation was required for this regression because the model-driven runtime, builtin registration, and send-time `useChatActions -> invokeSkill` path were unchanged; the change removes a premature Webview-only selection path. The existing `explicit-system-skill-creator` evaluation above remains the Agent-runtime evidence, while the new unit and Extension Development Host checks cover the changed UI boundary.
+
+## Configuration-root and portable-Skill-root separation
+
+The path contract was re-audited on July 11, 2026 after clarifying that Neko user and workspace configuration live under `.neko`. The implementation already resolved configuration through the shared `@neko/shared` configuration path helpers, so no production path migration was required. The documented and tested namespaces are now explicit:
+
+```text
+Neko user configuration root       ${HOME}/.neko
+Neko workspace configuration root  <workspace>/.neko
+Portable personal Skill root       ${HOME}/.agents/skills
+Portable project Skill root        <workspace>/.agents/skills
+```
+
+The canonical configuration files remain `${HOME}/.neko/config.toml` and `<workspace>/.neko/config.toml`. The existence of a Neko configuration root does not make `.neko/skills` a normal discovery source; that legacy subdirectory remains migration-only.
+
+Focused contract verification:
+
+```bash
+pnpm exec vitest run \
+  packages/neko-types/src/config/config-reader.test.ts \
+  packages/neko-agent/packages/agent/src/skill/__tests__/skill-file-runtime.test.ts \
+  --reporter=dot
+```
+
+- Result: **2 files, 48 tests passed**.
+- The shared configuration tests assert exact user/workspace `.neko` roots and `config.toml` paths.
+- The Skill runtime tests assert `.agents/skills` discovery/create/watch roots, `.neko/commands` separation, and poisoned `.neko/skills` exclusion.
+
+```bash
+openspec validate adopt-portable-agent-skills --type change --strict --no-interactive
+```
+
+- Result: `Change 'adopt-portable-agent-skills' is valid`.
+
+A package TypeScript check was also attempted:
+
+```bash
+pnpm exec tsc --noEmit -p packages/neko-agent/packages/agent/tsconfig.json
+```
+
+- Result: non-zero because of existing/concurrent test-fixture and contract errors across unrelated Agent surfaces.
+- No diagnostic referenced the configuration path test, `config-reader.ts`, `agent-skill-layout.ts`, or `skill-file-runtime.ts`.
 
 ## TypeScript and repository gates
 

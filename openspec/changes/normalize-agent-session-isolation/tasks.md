@@ -85,8 +85,8 @@
   - Validation: `/opt/homebrew/bin/pnpm check` ran and failed in `check:unused` before dependency checks due existing knip findings: unused dependencies, unlisted dependencies, unused exports, duplicate export, and configuration hints.
   - Additional affected checks: `/opt/homebrew/bin/pnpm check:webview-boundaries` passed; `/opt/homebrew/bin/pnpm check:strict-tsconfig` passed; `/opt/homebrew/bin/pnpm check:deps` passed with no dependency violations.
   - Residual risk: `/opt/homebrew/bin/pnpm check:agent-boundaries` failed only on expired compatibility exceptions dated 2026-07-04; it reported no direct dependency boundary findings.
-- [x] 9.7 Run `pnpm smoke:webview:runtime` or equivalent `vscode-extension-debugger` validation for multi-tab new conversation, switch, Skill indicator, queue/task controls, cancellation, and logs.
-  - Validation (2026-07-12): `/opt/homebrew/bin/pnpm smoke:webview:runtime` passed with 2 VS Code page targets and 2 Webview targets, including `neko.neko-agent`.
+- [x] 9.7 Run a real Extension Development Host functional scenario with `vscode-extension-debugger` evidence for the affected multi-tab activation/render path; keep Skill, queue, task, cancellation, and log behavior in their owning focused scenarios.
+  - Environment preflight (2026-07-12): `/opt/homebrew/bin/pnpm smoke:webview:targets` passed with 2 VS Code page targets and 2 Webview targets, including `neko.neko-agent`; target discovery alone is not functional acceptance.
   - Runtime path evidence: created an empty second chat Tab in the Extension Development Host, switched A→B→A through the actual Webview DOM, verified the foreground transcript returned to A, the input remained enabled, no session lifecycle error/status appeared, and the only console warning was VS Code's benign `local-network-access` warning. The empty test Tab was closed afterward.
   - Scope note: this rerun directly covers correlated multi-Tab activation/render lifecycle. Skill/queue/task/cancellation/log behaviors retain the focused protocol/runtime evidence recorded in 9.1–9.5.
 - [x] 9.8 Run `pnpm check:legacy-debt` or equivalent quality/debt checks if legacy fallback paths are removed or renamed.
@@ -108,8 +108,8 @@
 - [x] 10.6 Add explicit foreground history availability (`loading`/`ready`/`unavailable`) so uncached history is not rendered as an empty transcript.
 - [x] 10.7 Route conversation-owned session diagnostics by `conversationId` while retaining a distinct truly-global diagnostic owner.
 - [x] 10.8 Remove or poison the replaced ordinary switch/persistence path and add execution-path assertions proving it is not used.
-- [x] 10.9 Run focused producer/consumer tests, Webview and Extension typechecks, boundary checks, legacy-debt checks, and VS Code Webview runtime smoke when a debug endpoint is available.
+- [x] 10.9 Run focused producer/consumer tests, Webview and Extension typechecks, boundary checks, legacy-debt checks, and a real VS Code Webview functional scenario when a debug endpoint is available.
   - Validation (2026-07-12): Agent types/runtime focused suite -> 4 files / 53 tests passed; Webview activation/render suite -> 6 files / 125 tests passed; Extension activation/router suite -> 2 files / 15 relevant tests passed (49 unrelated tests skipped by name filter); full `chatProvider.test.ts` -> 23 tests passed.
   - Typechecks: Webview `tsc --noEmit` passed. Extension `tsc --noEmit` was executed and remains blocked only by parallel, out-of-scope changes in `perception-pipeline.ts`, `agentMessageTurnHandler.ts`, `skillContextRoutes.ts`, and `consistencyCheckTools.ts`; no correlated activation file was reported.
   - Quality gates: `pnpm check:webview-boundaries`, `pnpm check:strict-tsconfig`, focused ESLint, and `git diff --check` passed. `pnpm check:legacy-debt` was executed and remains blocked by repository-wide pre-existing/parallel debt outside this activation slice.
-  - Runtime: `pnpm smoke:webview:runtime` passed and an actual Extension Development Host A→B→A Tab interaction completed without the normalized Markdown/session snapshot/revision errors targeted by this change.
+  - Runtime: `pnpm smoke:webview:targets` passed as preflight, then an actual Extension Development Host A→B→A Tab interaction completed without the normalized Markdown/session snapshot/revision errors targeted by this change.

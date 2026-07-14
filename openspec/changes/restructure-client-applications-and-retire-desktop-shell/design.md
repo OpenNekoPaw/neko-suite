@@ -127,10 +127,10 @@ Fail-visible behavior:
 ## Migration Plan
 
 1. Keep the completed application ownership inventory and boundary checks.
-2. Finish and validate `apps/neko-home`; map and delete every Desktop scenario and source module.
+2. Validate the existing Home replacement slice, map every Desktop scenario/module, then delete `packages/neko-desktop`, root scripts, dependencies, fixtures, scenarios, generated artifacts, and tooling references.
 3. Make `apps/neko-tui` the only executable build over the public Agent terminal entry; migrate Evaluation/CI, run real cases, then remove Agent-package `bin` and executable builds.
 4. Create `apps/neko-vscode` from the pure Extension Pack product files; preserve `neko.neko-suite`, validate VSIX install/activation, then delete `packages/neko-suite`.
-5. Remove `packages/neko-desktop`, root scripts, dependencies, fixtures, scenarios, generated artifacts, and tooling references.
+5. Continue the separately scoped Home multi-session/AIGC management tasks after product-root cleanup, without restoring Desktop code.
 6. Update architecture/docs/tooling and run focused plus repository quality gates.
 
 Rollback before old-path deletion may restore callers to the old entry. After deletion, rollback means reverting the complete migration change, not maintaining a compatibility path.

@@ -1,7 +1,7 @@
 ## 1. Shared contracts and validation
 
 - [x] 1.1 Add portable Skill definition, resource, Neko overlay, validation diagnostic, compatibility, native creation, result, and migration contracts to `@neko/shared`.
-- [x] 1.2 Replace canonical Skill directory constants and documentation with `.agents/skills` while keeping command artifact roots separate.
+- [x] 1.2 Replace canonical Skill directory constants and documentation with `.agents/skills` while keeping Neko user/workspace configuration and command artifact roots under `.neko`.
 - [x] 1.3 Implement portable `SKILL.md` parsing/serialization and deterministic validation for names, descriptions, compatibility, metadata, and directory identity.
 - [x] 1.4 Implement versioned `agents/neko.yaml` parsing/serialization and validation without generating empty overlays.
 - [x] 1.5 Add focused contract/parser tests that distinguish portable validity, overlay validity, compatibility, and first-party quality.
@@ -40,7 +40,7 @@
 
 ## 6. User guidance and architecture synchronization
 
-- [x] 6.1 Update platform diagnostics, Extension/Webview/TUI strings, fixtures, and settings guidance from `.neko/skills` to `.agents/skills`.
+- [x] 6.1 Update platform diagnostics, Extension/Webview/TUI strings, fixtures, and settings guidance from `.neko/skills` to `.agents/skills` without changing `${HOME}/.neko` or `<workspace>/.neko` configuration roots.
 - [x] 6.2 Remove stale single-Skill `manifest.json` authoring guidance while preserving Marketplace/plugin/cache manifest documentation.
 - [x] 6.3 Maintain anti-regression tests ensuring Skill prompt content does not absorb runtime tool protocols or Host schema details.
 

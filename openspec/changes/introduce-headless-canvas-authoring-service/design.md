@@ -156,7 +156,7 @@ Interactive-only actions must declare why they need Webview state. If the same o
 - Poison tests where Webview executor methods throw and headless production requests still succeed.
 - Runtime handle rejection tests.
 - Existing Canvas markdown/storyboard tests updated to assert production creation hits the headless service.
-- VSCode Webview runtime smoke only for UI synchronization/reveal behavior, not as the sole evidence for headless project writes.
+- A real VS Code Webview functional scenario only for UI synchronization/reveal behavior, not as the sole evidence for headless project writes.
 
 ### Proportionality
 

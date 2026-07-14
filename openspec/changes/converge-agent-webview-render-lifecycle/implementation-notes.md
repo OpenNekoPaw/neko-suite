@@ -101,7 +101,7 @@ Markdown 改造暴露了问题，是因为 canonical Timeline commit 与 snapsho
 
 ### VS Code Webview 运行态
 
-- `pnpm smoke:webview:runtime`：通过，target counts 为 total 5 / page 2 / webview 2 / worker 1。
+- `pnpm smoke:webview:targets`：通过，target counts 为 total 5 / page 2 / webview 2 / worker 1。
 - 使用 Extension Development Host + `vscode-extension-debugger` 执行：A streaming 并暂停 -> hide/reveal -> 新建并切到 B -> 在 B 保持可编辑输入 -> A 后台继续并完成 -> 切回 A。
 - hide/reveal 后 A 的 streaming Timeline、表格内容与 Tab 状态恢复；B 输入 `background-input-check-fixed` 保持焦点且 input/send 未被禁用；A 后台完成后切回可见 terminal content、完成状态、时间与 follow-tail 底部位置。
 - 最终 console 仅有 VS Code container 的既有 `Unrecognized feature: 'local-network-access'` warning。

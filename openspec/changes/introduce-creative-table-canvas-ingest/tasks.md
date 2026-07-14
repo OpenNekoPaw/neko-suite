@@ -65,4 +65,4 @@
 - [x] 9.4 Run focused Agent Extension route tests for Canvas ingest invocation and approval-gated follow-up actions.
 - [x] 9.5 Run `openspec validate introduce-creative-table-canvas-ingest --strict`.
 - [x] 9.6 Run affected package typechecks/compiles for `@neko/shared`, `neko-agent`, Agent Webview, and `neko-canvas`.
-- [x] 9.7 Run VSCode Webview runtime smoke for Markdown table rendering, media thumbnails, primary Send to Canvas, generic fallback diagnostics, and one approval-gated follow-up action.
+- [x] 9.7 Run a real VS Code Webview functional scenario for Markdown table rendering, media thumbnails, primary Send to Canvas, generic fallback diagnostics, and one approval-gated follow-up action.

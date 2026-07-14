@@ -58,13 +58,13 @@
 - [x] 8.2 Run Agent architecture and boundary checks, including `pnpm check:agent-boundaries` and any focused dependency-boundary tests touched by the change.
 - [x] 8.3 Run `pnpm check:legacy-debt` and `pnpm check:unused` after legacy path cleanup, or record the broader command that covers them.
 - [x] 8.4 Run a focused `scripts/agent-eval` case through TUI debug automation for provider/model selection and live Agent event behavior, or record why it could not run and the residual risk.
-- [x] 8.5 Run VS Code Extension Development Host Webview runtime smoke for changed Webview message/config/command/session paths.
+- [x] 8.5 Run a real VS Code Extension Development Host Webview functional scenario for changed Webview message/config/command/session paths.
 - [x] 8.6 Update Chinese and English architecture or package docs when public entrypoints, config policy, Skill source policy, or task/cache scope behavior changes.
 
 Validation notes on 2026-07-08:
 
 - Focused Vitest suite passed: 29 files, 191 tests.
-- `pnpm check:agent-boundaries`, `pnpm check:legacy-debt`, `pnpm check:unused`, and `pnpm smoke:webview:runtime` were attempted; the pnpm wrapper stopped before script execution because the local pnpm 11 deps-status install rejected ignored build scripts. Equivalent direct commands were run.
+- `pnpm check:agent-boundaries`, `pnpm check:legacy-debt`, `pnpm check:unused`, and the Webview functional scenario were attempted; the pnpm wrapper stopped before script execution because the local pnpm 11 deps-status install rejected ignored build scripts. Equivalent direct commands were run.
 - `node scripts/check-neko-agent-boundaries.mjs` still fails on pre-existing expired compatibility exceptions, but reports no boundary findings and no LCD register findings for this change.
 - `node scripts/check-legacy-debt-surfaces.mjs` and `./node_modules/.bin/knip` still fail on broader repository baseline items; this change removed its new production `legacy`/unlisted-dependency hits before completion.
 - A credentialed TUI debug automation evaluation was not run in the original validation environment. Residual risk: live provider/model event behavior still needs a focused `scripts/agent-eval` run.

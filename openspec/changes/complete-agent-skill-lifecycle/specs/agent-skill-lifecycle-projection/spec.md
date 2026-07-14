@@ -106,6 +106,24 @@ The system SHALL allow multiple active Skill records only when their slots and c
 - **THEN** projection SHALL fail with a tool policy conflict diagnostic
 - **AND** it SHALL NOT widen tool access by taking an unsafe union.
 
+#### Scenario: Activation rejects an incompatible tool policy transaction
+- **WHEN** activating a lifecycle record would make the post-replacement executable allow-list intersection empty
+- **THEN** activation SHALL return a `tool-policy-conflict` diagnostic before creating the requested record
+- **AND** the previously valid active records and their projection SHALL remain unchanged.
+
+#### Scenario: Apply persona composes with a domain Skill
+- **WHEN** the Apply-stage `execution-persona` is active without a Skill-level allow-list
+- **AND** an `image` domain Skill is activated with `GenerateImage`, `TransformImage`, and `ReadImage`
+- **THEN** both prompt records SHALL remain active
+- **AND** the effective Skill tool policy SHALL be the domain Skill allow-list
+- **AND** IDC stage, permission, and approval gates SHALL remain higher-priority enforcement boundaries.
+
+#### Scenario: Meta Tool provider binding is conversation scoped
+- **WHEN** two Agent sessions share the Host Tool registry and bind different conversation Skill providers
+- **AND** the second session calls `ActivateSkill`
+- **THEN** only the second session's provider SHALL receive the activation
+- **AND** no lifecycle record SHALL be created or renewed under the first conversation identity.
+
 #### Scenario: Model override conflict is explicit
 - **WHEN** two active records both require incompatible model overrides
 - **THEN** the runtime SHALL choose the owner defined by slot policy or fail with a model override conflict diagnostic

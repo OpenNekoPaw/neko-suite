@@ -41,4 +41,4 @@ None. Existing generated asset lifecycle, content access, project file IO, and A
   - Project background creative sessions into the Agent conversation list for inspection.
 - Tests and validation
   - Add contract, Canvas, Agent runtime, and legacy poison tests.
-  - Add VS Code Webview runtime smoke for button state, diagnostics, candidate/progress UI, and Agent session projection.
+  - Add real VS Code Webview functional scenarios for button state, diagnostics, candidate/progress UI, Agent session projection, and runtime errors.

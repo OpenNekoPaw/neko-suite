@@ -49,11 +49,11 @@
 - [x] 6.6 Keep queued items out of `MessageList` and remove any leftover `isQueued` transcript rendering assumptions that conflict with snapshot-owned state.
 - [x] 6.7 Add or update zh-CN/en i18n strings for queue count, send-next, cancel queued item, re-edit queued item, stale item diagnostics, and rich payload not queueable messaging.
 
-## 7. UI Accessibility And Runtime Smoke
+## 7. UI Accessibility And Functional Acceptance
 
 - [x] 7.1 Add focused InputArea/component tests for queue placement above the composer, action wiring, long-text truncation, keyboard focus, empty queue hiding, and multiple queued items.
 - [x] 7.2 Add tests proving queued items are not visible as normal transcript messages before execution and become transcript messages only through the normal executing turn path.
-- [x] 7.3 Verify VS Code Webview runtime behavior with Extension Development Host and the `vscode-extension-debugger` skill, including composer focus, command delivery, and queue snapshot updates.
+- [ ] 7.3 Verify VS Code Webview behavior with a real Extension Development Host functional scenario and the `vscode-extension-debugger` Skill, including composer focus, command delivery, queue snapshot updates, and runtime error gates.
 - [x] 7.4 Capture residual UI risks for any open question left unresolved, such as collapsed vs expanded default state or edit-with-existing-draft behavior.
 
 ## 8. Validation And Cleanup
@@ -71,7 +71,7 @@ Validation notes:
 - Focused Agent runtime coverage passed with `vitest run` over `agent-session-runner`, `agent-turn-runtime`, `agent-runtime-manager`, `agent-runner-port`, and `message-runtime`.
 - Focused Extension coverage passed with `vitest run` over `webviewProtocol`, `agentMessageTurnHandler`, and `agentStreamProcessor`.
 - Focused Webview coverage passed with `vitest run` over queue presenters, streaming handlers, `useChatActions`, `InputArea`, `MessageList`, and `ChatWorkspace`.
-- VS Code Webview runtime smoke passed against an Extension Development Host target for `neko.neko-agent` on CDP port 9222. Evidence: `smoke-vscode-debugger-skill.mjs --skill vscode-extension-debugger --require-webview --expect-extension-id neko.neko-agent` observed the webview; injected queue snapshots rendered `.agent-composer-queue-panel` inside `.agent-composer-rail`, before both model/mode controls and the textarea; queue action buttons had accessible send-next/edit/cancel labels and were enabled for runtime ids; an empty snapshot removed the panel. Direct CDP capture of the already-acquired VS Code API command closure was not reliable, so command delivery remains covered by focused Webview/Extension tests.
+- VS Code target smoke passed against an Extension Development Host for `neko.neko-agent` on CDP port 9222. Evidence: `smoke-vscode-targets.mjs --skill vscode-extension-debugger --require-webview --expect-extension-id neko.neko-agent` observed the Webview. The follow-up DOM check injected queue snapshots and could not capture delivery through the already-acquired VS Code API command closure, so it is supplemental debug evidence rather than functional acceptance; task 7.3 remains open until a structured scenario drives the public UI/host path and error gates.
 - Package TypeScript checks were executed. `@neko-agent/types` and Webview passed; Agent and Extension package checks are currently blocked by pre-existing unrelated type drift, while filtered output for the queue-touched files is clean.
 - Full `pnpm check` is not the right acceptance boundary for this local queue fix in the current dirty workspace because it expands to repository-wide unused/dependency analysis across many unrelated concurrent changes. Focused package tests, package TypeScript checks, queue-touched-file filtering, and Agent boundary guardrails were used instead.
 - `pnpm check:legacy-debt` / `pnpm check:agent-boundaries` wrappers were blocked by pnpm install build-script approval. Equivalent direct guards passed with `node scripts/check-legacy-debt-surfaces.mjs` and `node scripts/check-neko-agent-boundaries.mjs`.

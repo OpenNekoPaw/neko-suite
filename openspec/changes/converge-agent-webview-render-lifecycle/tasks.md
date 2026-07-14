@@ -56,7 +56,7 @@
 - [x] 7.1 Run focused coordinator, Markdown registry, handler, ConversationController, MessageList, queue/input, status, and viewport Vitest suites.
 - [x] 7.2 Run `pnpm --filter @neko-agent/webview exec tsc --noEmit --pretty false`, the full Webview test suite, Webview production build, and `pnpm --dir packages/neko-agent run compile:webview`.
 - [x] 7.3 Run repository dependency/boundary checks relevant to Webview and Extension separation, and confirm Webview does not import `vscode` or Node APIs.
-- [x] 7.4 Run `pnpm smoke:webview:runtime` and a `vscode-extension-debugger` Extension Development Host scenario: A streams, switch to B, A updates in background, use B input, switch back to A, hide/reveal Webview, and verify Markdown/status/time/scroll/focus.
+- [x] 7.4 Run `pnpm smoke:webview:targets` and a `vscode-extension-debugger` Extension Development Host scenario: A streams, switch to B, A updates in background, use B input, switch back to A, hide/reveal Webview, and verify Markdown/status/time/scroll/focus.
 - [x] 7.5 Capture runtime console/diagnostic evidence proving no missing normalized Markdown session, unavailable snapshot activation, cross-conversation foreground write, or repeated activation publication.
 - [x] 7.6 Update `packages/neko-agent/ARCHITECTURE.md` or package-private architecture documentation with render ownership, activation transaction ordering, background isolation, and cleanup scopes.
 - [x] 7.7 Record final validation commands, performance observations for background Markdown coalescing, remaining risks, and removed bypass paths in `implementation-notes.md` before archive.

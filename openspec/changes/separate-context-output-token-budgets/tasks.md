@@ -39,6 +39,7 @@
 ## 6. Validation
 
 - [x] 6.1 Run targeted unit tests for config conversion, token-budget resolver, LLM parameter projection, provider adapters, Agent session compact behavior, Webview presenters, and CLI config/status.
-- [ ] 6.2 Run `pnpm check` after targeted tests pass. (Attempted; blocked by pnpm 11 ignored-builds install gate and existing direct `knip` debt.)
+- [ ] 6.2 Run `pnpm check` after targeted tests pass. (Attempted; `knip` reports existing repository-wide unused/dependency/export debt outside this change.)
 - [ ] 6.3 For Webview-visible changes, run VS Code Extension Development Host smoke through the `vscode-extension-debugger` workflow or record why the implementation did not change runtime UI behavior. (Attempted direct smoke; blocked because no VS Code CDP endpoint was listening on port 9222.)
 - [x] 6.4 Verify a config with `[defaults].max_tokens = 256000`, model `context_window = 256000`, and model `max_output_tokens = 128000` no longer sends `256000` as provider output cap.
+- [x] 6.5 Add a regression test proving supported session `maxTokens` and `thinkingBudget` values enter the single provider capability projection path while unsupported fields stay omitted.

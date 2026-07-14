@@ -194,7 +194,7 @@ Client adapters can be added without changing package authoring internals as lon
 - Poison tests where old Webview postMessage/import commands throw or are absent.
 - Save/reopen tests proving facts persist without Webview cache, active editor state, or cache paths.
 - Transfer planner tests proving old UI-bound command IDs are no longer emitted for migrated flows.
-- VSCode Webview runtime smoke only for reveal/synchronization behavior after host-side writes.
+- A real VS Code Webview functional scenario only for reveal/synchronization behavior after host-side writes.
 
 ### Proportionality
 

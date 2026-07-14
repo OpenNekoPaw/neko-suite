@@ -299,7 +299,7 @@ All internal contract violations fail directly. Snapshot recovery is allowed onl
 5. Add TUI application/session runtime ownership and remove mutable module-singleton paths.
 6. Add conversation projection store and attachment snapshot/ACK/patch protocol; migrate Extension/Webview producers and consumers.
 7. Delete legacy Timeline delivery/recovery, foreground flush/discard, obsolete messages/tests, and rebuildable persisted recovery descriptors.
-8. Run focused tests after every batch, then package builds/checks, Agent evaluation, legacy/unused checks, and VS Code Webview runtime smoke.
+8. Run focused tests after every batch, then package builds/checks, Agent evaluation, legacy/unused checks, and real VS Code Webview functional scenarios.
 
 Rollback during development is commit-based by batch. There is no runtime dual-protocol rollback. Valuable durable history/config remains unchanged; ambiguous legacy task records fail closed with diagnostics until migrated.
 

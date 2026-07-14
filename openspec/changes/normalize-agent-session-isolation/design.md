@@ -262,7 +262,7 @@ The 5.1 implementation audit checked the current runtime event sources before sp
 - Extension tests: chat router, tab state sync, conversation bridge snapshots.
 - Agent runtime tests: concurrent runs, task observation, queue isolation, log partitioning.
 - Storage tests: stale shared-index writes, partition-local log sequence, duplicate `runId === turnId` suppression, and multi-writer diagnostics for workspace-global files.
-- VS Code Webview runtime smoke: tab switching, new conversation creation, Skill indicator isolation, queue/task controls, and cancellation.
+- Real VS Code Webview functional scenarios: tab switching, new conversation creation, Skill indicator isolation, queue/task controls, cancellation, durable projections, and runtime error gates.
 
 ### Proportionality
 
@@ -308,7 +308,7 @@ Storage conflicts should also be fail-visible at the owning boundary: unknown co
    - classify shared JSON files as rebuildable caches or guarded state;
    - add stale-write diagnostics or owner/version checks where same-workspace multi-process writes can clobber state.
 8. Remove or fail-close legacy current-active fallback paths inside the scoped boundary.
-9. Run focused package tests, `pnpm check` or affected check commands, and VS Code Webview runtime smoke.
+9. Run focused package tests, `pnpm check` or affected check commands, and focused real VS Code Webview functional scenarios.
 
 Rollback is local and non-destructive: revert Webview/Extension/runtime routing changes and keep conversation histories intact. Recoverable Webview session caches may be rebuilt from persisted conversation history and runtime snapshots.
 

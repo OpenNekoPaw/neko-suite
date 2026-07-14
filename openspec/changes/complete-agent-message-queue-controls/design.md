@@ -72,7 +72,7 @@ Testing:
 - Webview presenter/component tests prove queued items stay out of
   `MessageList`, appear above the composer, and wire send-next/cancel/edit
   controls.
-- Webview runtime smoke uses Extension Development Host plus
+- Webview functional acceptance uses Extension Development Host plus
   `vscode-extension-debugger`, because ordinary browser/Vite validation is not
   enough for VS Code Webview message/focus behavior.
 

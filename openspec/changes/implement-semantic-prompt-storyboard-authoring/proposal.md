@@ -36,4 +36,4 @@ This change makes the Semantic Prompt Document the Canvas-owned creative authori
 - `packages/neko-agent/packages/webview`: task/result presentation may link back to Canvas shots, but generation progress stays in Agent task UI.
 - `packages/neko-markdown`: no new authority; it may continue to provide read-only syntax/projection DTOs consumed by Canvas/Agent.
 - Project data: prelaunch storyboard shot data may need a migration or rebuild path from `generationPrompt`, `promptSlots`, `visualDescription`, and related fields into semantic prompt documents.
-- Validation: contract tests, Canvas Webview tests, Agent route/task tests, path-level legacy poisoning, OpenSpec strict validation, and VS Code Webview runtime smoke for prompt editing/action controls.
+- Validation: contract tests, Canvas Webview tests, Agent route/task tests, path-level legacy poisoning, OpenSpec strict validation, and a real VS Code Webview functional scenario for prompt editing/action controls.

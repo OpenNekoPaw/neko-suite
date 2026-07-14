@@ -50,7 +50,7 @@
 - [x] 6.3 Run reload projection tests proving completed `Message.contentBlocks` history renders correctly without active timeline state.
 - [x] 6.4 Run `pnpm check` and record any residual type/lint risks.
 - [x] 6.5 Run `pnpm test -- --run` or the repository-equivalent affected test command and record residual risk if full test is too large.
-- [x] 6.6 Run `pnpm smoke:webview:runtime` or equivalent Extension Development Host validation with `vscode-extension-debugger` for live streaming, tool failure, task progress, media rendering, completion, scroll behavior, and conversation switching.
+- [x] 6.6 Run a real Extension Development Host functional scenario with `vscode-extension-debugger` evidence for live streaming, tool failure, task progress, media rendering, completion, scroll behavior, and conversation switching.
 - [x] 6.7 Run `pnpm check:legacy-debt` or confirm equivalent coverage from `pnpm check:quality` after removing old fallback/synthetic paths.
 
 ## 7. Documentation And Handoff

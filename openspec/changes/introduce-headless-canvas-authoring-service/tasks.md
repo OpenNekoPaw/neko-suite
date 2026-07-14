@@ -47,7 +47,7 @@
 - [x] 6.5 Add resource identity tests proving Webview URI, blob URL, cache path, temp path, Engine token, preview URL, stream id, and legacy `cachePath` are rejected before `.nkc` persistence.
 - [x] 6.6 Update existing Canvas markdown/storyboard tests to assert production creation hits the headless authoring service and review ingestion remains review-only.
 - [x] 6.7 Run targeted validation: shared planner tests, Canvas extension tests, Canvas compile, and any affected agent capability tests.
-- [ ] 6.8 Run VSCode Webview runtime smoke only for reveal/synchronization behavior and record residual risk if full runtime smoke is not available.
+- [ ] 6.8 Run a real VS Code Webview functional scenario for reveal/synchronization behavior and record a blocking condition plus residual risk if the scenario is unavailable.
 - [x] 6.9 Add headless media import tests for workspace path normalization, pure document resource refs, and legacy Webview import path absence.
 
 ## 7. Documentation And Cleanup

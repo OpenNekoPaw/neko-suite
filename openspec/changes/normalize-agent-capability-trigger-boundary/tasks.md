@@ -59,12 +59,12 @@
 - [x] 7.3 Run transaction tests proving failed Skill activation leaves no prompt/tool/model/lifecycle/UI active residue.
 - [ ] 7.4 Run `pnpm check` and record any residual type/lint risks.
 - [x] 7.5 Run repository affected tests or `pnpm test -- --run` when feasible; record residual risk if full test is too large.
-- [x] 7.6 Run `pnpm smoke:webview:runtime` or equivalent `vscode-extension-debugger` validation for VS Code Webview behavior.
+- [ ] 7.6 Run a focused `pnpm test:webview:functional` scenario with `vscode-extension-debugger` evidence for VS Code Webview behavior.
 - [x] 7.7 Run `pnpm check:legacy-debt` or confirm equivalent coverage from `pnpm check:quality`.
 
 Validation notes:
 
 - 7.4: `pnpm check` is currently blocked before lint/type/dependency checks by pnpm 11 ignored-build approvals (`ERR_PNPM_IGNORED_BUILDS`). Direct `./node_modules/.bin/tsc --noEmit -p packages/neko-agent/packages/cli-tui/tsconfig.json` runs but still reports existing/parallel strict TS issues outside the IDC/TUI trigger wiring path.
 - 7.5: `cd packages/neko-agent && ./node_modules/.bin/vitest --run` ran 396 files / 4068 tests; 391 files passed and 5 existing/parallel tests failed outside the explicit IDC Webview/Extension/TUI path.
-- 7.6: `node scripts/smoke-vscode-debugger-skill.mjs --skill vscode-extension-debugger --require-webview` passed and observed VS Code page + neko-agent Webview targets.
+- 7.6: `node scripts/smoke-vscode-targets.mjs --skill vscode-extension-debugger --require-webview` passed and observed VS Code page + neko-agent Webview targets. This is environment preflight only; it does not execute the trigger UI or satisfy functional acceptance, so 7.6 remains open.
 - 7.7: `node scripts/check-legacy-debt-surfaces.mjs` still fails on pre-existing blockers in `builtin-prompts.ts`, `validation-hooks.ts`, and `markdownCapabilities.ts`; current IDC/TUI trigger changes no longer add blocking hits.

@@ -22,7 +22,7 @@ Implementation review notes:
 
 Blocked or residual:
 
-- `pnpm check`, `pnpm test -- --run`, `pnpm check:legacy-debt`, and `pnpm smoke:webview:runtime` all failed before running their underlying scripts because pnpm rejected ignored build scripts for `@fission-ai/openspec`, `@vscode/vsce-sign`, `core-js`, `es5-ext`, multiple `esbuild` versions, `keytar`, `sharp`, and `tesseract.js`. The command asks for `pnpm approve-builds`.
-- Direct `node scripts/smoke-vscode-debugger-skill.mjs --skill vscode-extension-debugger --require-webview` failed because no VS Code debugger target was listening on `127.0.0.1:9222`.
+- `pnpm check`, `pnpm test -- --run`, `pnpm check:legacy-debt`, and `pnpm smoke:webview:targets` all failed before running their underlying scripts because pnpm rejected ignored build scripts for `@fission-ai/openspec`, `@vscode/vsce-sign`, `core-js`, `es5-ext`, multiple `esbuild` versions, `keytar`, `sharp`, and `tesseract.js`. The command asks for `pnpm approve-builds`.
+- Direct `node scripts/smoke-vscode-targets.mjs --skill vscode-extension-debugger --require-webview` failed because no VS Code debugger target was listening on `127.0.0.1:9222`.
 - Full `./node_modules/.bin/tsc --noEmit -p packages/neko-agent/packages/agent/tsconfig.json` still fails on existing test fixture type errors outside this lifecycle slice. Filtering the output for touched lifecycle/turn/session/conflict files shows no remaining errors after the fixes in this change.
 - Full `packages/neko-agent/packages/agent/src/session/__tests__/agent-session.test.ts` still has existing failures outside the new lifecycle regression, including the pre-existing lazy ToolSet activation assertion and several stage tracking / audit expectations. The new lifecycle ToolGuard regression passes in isolation.

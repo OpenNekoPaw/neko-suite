@@ -65,5 +65,5 @@
 - [x] 7.2 Run focused `@neko/markdown`, Agent Webview, and Extension tests for Markdown extension projection, handoff routing, shortcut semantics, lifecycle/result rendering, and direct import separation.
 - [x] 7.3 Run OpenSpec validation for this change and update artifacts if requirements or tasks drift.
 - [x] 7.4 Run affected package checks such as `pnpm --filter neko-canvas test`, `pnpm --filter neko-agent test`, and narrower Vitest commands selected during implementation.
-- [x] 7.5 Run VS Code Webview runtime smoke with `vscode-extension-debugger` for the Markdown rendering and button-to-Agent-to-Canvas loop if UI behavior changes.
+- [x] 7.5 Run a real VS Code Webview functional scenario with `vscode-extension-debugger` evidence for the Markdown rendering and button-to-Agent-to-Canvas loop if UI behavior changes.
 - [x] 7.6 Update Canvas/Agent/Markdown architecture docs after implementation stabilizes, including the Extension Host canonical path, prompt-first storyboard model, public `@neko/markdown` syntax/rendering boundary, and future MCP-server-as-adapter boundary.

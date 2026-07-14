@@ -70,3 +70,8 @@ Agent SHALL choose native context or tool/perception context based on whether th
 - **THEN** Agent SHALL keep the chat model as the main Agent turn model
 - **AND** Agent SHALL route media analysis through a perception/tool path using the selected understand model
 - **AND** Agent SHALL NOT send the full Agent conversation context to the understand model
+
+#### Scenario: Host dispatch preserves understanding selections
+- **WHEN** Webview/Extension resolution selects a distinct media understanding model for an Agent turn
+- **THEN** the message runtime and task-result continuation dispatch contracts MUST preserve that explicit selection through the Agent turn bridge
+- **THEN** downstream perception routing MUST NOT fall back to an active or unrelated understanding model when the selection is missing

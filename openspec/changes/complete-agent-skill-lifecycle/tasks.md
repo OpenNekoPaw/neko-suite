@@ -65,6 +65,13 @@
 - [x] 8.1 Run targeted Vitest suites for Skill lifecycle, Skill service, Agent turn runtime, meta tools, Webview message routing, and CLI/TUI Skill commands.
 - [ ] 8.2 Run `pnpm check` and record any residual type/lint risks.
 - [ ] 8.3 Run `pnpm test -- --run` or the repository-equivalent affected test command and record residual risk if full test is too large.
-- [ ] 8.4 Run `pnpm smoke:webview:runtime` or equivalent `vscode-extension-debugger` validation for Webview active Skill indicators and clear actions.
+- [ ] 8.4 Run a focused `pnpm test:webview:functional` scenario with `vscode-extension-debugger` evidence for Webview active Skill indicators and clear actions.
 - [x] 8.5 Run `pnpm check:legacy-debt` or confirm equivalent coverage from `pnpm check:quality`.
 - [x] 8.6 Update `packages/neko-agent/docs/skill-authoring.md` or architecture docs if lifecycle slots, clearability, or Skill manifest guidance becomes user-facing.
+
+## 9. Runtime conflict regression
+
+- [ ] 9.1 Reproduce the real `execution-persona` + `image` projection conflict and make Apply persona/domain policy ownership explicit.
+- [ ] 9.2 Reject incompatible executable allow-list intersections during activation before mutating lifecycle records; keep projection validation as the restored-state invariant guard.
+- [ ] 9.3 Isolate mutable Meta Tool provider bindings per Agent session while reusing the shared Host Tool registry.
+- [ ] 9.4 Run focused lifecycle, persona, dual-session, Agent Evaluation, and VS Code Webview runtime verification for image generation continuation.

@@ -48,7 +48,7 @@ Testing:
 - Unit tests cover selectors, action descriptors, mode gating, invalid selection diagnostics, AI review state, and operation routing.
 - Component tests cover empty/import strip, selection action bar, inspector scope switching, AI panel queue/review, effects mini rack, markers panel, and master/loudness strip.
 - Existing project store tests cover operation application and undo/redo effects.
-- Webview runtime smoke uses Extension Development Host plus `vscode-extension-debugger` for layout, keyboard/focus, dock resizing, and VS Code theme behavior.
+- Webview functional acceptance uses Extension Development Host plus `vscode-extension-debugger` for layout, keyboard/focus, dock resizing, VS Code theme behavior, authoritative results, and runtime error gates.
 
 ## Goals / Non-Goals
 
@@ -161,7 +161,7 @@ This change is additive. It does not require `.nka` migration or Engine migratio
 2. Add components in inactive or mode-gated form first, with tests proving canonical handlers are reached.
 3. Wire components to existing project operations and `audio:*` / `project:*` messages.
 4. Update i18n strings and package documentation for the lightweight AI DAW component model.
-5. Validate with focused Vitest suites and VS Code Webview runtime smoke.
+5. Validate with focused Vitest suites and real VS Code Webview functional scenarios.
 
 Rollback is component-level: a panel or action can be hidden while leaving canonical project operations and existing timeline/transport/mixer behavior unchanged.
 

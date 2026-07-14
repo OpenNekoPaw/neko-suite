@@ -46,10 +46,10 @@
 ## 6. Remove Neko Desktop
 
 - [x] 6.1 Map every remaining Desktop scenario and source module to Home/shared coverage or explicit retirement.
-- [ ] 6.2 Delete CodeMirror/editor tabs, workbench renderer, creative-editor composition, project-editor fixtures, shell styles, and obsolete dependencies.
-- [ ] 6.3 Delete remaining Desktop main/preload/shared adapters only after reference scans and replacement tests prove no canonical consumer.
-- [ ] 6.4 Delete `packages/neko-desktop`, root build/start/test/smoke commands, CI/release entries, functional owner registration, scenarios, fixtures, and rebuildable outputs.
-- [ ] 6.5 Add legacy-debt/unused/boundary checks rejecting Desktop references, successful aliases, editor-shell dependencies, and buildable Studio roots.
+- [x] 6.2 Delete CodeMirror/editor tabs, workbench renderer, creative-editor composition, project-editor fixtures, shell styles, and obsolete dependencies.
+- [x] 6.3 Delete remaining Desktop main/preload/shared adapters only after reference scans and replacement tests prove no canonical consumer.
+- [x] 6.4 Delete `packages/neko-desktop`, root build/start/test/smoke commands, CI/release entries, functional owner registration, scenarios, fixtures, and rebuildable outputs.
+- [x] 6.5 Add legacy-debt/unused/boundary checks rejecting Desktop references, successful aliases, editor-shell dependencies, and buildable Studio roots.
 
 ## 7. Documentation And Final Validation
 

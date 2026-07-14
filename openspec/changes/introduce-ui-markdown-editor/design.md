@@ -21,7 +21,7 @@ service.
 | Dependency | `@neko/ui/markdown` may depend on React, `@neko/ui/keyboard`, and `@neko/markdown`. It must not import VS Code, Node-only modules, feature packages, `acquireVsCodeApi`, Agent runtime, Canvas internals, or content-access implementations. `@neko/markdown` remains L0 and must not depend on `@neko/ui`. |
 | Interface | Public UI contracts are editor profiles, projection options, token render hooks, diagnostic render hooks, completion providers, and keyboard owner metadata. They are not Canvas node schemas, Agent action ids, resource cache handles, or Extension message payloads. |
 | Extension | New surfaces add profile-specific adapters and completion providers without changing the shared editor core. Domain-specific behavior stays in thin package adapters. |
-| Testing | `@neko/ui` unit tests cover public exports, boundary guards, token rendering, overlay scroll sync, diagnostics, completion trigger behavior, and keyboard boundary metadata. Canvas focused tests prove semantic prompt behavior still uses Canvas-owned spans/diagnostics. VS Code Webview runtime smoke validates migrated Canvas prompt editing. |
+| Testing | `@neko/ui` unit tests cover public exports, boundary guards, token rendering, overlay scroll sync, diagnostics, completion trigger behavior, and keyboard boundary metadata. Canvas focused tests prove semantic prompt behavior still uses Canvas-owned spans/diagnostics. A real VS Code Webview functional scenario validates migrated Canvas prompt editing. |
 | Proportionality | A lightweight textarea-overlay editor is enough for inline prompt/note editing in a local VS Code client. CodeMirror remains a Desktop-only dependency and is not added to VS Code Webview packages in this change. |
 | Fail-visible behavior | Unknown editor profiles, missing required keyboard owner ids, invalid token ranges, overlapping injected spans, unsupported completion edits, or absent domain renderers should produce explicit diagnostics/test failures instead of silently dropping tokens or returning successful no-op UI. |
 
@@ -133,7 +133,7 @@ generic for Canvas prompt overlays or too opinionated for Agent message previews
    and small resource-reference inputs after the semantic prompt path is stable.
 5. Let Agent Webview adopt preview/inline rendering primitives separately from
    any handoff or Canvas capability logic.
-6. Validate with targeted unit tests and VS Code Webview runtime smoke for
+6. Validate with targeted unit tests and a real VS Code Webview functional scenario for
    changed Canvas prompt editing surfaces.
 
 Rollback is local: Canvas can temporarily keep its package-local semantic prompt

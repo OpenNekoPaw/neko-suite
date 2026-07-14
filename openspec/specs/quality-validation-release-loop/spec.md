@@ -177,11 +177,12 @@ Local and pre-release validation SHALL include a VS Code debugger smoke path tha
 - **WHEN** a VS Code debugger Skill smoke is requested
 - **THEN** the harness MUST connect to an existing VS Code remote debugging port, verify observable VS Code page targets, optionally require visible Webview targets or target matchers, and record the Skill file used for the test evidence or an explicit failure
 
-#### Scenario: Webview runtime smoke runs
+#### Scenario: Webview target smoke runs
 
-- **WHEN** Webview runtime smoke is requested
+- **WHEN** Webview target smoke is requested
 - **THEN** the harness MUST route through the VS Code debugger Skill smoke path and require a visible Webview target by default
 - **AND** the harness MUST NOT open Chrome, the generic Browser plugin, Playwright, or a regular browser as the default validation surface
+- **AND** the result MUST be classified as environment smoke and MUST NOT satisfy functional acceptance
 
 ### Requirement: Strict TypeScript extension baselines
 

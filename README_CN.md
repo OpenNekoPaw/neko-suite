@@ -6,7 +6,7 @@
 
 [![Status](https://img.shields.io/badge/Status-Alpha-orange)]()
 [![License](https://img.shields.io/badge/License-AGPL--3.0--or--later-blue)]()
-[![VS Code](https://img.shields.io/badge/VS%20Code-1.85+-blue)]()
+[![VS Code](https://img.shields.io/badge/VS%20Code-1.128+-blue)]()
 
 Neko Suite 是一个面向 AI 原生创作工作流的 monorepo。它把剧本规划、分镜画布、视频时间线、媒体预览、3D 创作、2D 绘画、2D 骨骼动画、音频工作站、素材管理、市场安装、项目搜索和实时互动整合到一组 VS Code 扩展中。
 

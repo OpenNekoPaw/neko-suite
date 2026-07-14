@@ -50,7 +50,7 @@
 - [x] 7.3 Add Canvas Webview tests for button disabled state, diagnostics, candidate rendering, accept/retry/delete actions, and aggregate progress.
 - [x] 7.4 Add Agent runtime tests for lane concurrency, queued workItems, duplicate idempotency, cancellation, retry, judge pass/fail, provider capability mismatch, and apply failure.
 - [x] 7.5 Run targeted validation for touched packages, including focused Vitest suites and `pnpm check` or narrower package checks.
-- [x] 7.6 Run VS Code Webview runtime smoke for Canvas AI buttons, candidate/progress UI, diagnostics, and Agent background session projection, or record residual risk if unavailable.
+- [x] 7.6 Run a real VS Code Webview functional scenario for Canvas AI buttons, candidate/progress UI, diagnostics, and Agent background session projection, or record a blocking condition plus residual risk if unavailable.
 
 ## 8. Documentation
 

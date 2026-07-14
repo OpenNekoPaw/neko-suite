@@ -113,7 +113,7 @@ Alternative rejected: keep old and new paths in parallel until the UI looks righ
 - Canvas Webview tests for disabled buttons, diagnostics, candidate controls, and progress counts.
 - Agent runtime tests for lane scheduling, workItem lifecycle, idempotency, judge, and apply orchestration.
 - Legacy poison tests proving migrated buttons cannot succeed through old paths.
-- VS Code Webview runtime smoke for Extension/Webview behavior.
+- Real VS Code Webview functional scenarios for Extension/Webview behavior.
 
 ### Proportionality
 
@@ -141,7 +141,7 @@ This design adds no remote services, daemons, or distributed queues. The extra c
 4. Add candidate apply and promotion apply in Canvas apply adapter, including revision re-check and judge rejection states.
 5. Migrate Webview buttons from `sendToAgent`/`generateForNode` to typed creative action requests.
 6. Poison migrated legacy paths in tests, then remove or fail-close obsolete success paths.
-7. Run focused unit/contract tests and VS Code Webview runtime smoke.
+7. Run focused unit/contract tests and real VS Code Webview functional scenarios.
 
 ## Open Questions
 

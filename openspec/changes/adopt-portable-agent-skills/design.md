@@ -68,7 +68,7 @@ This change crosses Layer 0 contracts, Agent file runtime/loader, Extension Host
 - Load standard instruction-only Skills without Neko conversion.
 - Support an optional versioned `agents/neko.yaml` overlay.
 - Implement complete typed native creation with validation and atomic commit.
-- Make project/personal canonical roots `.agents/skills`.
+- Make project/personal canonical Skill roots `.agents/skills` while keeping Neko configuration roots at `.neko`.
 - Remove root `manifest.json` and `.neko/skills` from normal create/discovery success paths.
 - Preserve valuable legacy data through an explicit, fail-closed migration boundary.
 - Keep Host/runtime facts out of author-controlled metadata.
@@ -142,16 +142,21 @@ Rationale: an external Skill can be portable-valid yet incompatible with the cur
 
 Rejected: one boolean validator with warnings. It cannot distinguish a corrupt package from a missing optional capability and encourages unsafe fallback.
 
-### Decision 3: Resolve Skill roots explicitly, without legacy fallback
+### Decision 3: Separate portable Skill roots from Neko configuration roots
 
-Project and personal Skill roots are:
+Project and personal portable Skill roots are:
 
 - `<workspace>/.agents/skills`
 - `${HOME}/.agents/skills`
 
-Command artifacts remain under their existing command roots because they are a different namespace and file shape.
+Neko configuration roots remain:
 
-A small root contract resolves writable/discovery roots by target/source. Normal scan and watch plans contain only canonical Skill roots. `.neko/skills` is reachable only through an explicitly named migration API; a missing canonical root is created rather than replaced by a legacy root.
+- `<workspace>/.neko`
+- `${HOME}/.neko`
+
+Their canonical configuration files remain `<workspace>/.neko/config.toml` and `${HOME}/.neko/config.toml`. Command artifacts also remain under their existing `.neko/commands` roots because they are Neko-owned configuration/runtime artifacts with a different namespace and file shape. Moving portable Skills to `.agents/skills` does not move or rename Neko configuration.
+
+A small root contract resolves writable/discovery Skill roots by target/source independently of the shared Neko configuration path resolver. Normal Skill scan and watch plans contain only canonical Skill roots. `.neko/skills` is reachable only through an explicitly named migration API; its location beneath the Neko configuration root does not make it a normal Skill source, and a missing canonical root is created rather than replaced by a legacy root.
 
 Rationale: one canonical path makes manual creation, general file creation, native creation, watch/rescan, and catalog projection converge.
 

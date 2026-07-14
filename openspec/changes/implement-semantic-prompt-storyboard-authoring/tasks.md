@@ -73,4 +73,4 @@
 - [x] 9.5 Run focused Agent Extension/Webview tests for action intent routing, approval, async task progress ownership, and result writeback.
 - [x] 9.6 Run `openspec validate implement-semantic-prompt-storyboard-authoring --strict`.
 - [x] 9.7 Run affected package typechecks/builds for `@neko/shared`, `neko-canvas`, `neko-agent`, and `@neko/markdown` if touched.
-- [ ] 9.8 Run VS Code Webview runtime smoke with `vscode-extension-debugger` for the prompt editor, storyboard table next-action button, Agent task handoff, and Canvas writeback loop.
+- [ ] 9.8 Run a real VS Code Webview functional scenario with `vscode-extension-debugger` evidence for the prompt editor, storyboard table next-action button, Agent task handoff, and Canvas writeback loop.

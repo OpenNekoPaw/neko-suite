@@ -92,6 +92,26 @@ The system SHALL use `<workspace>/.agents/skills` for project Skills and `${HOME
 - **THEN** normal discovery SHALL NOT load it
 - **AND** a missing or invalid canonical package SHALL NOT be masked by the legacy package.
 
+### Requirement: Portable Skill roots do not replace Neko configuration roots
+The system SHALL continue to resolve Neko user configuration from `${HOME}/.neko` and workspace configuration from `<workspace>/.neko`, independently of portable Skill root resolution.
+
+#### Scenario: User configuration remains in the Neko namespace
+- **WHEN** the Host resolves the canonical user configuration
+- **THEN** its configuration root SHALL be `${HOME}/.neko`
+- **AND** its canonical configuration file SHALL be `${HOME}/.neko/config.toml`
+- **AND** `${HOME}/.agents` SHALL NOT be treated as a Neko configuration root.
+
+#### Scenario: Workspace configuration remains in the Neko namespace
+- **WHEN** the Host resolves configuration for a workspace
+- **THEN** its configuration root SHALL be `<workspace>/.neko`
+- **AND** its canonical configuration file SHALL be `<workspace>/.neko/config.toml`
+- **AND** `<workspace>/.agents` SHALL NOT be treated as a Neko configuration root.
+
+#### Scenario: Neko configuration root does not imply Skill discovery
+- **WHEN** the Host scans normal Skill sources
+- **THEN** the existence of `${HOME}/.neko` or `<workspace>/.neko` SHALL NOT add `.neko/skills` to the normal Skill scan plan
+- **AND** only the explicit migration boundary MAY read that legacy Skill subdirectory.
+
 ### Requirement: Legacy Neko Skill data is available only to explicit migration
 The system SHALL isolate `.neko/skills` and root `manifest.json` handling behind an explicitly invoked migration boundary.
 

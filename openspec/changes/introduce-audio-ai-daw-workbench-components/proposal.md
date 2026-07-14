@@ -51,4 +51,4 @@ This change defines the component set needed to make common audio cleanup, editi
   - timeline selection and action routing;
   - AI operation queue/review behavior;
   - effect/mixer/loudness state projection;
-  - VS Code Webview runtime smoke for layout, focus, keyboard, and side panel behavior.
+  - Real VS Code Webview functional scenarios for layout, focus, keyboard, side panel behavior, and runtime errors.

@@ -269,12 +269,12 @@ Run:
 
 Expected: PASS. Build warnings are acceptable only if they already exist and are unrelated to `chatProvider.ts`.
 
-- [ ] **Step 5: Run the VSCode Webview runtime smoke test**
+- [ ] **Step 5: Run a real VS Code Webview functional scenario**
 
 Run:
 
 ```bash
-/opt/homebrew/bin/pnpm smoke:webview:runtime
+/opt/homebrew/bin/pnpm smoke:webview:targets
 ```
 
 Expected: PASS. This is required because the bug crosses Extension Host and VSCode Webview messaging; ordinary browser/Vite verification is not sufficient for this project.

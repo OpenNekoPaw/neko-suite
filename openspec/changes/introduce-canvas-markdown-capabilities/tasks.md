@@ -70,7 +70,7 @@ Legacy cleanup notes:
 - [x] 8.4 Run resource/content-access focused tests proving stable refs and projection services are used instead of raw path/cache/Webview URI fallback.
 - [x] 8.5 Run package compile/typecheck for affected packages: `neko-agent`, `neko-canvas`, shared contract package, and any package touched by cleanup.
 - [x] 8.6 Run `pnpm check:agent-boundaries`, relevant dependency/boundary checks, and legacy debt/unused checks for removed draft-runtime paths.
-- [x] 8.7 Run VS Code Webview runtime smoke with `vscode-extension-debugger` for rendering a Markdown table with images and invoking Send to Canvas.
+- [x] 8.7 Run a real VS Code Webview functional scenario with `vscode-extension-debugger` evidence for rendering a Markdown table with images and invoking Send to Canvas.
 - [x] 8.8 Run `openspec validate introduce-canvas-markdown-capabilities --strict` and record any residual validation gaps before implementation is considered complete.
 
 Validation notes:

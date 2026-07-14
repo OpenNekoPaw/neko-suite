@@ -188,4 +188,4 @@ The component set SHALL remain compatible with VS Code Webview constraints, them
 
 - **WHEN** the user switches VS Code theme or resizes the editor/right dock
 - **THEN** the workbench components SHALL preserve readable contrast, stable dimensions, and non-overlapping controls
-- **AND** validation SHALL include VS Code Webview runtime smoke for layout and interaction-sensitive behavior.
+- **AND** validation SHALL include a real VS Code Webview functional scenario for layout and interaction-sensitive behavior.

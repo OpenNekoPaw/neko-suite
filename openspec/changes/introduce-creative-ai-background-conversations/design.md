@@ -86,7 +86,7 @@ Validation should cover:
 - Cancellation tests for conversation, run, workItem, and target deletion/supersession.
 - Apply-adapter tests for revision match, stale target, deleted target, same-target lock, and per-target batch failure.
 - Webview/Extension tests for active/archived/deleted conversation projections and stop-and-archive/delete controls.
-- VS Code Webview runtime smoke for the Agent conversation list/status UI once UI changes are implemented.
+- A real VS Code Webview functional scenario for the Agent conversation list/status UI once UI changes are implemented.
 
 ### Proportionality
 

@@ -38,4 +38,4 @@ This matters now because Agent Webview has moved toward canonical queue, timelin
   - terminal context compression;
   - running-turn queued messages and cancellation;
   - terminal streaming/task/media/artifact output.
-- Validation will focus on unit/contract tests for command routing, prompt suggestions, queue semantics, context compaction, timeline projection, and reference summaries. Webview runtime smoke is not required unless Webview code changes.
+- Validation will focus on unit/contract tests for command routing, prompt suggestions, queue semantics, context compaction, timeline projection, and reference summaries. A real Webview functional scenario is not required unless Webview code changes.

@@ -49,5 +49,5 @@
 - [x] 7.2 Run focused Extension tests if any command or message routing changes are required.
 - [x] 7.3 Run `pnpm --filter @neko/neko-audio test` or the repository's equivalent focused package test command and record the exact command.
 - [x] 7.4 Run `pnpm check` or document why a narrower validation set is sufficient for this UI-focused change.
-- [x] 7.5 Run VS Code Webview runtime smoke with `vscode-extension-debugger` for opening a `.nka`, switching basic/professional modes, selecting a clip, using the selection action bar, resizing the right dock, typing in the AI panel, and verifying theme/focus behavior.
+- [x] 7.5 Run a real VS Code Webview functional scenario with `vscode-extension-debugger` evidence for opening a `.nka`, switching basic/professional modes, selecting a clip, using the selection action bar, resizing the right dock, typing in the AI panel, and verifying theme/focus behavior.
 - [x] 7.6 Run `openspec validate introduce-audio-ai-daw-workbench-components --type change --strict`.

@@ -6,7 +6,7 @@
 
 [![Status](https://img.shields.io/badge/Status-Alpha-orange)]()
 [![License](https://img.shields.io/badge/License-AGPL--3.0--or--later-blue)]()
-[![VS Code](https://img.shields.io/badge/VS%20Code-1.85+-blue)]()
+[![VS Code](https://img.shields.io/badge/VS%20Code-1.128+-blue)]()
 
 Neko Suite is a monorepo for building an AI-native creative workspace. It combines screenplay planning, storyboard canvas, video timeline editing, media preview, 3D authoring, 2D drawing, 2D puppet animation, audio work, asset management, marketplace installation, project search, and live interaction under one VS Code extension suite.
 

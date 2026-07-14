@@ -37,7 +37,7 @@
 - [x] 5.2 Add UI actions for open/focus, archive, restore, delete, stop-and-archive, and stop-and-delete with clear disabled/diagnostic states for active work.
 - [x] 5.3 Render run/workItem observations, generated result refs, stale diagnostics, apply diagnostics, and SubAgent progress in the selected conversation without requiring a separate subagent conversation.
 - [x] 5.4 Add Webview handler tests for lifecycle actions, selected-conversation routing, background conversation opening, and stale/archived conversation diagnostics.
-- [x] 5.5 Run VS Code Webview runtime smoke for conversation list/status interactions after UI implementation and record residual risk if the smoke cannot run.
+- [x] 5.5 Run a real VS Code Webview functional scenario for conversation list/status interactions after UI implementation and record residual risk if the scenario cannot run.
 
 ## 6. Owning Package Apply Adapter Integration
 
@@ -53,5 +53,5 @@
 - [x] 7.2 Run Agent extension/runtime tests covering conversation isolation, background workItem concurrency, SubAgent projection, memory isolation, and lifecycle deletion safeguards.
 - [x] 7.3 Run package-specific tests for the first migrated creative package.
 - [x] 7.4 Run `pnpm check` and relevant package `vitest` commands; expand to `pnpm test` or `pnpm build` if shared contracts or package exports affect broad surfaces.
-- [x] 7.5 Run `pnpm smoke:webview:runtime` or equivalent `vscode-extension-debugger` validation for Agent Webview conversation lifecycle UI changes.
+- [x] 7.5 Run a focused `pnpm test:webview:functional` scenario with `vscode-extension-debugger` evidence for Agent Webview conversation lifecycle UI changes.
 - [x] 7.6 Document any legacy AI button paths left intentionally unmigrated, including owner, replacement path, validation command, and removal condition.

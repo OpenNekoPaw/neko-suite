@@ -80,7 +80,7 @@
   - Passed: 4 files, 50 tests under the root Agent Vitest config.
 - `cd packages/neko-agent/packages/webview && npx -y pnpm@10.29.2 exec vitest run src/presenters/__tests__/skill-presenter.test.ts --config vitest.config.ts`
   - Passed: 1 file, 2 tests under the Webview Vitest config.
-- `npx -y pnpm@10.29.2 smoke:webview:runtime`
+- `npx -y pnpm@10.29.2 smoke:webview:targets`
   - Passed: `vscode-debugger-skill-smoke` observed 2 VS Code page targets and 5 Webview targets, including `neko.neko-agent`.
   - The command validates that the VS Code/Electron debugger skill can see Extension Webview runtime targets. It does not by itself exercise a scripted long-turn transcript with live tool failure/retry/media interactions.
 
@@ -89,7 +89,7 @@
 - `pnpm check` now runs under the repository pnpm version, but remains blocked from passing by existing knip unused-dependency/export/config issues outside the timeline path.
 - VS Code Extension Development Host smoke now starts and observes Neko Agent Webview targets. A scripted long-turn transcript with live tool failure/retry/media interactions, scroll behavior, focus, and conversation switching remains useful before archive if visual acceptance is required.
 - `streamText`/`streamThinking` are intentionally not routed through non-timeline message mutation when active timeline exists; they are discarded after canonical timeline delivery. If a provider emits stream chunks without matching `agentTurnTimeline`, the active timeline path should fail visibly rather than append through direct message mutation.
-- Existing completed-history rendering still uses persisted `Message.contentBlocks`; focused message-list presenter tests cover this reload source, but VS Code Webview runtime smoke is still needed before archive.
+- Existing completed-history rendering still uses persisted `Message.contentBlocks`; focused message-list presenter tests cover this reload source, but a real VS Code Webview functional scenario is still needed before archive.
 
 ### Active-Turn Non-Timeline Path Cleanup
 
@@ -120,7 +120,7 @@
   - Passed; Vite reported only the existing Browserslist age and large-chunk warnings.
 - `pnpm --dir packages/neko-agent run compile:webview`
   - Passed and copied the production Webview bundle into the extension package.
-- `pnpm smoke:webview:runtime`
+- `pnpm smoke:webview:targets`
   - Passed: observed two VS Code page targets and two Webview targets, including `neko.neko-agent` in the Extension Development Host.
 - VS Code CDP inspection of the visible Neko Webview target found no current `Normalized Markdown streaming session is missing` text and no Neko console error during the observation window. This is runtime presence/console evidence, not a complete scripted long-turn interaction test.
 - `pnpm check:legacy-debt`

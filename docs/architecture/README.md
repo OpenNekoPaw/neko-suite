@@ -31,6 +31,7 @@
 | [`adr-local-metadata-store-sqlite.md`](adr-local-metadata-store-sqlite.md)                                         | 用户级 SQLite 本地元数据 Store、项目事实和缓存索引边界                                |
 | [`adr-neko-desktop-apphost-resource-viewport-boundary.md`](adr-neko-desktop-apphost-resource-viewport-boundary.md) | Neko Desktop AppHost、资源工作台、Market/Skills 管理面和 Engine-owned viewport 边界   |
 | [`adr-neko-workbench-core-plugin-host.md`](adr-neko-workbench-core-plugin-host.md)                                 | Neko Workbench Core、Plugin Host、VSCode 设计参考和 Desktop Host Adapter 边界         |
+| [`application-composition.md`](application-composition.md)                                                       | Home、TUI、Neko for VSCode 与延后 Studio 的应用 composition root 和依赖方向          |
 | [`adr-unified-markdown-resource-rendering.md`](adr-unified-markdown-resource-rendering.md)                         | Canvas MCP 式能力、Markdown 扩展语法、资源增强渲染和 Send to Canvas 边界              |
 | [`adr-canvas-cut-playback-route-and-timeline-boundary.md`](adr-canvas-cut-playback-route-and-timeline-boundary.md) | Canvas 预览路线矩阵、Cut 剪辑时间线、Agent 顺序感知和跨包协议边界                     |
 | [`adr-ui-domain-panels-and-shared-primitives.md`](adr-ui-domain-panels-and-shared-primitives.md)                   | 创作领域面板与共享 UI 原语的复用边界                                                  |

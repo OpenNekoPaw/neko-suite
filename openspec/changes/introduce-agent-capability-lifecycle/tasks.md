@@ -66,5 +66,5 @@
 - [x] 8.5 Run legacy poison-path tests for plugin transfer and old Markdown authoring paths.
 - [x] 8.6 Run package compile/typecheck for affected packages: shared contract package, `neko-agent`, `neko-agent/webview`, and `neko-canvas`.
 - [x] 8.7 Run boundary/debt checks relevant to legacy cleanup, including `pnpm check:legacy-debt` or the narrower guardrails available in the repository.
-- [x] 8.8 Run VS Code Webview runtime smoke with `vscode-extension-debugger` for rendering a Markdown table with resources and invoking `Send to Canvas` through the lifecycle path.
+- [x] 8.8 Run a real VS Code Webview functional scenario with `vscode-extension-debugger` evidence for rendering a Markdown table with resources and invoking `Send to Canvas` through the lifecycle path.
 - [x] 8.9 Run `openspec validate introduce-agent-capability-lifecycle --strict`.

@@ -338,7 +338,7 @@ pnpm exec eslint \
 
 额外使用 `module=esnext`、`moduleResolution=bundler` 执行 Sketch Extension typecheck。该包仍有既有 `agentCapabilityProvider`、`SketchEditorProvider`、PSD integration test 和 `SketchProjectAuthoringService` 类型基线错误；本批 `SketchProjectQualityFacade` 与 `extension-api.ts` 未出现在错误列表中，因此只记录 focused type evidence，不宣称全包 typecheck 通过。
 
-质量自审风险级别为 L3（项目格式 + shared public Extension API）。未发现阻断项。没有 Webview UI/交互修改，无需 runtime visual smoke；没有 Agent prompt/Skill/capability routing 修改，无需新增真实 Agent evaluation。
+质量自审风险级别为 L3（项目格式 + shared public Extension API）。未发现阻断项。没有 Webview UI/交互修改，无需真实宿主功能场景；没有 Agent prompt/Skill/capability routing 修改，无需新增真实 Agent evaluation。
 
 ### 10.4 剩余限制
 
@@ -411,7 +411,7 @@ pnpm build:neko-cut
 
 额外运行 `pnpm exec tsc --noEmit -p packages/neko-cut/packages/extension/tsconfig.json`。全包仍有 198 个既有基线错误；`CutProjectQualityFacade`、`extension.ts`、`agentCapabilityProvider.test.ts` 与 `extension-api.ts` 未出现在错误列表中，因此只记录 focused type evidence，不宣称 Cut Extension 全量 typecheck 通过。
 
-质量自审风险级别为 L3（项目格式、Extension production wiring、shared public API）。未发现阻断项。路径级测试证明 target-bound live snapshot/review/export adapter 被命中，并证明 stale revision 时 adapter 不会执行。没有 Webview UI/交互改动，无需 VSCode runtime visual smoke；没有 prompt、Skill 或 Agent routing 改动，无需真实 Agent evaluation。
+质量自审风险级别为 L3（项目格式、Extension production wiring、shared public API）。未发现阻断项。路径级测试证明 target-bound live snapshot/review/export adapter 被命中，并证明 stale revision 时 adapter 不会执行。没有 Webview UI/交互改动，无需真实 VS Code 功能场景；没有 prompt、Skill 或 Agent routing 改动，无需真实 Agent evaluation。
 
 ### 11.5 剩余限制
 
@@ -611,7 +611,7 @@ git diff --check -- packages/neko-audio \
 剩余风险：
 
 - 当前生产环境没有 final-mix review renderer 和 loudness/true-peak readiness adapter，因此 preview/readiness 正确报告 unavailable，而不是伪装通过；
-- 没有修改 Engine、Webview 或跨层 message，不需要 cargo test 或 VSCode Webview runtime smoke；
+- 没有修改 Engine、Webview 或跨层 message，不需要 cargo test 或真实 VS Code Webview 功能场景；
 - 下一项任务 7.4 为 `neko-puppet` owning package 的 `.nkp` ProjectQuality facade。
 
 ## 14. 旧创作 Skill 运行时导出清理（2026-07-12）

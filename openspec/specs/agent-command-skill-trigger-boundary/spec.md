@@ -124,14 +124,14 @@ Agent help text, menu labels, and i18n strings SHALL present `/`, `$`, and `@` a
 
 ### Requirement: Runtime-sensitive validation
 
-The trigger boundary SHALL be validated with path-level tests and VS Code Webview runtime smoke for Webview interaction. Browser-only validation SHALL NOT be sufficient for final acceptance of Extension Webview behavior.
+The trigger boundary SHALL be validated with path-level tests and a real VS Code Webview functional scenario for Webview interaction. Browser-only validation and target discovery SHALL NOT be sufficient for final acceptance of Extension Webview behavior.
 
 #### Scenario: Path-level runtime tests
 - **WHEN** tests validate `$skill` invocation
 - **THEN** they SHALL assert that the canonical Skill invocation path was hit
 - **AND** they SHALL assert that builtin command and legacy slash Skill paths were not used.
 
-#### Scenario: Webview runtime smoke
+#### Scenario: Webview functional scenario
 - **WHEN** the Webview input trigger UI is changed
-- **THEN** validation SHALL include VS Code Extension Development Host Webview runtime smoke or an equivalent `vscode-extension-debugger` verification
+- **THEN** validation SHALL include an Extension Development Host scenario that operates the trigger UI and verifies its host/session result and runtime error gate
 - **AND** regular browser, Vite, Chrome, or Playwright-only checks SHALL be recorded only as supplemental evidence.

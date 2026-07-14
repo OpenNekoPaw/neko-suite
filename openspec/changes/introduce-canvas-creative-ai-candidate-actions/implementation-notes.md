@@ -13,6 +13,6 @@
 ### Residual Risk
 
 - `packages/neko-canvas` full `typecheck` still reports existing moduleResolution and legacy implicit-any errors unrelated to this change; narrower Canvas extension/webview builds pass.
-- VS Code Webview runtime smoke has not been run in this batch, so focus/CSP/postMessage behavior still needs runtime acceptance before archival.
+- A real VS Code Webview functional scenario has not been run in this batch, so focus/CSP/postMessage behavior still needs functional acceptance before archival.
 - Agent now resolves provider/model capability before run creation, writes visible background session projections, emits run/workItem observations, and supports explicit judge workItems. Real provider quality still depends on the configured external APIs and media task executor.
 - Legacy `GenerationPromptPanel` still uses `generateForNode` and `generationProgress`; Shot overlay AI buttons are poisoned at source-test level and use the new typed creative action path.

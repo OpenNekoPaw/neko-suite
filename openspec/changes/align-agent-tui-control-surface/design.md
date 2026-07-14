@@ -87,7 +87,7 @@ Testing:
 - Queue behavior should be tested with item-aware runtime queue fixtures.
 - Timeline and reference formatting should be covered with DTO fixtures, not
   real providers or real media rendering.
-- CLI smoke can validate terminal entry paths. Webview runtime smoke is not
+- CLI smoke can validate terminal entry paths. A Webview functional scenario is not
   required unless this change edits Webview code.
 
 ## Goals / Non-Goals

@@ -193,7 +193,7 @@ These effects SHALL be applied from canonical lifecycle projection. Webview and 
 - Agent tool tests proving `ActivateSkill` and workflow activation still work.
 - Webview protocol tests for user explicit messages, visible activation events, collapsed activation rows, and expanded activation timelines.
 - Transaction tests proving failed activation does not leave partial prompt/tool/model/lifecycle state.
-- VS Code Webview runtime smoke for mode selector, workflow start/resume controls, and active lifecycle indicators.
+- Real VS Code Webview functional scenarios for mode selector, workflow start/resume controls, active lifecycle indicators, and runtime error gates.
 
 ## Risks / Trade-offs
 

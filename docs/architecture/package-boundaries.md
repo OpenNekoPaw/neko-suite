@@ -313,6 +313,10 @@ Webview 包负责浏览器沙箱内的交互体验。
 
 按影响范围选择最小必要验证：
 
+功能包拥有自身的 Webview 功能验收语义：在 `scripts/webview-functional/scenarios/<owner>/` 维护 P0/P1/P2 场景，在 `scripts/webview-functional/fixtures/` 维护最小合成 workspace，并声明 public activation、可见 UI 操作、canonical path、持久结果或 Engine 结果、生命周期和运行错误断言。共享 `scripts/webview-functional/` runner 只提供宿主 adapter、CDP、封闭操作、错误策略和报告，不拥有 Canvas/Cut/Agent 等业务成功逻辑。场景不得通过私有 store/handler、test-only command 或直接文件写入绕过 owning Extension/domain service。
+
+Extension Webview 交互变更使用 `pnpm test:webview:functional --owner <package>` 的聚焦真实场景；`pnpm smoke:webview:targets` 只做 target discovery 预检。原始报告位于 gitignored `reports/webview-functional/`，只允许采集隔离 fixture workspace，并按质量 ADR 的脱敏和保留策略处理。
+
 ```bash
 pnpm check:deps
 pnpm check:agent-boundaries
@@ -321,6 +325,7 @@ pnpm --dir packages/neko-ui test -- --run
 pnpm --dir packages/neko-entity test -- --run
 pnpm test
 pnpm build
+pnpm test:webview:functional --owner neko-canvas
 cd packages/neko-engine && cargo test
 ```
 

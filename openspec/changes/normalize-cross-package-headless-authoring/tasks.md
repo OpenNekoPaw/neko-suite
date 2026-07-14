@@ -74,13 +74,13 @@
 - [x] 10.3 Update TUI/Electron architecture notes or package docs to describe shared authoring adapter responsibilities.
 - [x] 10.4 Run focused shared contract tests and package tests for each migrated package as tasks land.
 - [x] 10.5 Run package compile/typecheck for migrated packages and any affected shared packages.
-- [x] 10.6 Run VSCode Webview runtime smoke only for reveal/sync behavior after host-side writes, or record residual risk if unavailable.
+- [x] 10.6 Run a real VS Code Webview functional scenario for reveal/sync behavior after host-side writes, or record a blocking condition plus residual risk if unavailable.
 - [x] 10.7 Run `pnpm check:legacy-debt` and `pnpm check:unused`, or record which broader quality command covered those checks and any unrelated existing failures.
 
 ## Validation Notes
 
 - `pnpm exec turbo run compile --filter=neko-cut --filter=neko-sketch --filter=neko-audio --filter=neko-model --filter=neko-assets --filter=neko-agent` passed on 2026-07-08.
 - Focused Vitest suites for shared authoring contracts, plugin transfer, Agent bridge, Assets dispatch, Cut, Sketch, Audio, Model, Puppet, and Story passed on 2026-07-08.
-- VSCode Webview runtime smoke was not run because this cleanup changed host-side authoring routes, command registration, tests, and docs, not Webview interaction rendering. Residual risk: reveal/sync behavior after successful host writes is covered by unit tests and compile, but not by Extension Development Host visual/runtime smoke in this pass.
+- A VS Code Webview functional scenario was not run because this cleanup changed host-side authoring routes, command registration, tests, and docs, not Webview interaction rendering. Residual risk: reveal/sync behavior after successful host writes is covered by unit tests and compile, but not by Extension Development Host functional evidence in this pass.
 - `pnpm check:legacy-debt` ran and failed on existing repository-wide debt classes (`migrate-now` in Agent/Canvas and `needs-review` in Canvas/Desktop). The migrated authoring production scan for old Cut/Sketch/Model command IDs, queued imports, temp projects, and old Webview import messages was empty.
 - `pnpm check:unused` ran and failed on existing repository-wide unused dependencies/exports and package entry hints outside this change boundary.

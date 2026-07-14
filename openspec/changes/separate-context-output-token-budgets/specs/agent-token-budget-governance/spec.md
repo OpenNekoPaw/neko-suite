@@ -23,6 +23,12 @@ Neko Agent SHALL resolve a per-turn token budget before invoking a chat provider
 ### Requirement: Provider requests receive output-token caps only
 Neko Agent SHALL send provider `max_tokens`, `maxOutputTokens`, `num_predict`, or equivalent wire fields only as output generation limits. Provider adapters SHALL NOT interpret those fields as input context-window limits.
 
+#### Scenario: Session output defaults enter capability projection
+- **WHEN** a conversation snapshot configures max output tokens or a thinking budget and the turn also carries projected LLM presets
+- **THEN** provider capability projection MUST include the supported session defaults before applying turn-level preset or advanced overrides
+- **THEN** omitted projected fields MUST NOT cause Agent runtime to consult a second global-settings fallback
+- **THEN** parameters unsupported by the selected provider/model MUST remain omitted or diagnostic rather than being forced onto the wire
+
 #### Scenario: OpenAI-compatible request uses resolved output cap
 - **WHEN** Agent dispatches an OpenAI-compatible chat request after resolving `effectiveMaxOutputTokens = 8192`
 - **THEN** the provider request MUST send `max_tokens` or `maxOutputTokens` with value `8192`

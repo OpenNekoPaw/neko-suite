@@ -29,3 +29,4 @@
 - [x] 5.2 Add runtime tests for same-model native context and different-model perception context.
 - [x] 5.3 Add Webview tests for understand model filtering.
 - [x] 5.4 Run focused TypeScript/package checks and document any unrelated existing failures.
+- [x] 5.5 Preserve explicit understanding model selections in message-runtime and task-result continuation dispatch, with a message-runtime path regression test.

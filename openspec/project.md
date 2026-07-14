@@ -78,12 +78,14 @@ For multi-module changes, include the five-layer analysis:
 - Extension: can the next similar feature be added without copy-paste or broad
   caller edits?
 - Testing: what is covered by unit tests, contract tests, integration tests,
-  CLI smoke, Webview runtime smoke, VSCode smoke, fixture smoke, or benchmarks?
-  For Extension Webview visuals/interactions, Webview runtime smoke means
-  Extension Development Host plus the `vscode-extension-debugger` Skill by
-  default. Chrome, the generic Browser plugin, Playwright, or a Vite dev server
-  in a regular browser must not be used as the default acceptance surface unless
-  the user explicitly asks for browser-compatibility validation.
+  CLI smoke, Webview target smoke, real host functional scenarios, fixture
+  smoke, or benchmarks? Extension Webview visual/interaction acceptance means
+  an isolated Extension Development Host scenario with structured UI actions,
+  authoritative results, and runtime error gates. Target discovery and the
+  `vscode-extension-debugger` Skill remain environment/manual inspection aids.
+  Chrome, the generic Browser plugin, Playwright, or a Vite dev server in a
+  regular browser must not be used as the default acceptance surface unless the
+  user explicitly asks for browser-compatibility validation.
 - Proportionality: why is each abstraction, registry, factory, feature flag,
   config layer, fallback, retry, or guard required for this local client/engine
   boundary now?
@@ -733,10 +735,10 @@ Recommended commands by impact:
 - Residual/debt terms or redundant code: `pnpm check:legacy-debt` and
   `pnpm check:unused`, or record that `pnpm ci:local` / `pnpm check:quality`
   covered them.
-- Smoke: `pnpm smoke:engine`, `pnpm smoke:webview`,
-  `pnpm smoke:webview:runtime`, or focused VSCode debugger Skill smoke. Use
-  Webview runtime smoke by default when Extension Webview visuals,
-  interactions, CSP, media, Webview lifecycle, or UX are affected.
+- Smoke: `pnpm smoke:engine`, `pnpm smoke:webview`, or
+  `pnpm smoke:webview:targets`. These commands are preflight only. Use a focused
+  `pnpm test:webview:functional` scenario when Extension Webview visuals,
+  interactions, CSP, media, lifecycle, or UX are affected.
 
 When validation cannot be run, record why, what risk remains, and what follow-up
 will close it.

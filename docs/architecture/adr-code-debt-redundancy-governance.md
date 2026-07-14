@@ -42,7 +42,7 @@ Neko Suite 对重复、冗余和兼容代码采用“先分类、再收敛、最
 - `pnpm check:legacy-debt`
 - `pnpm check:legacy-debt:ledger`
 - 相关包的 focused test/build
-- 涉及 Webview runtime、CSP、message、媒体、焦点或视觉交互时，运行 `pnpm smoke:webview:runtime` 或等价 `vscode-extension-debugger` Skill 验证
+- 涉及 Webview runtime、CSP、message、媒体、焦点或视觉交互时，运行 `pnpm test:webview:functional` 的聚焦真实宿主场景；`pnpm smoke:webview:targets` 或等价 `vscode-extension-debugger` target 检查仅作为环境预检
 - 涉及 Engine/Rust/GPU 时，运行对应 Rust focused test 或 `pnpm ci:local:rust`
 
 如果保留兼容桥，验证必须覆盖：
