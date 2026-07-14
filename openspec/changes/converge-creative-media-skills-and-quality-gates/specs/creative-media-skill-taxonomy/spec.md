@@ -32,6 +32,13 @@ The Skill catalog SHALL distinguish canonical Skills from source profiles, opera
 - **AND** the Agent SHALL select an exact registered identity rather than constructing a source-specific Skill name
 - **AND** a removed identity SHALL NOT be attempted before or instead of the canonical Skill.
 
+#### Scenario: Dashboard projects installed Skills
+- **WHEN** the Dashboard reads catalog entries from Agent and feature-package providers
+- **THEN** the installed-Skill list and count SHALL include only non-hidden Skill artifacts
+- **AND** command wrappers classified as quick actions SHALL NOT be projected or counted as Skills
+- **AND** orchestrator metadata SHALL NOT create a separate user-facing Skill category
+- **AND** filtering the Dashboard SHALL NOT unregister or disable the owning package command, tool, or runtime capability.
+
 ### Requirement: Skill content does not own runtime tool protocols
 Canonical creative Skill content SHALL contain creative methods, task judgment, profile selection guidance, and output semantics. Tool names, parameter schemas, polling/task protocols, path protocols, Webview messages, and owning package authoring details MUST remain in machine-readable metadata, capability prompts, tool schemas, or runtime catalogs.
 

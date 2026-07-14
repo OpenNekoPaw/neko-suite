@@ -64,6 +64,8 @@ flowchart LR
 
 普通 Skill 不再依赖 `command` 字段作为入口；显式调用使用现有 `$skill` namespace，自然语言由 Agent 根据 catalog metadata 激活。只有真正的 command artifact 才进入 Slash catalog。
 
+Dashboard 的“已安装技能”只投影真实 Skill artifact。子包通过历史 `ISkillProvider.getSkills()` 暴露、但 catalog role 为 `quick-action` 的命令包装不得进入 Skill 列表或 Skill 计数；`hidden` runtime/persona 条目同样不得进入。Dashboard 不再把 `orchestrator` 呈现为另一种用户级 Skill 分类，顶级 `orchestrator` 与 `standalone` 统一显示为 Skill，focused Skill 仍作为父 Skill 的可展开关联。子包命令继续由 owning package、Command Palette 或领域 UI 暴露，工具/capability 继续只存在于 Agent runtime catalog。本次不新增平行动作 registry，也不删除子包运行能力。
+
 ### 2. Storyboard 使用统一 canonical contract，来源适配器保持独立
 
 新增共享 Storyboard contract，至少包含：scene/shot 标识、顺序、叙事意图、画面描述、对白/声音提示、镜头语言、时长建议、角色/风格/资源引用、source trace、revision 和 validation state。最终具体落点根据既有公共能力审计决定放入 `@neko/shared` 或 Story owning contract；不得在 Canvas、Cut 和 Skill 中分别定义同义 DTO。

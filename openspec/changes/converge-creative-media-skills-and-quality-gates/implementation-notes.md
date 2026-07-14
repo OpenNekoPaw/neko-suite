@@ -1540,3 +1540,43 @@ node scripts/agent-eval/protocol-smoke.mjs \
 ```
 
 BLAME case 实际读取并分析 EPUB 前 10 页，产出 6 个 scene、13 个 shot。每个 shot 保留独立 `imagePrompt`，每个 scene 仅首个 shot 承载汇总该场有序动作、运镜、声音和总时长的 `videoPrompt`。首次运行遇到 provider 连续空响应并被 runner 正确判为 runtime failure；重试后全部 8 项 deterministic assertions 通过，未用空结果或 fallback 伪装成功。
+
+## 30. Dashboard Installed-Skill Projection Cleanup（2026-07-14）
+
+任务 9.5b 已完成。Dashboard 不再把各功能子包通过历史 `ISkillProvider.getSkills()` 暴露的 command wrapper、quick action、hidden runtime entry 或 persona 计入“已安装技能”。过滤只发生在 Dashboard 展示投影边界，不注销 owning package command，也不改变 Agent tool/capability 注册。
+
+### Canonical projection
+
+- `SkillReader` 仍允许功能子包显式提供真实 plugin Skill；只有 catalog role 为 `orchestrator`、`standalone` 或 `focused-skill` 且 visibility 非 hidden 的条目进入 Dashboard。
+- 非 Agent 子包缺少显式 catalog metadata 的历史 `getSkills()` 条目仍按 `quick-action` 分类，并在 Extension Host 投影阶段被排除；Webview 对陈旧消息执行相同确定性过滤，避免旧 Dashboard payload 再次膨胀计数。
+- Dashboard 顶级 `orchestrator` 与 `standalone` 统一显示在“技能”区；`focused-skill` 只作为父 Skill 的可展开关联，不再同时重复显示为高级项。
+- “编排技能”“独立技能”“快捷动作”及顶级 role badge 已从用户界面删除；source badge 与 focused-child badge 保留。
+- 未新增 Dashboard action registry、跨包 import 或 command adapter；子包动作继续由 owning package、Command Palette 或领域 UI 暴露。
+
+### 回归与真实 Webview 证据
+
+修复前回归测试稳定返回：
+
+```text
+["generate-video-clip", "media-production", "audio-mixing", "execution-persona"]
+```
+
+修复后同一路径只返回 `media-production`。验证：
+
+```bash
+pnpm test
+# packages/neko-dashboard: 12 files, 57 tests passed
+
+pnpm run compile
+# packages/neko-dashboard: Extension + Webview build passed
+
+node scripts/webview-functional/cli.mjs \
+  --scenario scripts/webview-functional/scenarios/dashboard/dashboard-skill-projection.p0.scenario.json
+# pass
+# generate-video-clip absent
+# transcribe-audio absent
+# dashboard command observed
+# no runtime failures
+```
+
+真实场景使用隔离 fixture workspace，并关闭 Dashboard DOM/screenshot evidence。原因是当前 built-in Debug Host 可见本机已安装扩展；场景只按已声明 Cut artifact id 做负向断言，报告不采集个人 Skill 名称、凭据或本机配置。首次不安全的临时 DOM 报告已删除。
