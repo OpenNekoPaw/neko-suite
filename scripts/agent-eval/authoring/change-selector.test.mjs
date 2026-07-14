@@ -46,6 +46,7 @@ describe('Agent Evaluation change-to-suite selector', () => {
         '.codex/skills/storyboard/SKILL.md',
         'packages/neko-agent/packages/agent/src/prompt/system-prompt.ts',
         'packages/neko-agent/packages/extension/src/tools/readImageTool.ts',
+        'packages/neko-agent/packages/platform/src/service/shared-service-adapter.ts',
         'packages/neko-agent/packages/platform/src/llm/adapter/openai-adapter.ts',
         'packages/neko-agent/packages/agent/src/session/agent-session.ts',
         'packages/neko-agent/packages/agent/src/task/task-runtime.ts',

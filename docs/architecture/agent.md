@@ -227,6 +227,14 @@ Agent 有三类协议面，不能混用：
 - Artifact projection 只传 compact ref、metadata、provenance 和可展示摘要；二进制内容通过资源/缓存服务按 intent 读取。
 - Webview confirmation 只表达用户批准或拒绝；Approval/Policy 决策仍归 runtime/Extension adapter。
 
+### 媒体上下文生命周期
+
+原生媒体输入和可展开为 provider 媒体的 `PerceptionCard` 只属于引入它们的当前 Agent turn。Platform provider projection 必须以最新普通用户消息或内部 continuation 为 turn 边界，只展开该边界之后的 `MultimodalContextPacket` 和工具感知卡片。
+
+后续 turn 保留历史工具结果中的结构、语义证据、`ResourceRef`、版本和 provenance，但不得自动重新加载缩略图、关键帧、音频或视频字节，也不得把历史 `MultimodalContextPacket` 作为 JSON 文本继续发送给 provider。需要再次查看媒体时，Agent 必须通过当前 turn 的 `ReadImage` 或 `perception.perceive` 显式重检稳定资源身份；只有新产生的当前 turn 感知结果可以再次展开。
+
+聊天模型与理解模型相同时，当前 turn 可以使用原生多模态输入；两者不同时，媒体分析走独立 perception/tool 路径，主 Agent 消费紧凑 `PerceptionCard` 证据。两条路径都不得让历史媒体在普通“继续”或内部续跑中隐式重放。当前 turn 媒体缺失、模型不支持或加载失败时保持 fail-visible，不得回退历史媒体或返回空成功。
+
 ### 协议治理规则
 
 - 跨 Webview 边界的消息必须由 `agent-types` 或共享 contract 定义，不在组件里临时拼自由对象。

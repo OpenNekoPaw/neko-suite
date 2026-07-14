@@ -37,6 +37,7 @@ const RULES = Object.freeze([
       'packages/neko-agent/packages/agent/src/tools/',
       'packages/neko-agent/packages/extension/src/tools/',
       'packages/neko-agent/packages/platform/src/capability/',
+      'packages/neko-agent/packages/platform/src/service/shared-service-adapter.ts',
       'packages/neko-agent/packages/agent-types/src/capability',
     ],
   ),
