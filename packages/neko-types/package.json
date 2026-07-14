@@ -6,11 +6,17 @@
   "type": "module",
   "scripts": {
     "generate": "node ../../scripts/proto-gen-ts.mjs",
-    "test": "vitest --passWithNoTests"
+    "test": "vitest"
   },
   "exports": {
     ".": "./src/index.ts",
     "./path": "./src/path/index.ts",
+    "./local-metadata": "./src/local-metadata/index.ts",
+    "./local-metadata/node": "./src/local-metadata/node.ts",
+    "./local-metadata/sqlite": "./src/local-metadata/sqlite/index.ts",
+    "./local-metadata/testing": "./src/local-metadata/testing/index.ts",
+    "./local-metadata/node-sqlite-local-metadata-store": "./src/local-metadata/node-sqlite-local-metadata-store.ts",
+    "./local-metadata/node-workspace-identity": "./src/local-metadata/node-workspace-identity.ts",
     "./project-file-io": "./src/project-file-io/index.ts",
     "./project-authoring": "./src/project-authoring/index.ts",
     "./project-authoring/test-helpers": "./src/project-authoring/test-helpers.ts",
@@ -57,7 +63,8 @@
     }
   },
   "devDependencies": {
-    "@types/vscode": "^1.85.0",
+    "@types/node": "^24.0.0",
+    "@types/vscode": "^1.125.0",
     "jsdom": "^27.0.1"
   },
   "license": "AGPL-3.0-or-later",

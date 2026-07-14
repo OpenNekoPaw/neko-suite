@@ -33,6 +33,9 @@ export * from './theme/index';
 // Path resolution (PathResolver + variable expansion)
 export * from './path/index';
 
+// Host-neutral local metadata store and repository contracts
+export * from './local-metadata/index';
+
 // Project file I/O contracts and host-agnostic helpers
 export * from './project-file-io/index';
 

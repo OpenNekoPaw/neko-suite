@@ -211,10 +211,11 @@ describe('resource cache contracts', () => {
   it('adds unified resource cache paths to storage layout', () => {
     const layout = resolveStorageLayout('/workspace/demo', '/Users/feng');
 
+    expect(layout.global.database).toBe('/Users/feng/.neko/neko.db');
     expect(layout.project.local.cache.resources).toBe('/workspace/demo/.neko/.cache/resources');
     expect(layout.project.local.cache.resourceManifest).toBe(
       '/workspace/demo/.neko/.cache/resources/manifest.json',
     );
-    expect(layout.project.local.cache.database).toBe('/workspace/demo/.neko/.cache/neko-cache.db');
+    expect('database' in layout.project.local.cache).toBe(false);
   });
 });

@@ -144,6 +144,21 @@ export interface ResourceCacheManifest {
   readonly stats?: ResourceCacheStats;
 }
 
+export interface ResourceCacheManifestLoadOptions {
+  readonly refresh?: boolean;
+}
+
+export interface ResourceCacheManifestStore {
+  load(options?: ResourceCacheManifestLoadOptions): Promise<ResourceCacheManifest>;
+  save(manifest: ResourceCacheManifest): Promise<void>;
+  update(
+    operation: (
+      manifest: ResourceCacheManifest,
+    ) => ResourceCacheManifest | Promise<ResourceCacheManifest>,
+  ): Promise<ResourceCacheManifest>;
+  invalidateCache(): void;
+}
+
 export interface ResourceCacheStats {
   readonly totalSizeBytes: number;
   readonly entryCount: number;
@@ -534,7 +549,7 @@ export function stableStringify(value: unknown): string {
   return JSON.stringify(String(value));
 }
 
-function isResourceCacheEntry(value: unknown): value is ResourceCacheEntry {
+export function isResourceCacheEntry(value: unknown): value is ResourceCacheEntry {
   if (!isRecord(value)) return false;
   return (
     isResourceRef(value['resource']) &&
@@ -548,7 +563,7 @@ function isResourceCacheEntry(value: unknown): value is ResourceCacheEntry {
   );
 }
 
-function isResourceCacheVariantEntry(value: unknown): value is ResourceCacheVariantEntry {
+export function isResourceCacheVariantEntry(value: unknown): value is ResourceCacheVariantEntry {
   if (!isRecord(value)) return false;
   return (
     typeof value['key'] === 'string' &&
