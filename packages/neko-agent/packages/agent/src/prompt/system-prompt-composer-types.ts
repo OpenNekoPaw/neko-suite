@@ -43,6 +43,10 @@ export interface PromptSection {
   layer: PromptLayer;
   /** The prompt text content */
   content: string;
+  /** Stable owner/source identifier used by secret-free composition evidence */
+  source: string;
+  /** Optional stable content/package version; never derived from prompt content */
+  version?: string;
   /** Higher priority = placed earlier within same layer (default: 50) */
   priority: number;
   /** Estimated token count (auto-calculated) */
@@ -96,6 +100,10 @@ export interface PromptSectionInput {
   id: string;
   layer: PromptLayer;
   content: string;
+  /** Stable owner/source identifier. Defaults to the prompt layer. */
+  source?: string;
+  /** Optional stable content/package version. */
+  version?: string;
   priority?: number;
   /** Cache control hint for LLM API prompt caching */
   cacheControl?: 'ephemeral';
@@ -135,6 +143,15 @@ export interface PromptDumpInfo {
   tokenEstimate: number;
   priority: number;
   cacheControl?: 'ephemeral';
+}
+
+/** Secret-free evidence for one fragment that participated in composition. */
+export interface PromptCompositionFragmentProjection {
+  readonly id: string;
+  readonly source: string;
+  readonly order: number;
+  readonly version?: string;
+  readonly hash: string;
 }
 
 /** Layer usage info */
@@ -194,6 +211,9 @@ export interface ISystemPromptComposer {
    * Returns id, layer, tokenEstimate, priority, cacheControl per section.
    */
   dumpSections(): PromptDumpInfo[];
+
+  /** Project the actual composed fragment order without exposing prompt bodies. */
+  projectComposition(): readonly PromptCompositionFragmentProjection[];
 
   /** Clear all non-base sections */
   reset(): void;

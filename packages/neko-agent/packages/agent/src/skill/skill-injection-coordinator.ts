@@ -359,6 +359,7 @@ export class SkillInjectionCoordinator {
           id: s.sectionId,
           layer: s.layer,
           content: s.content,
+          source: mod.manifest.id,
           priority: s.priority ?? 50,
           ...(s.cacheControl && { cacheControl: s.cacheControl }),
         });

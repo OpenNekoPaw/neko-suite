@@ -215,6 +215,7 @@ function createCoordinatorDeps() {
     getTotalTokens: vi.fn().mockReturnValue(0),
     getLayerUsage: vi.fn(),
     dumpSections: vi.fn().mockReturnValue([]),
+    projectComposition: vi.fn().mockReturnValue([]),
     reset: vi.fn(),
   };
   const permissionHooks = {

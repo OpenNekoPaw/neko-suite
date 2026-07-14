@@ -14,6 +14,8 @@
  * from AGENTS.md and locale/mode switching.
  */
 
+import { createHash } from 'node:crypto';
+
 import type {
   PromptLayer,
   PromptSection,
@@ -25,6 +27,7 @@ import type {
   ComposedPromptResult,
   ComposedPromptSection,
   PromptDumpInfo,
+  PromptCompositionFragmentProjection,
 } from './system-prompt-composer-types';
 
 import { PROMPT_LAYER_ORDER, DEFAULT_PROMPT_LAYER_BUDGET } from './system-prompt-composer-types';
@@ -44,6 +47,13 @@ const BASE_SECTION_ID = 'base';
 
 /** Approximate chars per token for estimation */
 const CHARS_PER_TOKEN = 4;
+
+const PROMPT_COMPOSITION_METADATA_PATTERN = /^[a-z0-9][a-z0-9._:/@-]{0,255}$/iu;
+
+interface ComposedSectionFragment {
+  readonly section: PromptSection;
+  readonly content: string;
+}
 
 // =============================================================================
 // Implementation
@@ -71,6 +81,7 @@ export class SystemPromptComposer implements ISystemPromptComposer {
       id: BASE_SECTION_ID,
       layer: 'base',
       content,
+      source: 'base',
       priority: 100,
     });
   }
@@ -80,10 +91,17 @@ export class SystemPromptComposer implements ISystemPromptComposer {
   // ---------------------------------------------------------------------------
 
   setSection(input: PromptSectionInput): void {
+    const source = input.source ?? input.layer;
+    assertSafeCompositionMetadata(source, 'source');
+    if (input.version !== undefined) {
+      assertSafeCompositionMetadata(input.version, 'version');
+    }
     const section: PromptSection = {
       id: input.id,
       layer: input.layer,
       content: input.content,
+      source,
+      ...(input.version !== undefined ? { version: input.version } : {}),
       priority: input.priority ?? DEFAULT_PRIORITY,
       tokenEstimate: estimateTokens(input.content),
       addedAt: Date.now(),
@@ -231,6 +249,22 @@ export class SystemPromptComposer implements ISystemPromptComposer {
     return infos;
   }
 
+  projectComposition(): readonly PromptCompositionFragmentProjection[] {
+    const projection: PromptCompositionFragmentProjection[] = [];
+    for (const layer of PROMPT_LAYER_ORDER) {
+      for (const fragment of this._composeLayerSections(layer)) {
+        projection.push({
+          id: fragment.section.id,
+          source: fragment.section.source,
+          order: projection.length,
+          ...(fragment.section.version !== undefined ? { version: fragment.section.version } : {}),
+          hash: sha256(fragment.content),
+        });
+      }
+    }
+    return projection;
+  }
+
   // ---------------------------------------------------------------------------
   // Reset
   // ---------------------------------------------------------------------------
@@ -265,12 +299,19 @@ export class SystemPromptComposer implements ISystemPromptComposer {
 
   /** Compose a single layer's content, respecting token budget */
   private _composeLayer(layer: PromptLayer): string {
+    return this._composeLayerSections(layer)
+      .map((fragment) => fragment.content)
+      .join(this._separator);
+  }
+
+  /** Select the exact section content that participates after budget enforcement. */
+  private _composeLayerSections(layer: PromptLayer): ComposedSectionFragment[] {
     const sections = this._getLayerSections(layer);
-    if (sections.length === 0) return '';
+    if (sections.length === 0) return [];
 
     const budget = this._budget[layer];
     let usedTokens = 0;
-    const parts: string[] = [];
+    const fragments: ComposedSectionFragment[] = [];
 
     for (const section of sections) {
       if (usedTokens + section.tokenEstimate > budget) {
@@ -278,15 +319,18 @@ export class SystemPromptComposer implements ISystemPromptComposer {
         const remainingTokens = budget - usedTokens;
         if (remainingTokens > 0) {
           const maxChars = remainingTokens * CHARS_PER_TOKEN;
-          parts.push(section.content.slice(0, maxChars) + '\n[truncated]');
+          fragments.push({
+            section,
+            content: section.content.slice(0, maxChars) + '\n[truncated]',
+          });
         }
         break;
       }
-      parts.push(section.content);
+      fragments.push({ section, content: section.content });
       usedTokens += section.tokenEstimate;
     }
 
-    return parts.join(this._separator);
+    return fragments;
   }
 }
 
@@ -297,6 +341,16 @@ export class SystemPromptComposer implements ISystemPromptComposer {
 /** Estimate token count from string length (1 token ≈ 4 chars) */
 function estimateTokens(text: string): number {
   return Math.ceil(text.length / CHARS_PER_TOKEN);
+}
+
+function sha256(text: string): string {
+  return `sha256:${createHash('sha256').update(text).digest('hex')}`;
+}
+
+function assertSafeCompositionMetadata(value: string, field: 'source' | 'version'): void {
+  if (!PROMPT_COMPOSITION_METADATA_PATTERN.test(value)) {
+    throw new Error(`Prompt composition ${field} must be a stable non-secret identifier.`);
+  }
 }
 
 // =============================================================================

@@ -386,6 +386,7 @@ export function defaultSkillLifecycleRequest(input: {
 }
 
 export function projectSkillSummary(skill: Skill): SkillLifecycleSkillSummary {
+  const host = skill.hostProjection;
   return {
     name: skill.name,
     description: skill.description,
@@ -395,6 +396,18 @@ export function projectSkillSummary(skill: Skill): SkillLifecycleSkillSummary {
       ? { relatedSkills: skill.referencedSkills }
       : {}),
     ...(skill.mediaWorkflow ? { mediaWorkflow: skill.mediaWorkflow } : {}),
+    ...(host
+      ? {
+          hostIdentity: {
+            portableName: skill.name,
+            source: host.source,
+            provenance: host.provenance,
+            rootId: host.location.rootId,
+            relativePath: host.location.relativePath,
+            fingerprint: host.fingerprint,
+          },
+        }
+      : {}),
   };
 }
 

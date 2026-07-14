@@ -60,7 +60,34 @@ export interface TerminalTimelineRow {
   readonly progress?: number;
   readonly details?: string;
   readonly diagnosticCode?: string;
+  readonly artifactFacts?: readonly TerminalArtifactFact[];
   readonly timestamp: number;
+}
+
+export interface TerminalArtifactFact {
+  readonly ref: string;
+  readonly kind:
+    'file' | 'resource-ref' | 'generated-asset' | 'project-revision' | 'composite-artifact';
+  readonly relativePath?: string;
+  readonly digest?: string;
+  readonly revision?: string;
+  readonly provenance: {
+    readonly source: string;
+    readonly skillId?: string;
+    readonly toolCallId?: string;
+    readonly taskId?: string;
+    readonly providerId?: string;
+  };
+  readonly deliveryStatus: 'delivered' | 'failed' | 'partial' | 'cancelled' | 'unavailable';
+  readonly validator: {
+    readonly id: string;
+    readonly status: 'valid' | 'invalid' | 'unavailable';
+  };
+  readonly diagnostics: readonly {
+    readonly code: string;
+    readonly severity: 'info' | 'warning' | 'error';
+    readonly message: string;
+  }[];
 }
 
 /**

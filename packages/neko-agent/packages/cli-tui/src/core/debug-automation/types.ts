@@ -5,8 +5,11 @@ import type {
   AgentTurnSource,
 } from '@neko-agent/types';
 import type { Task } from '@neko/shared';
+import type { ActiveSkillLifecycleRecordProjection } from '@neko/shared';
 import type { Message } from '../../types/state';
+import type { TerminalArtifactFact } from '../../types/state';
 import type { TerminalMarkdownPathEvent } from '../../markdown/path-observer';
+import type { PromptCompositionFragmentProjection } from '@neko/agent';
 
 export const TUI_DEBUG_AUTOMATION_REQUEST_SCHEMA = 'neko.tui-debug-automation.request.v1';
 export const TUI_DEBUG_AUTOMATION_RESPONSE_SCHEMA = 'neko.tui-debug-automation.response.v1';
@@ -66,6 +69,14 @@ export interface TuiDebugAutomationSessionCreateParams {
   readonly model?: string;
   readonly apiKey?: string;
   readonly initialPrompt?: string;
+  readonly runtimeConfig?: TuiDebugAutomationSessionRuntimeConfig;
+}
+
+export interface TuiDebugAutomationSessionRuntimeConfig {
+  readonly temperature?: number;
+  readonly maxTokens?: number;
+  readonly thinkingBudget?: number;
+  readonly outputFormat?: 'text' | 'json' | 'markdown';
 }
 
 export interface TuiDebugAutomationSessionResumeParams extends TuiDebugAutomationSessionCreateParams {
@@ -144,6 +155,16 @@ export interface TuiDebugAutomationModelIdentity {
   readonly providerExpressionProfileId?: string;
 }
 
+export interface TuiDebugAutomationEffectiveConfiguration {
+  readonly digest: string;
+  readonly runtime: Required<TuiDebugAutomationSessionRuntimeConfig>;
+  readonly chat: TuiDebugAutomationModelIdentity;
+  readonly media: {
+    readonly defaultModels: Readonly<Partial<Record<'image' | 'video' | 'audio', string>>>;
+    readonly perceptionModels: Readonly<Partial<Record<'image' | 'video' | 'audio', string>>>;
+  };
+}
+
 export interface TuiDebugAutomationTimelineRowSummary {
   readonly id: string;
   readonly sequence: number;
@@ -169,21 +190,52 @@ export interface TuiDebugAutomationTurnSummary {
 
 export interface TuiDebugAutomationContinuationFact {
   readonly id: string;
+  readonly conversationId: string;
   readonly source: Exclude<AgentTurnSource, 'user'>;
   readonly displayKind: AgentQueuedMessageDisplayKind;
-  readonly promptSummary?: string;
+  readonly promptHash?: string;
   readonly metadata?: AgentContinuationMetadata;
   readonly status: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled' | 'discarded';
   readonly timestamp: number;
+  readonly diagnostics: readonly TuiDebugAutomationDiagnostic[];
+}
+
+export interface TuiDebugAutomationDiagnostic {
+  readonly code: string;
+  readonly severity: 'info' | 'warning' | 'error';
+  readonly message: string;
 }
 
 export interface TuiDebugAutomationToolCallSummary {
   readonly id: string;
   readonly name: string;
-  readonly status: string;
+  readonly status:
+    Message['toolCalls'][number]['status'] | import('../../types/state').TerminalTimelineRowStatus;
   readonly arguments?: unknown;
   readonly result?: unknown;
   readonly error?: string;
+  readonly resultObservation: 'pending' | 'available' | 'error' | 'missing';
+  readonly diagnostics: readonly TuiDebugAutomationDiagnostic[];
+}
+
+export interface TuiDebugAutomationTaskFact {
+  readonly scope: Task['scope'];
+  readonly id: string;
+  readonly type: Task['type'];
+  readonly status: Task['status'];
+  readonly progress: number;
+  readonly createdAt: number;
+  readonly updatedAt: number;
+  readonly providerId?: string;
+  readonly modelId?: string;
+  readonly retryCount: number;
+  readonly lifecycle?: Task['lifecycle'];
+  readonly metrics?: NonNullable<Task['output']>['metrics'];
+  readonly resultObservation: {
+    readonly status: 'pending' | 'available' | 'observed' | 'failed' | 'missing';
+    readonly observationIds: readonly string[];
+  };
+  readonly diagnostics: readonly TuiDebugAutomationDiagnostic[];
 }
 
 export interface TuiDebugAutomationCanvasFacts {
@@ -196,26 +248,85 @@ export interface TuiDebugAutomationMarkdownFacts {
   readonly droppedPathEventCount: number;
 }
 
+export interface TuiDebugAutomationConversationPersistenceFacts {
+  readonly authority: 'journal' | 'memory';
+  readonly catalog: 'sqlite' | 'memory';
+  readonly databaseScope: 'user-global' | 'isolated-test';
+  readonly resume: {
+    readonly status: 'new' | 'restored' | 'not-found';
+    readonly requestedConversationId?: string;
+    readonly restoredConversationId?: string;
+    readonly recordSource?: 'extension' | 'tui' | 'journal-projection';
+    readonly restoredMessageCount: number;
+  };
+}
+
 export interface TuiDebugAutomationSessionFacts {
   readonly sessionId: string;
   readonly conversationId: string;
   readonly ready: boolean;
   readonly model: TuiDebugAutomationModelIdentity;
+  readonly configuration: TuiDebugAutomationEffectiveConfiguration;
   readonly idle: TuiDebugAutomationIdleState;
   readonly turns: readonly TuiDebugAutomationTurnSummary[];
   readonly history?: readonly unknown[];
-  readonly skillActivations: readonly unknown[];
-  readonly tasks: readonly Pick<Task, 'id' | 'type' | 'status' | 'progress' | 'error'>[];
+  readonly skillActivations: readonly ActiveSkillLifecycleRecordProjection[];
+  readonly tasks: readonly TuiDebugAutomationTaskFact[];
   readonly messageQueue: AgentMessageQueueSnapshot | null;
   readonly continuations: readonly TuiDebugAutomationContinuationFact[];
+  readonly promptComposition: readonly PromptCompositionFragmentProjection[];
+  readonly artifacts: readonly TerminalArtifactFact[];
   readonly runtimeErrors: readonly string[];
   readonly canvas: TuiDebugAutomationCanvasFacts;
   readonly markdown: TuiDebugAutomationMarkdownFacts;
+  readonly conversationPersistence: TuiDebugAutomationConversationPersistenceFacts;
+  readonly usage: {
+    readonly inputTokens: number;
+    readonly outputTokens: number;
+    readonly totalTokens: number;
+  };
+  readonly timing: {
+    readonly capturedAt: number;
+    readonly activeStartedAt?: number;
+    readonly firstTurnAt?: number;
+    readonly lastTurnAt?: number;
+  };
+  readonly iteration: {
+    readonly current: number;
+    readonly max: number;
+  };
+  readonly retries: {
+    readonly taskRetryCount: number;
+    readonly tasksWithRetries: number;
+  };
+  readonly evidenceCompleteness: TuiDebugAutomationEvidenceCompleteness;
+}
+
+export interface TuiDebugAutomationCollectionCompleteness {
+  readonly limit: number;
+  readonly droppedCount: number;
+}
+
+export interface TuiDebugAutomationEvidenceCompleteness {
+  readonly turns: TuiDebugAutomationCollectionCompleteness;
+  readonly turnToolCalls: TuiDebugAutomationCollectionCompleteness;
+  readonly timelineRows: TuiDebugAutomationCollectionCompleteness;
+  readonly skillActivations: TuiDebugAutomationCollectionCompleteness;
+  readonly tasks: TuiDebugAutomationCollectionCompleteness;
+  readonly continuations: TuiDebugAutomationCollectionCompleteness;
+  readonly promptComposition: TuiDebugAutomationCollectionCompleteness;
+  readonly artifacts: TuiDebugAutomationCollectionCompleteness;
+  readonly runtimeErrors: TuiDebugAutomationCollectionCompleteness;
+  readonly canvasMessageSummaries: TuiDebugAutomationCollectionCompleteness;
+  readonly canvasToolCallSummaries: TuiDebugAutomationCollectionCompleteness;
+  readonly markdownPathEvents: TuiDebugAutomationCollectionCompleteness;
+  readonly history?: TuiDebugAutomationCollectionCompleteness;
 }
 
 export interface TuiDebugAutomationAppPort {
   readonly ownerKind: 'tui-app-session-owner';
   isReady(): boolean;
+  getInitializationError(): Error | null;
   getConversationId(): string;
   submitMessage(input: { readonly prompt: string }): Promise<void>;
   cancelActiveMessage(): boolean;

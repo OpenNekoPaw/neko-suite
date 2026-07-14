@@ -16,6 +16,7 @@ import type {
 } from '@neko-agent/types';
 import { getToolSummary } from '@neko-agent/types';
 import { collectTuiArtifactReferences } from './artifact-reference-formatter';
+import { projectToolResultArtifactFacts } from './artifact-fact-projector';
 import type { AgentTerminalPresentationContext } from '../presentation/context';
 import { presentArtifactReference } from '../presentation/artifact-presentation';
 import type { AgentTerminalMessageKey } from '../presentation/terminal-messages';
@@ -341,6 +342,7 @@ export function createTerminalTimelineProjector(
               toolName: tool.name,
               toolArguments: tool.arguments,
               toolResult: projectedResult.data,
+              ...projectArtifactFacts(result, result.toolCallId),
               ...(projectedResult.error ? { toolError: projectedResult.error } : {}),
               resultSummary: summarizeToolResult(result, options.presentation),
             }),
@@ -371,6 +373,7 @@ export function createTerminalTimelineProjector(
               toolName: tool.name,
               toolArguments: tool.arguments,
               toolResult: mergedResult.data,
+              ...projectArtifactFacts(mergedResult, backfill.toolCallId),
               ...(mergedResult.error ? { toolError: mergedResult.error } : {}),
               backfillSummary: summarizeBackfill(backfill.dataPatch, options.presentation),
             }),
@@ -718,6 +721,7 @@ function projectTimelineItem(
           ...(toolCall.result
             ? {
                 toolResult: toolCall.result.data,
+                ...projectArtifactFacts(toolCall.result, toolCall.id),
                 ...(toolCall.result.error ? { toolError: toolCall.result.error } : {}),
               }
             : {}),
@@ -854,6 +858,14 @@ function toWorkItemStatus(status: AgentWorkItem['status']): TerminalTimelineRowS
 function summarizeArgs(name: string, args: Record<string, unknown>): string {
   const summary = getToolSummary(name, args);
   return summary || summarizeUnknown(args);
+}
+
+function projectArtifactFacts(
+  result: Parameters<typeof projectToolResultArtifactFacts>[0],
+  toolCallId: string,
+): Pick<TerminalTimelineRow, 'artifactFacts'> | Record<string, never> {
+  const artifactFacts = projectToolResultArtifactFacts(result, toolCallId);
+  return artifactFacts.length > 0 ? { artifactFacts } : {};
 }
 
 function summarizeToolResult(

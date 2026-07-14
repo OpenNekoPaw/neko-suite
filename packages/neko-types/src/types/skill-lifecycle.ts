@@ -9,6 +9,7 @@
 
 import type { AgentCapabilityActivationProvenance } from './agent-capability-activation';
 import type { RelatedSkill, SkillInjection, SkillMediaWorkflowHint, SkillSource } from './skill';
+import type { SkillProvenance } from './portable-skill';
 
 export type SkillLifecycleSlot =
   'stagePersona' | 'domainSkill' | 'referenceSkill' | 'ephemeralSkill' | 'promptChainSkill';
@@ -108,6 +109,25 @@ export interface SkillLifecycleSkillSummary {
   readonly domain?: string;
   readonly relatedSkills?: readonly RelatedSkill[];
   readonly mediaWorkflow?: SkillMediaWorkflowHint;
+  readonly hostIdentity?: SkillLifecycleHostIdentityProjection;
+}
+
+/** Host-owned local development identity. Market release identity is intentionally absent. */
+export interface SkillLifecycleHostIdentityProjection {
+  readonly portableName: string;
+  readonly source: import('./skill').SkillCatalogSource;
+  readonly provenance: SkillProvenance;
+  readonly rootId: string;
+  readonly relativePath: string;
+  readonly fingerprint: string;
+}
+
+export interface SkillLifecycleInjectedFragmentProjection {
+  readonly id: string;
+  readonly source: 'skill-lifecycle';
+  readonly order: number;
+  readonly version?: string;
+  readonly hash: string;
 }
 
 export interface SkillLifecycleRecord {
@@ -180,6 +200,7 @@ export interface SkillLifecyclePromptSectionProjection {
   readonly recordId: string;
   readonly slot: SkillLifecycleSlot;
   readonly skillName: string;
+  readonly version?: string;
 }
 
 export interface SkillLifecycleToolPolicyProjection {
@@ -212,6 +233,10 @@ export interface ActiveSkillLifecycleRecordProjection {
   readonly lockedReason?: string;
   readonly expires?: string;
   readonly status: SkillLifecycleRecordStatus;
+  readonly triggerSource?: SkillLifecycleActivationSource;
+  readonly hostIdentity?: SkillLifecycleHostIdentityProjection;
+  readonly injectedFragments?: readonly SkillLifecycleInjectedFragmentProjection[];
+  readonly toolPolicyIds?: readonly string[];
 }
 
 export interface ActiveSkillLifecycleProjection {

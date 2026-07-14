@@ -10,9 +10,11 @@ const mockState = vi.hoisted(
       readonly automation?: TuiDebugAutomationController;
       readonly resumeConversationId?: string;
       readonly initialPrompt?: string;
+      readonly config?: Record<string, unknown>;
     };
     submittedPrompts: string[];
     terminalSizes: Array<{ columns: number; rows: number }>;
+    initializationError?: Error;
   } => ({
     submittedPrompts: [],
     terminalSizes: [],
@@ -61,6 +63,7 @@ beforeEach(() => {
   mockState.renderedAppProps = undefined;
   mockState.submittedPrompts = [];
   mockState.terminalSizes = [];
+  mockState.initializationError = undefined;
 });
 
 describe('TuiDebugAutomationSessionManager', () => {
@@ -133,6 +136,29 @@ describe('TuiDebugAutomationSessionManager', () => {
     await manager.disposeAll();
   });
 
+  it('fails session creation immediately with the App initialization diagnostic', async () => {
+    mockState.initializationError = new Error('conversation storage initialization failed');
+    const manager = new TuiDebugAutomationSessionManager({
+      defaultWorkDir: '/workspace',
+      createSessionId: () => 'debug-session-failed',
+    });
+
+    await expect(
+      manager.handle({
+        schema: 'neko.tui-debug-automation.request.v1',
+        id: 'failed-create',
+        method: 'session.create',
+        params: {},
+      }),
+    ).rejects.toMatchObject({
+      code: 'internal-error',
+      details: {
+        sessionId: 'debug-session-failed',
+        diagnostic: 'conversation storage initialization failed',
+      },
+    });
+  });
+
   it('fails visibly for non-canonical resume conversation ids before mounting App', async () => {
     const manager = new TuiDebugAutomationSessionManager({
       defaultWorkDir: '/workspace',
@@ -148,12 +174,67 @@ describe('TuiDebugAutomationSessionManager', () => {
     ).rejects.toThrow('non-canonical');
     expect(mockState.renderedAppProps).toBeUndefined();
   });
+
+  it('applies supported session runtime config and rejects unknown config before mounting', async () => {
+    const manager = new TuiDebugAutomationSessionManager({ defaultWorkDir: '/workspace' });
+    await manager.handle({
+      schema: 'neko.tui-debug-automation.request.v1',
+      id: 'configured',
+      method: 'session.create',
+      params: {
+        runtimeConfig: {
+          temperature: 0.2,
+          maxTokens: 2048,
+          thinkingBudget: 256,
+          outputFormat: 'json',
+        },
+      },
+    });
+    expect(mockState.renderedAppProps?.config).toMatchObject({
+      temperature: 0.2,
+      maxTokens: 2048,
+      thinkingBudget: 256,
+      outputFormat: 'json',
+    });
+    await manager.disposeAll();
+
+    mockState.renderedAppProps = undefined;
+    await expect(
+      manager.handle({
+        schema: 'neko.tui-debug-automation.request.v1',
+        id: 'invalid',
+        method: 'session.create',
+        params: { runtimeConfig: { evaluationVariant: 'candidate' } },
+      }),
+    ).rejects.toMatchObject({ code: 'invalid-request' });
+    expect(mockState.renderedAppProps).toBeUndefined();
+  });
+
+  it('preserves loaded defaults when a runtime profile overrides one setting', async () => {
+    const manager = new TuiDebugAutomationSessionManager({ defaultWorkDir: '/workspace' });
+
+    await manager.handle({
+      schema: 'neko.tui-debug-automation.request.v1',
+      id: 'partial-runtime-profile',
+      method: 'session.create',
+      params: { runtimeConfig: { thinkingBudget: 128 } },
+    });
+
+    expect(mockState.renderedAppProps?.config).toMatchObject({
+      temperature: 0.7,
+      maxTokens: 8192,
+      thinkingBudget: 128,
+      outputFormat: 'text',
+    });
+    await manager.disposeAll();
+  });
 });
 
 function createFakePort(): TuiDebugAutomationAppPort {
   return {
     ownerKind: 'tui-app-session-owner',
     isReady: () => true,
+    getInitializationError: () => mockState.initializationError ?? null,
     getConversationId: () => 'tui-2026-01-01T00-00-00-000Z-test',
     async submitMessage(input) {
       mockState.submittedPrompts.push(input.prompt);
@@ -179,17 +260,54 @@ function createFakePort(): TuiDebugAutomationAppPort {
         conversationId: 'tui-2026-01-01T00-00-00-000Z-test',
         ready: true,
         model: { providerId: 'nekoapi-chat', modelId: 'gpt-test' },
+        configuration: {
+          digest: `sha256:${'a'.repeat(64)}`,
+          runtime: {
+            temperature: 0.7,
+            maxTokens: 8192,
+            thinkingBudget: 0,
+            outputFormat: 'text',
+          },
+          chat: { providerId: 'nekoapi-chat', modelId: 'gpt-test' },
+          media: { defaultModels: {}, perceptionModels: {} },
+        },
         idle: await this.waitForIdle({ timeoutMs: 1, pollIntervalMs: 1 }),
         turns: [],
         skillActivations: [],
         tasks: [],
         messageQueue: null,
         continuations: [],
+        promptComposition: [],
+        artifacts: [],
         runtimeErrors: [],
         canvas: { messageSummaries: [], toolCallSummaries: [] },
         markdown: mockState.renderedAppProps?.automation?.readMarkdownFacts() ?? {
           pathEvents: [],
           droppedPathEventCount: 0,
+        },
+        conversationPersistence: {
+          authority: 'memory',
+          catalog: 'memory',
+          databaseScope: 'isolated-test',
+          resume: { status: 'new', restoredMessageCount: 0 },
+        },
+        usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+        timing: { capturedAt: 1 },
+        iteration: { current: 0, max: 0 },
+        retries: { taskRetryCount: 0, tasksWithRetries: 0 },
+        evidenceCompleteness: {
+          turns: { limit: 512, droppedCount: 0 },
+          turnToolCalls: { limit: 256, droppedCount: 0 },
+          timelineRows: { limit: 2048, droppedCount: 0 },
+          skillActivations: { limit: 128, droppedCount: 0 },
+          tasks: { limit: 512, droppedCount: 0 },
+          continuations: { limit: 512, droppedCount: 0 },
+          promptComposition: { limit: 256, droppedCount: 0 },
+          artifacts: { limit: 512, droppedCount: 0 },
+          runtimeErrors: { limit: 256, droppedCount: 0 },
+          canvasMessageSummaries: { limit: 128, droppedCount: 0 },
+          canvasToolCallSummaries: { limit: 128, droppedCount: 0 },
+          markdownPathEvents: { limit: 2048, droppedCount: 0 },
         },
       };
     },

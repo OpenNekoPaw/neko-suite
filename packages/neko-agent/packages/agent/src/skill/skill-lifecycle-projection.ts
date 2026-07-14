@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import type {
   ActiveSkillLifecycleRecordProjection,
   SkillLifecycleDiagnostic,
@@ -53,6 +54,9 @@ export function projectSkillLifecycle(
       recordId: record.id,
       slot: record.slot,
       skillName: record.skillName,
+      ...(record.skillSummary.hostIdentity?.fingerprint
+        ? { version: record.skillSummary.hostIdentity.fingerprint }
+        : {}),
     })),
     toolPolicy,
     ...(modelOverride.projection ? { modelOverride: modelOverride.projection } : {}),
@@ -133,7 +137,8 @@ function projectToolPolicy(
 ): SkillLifecycleToolPolicyProjection {
   const activationTools = collectActivationTools(records);
   const restrictedRecords = records.filter(
-    (record) => record.slot !== 'referenceSkill' && (record.injection.allowedTools?.length ?? 0) > 0,
+    (record) =>
+      record.slot !== 'referenceSkill' && (record.injection.allowedTools?.length ?? 0) > 0,
   );
   if (restrictedRecords.length === 0) {
     return {
@@ -238,7 +243,10 @@ function projectModelOverride(
 
 function projectVisibleIndicator(
   record: SkillLifecycleRecord,
+  index: number,
 ): ActiveSkillLifecycleRecordProjection {
+  const fragmentId = buildLifecyclePromptSectionId(record);
+  const hostIdentity = record.skillSummary.hostIdentity;
   return {
     id: record.id,
     skillName: record.skillName,
@@ -249,7 +257,30 @@ function projectVisibleIndicator(
     ...(record.deactivation.lockedReason ? { lockedReason: record.deactivation.lockedReason } : {}),
     ...(projectExpiry(record) ? { expires: projectExpiry(record) } : {}),
     status: record.status,
+    triggerSource: record.source,
+    ...(hostIdentity ? { hostIdentity } : {}),
+    injectedFragments: [
+      {
+        id: fragmentId,
+        source: 'skill-lifecycle',
+        order: index,
+        ...(hostIdentity?.fingerprint ? { version: hostIdentity.fingerprint } : {}),
+        hash: sha256(record.injection.systemPrompt),
+      },
+    ],
+    toolPolicyIds: [
+      `skill-tool-policy:${record.id}:${sha256(
+        JSON.stringify({
+          mode: record.injection.allowedTools ? 'allowlist' : 'unrestricted',
+          allowedTools: [...(record.injection.allowedTools ?? [])].sort(),
+        }),
+      )}`,
+    ],
   };
+}
+
+function sha256(value: string): string {
+  return `sha256:${createHash('sha256').update(value).digest('hex')}`;
 }
 
 function projectExpiry(record: SkillLifecycleRecord): string | undefined {

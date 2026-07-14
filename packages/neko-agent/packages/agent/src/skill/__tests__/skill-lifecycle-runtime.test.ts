@@ -70,6 +70,61 @@ describe('SkillLifecycleRuntime', () => {
     ]);
   });
 
+  it('projects typed Host identity, trigger, fragment hash, and tool policy ids without prompt bodies', () => {
+    const runtime = createRuntime([]);
+    runtime.activatePrepared({
+      conversationId: 'conv-1',
+      skill: createSkill('storyboard', {
+        hostProjection: {
+          source: 'project',
+          location: { rootId: 'project-agent-skills', relativePath: 'storyboard' },
+          provenance: 'workspace',
+          enabled: true,
+          editable: true,
+          trusted: true,
+          compatibility: { state: 'compatible', diagnostics: [] },
+          fingerprint: `sha256:${'a'.repeat(64)}`,
+          catalogActions: [{ id: 'run' }],
+        },
+      }),
+      injection: createInjection('storyboard', {
+        systemPrompt: 'HIDDEN_STORYBOARD_PROMPT',
+        allowedTools: ['WriteDocument', 'ReadDocument'],
+      }),
+      slot: 'domainSkill',
+      owner: 'user',
+      lifetime: { kind: 'conversation', untilCleared: true },
+      source: 'explicit-user',
+    });
+
+    const [fact] = runtime.project('conv-1').visibleIndicators;
+    expect(fact).toMatchObject({
+      skillName: 'storyboard',
+      slot: 'domainSkill',
+      owner: 'user',
+      triggerSource: 'explicit-user',
+      hostIdentity: {
+        portableName: 'storyboard',
+        source: 'project',
+        provenance: 'workspace',
+        rootId: 'project-agent-skills',
+        relativePath: 'storyboard',
+        fingerprint: `sha256:${'a'.repeat(64)}`,
+      },
+      injectedFragments: [
+        expect.objectContaining({
+          source: 'skill-lifecycle',
+          order: 0,
+          hash: expect.stringMatching(/^sha256:[a-f0-9]{64}$/u),
+        }),
+      ],
+      toolPolicyIds: [expect.stringMatching(/^skill-tool-policy:.*:sha256:[a-f0-9]{64}$/u)],
+    });
+    expect(JSON.stringify(fact)).not.toContain('HIDDEN_STORYBOARD_PROMPT');
+    expect(JSON.stringify(fact)).not.toContain('semver');
+    expect(JSON.stringify(fact)).not.toContain('packageId');
+  });
+
   it('deactivation removes records and the next projection omits prompt and tool policy', async () => {
     const runtime = createRuntime([createSkill('review', { allowedTools: ['ReadDocument'] })]);
     const activation = await runtime.activate({

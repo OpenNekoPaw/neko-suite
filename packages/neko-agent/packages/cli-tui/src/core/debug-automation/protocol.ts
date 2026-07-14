@@ -153,6 +153,23 @@ export function assertRecordParams(
   return value;
 }
 
+export function assertAllowedParamKeys(
+  params: Record<string, unknown>,
+  allowedKeys: readonly string[],
+  method: TuiDebugAutomationMethod,
+  label = 'params',
+): void {
+  const allowed = new Set(allowedKeys);
+  const unknown = Object.keys(params).filter((key) => !allowed.has(key));
+  if (unknown.length > 0) {
+    throw new TuiDebugAutomationProtocolError(
+      'invalid-request',
+      `${method} ${label} contains unknown field(s): ${unknown.join(', ')}`,
+      { unknown },
+    );
+  }
+}
+
 export function readRequiredStringParam(
   params: Record<string, unknown>,
   key: string,

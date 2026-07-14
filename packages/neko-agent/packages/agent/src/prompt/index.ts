@@ -79,6 +79,7 @@ export type {
   ComposedPromptSection,
   ComposedPromptResult,
   PromptDumpInfo,
+  PromptCompositionFragmentProjection,
 } from './system-prompt-composer-types';
 
 export { PROMPT_LAYER_ORDER, DEFAULT_PROMPT_LAYER_BUDGET } from './system-prompt-composer-types';

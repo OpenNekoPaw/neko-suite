@@ -1,5 +1,7 @@
+import { createHash } from 'node:crypto';
 import type { AgentMessageQueueSnapshot } from '@neko-agent/types';
 import type { Task } from '@neko/shared';
+import type { PromptCompositionFragmentProjection } from '@neko/agent';
 import type { TuiConversationStores } from '../../runtime/tui-application-runtime';
 import type { Message } from '../../types/state';
 import type {
@@ -9,10 +11,27 @@ import type {
   TuiDebugAutomationIdleState,
   TuiDebugAutomationMarkdownFacts,
   TuiDebugAutomationSessionFacts,
+  TuiDebugAutomationTaskFact,
   TuiDebugAutomationToolCallSummary,
   TuiDebugAutomationTurnSummary,
 } from './types';
+import type { TuiConversationPersistenceSnapshot } from '../../host/tui-sqlite-conversation-storage';
 import { TuiDebugAutomationProtocolError } from './protocol';
+
+const FACT_LIMITS = Object.freeze({
+  turns: 512,
+  turnToolCalls: 256,
+  timelineRows: 2_048,
+  history: 512,
+  skillActivations: 128,
+  tasks: 512,
+  continuations: 512,
+  promptComposition: 256,
+  artifacts: 512,
+  runtimeErrors: 256,
+  canvasMessageSummaries: 128,
+  canvasToolCallSummaries: 128,
+});
 
 export interface TuiAutomationSessionHandle {
   readonly isReady: boolean;
@@ -21,7 +40,9 @@ export interface TuiAutomationSessionHandle {
   readonly listTasks: () => Promise<readonly Task[]>;
   readonly getCurrentConversationId: () => string;
   readonly getHistory: () => readonly unknown[];
+  readonly getConversationPersistenceSnapshot: () => TuiConversationPersistenceSnapshot | null;
   readonly getMessageQueueSnapshot: () => AgentMessageQueueSnapshot | null;
+  readonly getPromptCompositionProjection?: () => readonly PromptCompositionFragmentProjection[];
 }
 
 export interface TuiAutomationAppPortOptions {
@@ -41,6 +62,13 @@ export function createTuiAutomationAppPort(
 
     isReady(): boolean {
       return options.readHandle().isReady;
+    },
+
+    getInitializationError(): Error | null {
+      if (options.readHandle().isReady) {
+        return null;
+      }
+      return stores.agent.getState().error;
     },
 
     getConversationId(): string {
@@ -90,27 +118,93 @@ export function createTuiAutomationAppPort(
     async readFacts(input): Promise<TuiDebugAutomationSessionFacts> {
       const handle = options.readHandle();
       const idle = await readTuiAutomationIdleState(handle, stores);
+      const messageQueue = handle.getMessageQueueSnapshot();
+      const rawContinuations = readContinuationFacts(
+        messageQueue,
+        stores,
+        handle.getCurrentConversationId(),
+      );
+      const continuations = bounded(rawContinuations, FACT_LIMITS.continuations);
+      const promptComposition = bounded(
+        [...(handle.getPromptCompositionProjection?.() ?? [])],
+        FACT_LIMITS.promptComposition,
+      );
+      const rawTasks = await readTasks(handle);
+      const tasks = bounded(projectTaskFacts(rawTasks, rawContinuations), FACT_LIMITS.tasks);
+      const turns = readTurnSummaries(stores);
+      const skillActivations = bounded(
+        [...stores.agent.getState().activeSkillLifecycleRecords],
+        FACT_LIMITS.skillActivations,
+      );
+      const artifacts = bounded(readArtifactFacts(stores), FACT_LIMITS.artifacts);
+      const runtimeErrors = bounded(readRuntimeErrors(stores), FACT_LIMITS.runtimeErrors);
+      const canvas = readCanvasFacts(stores);
+      const markdown = options.readMarkdownFacts();
+      const conversationPersistence = handle.getConversationPersistenceSnapshot();
+      if (!conversationPersistence) {
+        throw new TuiDebugAutomationProtocolError(
+          'session-not-ready',
+          'Conversation persistence facts are unavailable before storage initialization.',
+        );
+      }
+      const history = input.includeHistory
+        ? bounded([...handle.getHistory()], FACT_LIMITS.history)
+        : undefined;
+      const agentState = stores.agent.getState();
+      const taskRetryCount = rawTasks.reduce((total, task) => total + (task.retryCount ?? 0), 0);
       return {
         sessionId: input.sessionId,
         conversationId: handle.getCurrentConversationId(),
         ready: handle.isReady,
         model: readModelIdentity(stores),
+        configuration: readEffectiveConfiguration(stores),
         idle,
-        turns: readTurnSummaries(stores),
-        ...(input.includeHistory ? { history: [...handle.getHistory()] } : {}),
-        skillActivations: [...stores.agent.getState().activeSkillLifecycleRecords],
-        tasks: (await readTasks(handle)).map((task) => ({
-          id: task.id,
-          type: task.type,
-          status: task.status,
-          progress: task.progress,
-          ...(task.error ? { error: task.error } : {}),
-        })),
-        messageQueue: handle.getMessageQueueSnapshot(),
-        continuations: readContinuationFacts(handle.getMessageQueueSnapshot(), stores),
-        runtimeErrors: readRuntimeErrors(stores),
-        canvas: readCanvasFacts(stores),
-        markdown: options.readMarkdownFacts(),
+        turns: turns.items,
+        ...(history ? { history: history.items } : {}),
+        skillActivations: skillActivations.items,
+        tasks: tasks.items,
+        messageQueue,
+        continuations: continuations.items,
+        promptComposition: promptComposition.items,
+        artifacts: artifacts.items,
+        runtimeErrors: runtimeErrors.items,
+        canvas: canvas.value,
+        markdown,
+        conversationPersistence,
+        usage: {
+          inputTokens: agentState.usage.input,
+          outputTokens: agentState.usage.output,
+          totalTokens: agentState.usage.total,
+        },
+        timing: {
+          capturedAt: Date.now(),
+          ...(agentState.startTime !== null ? { activeStartedAt: agentState.startTime } : {}),
+          ...(turns.items[0] ? { firstTurnAt: turns.items[0].timestamp } : {}),
+          ...(turns.items.at(-1) ? { lastTurnAt: turns.items.at(-1)?.timestamp } : {}),
+        },
+        iteration: { ...agentState.iteration },
+        retries: {
+          taskRetryCount,
+          tasksWithRetries: rawTasks.filter((task) => (task.retryCount ?? 0) > 0).length,
+        },
+        evidenceCompleteness: {
+          turns: turns.completeness,
+          turnToolCalls: turns.toolCalls,
+          timelineRows: turns.timelineRows,
+          skillActivations: skillActivations.completeness,
+          tasks: tasks.completeness,
+          continuations: continuations.completeness,
+          promptComposition: promptComposition.completeness,
+          artifacts: artifacts.completeness,
+          runtimeErrors: runtimeErrors.completeness,
+          canvasMessageSummaries: canvas.messageSummaries,
+          canvasToolCallSummaries: canvas.toolCallSummaries,
+          markdownPathEvents: {
+            limit: 2_048,
+            droppedCount: markdown.droppedPathEventCount,
+          },
+          ...(history ? { history: history.completeness } : {}),
+        },
       };
     },
   };
@@ -250,10 +344,53 @@ function readModelIdentity(stores: TuiConversationStores): TuiDebugAutomationSes
   };
 }
 
-function readTurnSummaries(
+export function readEffectiveConfiguration(
   stores: TuiConversationStores,
-): readonly TuiDebugAutomationTurnSummary[] {
-  return stores.conversation.getState().messages.map((message) => ({
+): TuiDebugAutomationSessionFacts['configuration'] {
+  const config = stores.config.getState().config;
+  const projection: Omit<TuiDebugAutomationSessionFacts['configuration'], 'digest'> = {
+    runtime: {
+      temperature: config.temperature,
+      maxTokens: config.maxTokens,
+      thinkingBudget: config.thinkingBudget,
+      outputFormat: config.outputFormat,
+    },
+    chat: readModelIdentity(stores),
+    media: {
+      defaultModels: { ...(config.defaultMediaModels ?? {}) },
+      perceptionModels: { ...(config.perceptionModels ?? {}) },
+    },
+  };
+  return {
+    digest: `sha256:${createHash('sha256').update(stableStringify(projection)).digest('hex')}`,
+    ...projection,
+  };
+}
+
+function stableStringify(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`;
+  if (value !== null && typeof value === 'object') {
+    return `{${Object.entries(value)
+      .filter(([, item]) => item !== undefined)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, item]) => `${JSON.stringify(key)}:${stableStringify(item)}`)
+      .join(',')}}`;
+  }
+  const serialized = JSON.stringify(value);
+  if (serialized === undefined) throw new Error('Cannot hash undefined TUI configuration value');
+  return serialized;
+}
+
+function readTurnSummaries(stores: TuiConversationStores): {
+  readonly items: readonly TuiDebugAutomationTurnSummary[];
+  readonly completeness: import('./types').TuiDebugAutomationCollectionCompleteness;
+  readonly toolCalls: import('./types').TuiDebugAutomationCollectionCompleteness;
+  readonly timelineRows: import('./types').TuiDebugAutomationCollectionCompleteness;
+} {
+  const messages = bounded(stores.conversation.getState().messages, FACT_LIMITS.turns);
+  let droppedToolCalls = 0;
+  let droppedTimelineRows = 0;
+  const items = messages.items.map((message) => ({
     id: message.id,
     role: message.role,
     ...(message.source ? { source: message.source } : {}),
@@ -261,50 +398,163 @@ function readTurnSummaries(
     ...(message.metadata ? { metadata: message.metadata } : {}),
     content: readMessageSummaryContent(message),
     ...(message.isError ? { isError: true } : {}),
-    toolCalls: readMessageToolCallSummaries(message),
-    timeline: (message.timelineRows ?? []).map((row) => ({
-      id: row.id,
-      sequence: row.sequence,
-      kind: row.kind,
-      status: row.status,
-      ...(row.content !== undefined ? { content: row.content } : {}),
-      ...(row.toolCallId !== undefined ? { toolCallId: row.toolCallId } : {}),
-      ...(row.toolName !== undefined ? { toolName: row.toolName } : {}),
-    })),
+    toolCalls: (() => {
+      const projected = bounded(readMessageToolCallSummaries(message), FACT_LIMITS.turnToolCalls);
+      droppedToolCalls += projected.completeness.droppedCount;
+      return projected.items;
+    })(),
+    timeline: (() => {
+      const projected = bounded(message.timelineRows ?? [], FACT_LIMITS.timelineRows);
+      droppedTimelineRows += projected.completeness.droppedCount;
+      return projected.items.map((row) => ({
+        id: row.id,
+        sequence: row.sequence,
+        kind: row.kind,
+        status: row.status,
+        ...(row.content !== undefined ? { content: row.content } : {}),
+        ...(row.toolCallId !== undefined ? { toolCallId: row.toolCallId } : {}),
+        ...(row.toolName !== undefined ? { toolName: row.toolName } : {}),
+      }));
+    })(),
     timestamp: message.timestamp,
   }));
+  return {
+    items,
+    completeness: messages.completeness,
+    toolCalls: { limit: FACT_LIMITS.turnToolCalls, droppedCount: droppedToolCalls },
+    timelineRows: { limit: FACT_LIMITS.timelineRows, droppedCount: droppedTimelineRows },
+  };
 }
 
 export function readContinuationFacts(
   queueSnapshot: import('@neko-agent/types').AgentMessageQueueSnapshot | null,
   stores: TuiConversationStores,
+  conversationId = queueSnapshot?.conversationId,
 ): import('./types').TuiDebugAutomationContinuationFact[] {
   const facts: import('./types').TuiDebugAutomationContinuationFact[] = [];
   for (const message of stores.conversation.getState().messages) {
     if (!message.source || !isContinuationSource(message.source)) continue;
+    if (!conversationId) {
+      throw new Error('Cannot project continuation facts without conversation identity.');
+    }
     facts.push({
       id: message.id,
+      conversationId,
       source: message.source,
       displayKind: normalizeContinuationDisplayKind(message.displayKind),
-      promptSummary: readMessageSummaryContent(message),
+      promptHash: hashText(readMessageSummaryContent(message)),
       ...(message.metadata ? { metadata: message.metadata } : {}),
       status: message.metadata?.status ?? 'running',
       timestamp: message.timestamp,
+      diagnostics: continuationDiagnostics(message.source, message.metadata),
     });
   }
   for (const item of queueSnapshot?.items ?? []) {
     if (!isContinuationSource(item.source)) continue;
     facts.push({
       id: item.id,
+      conversationId: item.conversationId,
       source: normalizeContinuationSource(item.source),
       displayKind: item.displayKind ?? normalizeContinuationDisplayKind(item.displayKind),
-      promptSummary: item.content.slice(0, 160),
+      promptHash: hashText(item.content),
       ...(item.metadata ? { metadata: item.metadata } : {}),
       status: item.metadata?.status ?? 'queued',
       timestamp: item.createdAt,
+      diagnostics: continuationDiagnostics(normalizeContinuationSource(item.source), item.metadata),
     });
   }
   return facts;
+}
+
+export function projectTaskFacts(
+  tasks: readonly Task[],
+  continuations: readonly import('./types').TuiDebugAutomationContinuationFact[],
+): readonly TuiDebugAutomationTaskFact[] {
+  return tasks.map((task) => {
+    const observations = continuations
+      .filter((item) => item.metadata?.taskId === task.id && item.metadata.observationId)
+      .map((item) => item.metadata?.observationId)
+      .filter((item): item is string => typeof item === 'string');
+    const providerId = readPayloadString(task, 'providerId');
+    const modelId = readPayloadString(task, 'modelId');
+    const diagnostics: import('./types').TuiDebugAutomationDiagnostic[] = [];
+    if (task.status === 'completed' && task.output === undefined) {
+      diagnostics.push({
+        code: 'completed-task-output-missing',
+        severity: 'error',
+        message: `Completed task ${task.id} has no output projection.`,
+      });
+    }
+    if (task.output?.error || task.error) {
+      diagnostics.push({
+        code: 'task-output-error',
+        severity: 'error',
+        message: task.output?.error ?? task.error ?? 'Task failed.',
+      });
+    }
+    return {
+      scope: task.scope,
+      id: task.id,
+      type: task.type,
+      status: task.status,
+      progress: task.progress,
+      createdAt: task.createdAt,
+      updatedAt: task.updatedAt,
+      ...(providerId ? { providerId } : {}),
+      ...(modelId ? { modelId } : {}),
+      retryCount: task.retryCount ?? 0,
+      ...(task.lifecycle ? { lifecycle: task.lifecycle } : {}),
+      ...(task.output?.metrics ? { metrics: task.output.metrics } : {}),
+      resultObservation: {
+        status:
+          observations.length > 0
+            ? 'observed'
+            : task.status === 'failed' || task.status === 'cancelled'
+              ? 'failed'
+              : task.status === 'completed' && task.output !== undefined
+                ? 'available'
+                : task.status === 'completed'
+                  ? 'missing'
+                  : 'pending',
+        observationIds: observations,
+      },
+      diagnostics,
+    };
+  });
+}
+
+function readPayloadString(task: Task, key: string): string | undefined {
+  const value = task.input.payload[key];
+  return typeof value === 'string' && value.length > 0 ? value : undefined;
+}
+
+function continuationDiagnostics(
+  source: Exclude<import('@neko-agent/types').AgentTurnSource, 'user'>,
+  metadata: import('@neko-agent/types').AgentContinuationMetadata | undefined,
+): readonly import('./types').TuiDebugAutomationDiagnostic[] {
+  if (source === 'task-result-continuation' && (!metadata?.taskId || !metadata.observationId)) {
+    return [
+      {
+        code: 'task-continuation-identity-incomplete',
+        severity: 'error',
+        message: 'Task continuation is missing taskId or observationId.',
+      },
+    ];
+  }
+  if (source === 'subagent-result-continuation' && !metadata?.subagentId) {
+    return [
+      {
+        code: 'subagent-continuation-identity-incomplete',
+        severity: 'error',
+        message: 'Subagent continuation is missing subagentId.',
+      },
+    ];
+  }
+  return [];
+}
+
+function hashText(value: string): string {
+  return `sha256:${createHash('sha256').update(value).digest('hex')}`;
 }
 
 function isContinuationSource(
@@ -380,6 +630,16 @@ export function readMessageToolCallSummaries(
           : {}),
       ...(result !== undefined ? { result } : {}),
       ...(error ? { error } : {}),
+      resultObservation: error
+        ? 'error'
+        : result !== undefined
+          ? 'available'
+          : row.status === 'pending' || row.status === 'running' || row.status === 'waiting'
+            ? 'pending'
+            : 'missing',
+      diagnostics: error
+        ? [{ code: row.diagnosticCode ?? 'tool-call-error', severity: 'error', message: error }]
+        : [],
     });
   }
   return [...summaries.values()];
@@ -394,16 +654,60 @@ function readRuntimeErrors(stores: TuiConversationStores): readonly string[] {
   return [...(agentError ? [agentError.message] : []), ...messageErrors];
 }
 
-function readCanvasFacts(stores: TuiConversationStores): TuiDebugAutomationCanvasFacts {
+function readCanvasFacts(stores: TuiConversationStores): {
+  readonly value: TuiDebugAutomationCanvasFacts;
+  readonly messageSummaries: import('./types').TuiDebugAutomationCollectionCompleteness;
+  readonly toolCallSummaries: import('./types').TuiDebugAutomationCollectionCompleteness;
+} {
   const messages = stores.conversation.getState().messages;
   const canvasMessages = messages.filter((message) => messageContainsCanvasSignal(message));
-  return {
-    messageSummaries: canvasMessages.map((message) => message.content).filter(Boolean),
-    toolCallSummaries: messages
+  const messageSummaries = bounded(
+    canvasMessages.map((message) => message.content).filter(Boolean),
+    FACT_LIMITS.canvasMessageSummaries,
+  );
+  const toolCallSummaries = bounded(
+    messages
       .flatMap((message) => message.toolCalls)
       .filter((toolCall) => safeJsonIncludesCanvas(toolCall))
       .map(projectToolCallSummary),
+    FACT_LIMITS.canvasToolCallSummaries,
+  );
+  return {
+    value: {
+      messageSummaries: messageSummaries.items,
+      toolCallSummaries: toolCallSummaries.items,
+    },
+    messageSummaries: messageSummaries.completeness,
+    toolCallSummaries: toolCallSummaries.completeness,
   };
+}
+
+function bounded<T>(
+  items: readonly T[],
+  limit: number,
+): {
+  readonly items: readonly T[];
+  readonly completeness: import('./types').TuiDebugAutomationCollectionCompleteness;
+} {
+  const droppedCount = Math.max(0, items.length - limit);
+  return {
+    items: droppedCount > 0 ? items.slice(droppedCount) : [...items],
+    completeness: { limit, droppedCount },
+  };
+}
+
+function readArtifactFacts(
+  stores: TuiConversationStores,
+): TuiDebugAutomationSessionFacts['artifacts'] {
+  const facts = stores.conversation
+    .getState()
+    .messages.flatMap((message) =>
+      (message.timelineRows ?? []).flatMap((row) => row.artifactFacts ?? []),
+    );
+  const unique = new Map<string, (typeof facts)[number]>();
+  for (const fact of facts)
+    unique.set(`${fact.ref}:${fact.digest ?? ''}:${fact.revision ?? ''}`, fact);
+  return [...unique.values()];
 }
 
 function messageContainsCanvasSignal(message: Message): boolean {
@@ -424,6 +728,16 @@ function projectToolCallSummary(
     ...(toolCall.arguments ? { arguments: toolCall.arguments } : {}),
     ...(toolCall.result !== undefined ? { result: toolCall.result } : {}),
     ...(toolCall.error ? { error: toolCall.error } : {}),
+    resultObservation: toolCall.error
+      ? 'error'
+      : toolCall.result !== undefined
+        ? 'available'
+        : toolCall.status === 'pending' || toolCall.status === 'running'
+          ? 'pending'
+          : 'missing',
+    diagnostics: toolCall.error
+      ? [{ code: 'tool-call-error', severity: 'error', message: toolCall.error }]
+      : [],
   };
 }
 

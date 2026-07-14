@@ -507,4 +507,75 @@ describe('SystemPromptComposer', () => {
       expect(baseDump!.cacheControl).toBeUndefined();
     });
   });
+
+  describe('projectComposition', () => {
+    it('projects only stable metadata and hashes in actual composition order', () => {
+      const hiddenBase = 'SYSTEM_SECRET sk-live-hidden /Users/private/workspace';
+      const hiddenSkill = 'SKILL_SECRET private methodology';
+      composer.setBase(hiddenBase);
+      composer.setSection({
+        id: 'skill:storyboard',
+        layer: 'skill',
+        content: hiddenSkill,
+        source: 'skill-lifecycle',
+        version: `sha256:${'a'.repeat(64)}`,
+      });
+
+      const projection = composer.projectComposition();
+      expect(projection).toEqual([
+        {
+          id: 'base',
+          source: 'base',
+          order: 0,
+          hash: expect.stringMatching(/^sha256:[a-f0-9]{64}$/u),
+        },
+        {
+          id: 'skill:storyboard',
+          source: 'skill-lifecycle',
+          order: 1,
+          version: `sha256:${'a'.repeat(64)}`,
+          hash: expect.stringMatching(/^sha256:[a-f0-9]{64}$/u),
+        },
+      ]);
+      const serialized = JSON.stringify(projection);
+      expect(serialized).not.toContain(hiddenBase);
+      expect(serialized).not.toContain(hiddenSkill);
+      expect(serialized).not.toContain('sk-live-hidden');
+      expect(serialized).not.toContain('/Users/private');
+      expect(Object.keys(projection[0]!)).toEqual(['id', 'source', 'order', 'hash']);
+    });
+
+    it('hashes the exact truncated fragment and excludes sections outside the budget', () => {
+      const constrained = new SystemPromptComposer({ budget: { skill: 1 } });
+      constrained.setSection({ id: 'skill:first', layer: 'skill', content: '12345678' });
+      constrained.setSection({ id: 'skill:second', layer: 'skill', content: 'later' });
+
+      const projection = constrained.projectComposition();
+      expect(projection).toHaveLength(1);
+      expect(projection[0]).toMatchObject({ id: 'skill:first', order: 0 });
+
+      const alternate = new SystemPromptComposer({ budget: { skill: 1 } });
+      alternate.setSection({ id: 'skill:first', layer: 'skill', content: 'abcd5678' });
+      expect(alternate.projectComposition()[0]?.hash).not.toBe(projection[0]?.hash);
+    });
+
+    it('rejects unsafe source and version metadata before it can reach facts', () => {
+      expect(() =>
+        composer.setSection({
+          id: 'unsafe-source',
+          layer: 'environment',
+          content: 'hidden',
+          source: '/Users/private/source',
+        }),
+      ).toThrow('stable non-secret identifier');
+      expect(() =>
+        composer.setSection({
+          id: 'unsafe-version',
+          layer: 'environment',
+          content: 'hidden',
+          version: 'api key value',
+        }),
+      ).toThrow('stable non-secret identifier');
+    });
+  });
 });

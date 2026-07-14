@@ -55,6 +55,7 @@ function createMockComposer() {
     getTotalTokens: vi.fn().mockReturnValue(0),
     getLayerUsage: vi.fn(),
     dumpSections: vi.fn().mockReturnValue([]),
+    projectComposition: vi.fn().mockReturnValue([]),
     reset: vi.fn(),
   };
 }
@@ -100,6 +101,7 @@ describe('SkillInjectionCoordinator', () => {
         id: 'skill:test-skill',
         layer: 'skill',
         content: 'Test skill prompt',
+        source: 'skill.injection',
         priority: 50,
       });
     });

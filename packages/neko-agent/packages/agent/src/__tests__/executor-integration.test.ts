@@ -296,8 +296,12 @@ describe('SkillInjectionCoordinator: multi-track atomicity', () => {
       hasSection: vi.fn().mockReturnValue(false),
       getSection: vi.fn(),
       compose: vi.fn().mockReturnValue('composed'),
+      composeStructured: vi.fn().mockReturnValue({ text: 'composed', sections: [] }),
       getTotalTokens: vi.fn().mockReturnValue(0),
       getLayerUsage: vi.fn(),
+      dumpSections: vi.fn().mockReturnValue([]),
+      projectComposition: vi.fn().mockReturnValue([]),
+      removeSectionsByPrefix: vi.fn().mockReturnValue(0),
       reset: vi.fn(),
     };
   }

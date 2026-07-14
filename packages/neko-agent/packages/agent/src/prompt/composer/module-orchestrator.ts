@@ -228,6 +228,7 @@ export class ModuleOrchestrator {
         id: section.sectionId,
         layer: section.layer,
         content: section.content,
+        source: manifest.id,
         priority: section.priority ?? manifest.priority,
         ...(section.cacheControl && { cacheControl: section.cacheControl }),
       });

@@ -12,6 +12,7 @@ import {
 } from '../../markdown/path-observer';
 import {
   assertRecordParams,
+  assertAllowedParamKeys,
   readOptionalBooleanParam,
   readOptionalStringParam,
   readRequiredPositiveIntegerParam,
@@ -246,11 +247,12 @@ export class TuiDebugAutomationSessionManager {
     const workDir = params.workDir ?? this.options.defaultWorkDir;
     let config: CLIConfig;
     try {
-      config = loadConfig(workDir, {
+      const loaded = loadConfig(workDir, {
         provider: params.provider ?? this.options.provider,
         model: params.model ?? this.options.model,
         apiKey: params.apiKey ?? this.options.apiKey,
       });
+      config = { ...loaded, ...(params.runtimeConfig ?? {}) };
     } catch (error) {
       if (error instanceof CliConfigLoadError) {
         throw new TuiDebugAutomationProtocolError(
@@ -387,6 +389,14 @@ class TuiDebugAutomationAppController implements TuiDebugAutomationController {
     const startedAt = Date.now();
     for (;;) {
       const port = await this.waitForPort(timeoutMs);
+      const initializationError = port.getInitializationError();
+      if (initializationError) {
+        throw new TuiDebugAutomationProtocolError(
+          'internal-error',
+          `TUI session initialization failed for ${this.sessionId}.`,
+          { sessionId, diagnostic: initializationError.message },
+        );
+      }
       if (port.isReady()) {
         return;
       }
@@ -451,12 +461,25 @@ function readCreateParams(
   request: TuiDebugAutomationRequest,
 ): TuiDebugAutomationSessionCreateParams {
   const params = assertRecordParams(request.params, request.method);
+  assertAllowedParamKeys(
+    params,
+    ['workDir', 'provider', 'model', 'apiKey', 'initialPrompt', 'runtimeConfig'],
+    request.method,
+  );
+  return readSessionCreateFields(params, request.method);
+}
+
+function readSessionCreateFields(
+  params: Record<string, unknown>,
+  method: TuiDebugAutomationRequest['method'],
+): TuiDebugAutomationSessionCreateParams {
   return {
     workDir: readOptionalStringParam(params, 'workDir'),
     provider: readOptionalStringParam(params, 'provider'),
     model: readOptionalStringParam(params, 'model'),
     apiKey: readOptionalStringParam(params, 'apiKey'),
     initialPrompt: readOptionalStringParam(params, 'initialPrompt'),
+    runtimeConfig: readRuntimeConfig(params['runtimeConfig'], method),
   };
 }
 
@@ -464,8 +487,13 @@ function readResumeParams(
   request: TuiDebugAutomationRequest,
 ): TuiDebugAutomationSessionResumeParams {
   const params = assertRecordParams(request.params, request.method);
+  assertAllowedParamKeys(
+    params,
+    ['workDir', 'provider', 'model', 'apiKey', 'initialPrompt', 'runtimeConfig', 'conversationId'],
+    request.method,
+  );
   return {
-    ...readCreateParams(request),
+    ...readSessionCreateFields(params, request.method),
     conversationId: readRequiredStringParam(params, 'conversationId', request.method),
   };
 }
@@ -474,6 +502,7 @@ function readMessageSubmitParams(
   request: TuiDebugAutomationRequest,
 ): TuiDebugAutomationMessageSubmitParams {
   const params = assertRecordParams(request.params, request.method);
+  assertAllowedParamKeys(params, ['sessionId', 'prompt'], request.method);
   return {
     sessionId: readRequiredStringParam(params, 'sessionId', request.method),
     prompt: readRequiredStringParam(params, 'prompt', request.method),
@@ -484,6 +513,7 @@ function readMessageCancelParams(
   request: TuiDebugAutomationRequest,
 ): TuiDebugAutomationMessageCancelParams {
   const params = assertRecordParams(request.params, request.method);
+  assertAllowedParamKeys(params, ['sessionId'], request.method);
   return {
     sessionId: readRequiredStringParam(params, 'sessionId', request.method),
   };
@@ -493,6 +523,7 @@ function readTerminalResizeParams(
   request: TuiDebugAutomationRequest,
 ): TuiDebugAutomationTerminalResizeParams {
   const params = assertRecordParams(request.params, request.method);
+  assertAllowedParamKeys(params, ['sessionId', 'columns', 'rows'], request.method);
   return {
     sessionId: readRequiredStringParam(params, 'sessionId', request.method),
     columns: readRequiredPositiveIntegerParam(
@@ -509,6 +540,7 @@ function readWaitForIdleParams(
   request: TuiDebugAutomationRequest,
 ): TuiDebugAutomationWaitForIdleParams {
   const params = assertRecordParams(request.params, request.method);
+  assertAllowedParamKeys(params, ['sessionId', 'timeoutMs', 'pollIntervalMs'], request.method);
   return {
     sessionId: readRequiredStringParam(params, 'sessionId', request.method),
     timeoutMs: readOptionalNumberParam(params, 'timeoutMs'),
@@ -518,6 +550,7 @@ function readWaitForIdleParams(
 
 function readFactsParams(request: TuiDebugAutomationRequest): TuiDebugAutomationFactsParams {
   const params = assertRecordParams(request.params, request.method);
+  assertAllowedParamKeys(params, ['sessionId', 'includeHistory'], request.method);
   return {
     sessionId: readRequiredStringParam(params, 'sessionId', request.method),
     includeHistory: readOptionalBooleanParam(params, 'includeHistory'),
@@ -526,8 +559,45 @@ function readFactsParams(request: TuiDebugAutomationRequest): TuiDebugAutomation
 
 function readDisposeParams(request: TuiDebugAutomationRequest): TuiDebugAutomationDisposeParams {
   const params = assertRecordParams(request.params, request.method);
+  assertAllowedParamKeys(params, ['sessionId'], request.method);
   return {
     sessionId: readRequiredStringParam(params, 'sessionId', request.method),
+  };
+}
+
+function readRuntimeConfig(
+  value: unknown,
+  method: TuiDebugAutomationRequest['method'],
+): TuiDebugAutomationSessionCreateParams['runtimeConfig'] {
+  if (value === undefined) return undefined;
+  const config = assertRecordParams(value, method);
+  assertAllowedParamKeys(
+    config,
+    ['temperature', 'maxTokens', 'thinkingBudget', 'outputFormat'],
+    method,
+    'params.runtimeConfig',
+  );
+  const outputFormat = readOptionalStringParam(config, 'outputFormat');
+  if (
+    outputFormat !== undefined &&
+    outputFormat !== 'text' &&
+    outputFormat !== 'json' &&
+    outputFormat !== 'markdown'
+  ) {
+    throw new TuiDebugAutomationProtocolError(
+      'invalid-request',
+      'session runtimeConfig.outputFormat must be text, json, or markdown.',
+      { received: outputFormat },
+    );
+  }
+  const temperature = readOptionalNumberParam(config, 'temperature');
+  const maxTokens = readOptionalNumberParam(config, 'maxTokens');
+  const thinkingBudget = readOptionalNumberParam(config, 'thinkingBudget');
+  return {
+    ...(temperature !== undefined ? { temperature } : {}),
+    ...(maxTokens !== undefined ? { maxTokens } : {}),
+    ...(thinkingBudget !== undefined ? { thinkingBudget } : {}),
+    ...(outputFormat ? { outputFormat } : {}),
   };
 }
 
