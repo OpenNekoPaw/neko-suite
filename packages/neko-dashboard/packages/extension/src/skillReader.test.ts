@@ -19,6 +19,13 @@ describe('SkillReader', () => {
             description: 'Generate a clip.',
             command: 'neko.cut.ai.generateVideoForClip',
             tags: ['generation', 'video'],
+            catalog: {
+              role: 'standalone',
+              source: 'plugin',
+              visibility: 'primary',
+              editable: false,
+              actions: [{ id: 'run' }],
+            },
             locales: {
               'zh-cn': {
                 name: '生成视频片段',
@@ -41,7 +48,7 @@ describe('SkillReader', () => {
       locale: 'zh-cn',
       tags: ['生成', '视频'],
       catalog: {
-        role: 'quick-action',
+        role: 'standalone',
         source: 'plugin',
         visibility: 'primary',
         editable: false,
@@ -113,5 +120,67 @@ describe('SkillReader', () => {
       groupId: 'media-production',
       actions: [{ id: 'run' }, { id: 'fork', targetSource: 'project' }],
     });
+  });
+
+  it('excludes quick-action command wrappers and hidden runtime entries from installed Skills', async () => {
+    installExtension('neko.neko-agent', {
+      exports: {
+        getSkills: () => [
+          {
+            id: 'media-production',
+            name: 'Media Production',
+            description: 'Coordinate production.',
+            catalog: {
+              role: 'orchestrator',
+              source: 'builtin',
+              visibility: 'primary',
+              editable: false,
+              actions: [{ id: 'run' }],
+            },
+          },
+          {
+            id: 'audio-mixing',
+            name: 'Audio Mixing',
+            description: 'Mix timeline audio.',
+            command: 'neko.agent.invokeSkill',
+            catalog: {
+              role: 'quick-action',
+              source: 'builtin',
+              visibility: 'primary',
+              editable: false,
+              actions: [{ id: 'run' }],
+            },
+          },
+          {
+            id: 'execution-persona',
+            name: 'Execution Persona',
+            description: 'Internal execution guidance.',
+            catalog: {
+              role: 'persona',
+              source: 'builtin',
+              visibility: 'hidden',
+              editable: false,
+              actions: [{ id: 'run' }],
+            },
+          },
+        ],
+      },
+    });
+    installExtension('neko.neko-cut', {
+      exports: {
+        getSkills: () => [
+          {
+            id: 'generate-video-clip',
+            name: 'Generate Video Clip',
+            description: 'Feature-package command wrapper.',
+            command: 'neko.cut.ai.generateVideoForClip',
+          },
+        ],
+      },
+    });
+
+    const skills = await new SkillReader().read();
+
+    expect(skills.map((skill) => skill.id)).toEqual(['media-production']);
   });
 });

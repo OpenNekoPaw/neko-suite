@@ -15,27 +15,16 @@ export interface SkillListProps {
 }
 
 interface SkillGroups {
-  readonly orchestrators: readonly DashboardSkill[];
-  readonly standalone: readonly DashboardSkill[];
-  readonly quickActions: readonly DashboardSkill[];
+  readonly primary: readonly DashboardSkill[];
   readonly focusedByParent: ReadonlyMap<string, readonly DashboardSkill[]>;
   readonly advanced: readonly DashboardSkill[];
 }
 
-type SkillSectionId = 'orchestrators' | 'standalone' | 'quickActions' | 'advanced';
+type SkillSectionId = 'primary' | 'advanced';
 
 const MAX_VISIBLE_TAGS = 3;
-const DEFAULT_EXPANDED_SECTIONS: readonly SkillSectionId[] = [
-  'orchestrators',
-  'standalone',
-  'quickActions',
-];
-const ALL_SKILL_SECTION_IDS: readonly SkillSectionId[] = [
-  'orchestrators',
-  'standalone',
-  'quickActions',
-  'advanced',
-];
+const DEFAULT_EXPANDED_SECTIONS: readonly SkillSectionId[] = ['primary'];
+const ALL_SKILL_SECTION_IDS: readonly SkillSectionId[] = ['primary', 'advanced'];
 
 export function SkillList({ skills, onCommand, onSkillAction }: SkillListProps) {
   const { t } = useTranslation();
@@ -44,7 +33,8 @@ export function SkillList({ skills, onCommand, onSkillAction }: SkillListProps) 
     () => new Set(DEFAULT_EXPANDED_SECTIONS),
   );
   const [expandedParents, setExpandedParents] = useState<ReadonlySet<string>>(() => new Set());
-  const availableTags = useMemo(() => getAvailableTags(skills), [skills]);
+  const installedSkills = useMemo(() => filterInstalledSkills(skills), [skills]);
+  const availableTags = useMemo(() => getAvailableTags(installedSkills), [installedSkills]);
   useEffect(() => {
     if (activeTag !== null && !availableTags.includes(activeTag)) {
       setActiveTag(null);
@@ -59,26 +49,26 @@ export function SkillList({ skills, onCommand, onSkillAction }: SkillListProps) 
   const visibleSkills = useMemo(
     () =>
       activeTag === null
-        ? skills
-        : skills.filter((skill) => skill.tags?.some((tag) => tag === activeTag) ?? false),
-    [activeTag, skills],
+        ? installedSkills
+        : installedSkills.filter((skill) => skill.tags?.some((tag) => tag === activeTag) ?? false),
+    [activeTag, installedSkills],
   );
   const groups = useMemo(() => groupSkills(visibleSkills), [visibleSkills]);
-  const visibleCount =
-    groups.orchestrators.length +
-    groups.standalone.length +
-    groups.quickActions.length +
-    groups.advanced.length;
+  const visibleCount = groups.primary.length + groups.advanced.length;
   const skillCountText =
     activeTag === null
-      ? t('dashboard.skills.count', { count: skills.length })
+      ? t('dashboard.skills.count', { count: installedSkills.length })
       : t('dashboard.skills.filteredCount', {
           shown: visibleSkills.length,
-          total: skills.length,
+          total: installedSkills.length,
         });
 
   return (
-    <section className="panel skill-list-panel" aria-label={t('dashboard.skills')}>
+    <section
+      className="panel skill-list-panel"
+      aria-label={t('dashboard.skills')}
+      data-skill-count={installedSkills.length}
+    >
       <div className="skill-list-header">
         <div>
           <h2>{t('dashboard.skills')}</h2>
@@ -120,24 +110,24 @@ export function SkillList({ skills, onCommand, onSkillAction }: SkillListProps) 
           </Button>
         </div>
       </div>
-      {skills.length === 0 ? (
+      {installedSkills.length === 0 ? (
         <p className="empty-cell">{t('dashboard.skills.empty')}</p>
       ) : (
         <>
           {visibleCount === 0 ? (
             <p className="empty-cell">{t('dashboard.skills.noFilteredResults')}</p>
           ) : null}
-          {groups.orchestrators.length > 0 ? (
+          {groups.primary.length > 0 ? (
             <SkillSection
-              title={t('dashboard.skills.orchestrators')}
-              count={groups.orchestrators.length}
-              expanded={expandedSections.has('orchestrators')}
+              title={t('dashboard.skills.primary')}
+              count={groups.primary.length}
+              expanded={expandedSections.has('primary')}
               onToggle={() =>
-                setExpandedSections((sections) => toggleSetValue(sections, 'orchestrators'))
+                setExpandedSections((sections) => toggleSetValue(sections, 'primary'))
               }
             >
               <div className="skill-row-list" role="list">
-                {groups.orchestrators.map((skill) => (
+                {groups.primary.map((skill) => (
                   <Fragment key={getSkillKey(skill)}>
                     <SkillRow
                       skill={skill}
@@ -161,48 +151,6 @@ export function SkillList({ skills, onCommand, onSkillAction }: SkillListProps) 
                         ))
                       : null}
                   </Fragment>
-                ))}
-              </div>
-            </SkillSection>
-          ) : null}
-          {groups.standalone.length > 0 ? (
-            <SkillSection
-              title={t('dashboard.skills.standalone')}
-              count={groups.standalone.length}
-              expanded={expandedSections.has('standalone')}
-              onToggle={() =>
-                setExpandedSections((sections) => toggleSetValue(sections, 'standalone'))
-              }
-            >
-              <div className="skill-row-list" role="list">
-                {groups.standalone.map((skill) => (
-                  <SkillRow
-                    key={getSkillKey(skill)}
-                    skill={skill}
-                    onCommand={onCommand}
-                    onSkillAction={onSkillAction}
-                  />
-                ))}
-              </div>
-            </SkillSection>
-          ) : null}
-          {groups.quickActions.length > 0 ? (
-            <SkillSection
-              title={t('dashboard.skills.quickActions')}
-              count={groups.quickActions.length}
-              expanded={expandedSections.has('quickActions')}
-              onToggle={() =>
-                setExpandedSections((sections) => toggleSetValue(sections, 'quickActions'))
-              }
-            >
-              <div className="skill-row-list" role="list">
-                {groups.quickActions.map((skill) => (
-                  <SkillRow
-                    key={getSkillKey(skill)}
-                    skill={skill}
-                    onCommand={onCommand}
-                    onSkillAction={onSkillAction}
-                  />
                 ))}
               </div>
             </SkillSection>
@@ -286,6 +234,15 @@ function getAvailableTags(skills: readonly DashboardSkill[]): readonly string[] 
     .map(([tag]) => tag);
 }
 
+function filterInstalledSkills(skills: readonly DashboardSkill[]): readonly DashboardSkill[] {
+  return skills.filter(
+    (skill) =>
+      skill.catalog.visibility !== 'hidden' &&
+      skill.catalog.role !== 'quick-action' &&
+      skill.catalog.role !== 'persona',
+  );
+}
+
 function groupSkills(skills: readonly DashboardSkill[]): SkillGroups {
   const visible = skills.filter((skill) => skill.catalog.visibility !== 'hidden');
   const focused = visible.filter((skill) => skill.catalog.role === 'focused-skill');
@@ -300,22 +257,24 @@ function groupSkills(skills: readonly DashboardSkill[]): SkillGroups {
     }
   }
 
+  const visibleIds = new Set(visible.map((skill) => skill.id));
+  const hasVisibleParent = (skill: DashboardSkill): boolean => {
+    const parentIds =
+      skill.catalog.parentSkillIds ?? (skill.catalog.groupId ? [skill.catalog.groupId] : []);
+    return parentIds.some((parentId) => visibleIds.has(parentId));
+  };
+
   return {
-    orchestrators: visible.filter(
-      (skill) => skill.catalog.role === 'orchestrator' && skill.catalog.visibility === 'primary',
-    ),
-    standalone: visible.filter(
-      (skill) => skill.catalog.role === 'standalone' && skill.catalog.visibility === 'primary',
-    ),
-    quickActions: visible.filter(
-      (skill) => skill.catalog.role === 'quick-action' && skill.catalog.visibility === 'primary',
+    primary: visible.filter(
+      (skill) =>
+        skill.catalog.visibility === 'primary' &&
+        (skill.catalog.role === 'orchestrator' || skill.catalog.role === 'standalone'),
     ),
     focusedByParent,
     advanced: visible.filter(
       (skill) =>
-        skill.catalog.visibility === 'advanced' ||
-        skill.catalog.role === 'focused-skill' ||
-        skill.catalog.role === 'persona',
+        (skill.catalog.role !== 'focused-skill' && skill.catalog.visibility === 'advanced') ||
+        (skill.catalog.role === 'focused-skill' && !hasVisibleParent(skill)),
     ),
   };
 }
@@ -349,7 +308,7 @@ function SkillRow({
   const rowClassName = density === 'default' ? 'skill-row' : `skill-row ${density}`;
 
   return (
-    <div className={rowClassName} role="listitem">
+    <div className={rowClassName} role="listitem" data-skill-id={skill.id}>
       <div className="skill-row-main">
         <div className="skill-row-title">
           <SkillIcon skill={skill} />
@@ -359,9 +318,11 @@ function SkillRow({
               <Badge className="h-auto rounded-full px-2 py-0.5">
                 {t(`dashboard.skills.source.${skill.catalog.source}`)}
               </Badge>
-              <Badge className="h-auto rounded-full px-2 py-0.5" tone="accent">
-                {t(`dashboard.skills.role.${skill.catalog.role}`)}
-              </Badge>
+              {skill.catalog.role === 'focused-skill' ? (
+                <Badge className="h-auto rounded-full px-2 py-0.5" tone="accent">
+                  {t('dashboard.skills.role.focused-skill')}
+                </Badge>
+              ) : null}
             </div>
           </div>
         </div>

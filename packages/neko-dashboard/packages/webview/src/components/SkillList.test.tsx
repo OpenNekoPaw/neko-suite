@@ -32,6 +32,13 @@ const skills: readonly DashboardSkill[] = [
     tags: ['导出', '视频', '交付'],
     role: 'quick-action',
   }),
+  makeSkill({
+    id: 'skill-creator',
+    name: '技能创建指导',
+    tags: ['技能', '创作'],
+    role: 'standalone',
+    visibility: 'advanced',
+  }),
 ];
 
 describe('SkillList', () => {
@@ -47,26 +54,38 @@ describe('SkillList', () => {
     }
   });
 
-  it('groups orchestrators with focused child skills and renders source/role badges', () => {
+  it('groups top-level and focused child skills without an orchestrator category', () => {
     const { host } = renderInteractive(
       <SkillList skills={skills} onCommand={vi.fn()} onSkillAction={vi.fn()} />,
     );
 
-    expect(host.textContent).toContain('编排技能');
+    expect(host.textContent).toContain('技能');
+    expect(host.textContent).not.toContain('编排技能');
     expect(host.textContent).toContain('媒体制作');
     expect(host.textContent).not.toContain('分镜设计');
     expect(host.textContent).toContain('内置');
-    expect(host.textContent).toContain('编排');
-    expect(host.textContent).toContain('快捷动作');
-    expect(host.textContent).toContain('视频编辑');
-    expect(host.querySelectorAll('.skill-row').length).toBe(2);
+    expect(host.textContent).not.toContain('快捷动作');
+    expect(host.textContent).not.toContain('视频编辑');
+    expect(host.querySelectorAll('.skill-row').length).toBe(1);
 
     act(() => {
       findButtonByText(host, '子技能（1）')?.click();
     });
 
     expect(host.textContent).toContain('分镜设计');
-    expect(host.querySelectorAll('.skill-row').length).toBe(3);
+    expect(host.querySelectorAll('.skill-row').length).toBe(2);
+  });
+
+  it('does not count or render quick actions as installed Skills', () => {
+    const { host } = renderInteractive(
+      <SkillList skills={skills} onCommand={vi.fn()} onSkillAction={vi.fn()} />,
+    );
+
+    expect(host.textContent).toContain('3 个技能');
+    expect(host.textContent).toContain('技能');
+    expect(host.textContent).not.toContain('编排技能');
+    expect(host.textContent).not.toContain('快捷动作');
+    expect(host.textContent).not.toContain('视频编辑');
   });
 
   it('filters installed skills by tag', () => {
@@ -75,7 +94,7 @@ describe('SkillList', () => {
     );
 
     expect(host.textContent).toContain('3 个技能');
-    expect(host.textContent).toContain('视频编辑');
+    expect(host.textContent).not.toContain('视频编辑');
 
     const storyboardFilter = host.querySelector<HTMLSelectElement>('.skill-filter-select');
     expect(storyboardFilter).not.toBeNull();
@@ -105,7 +124,7 @@ describe('SkillList', () => {
         id: 'command-icon',
         name: '命令图标技能',
         tags: ['视频'],
-        role: 'quick-action',
+        role: 'standalone',
         icon: '$(play-circle)',
       }),
     ];
@@ -133,8 +152,9 @@ describe('SkillList', () => {
     });
 
     expect(advancedToggle?.getAttribute('aria-expanded')).toBe('true');
-    expect(host.textContent).toContain('分镜设计');
-    expect(host.querySelectorAll('.skill-row').length).toBe(3);
+    expect(host.textContent).toContain('技能创建指导');
+    expect(host.textContent).not.toContain('分镜设计');
+    expect(host.querySelectorAll('.skill-row').length).toBe(2);
   });
 
   it('dispatches typed management actions without file paths', () => {
@@ -157,7 +177,7 @@ describe('SkillList', () => {
     });
 
     expect(onSkillAction).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 'storyboard' }),
+      expect.objectContaining({ id: 'skill-creator' }),
       'fork',
     );
     expect(JSON.stringify(onSkillAction.mock.calls)).not.toContain('/Users/');

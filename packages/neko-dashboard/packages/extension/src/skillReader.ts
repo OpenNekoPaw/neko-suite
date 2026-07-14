@@ -37,7 +37,10 @@ export class SkillReader {
 
       try {
         for (const def of api.getSkills()) {
-          skills.push(toDashboardSkill(def, extensionId, locale));
+          const skill = toDashboardSkill(def, extensionId, locale);
+          if (isInstalledDashboardSkill(skill)) {
+            skills.push(skill);
+          }
         }
       } catch {
         continue;
@@ -46,6 +49,14 @@ export class SkillReader {
 
     return skills;
   }
+}
+
+function isInstalledDashboardSkill(skill: DashboardSkill): boolean {
+  return (
+    skill.catalog.visibility !== 'hidden' &&
+    skill.catalog.role !== 'quick-action' &&
+    skill.catalog.role !== 'persona'
+  );
 }
 
 function toDashboardSkill(def: SkillDef, extensionId: string, locale: string): DashboardSkill {
