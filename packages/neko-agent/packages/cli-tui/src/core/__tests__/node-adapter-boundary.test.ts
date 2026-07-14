@@ -1,9 +1,11 @@
+import { execFileSync } from 'node:child_process';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { dirname, extname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
+const repositoryRoot = resolve(packageRoot, '../../../..');
 const srcRoot = join(packageRoot, 'src');
 
 describe('TUI Node adapter boundary', () => {
@@ -62,6 +64,47 @@ describe('TUI Node adapter boundary', () => {
     expect(defaultCapabilities).toContain('createNodeAssetsCapabilityProvider');
     expect(defaultCapabilities).toContain('createNodeEntitySearchCapabilityProviders');
     expect(nodeHostAdapter).toContain('createNodeHostAdapter');
+  });
+
+  it('loads the Assets headless subpath through the actual Node ESM loader', () => {
+    const output = execFileSync(
+      process.execPath,
+      [
+        '--import',
+        'tsx',
+        '--input-type=module',
+        '--eval',
+        [
+          "import { createNekoAssetsHeadlessCapabilityProvider } from 'neko-assets/agent-headless';",
+          "if (typeof createNekoAssetsHeadlessCapabilityProvider !== 'function') throw new Error('missing headless provider export');",
+          "process.stdout.write('assets-headless-esm-ok');",
+        ].join('\n'),
+      ],
+      { cwd: repositoryRoot, encoding: 'utf8' },
+    );
+
+    expect(output).toBe('assets-headless-esm-ok');
+  });
+
+  it('bundles raw workspace TypeScript while preserving runtime-specific dynamic modules', () => {
+    const buildConfig = readFileSync(join(packageRoot, 'tsup.config.ts'), 'utf8');
+    const packageManifest = JSON.parse(readFileSync(join(packageRoot, 'package.json'), 'utf8')) as {
+      readonly scripts?: Readonly<Record<string, string>>;
+    };
+
+    expect(buildConfig).toContain("'@neko/markdown'");
+    expect(buildConfig).toContain('splitting: true');
+    expect(buildConfig).toContain('removeNodeProtocol: false');
+    expect(buildConfig).toContain("'node:sqlite'");
+    expect(buildConfig).toContain("createRequire } from 'node:module'");
+    expect(buildConfig).toContain('createRequire(import.meta.url)');
+    const bundleScript = packageManifest.scripts?.['build:bundle'];
+    expect(bundleScript).toContain('--splitting');
+    expect(bundleScript).toContain('--outdir=dist');
+    expect(bundleScript).toContain('--entry-names=cli');
+    expect(bundleScript).toContain('--external:bun:sqlite');
+    expect(bundleScript).toContain('--external:node:sqlite');
+    expect(bundleScript).toContain('createRequire(import.meta.url)');
   });
 });
 

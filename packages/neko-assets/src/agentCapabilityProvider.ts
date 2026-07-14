@@ -6,9 +6,9 @@
  */
 
 import type { AgentCapabilityProvider, NekoAssetsAPI } from '@neko/shared';
-import { createNekoAssetsHeadlessCapabilityProvider } from './agentHeadlessCapabilityProvider';
+import { createNekoAssetsHeadlessCapabilityProvider } from './agentHeadlessCapabilityProvider.mts';
 
-export { createNekoAssetsHeadlessCapabilityProvider } from './agentHeadlessCapabilityProvider';
+export { createNekoAssetsHeadlessCapabilityProvider } from './agentHeadlessCapabilityProvider.mts';
 
 export function createNekoAssetsCapabilityProvider(api: NekoAssetsAPI): AgentCapabilityProvider {
   return createNekoAssetsHeadlessCapabilityProvider(api);

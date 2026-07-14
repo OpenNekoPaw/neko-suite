@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import type { AgentCapabilityContext, AssetEntity, NekoAssetsAPI } from '@neko/shared';
 import { TOOL_NAMES_ASSETS } from '@neko/shared';
-import { createNekoAssetsHeadlessCapabilityProvider } from '../agentHeadlessCapabilityProvider';
+import { createNekoAssetsHeadlessCapabilityProvider } from '../agentHeadlessCapabilityProvider.mts';
 
 describe('createNekoAssetsHeadlessCapabilityProvider', () => {
   it('declares terminal hosts and tool runtime requirements', () => {
@@ -71,7 +71,7 @@ describe('createNekoAssetsHeadlessCapabilityProvider', () => {
   });
 
   it('does not import vscode from headless provider source', () => {
-    const source = readFileSync(join(__dirname, '../agentHeadlessCapabilityProvider.ts'), 'utf8');
+    const source = readFileSync(join(__dirname, '../agentHeadlessCapabilityProvider.mts'), 'utf8');
 
     expect(source).not.toContain("from 'vscode'");
     expect(source).not.toContain('from "vscode"');

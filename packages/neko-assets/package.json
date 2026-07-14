@@ -39,7 +39,7 @@
   ],
   "main": "./dist/extension.js",
   "exports": {
-    "./agent-headless": "./src/agentHeadlessCapabilityProvider.ts",
+    "./agent-headless": "./src/agentHeadlessCapabilityProvider.mts",
     "./agent-capability": "./src/agentCapabilityProvider.ts"
   },
   "contributes": {
