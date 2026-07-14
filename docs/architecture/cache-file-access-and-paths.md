@@ -1,6 +1,6 @@
 # 缓存、文件读写服务与路径变量
 
-更新日期：2026-06-28
+更新日期：2026-07-13
 
 本文定义 Neko Suite 中路径变量、文件读写边界、内容访问意图、Webview 资源投影和派生缓存的横切设计。它不定义统一实体语义，也不定义素材库业务模型；相关设计分别见 [`unified-entity.md`](unified-entity.md) 和 [`asset-library.md`](asset-library.md)。
 
@@ -24,6 +24,8 @@
 - 交互预览 cache-first，离线导出、打包、校验 source-first。
 - 缓存是派生物，删除缓存不得删除项目文件、素材事实、实体事实或用户确认绑定。
 - runtime handle 只在当前会话有效，包括 Webview URI、blob URL、Engine token、stream id、preview URL。
+- 结构化本地 metadata 统一进入用户级 `~/.neko/neko.db`；有价值状态与可重建投影分别声明为逻辑 `state` / `cache` ownership，workspace 行必须携带显式 `workspaceId`。
+- workspace `.neko/.cache/` 只保存可重建 artifact bytes，不保存 SQLite 数据库或 canonical JSON metadata manifest。
 
 ## 分层模型
 
@@ -78,7 +80,7 @@ Runtime projection
 | absolute local path       | 默认否                | Host 运行时、local override、显式迁移来源   |
 | Webview URI               | 否                    | 当前 Webview 展示                           |
 | Engine token / stream URL | 否                    | 当前 Engine session                         |
-| cache-relative path       | 只允许 cache manifest | 缓存内部定位，不作为项目 source             |
+| cache-relative path       | 只允许 cache metadata | artifact 内部定位，不作为项目 source         |
 
 ### 变量来源
 
@@ -87,7 +89,7 @@ Runtime projection
 | workspace root                        | Project          | 默认项目根                       |
 | `neko/settings.json` media libraries  | Workspace / Team | 团队共享媒体库变量名和原始路径   |
 | `.neko/settings.local.json` overrides | User / Machine   | 本机路径覆盖，不提交             |
-| extension/global storage              | User / Machine   | 私有缓存和会话数据，不写项目事实 |
+| extension/global storage              | User / Machine   | VS Code 私有 artifact/view state，不作为跨 Host metadata authority |
 | explicit asset/create root            | Session / Intent | 一次性资产创建或窄授权 root      |
 
 ### 解析规则
@@ -169,7 +171,7 @@ Extension Host 侧统一通过 `@neko/shared/vscode/extension` 的 `createHostCo
 
 - source/ref 解析、`${VAR}` 和 workspace-relative 路径转换；
 - workspace、媒体库、extension-private、Webview roots 和 Engine file access 授权；
-- cache root、variant key、fingerprint、MD5/内容去重、manifest、重建、失效和 GC；
+- cache root、variant key、fingerprint、MD5/内容去重、LocalMetadata ledger、重建、失效和 GC；
 - `ResourceRef`、document source ref、generated asset ref 与 Webview URI、Engine source、bytes、local runtime path 之间的投影；
 - fail-visible diagnostics，包括 unresolved、unauthorized、unsupported、missing、stale、non-portable 和 service-unavailable。
 
@@ -197,9 +199,9 @@ Extension Host 侧统一通过 `@neko/shared/vscode/extension` 的 `createHostCo
 | --- | --- | --- | --- |
 | Shared Host runtime | `createHostContentAccessRuntime(...)` | `accessProviders`、`ingestProviders`、`resourceCacheOptions.providers`、`webviewResolver`、`engineSourceResolver` | 了解 Canvas/Cut/Preview/Agent 业务语义 |
 | Content domain service | `@neko/content/document` | document reader runtime deps、manifest/range/locator、image metadata probe | 管理 cache root、Webview URI、Engine token、VSCode extension lifecycle |
-| Engine file adapter | `@neko/neko-client/engine-file-access` | Engine register/range/entry/source adapter | 路径变量、cache manifest、Webview projection、领域 UI |
+| Engine file adapter | `@neko/neko-client/engine-file-access` | Engine register/range/entry/source adapter | 路径变量、cache metadata、Webview projection、领域 UI |
 | Resource providers | `DocumentResourceCacheProvider`、`ThumbnailResourceCacheProvider`、`PreviewVariantResourceCacheProvider`、`GeneratedAssetDerivativeResourceCacheProvider` 等 | `ensure/probe/materialize` adapter | 决定项目事实、Webview UI 或 durable source identity |
-| Feature package | Canvas/Cut/Preview/Agent/Assets/Audio/Model/Sketch provider adapter | source/ref shaping、variant intent、UI workflow | 直接管理 cache root、manifest、Webview URI fallback、Engine source path policy |
+| Feature package | Canvas/Cut/Preview/Agent/Assets/Audio/Model/Sketch provider adapter | source/ref shaping、variant intent、UI workflow | 直接管理 cache root、metadata ledger、Webview URI fallback、Engine source path policy |
 
 按领域的期望分工：
 
@@ -235,10 +237,10 @@ Extension Host 侧统一通过 `@neko/shared/vscode/extension` 的 `createHostCo
 | 纯文本、配置、JSON/TOML/Markdown、`nk*` 项目事实 | `ProjectFileStore`、domain codec、Host fs adapter / `workspace.fs` | 负责 schema、诊断、路径收缩、原子写入和项目事实生命周期；不经 Engine。 |
 | PDF/EPUB/CBZ/CBR/Office 等文档语义 | `@neko/content/document` + 注入的 Host runtime deps | 负责 document format、manifest/range、locator、entry refs、图片元数据；不决定缓存目录和 Engine token。 |
 | 图片、视频、音频、模型、Puppet、PSD 等二进制或媒体源 | `neko-engine` file access / preview API | 负责 path authorization 后的 token、Range、container entry、sibling resource、probe、decode、preview/proxy/thumbnail 生成。 |
-| 文档页图、缩略图、preview variant、proxy、OCR/ASR/metadata sidecar 等派生物 | `ResourceCacheService` + provider | 缓存只保存可重建 artifact 和 manifest，不成为 source identity。 |
+| 文档页图、缩略图、preview variant、proxy、OCR/ASR/metadata sidecar 等派生物 | `ResourceCacheService` + provider | 文件缓存只保存可重建 artifact；metadata ledger 位于用户级 SQLite cache tables，不成为 source identity。 |
 | Webview 展示资源 | `LocalResourceAccessService` 或 `ResourceCacheService.project()` | 只产生当前 Webview 可用的 URI/projection，不写入项目事实。 |
 
-`ResourceCacheService` 决定缓存规则、variant key、fingerprint、MD5/内容去重、manifest、重建、失效和 GC；它不决定原始文件身份，也不替代 Engine 的二进制读取。`neko-engine` 负责二进制/媒体数据的实际读取和派生计算，但不决定长期缓存目录、cache manifest 或项目事实写入。两者由 `ContentAccessService` 按 intent 编排。
+`ResourceCacheService` 决定缓存规则、variant key、fingerprint、MD5/内容去重、metadata ledger、重建、失效和 GC；它不决定原始文件身份，也不替代 Engine 的二进制读取。`neko-engine` 负责二进制/媒体数据的实际读取和派生计算，但不决定长期缓存目录、cache metadata 或项目事实写入。两者由 `ContentAccessService` 按 intent 编排。
 
 因此：
 
@@ -254,7 +256,7 @@ Extension Host 侧统一通过 `@neko/shared/vscode/extension` 的 `createHostCo
 | `ContentIngestService`       | 执行 Host 侧 Add/Link/Create Asset、注册 durable source、落盘 byte-only 输入 | Webview 展示、低层 range 读取、隐式复制未纳管文件 |
 | `ResourceCacheService`       | `ResourceRef`/variant 的 materialize、resolve、project、invalidate、gc    | 原始素材身份、最终导出输入                |
 | `LocalResourceAccessService` | Webview roots 授权和 `asWebviewUri(...)` 投影                             | 缓存物化、source fingerprint、离线读取    |
-| Engine File Access           | 二进制/媒体源、range、container entry、sibling resource、Engine 可读 source token | 纯文本项目文件、项目路径身份、Webview URI、cache manifest |
+| Engine File Access           | 二进制/媒体源、range、container entry、sibling resource、Engine 可读 source token | 纯文本项目文件、项目路径身份、Webview URI、cache metadata |
 | Project fact stores          | JSON/project 文件的原子读写、schema guard、锁或串行化                     | 派生缩略图、搜索排序、runtime token       |
 
 ### 项目文件 I/O
@@ -315,7 +317,7 @@ Generated 输出需要先按“用户是否可见、是否确认保留、删除�
 | 运行中 scratch / provider 临时文件 | system temp、provider 私有目录或 extension-private runtime dir | 否，只用于一次调用 | 否 | 可删除，调用失败或重试自行处理 |
 | 未确认但已展示的生成结果 | 有 workspace 时可落 `.neko/.cache/resources/generated-drafts/`；无 workspace 时落 `globalStorageUri/resources/generated-drafts/` | 是，出现在当前会话/任务结果中 | 否，只能用 `ResourceRef`/assetRef 投影 | 可被 TTL/GC 删除；UI 必须提示“未保存/可清理” |
 | 用户点击保存、发送到 Canvas、绑定实体、加入素材库或用于导出/打包的生成结果 | workspace `neko/generated/<media-kind>/`、workspace/media-library `assets/generated/`，或 AssetStore 管理的正式文件目录 | 是 | 是，保存 AssetRef、GeneratedAssetRef、`${VAR}/path` 或 workspace-relative path | 不能因清理 cache 删除 |
-| 已保存生成结果的缩略图、预览图、代理、metadata | `.neko/.cache/resources` 或 `.neko/.cache/neko-cache.db` 中的 variant/metadata | 间接可见 | 否 | 可删除并由正式 source/ref 重建 |
+| 已保存生成结果的缩略图、预览图、代理、metadata | artifact bytes 位于 `.neko/.cache/resources`；variant/metadata 位于 `~/.neko/neko.db` cache tables | 间接可见 | 否 | 可删除并由正式 source/ref 重建 |
 
 因此，`generated-assets/...` 这种返回给 Agent/Webview/Canvas 的稳定 URI 必须指向“已登记的生成资产身份”，不能是 `.neko/.cache/generated/...` 的路径别名。若生成结果还未保存，只能作为 session/runtime projection 展示，并在跨包交付前执行 Promote/Create Asset。
 
@@ -355,11 +357,11 @@ Generated source asset 本身不是 ResourceCache variant。ResourceCache 只允
 
 ```text
 source fact / ResourceRef
-  -> resolve manifest entry
+  -> resolve LocalMetadata entry
   -> probe source fingerprint
   -> materialize variant
   -> verify written artifact
-  -> update manifest
+  -> update cache-owned metadata transaction
   -> project to Webview or return descriptor
   -> touch lastAccessedAt
   -> invalidate / mark stale / gc
@@ -370,7 +372,7 @@ source fact / ResourceRef
 | 状态            | 含义                                              | 消费方式                                  |
 | --------------- | ------------------------------------------------- | ----------------------------------------- |
 | `ready`         | variant 可读取，fingerprint 与 source 匹配        | 可直接投影或读取                          |
-| `missing`       | manifest 或文件不存在，但 source 足够重建         | 可按 intent 触发 materialize              |
+| `missing`       | metadata row 或文件不存在，但 source 足够重建     | 可按 intent 触发 materialize              |
 | `stale`         | source fingerprint、provider version 或参数已变化 | 可展示旧预览并安排重建，离线操作回 source |
 | `materializing` | provider 正在生成或刷新                           | UI 显示进行中，读者等待或降级             |
 | `unsupported`   | 没有 provider 或格式不支持                        | 返回诊断，不猜测 fallback                 |
@@ -388,7 +390,7 @@ source fact / ResourceRef
 | `invalidate` | 让 ref 相关 entry 失效   | 否                               | 否                   |
 | `stats/gc`   | 统计和回收缓存           | 删除缓存                         | 否                   |
 
-写入缓存应先物化文件，再更新 manifest。manifest 只记录已校验 artifact，并保留 `createdAt`、`updatedAt`、`lastAccessedAt`、`sizeBytes`、`status` 和 provider metadata。
+写入缓存应先物化文件，再通过 owning repository transaction 更新 cache-owned metadata。metadata row 只记录已校验 artifact，并保留 `createdAt`、`updatedAt`、`lastAccessedAt`、`sizeBytes`、`status` 和 provider metadata。
 
 ## 自动缓存与预热
 
@@ -396,7 +398,7 @@ source fact / ResourceRef
 
 | 触发         | 适合自动缓存                                | 不适合自动缓存                        |
 | ------------ | ------------------------------------------- | ------------------------------------- |
-| 项目打开     | manifest、轻量 metadata、已有 index summary | 全量视频 probing、OCR、ASR、embedding |
+| 项目打开     | 轻量 metadata、已有 index summary、partition revision | 全量视频 probing、OCR、ASR、embedding |
 | 素材添加/创建 | 文件 identity、基础 metadata、小缩略图      | 大尺寸 proxy、复杂语义索引            |
 | Webview 可见 | 当前 viewport 周边 thumbnail/page-image     | 不可见列表的所有高清变体              |
 | Agent 上下文 | 有界片段、低分辨率图、transcript chunk      | 无来源的大型 scratch 内容             |
@@ -408,11 +410,11 @@ source fact / ResourceRef
 ## 一致性与并发
 
 - source fingerprint 变化、provider 版本变化、variant 参数变化、授权 roots 变化都可以让缓存变为 `stale`。
-- manifest 丢失、缓存文件丢失或 JSON 损坏应视为 cache miss，不应污染事实层。
+- metadata partition 丢失、缓存文件丢失或 SQLite cache row 损坏应进入 typed stale/rebuild diagnostic，不应污染事实层。
 - 同一 ref/variant 的并发 materialize 应合并为一个 in-flight 操作。
-- manifest 更新应串行化；JSON fact store 写入应使用锁、写队列或原子 rename。
+- cache metadata 更新必须使用 repository transaction 和 partition revision；JSON project fact 写入应使用 owning project-file service 的原子保存。
 - provider 输出应写入 cache root 下的受管目录，避免写入 workspace 任意位置。
-- GC 只删除缓存文件和 manifest entry，不删除 `neko/assets/library.json`、entity facts、binding facts 或领域项目文件。
+- GC 只删除缓存文件和 allowlisted cache rows，不删除 `neko.db`、state rows、`neko/assets/library.json`、entity facts、binding facts 或领域项目文件。
 - pinned variant、当前会话活跃 variant 和不可重建 variant 在 GC 中优先保留。
 
 ## 典型链路
@@ -476,7 +478,7 @@ project format refs
 
 涉及文件、文档、媒体、模型、附件、缩略图、preview/proxy、导入、导出或跨包资源传递的变更，review 必须按路径级别确认：
 
-- 上层业务只传递 intent、source/ref、target 和 caller，没有直接选择 cache 目录、cache manifest、Webview URI、Engine token 或 scratch path。
+- 上层业务只传递 intent、source/ref、target 和 caller，没有直接选择 cache 目录、cache metadata table、Webview URI、Engine token 或 scratch path。
 - 二进制/媒体/container entry 通过 Engine-backed content access 或注册 provider；纯文本、配置和 `nk*` 项目事实通过项目文件/text 服务。
 - Webview projection 只由 `LocalResourceAccessService` 或 `ResourceCacheService.project()` 生成；失败时返回 diagnostic、缺省 renderable projection 或 fail closed。
 - durable payload 只保存 `ResourceRef`、source ref、workspace-relative path、`${VAR}/path`、asset/entity ID 或 document locator，不保存 materialized cache path、`cachePath`、runtime path、Webview URI、blob/object URL 或 token。

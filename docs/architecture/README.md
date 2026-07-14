@@ -28,7 +28,7 @@
 | [`adr-agent-sandbox-and-external-processing-boundary.md`](adr-agent-sandbox-and-external-processing-boundary.md)   | Agent 资源沙箱、外部处理器、命令执行和审批边界                                        |
 | [`adr-code-debt-redundancy-governance.md`](adr-code-debt-redundancy-governance.md)                                 | 重复、冗余、兼容桥和 fallback 代码的分类、清理优先级与验证规则                        |
 | [`adr-code-review-quality-gates.md`](adr-code-review-quality-gates.md)                                             | 代码审查、风险分级、验证矩阵和功能偏离检查                                            |
-| [`adr-local-metadata-store-sqlite.md`](adr-local-metadata-store-sqlite.md)                                         | SQLite 本地元数据 Store、JSON 事实文件和缓存索引边界                                  |
+| [`adr-local-metadata-store-sqlite.md`](adr-local-metadata-store-sqlite.md)                                         | 用户级 SQLite 本地元数据 Store、项目事实和缓存索引边界                                |
 | [`adr-neko-desktop-apphost-resource-viewport-boundary.md`](adr-neko-desktop-apphost-resource-viewport-boundary.md) | Neko Desktop AppHost、资源工作台、Market/Skills 管理面和 Engine-owned viewport 边界   |
 | [`adr-neko-workbench-core-plugin-host.md`](adr-neko-workbench-core-plugin-host.md)                                 | Neko Workbench Core、Plugin Host、VSCode 设计参考和 Desktop Host Adapter 边界         |
 | [`adr-unified-markdown-resource-rendering.md`](adr-unified-markdown-resource-rendering.md)                         | Canvas MCP 式能力、Markdown 扩展语法、资源增强渲染和 Send to Canvas 边界              |

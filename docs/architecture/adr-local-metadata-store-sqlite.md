@@ -1,394 +1,418 @@
-# ADR: SQLite 本地元数据 Store 与 JSON 事实文件边界
+# ADR: 用户级 SQLite 本地元数据 Store 与项目事实边界
 
-状态：Proposed
-日期：2026-06-27
-范围：`~/.neko/`、workspace `neko/`、workspace `.neko/`、workspace `.neko/.cache/`、VS Code `globalStorageUri`、ContentAccess、ResourceCache、Search、Assets、Entity、Agent、Market 和各创作领域的本地元数据。
+状态：Accepted
+原始日期：2026-06-27
+修订日期：2026-07-14
+范围：`~/.neko/`、workspace `neko/`、workspace `.neko/`、workspace `.neko/.cache/`、VS Code `globalStorageUri`、ContentAccess、ResourceCache、Search、Assets、Entity、Agent、Market、Dashboard 和各创作领域的本地元数据。
 
-本文定义 Neko Suite 何时应使用 SQLite 管理本地元数据，何时必须继续使用 JSON/Markdown/TOML/`nk*` 文件作为事实源。它补充 [`cache-file-access-and-paths.md`](cache-file-access-and-paths.md)、[`asset-library.md`](asset-library.md)、[`unified-entity.md`](unified-entity.md) 和 `normalize-neko-storage-scopes` OpenSpec。
+本文定义 Neko Suite 哪些结构化本地数据进入用户级 SQLite，哪些内容继续使用 JSON/Markdown/TOML/JSONL/`nk*` 或文件 artifact。它补充 [`cache-file-access-and-paths.md`](cache-file-access-and-paths.md)、[`asset-library.md`](asset-library.md)、[`unified-entity.md`](unified-entity.md) 和 `normalize-neko-storage-scopes` OpenSpec。
+
+本修订取代旧版 ADR 中“每个 workspace 使用 `.neko/neko-local.db` 或 `.neko/.cache/neko-cache.db`”的放置策略。新 canonical path 不创建 workspace SQLite 数据库。
 
 ## 背景
 
-当前仓库已经形成四层本地存储模型：
+仓库现有文件布局分为：
 
-- `~/.neko/`：用户级跨项目数据。
-- `<workspace>/neko/`：可 Git 管理的项目事实。
-- `<workspace>/.neko/`：工作区本机状态，默认 gitignored。
-- `<workspace>/.neko/.cache/`：可删除、可重建的派生缓存。
+- `~/.neko/`：用户级跨项目文件。
+- `<workspace>/neko/`：Git-trackable 项目事实。
+- `<workspace>/.neko/`：gitignored 工作区本机文件。
+- `<workspace>/.neko/.cache/`：工作区缓存 artifact。
 
-实现中已有多个 JSON manifest / index / record 文件承载高频更新、本地索引或派生状态，例如：
+这个分类适合文件，但不适合继续为每个目录复制一套 JSON 数据库或 SQLite 数据库。迁移前实现曾有：
 
 - `.neko/.cache/resources/manifest.json`
 - `.neko/.cache/proxies/manifest.json`
-- `.neko/.cache/generated/index.json`（待迁移为 generated draft/projection 索引，不能作为已保存生成资产事实源）
+- `.neko/.cache/generated/index.json`
 - `.neko/.cache/media-metadata.json`
 - `.neko/.cache/search-index.json`
 - `.neko/.cache/asset-graph.json`
+- `.neko/tasks.json`
+- `.neko/dashboard-activity.json`
 - `~/.neko/conversations-index.json`
-- `~/.neko/market-installed.json`
 
-其中一部分是可审阅的用户事实或配置，适合继续保持文件形式；另一部分是可重建、本机高频变化、需要查询/事务/GC 的本地元数据，继续拆成多个 JSON 文件会造成重复 manifest、跨文件一致性、并发写入、增量查询和清理策略复杂化。
+这些 whole-file JSON store 存在重复 schema、整文件改写、并发覆盖、损坏恢复、增量查询、跨 Host 可见性和 GC 问题。
 
-`packages/neko-types/src/types/storage.ts` 已预留 `.neko/.cache/neko-cache.db`，但尚未定义哪些数据可以进入该数据库、谁拥有数据库、Webview/Agent 是否可感知数据库、以及 SQLite 与 JSON 事实文件的边界。
+会话故障进一步证明了职责错误：VS Code 会话列表仍可从 `workspaceState` 显示，Journal 也仍然存在，但零字节 `conversations-index.json` 让终态持久化返回 `conversation-durability-failed`。一个本应可重建的 catalog projection 被当成第二事实源和 hard gate。
+
+## 运行时验证
+
+2026-07-13 使用已有 VS Code 内置 `Debug Dev (All)` 和 `/Users/feng/Git/neko-test` Development Host 完成验证，没有启动独立 VS Code、Chrome、Electron 或普通浏览器替代环境。
+
+| 环境                        | 结果                                                                                      |
+| --------------------------- | ----------------------------------------------------------------------------------------- |
+| 真实 VS Code Extension Host | Node `24.17.0`、SQLite `3.53.0`；`node:sqlite` 建表、写入、查询成功                       |
+| 当前系统 Node               | Node `25.6.1`、SQLite `3.51.2`；成功，但输出 experimental warning                         |
+| 编译 TUI                    | Bun `1.3.10`；`node:sqlite` 返回 `ERR_UNKNOWN_BUILTIN_MODULE`                             |
+| Bun SQLite                  | `bun:sqlite` 建表、写入、查询成功                                                         |
+| 跨 Host 文件往返            | Extension `node:sqlite` 创建 WAL DB，Bun TUI 读写，Extension 再读取，`integrity_check=ok` |
+
+验证证明当前 Extension/Bun 运行时可以共享 SQLite 文件格式。支持契约因此收敛为 VS Code `^1.128.0`（已验证 Extension Host Node `24.17.0`）、Node `>=24.0.0` 和 Bun `>=1.3.10`；缺少对应 SQLite module 或版本时启动必须 fail-visible，不能静默降级到 JSON。
 
 ## 决策
 
-引入统一的 Host-owned `LocalMetadataStore`，以 SQLite 作为本地元数据和派生 read model 的默认持久化实现。SQLite 不替代项目事实文件，不保存 Webview URI、Engine token、cache path 作为稳定身份，也不让 Agent/Webview 直接感知数据库或缓存目录。
-
-核心决策：
-
-- `neko/` 下的项目事实继续使用 JSON/Markdown/TOML/`nk*` 等可审阅文件。
-- `.neko/.cache/neko-cache.db` 承接项目级可重建缓存 manifest、索引、投影、状态账本和 GC 元数据。
-- `globalStorageUri` 使用 extension-private SQLite store 承接无 workspace 的资源缓存、Market extension cache、provider catalog cache 和运行时索引。
-- `~/.agents/skills/` 保留用户可编辑 portable Skills；`~/.neko/` 保留配置、Command、Processor manifest、AGENTS 和 journal 文件。两者都只把 catalog/search/index/read model 等派生投影放入用户级 SQLite store。
-- 如果未来出现非 Git、非缓存、不可重建但本机有价值的项目本地状态，必须单独设计 `.neko/neko-local.db` 或等价 store；不得把不可重建数据塞进 `.neko/.cache/neko-cache.db`。
-- SQLite 的推荐角色是本机索引层、账本层和查询层，而不是 `neko/` 项目事实的替代格式。当前模型是“文本/JSON 维护项目事实，SQLite 维护可重建 read model”。
-
-### SQLite 放置策略
-
-SQLite 数据库放在用户区还是工作区，取决于数据的身份锚点，而不是取决于调用方是谁：
-
-| 数据身份                                                          | 默认位置                                                       | 说明                                                                                                                                                                                                                    |
-| ----------------------------------------------------------------- | -------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 绑定到某个 workspace/project source ref 的可重建投影              | `<workspace>/.neko/.cache/neko-cache.db`                       | 例如 resource cache manifest、文档页图状态、media metadata、Project Search FTS、semantic coverage ledger、语义 evidence read model、entity occurrence projection。删除后可以从项目事实、source ref、provider 重新生成。 |
-| 绑定到某个 workspace 但不可重建、且是本机私有状态                 | `<workspace>/.neko/neko-local.db` 或等价单独 store             | 只有在明确需要时才设计，例如不可重建的项目本机历史。不得放进 `.neko/.cache/neko-cache.db`，否则 cache 清理会误删有价值状态。                                                                                            |
-| 跨项目、用户级、可重建的 catalog/search/read model                | `~/.neko/` 下的用户级 SQLite store                             | 例如 Skill/Command/Processor catalog 投影、conversation 列表/搜索投影、用户级最近资源索引。Portable Skill package、processor descriptor、配置和 journal 仍是文件事实。                                                  |
-| Extension 私有、无 workspace 或不应暴露给用户直接管理的运行时索引 | VS Code `globalStorageUri` 下的 extension-private SQLite store | 例如 no-workspace cache metadata、Market catalog cache、provider catalog cache、extension-private generated draft projection。不要把它当成 `~/.neko` 用户事实。                                                         |
-
-因此，项目语义索引的默认落点应是工作区 cache DB：`<workspace>/.neko/.cache/neko-cache.db`。原因是语义 evidence、FTS 项、coverage ledger、分析任务状态和 source fingerprint 都锚定到项目 source ref / ResourceRef / document range；它们是项目上下文的派生索引，不应污染用户级跨项目数据库，也不应写入 `neko/` 项目事实目录。
-
-用户区只保存跨项目的索引和投影；工作区 cache DB 保存项目可重建索引；工作区 local DB 只给不可重建的本机私有项目状态预留。任何 store 都不得把 Webview URI、Engine token、cache path 或 provider runtime handle 作为稳定身份。
-
-SQLite 数据库默认不随项目共享，也不进入 Git-tracked 项目事实目录。团队共享、项目打包、迁移和跨机器恢复应共享 `neko/` 下的事实文件、domain project files、source media refs 和导出格式；每台机器再从这些事实和源文件重建 `.neko/.cache/neko-cache.db`。如果未来决定共享 SQLite 本身，则这不再是本地 metadata store，而是新的 Neko 项目数据库格式，需要单独 ADR 覆盖 diff/merge、迁移、备份、修复、审计、锁和同步策略。
-
-## 判断规则
-
-| 数据特征                                                                    | 默认存储                                    |
-| --------------------------------------------------------------------------- | ------------------------------------------- |
-| 用户可编辑、需要 Git diff/merge、团队共享、是项目事实源                     | JSON/Markdown/TOML/`nk*` 文件               |
-| 本机可重建、派生自 source ref/ResourceRef/provider、可删除后重建            | SQLite metadata + 文件 artifact             |
-| 高频更新、需要事务、去重、引用计数、LRU/GC、分页查询                        | SQLite                                      |
-| 多领域共享的查询投影、反向索引、availability/read model                     | SQLite                                      |
-| 大型二进制、媒体、文档页图、缩略图、proxy、模型、音视频                     | 文件 artifact，由 SQLite 记录 metadata      |
-| 用户显式保留的媒体或项目资产                                                | workspace/media-library 文件 + 项目事实引用 |
-| 日志、journal、AGENTS、portable Skill package、Processor manifest、用户配置 | 文件                                        |
-
-SQLite 存的是本地账本和索引，不是项目事实本身。业务层必须继续通过 `ContentAccessService`、`ResourceCacheService`、Search/Entity/Asset facade 或 Host adapter 访问这些数据，不直接读取 SQLite 表。
-
-### 文本事实与 SQLite 投影
-
-用户通常不会直接编辑 `neko/assets/library.json`、`characters.json` 或 `neko/entities/*.json`，但这些文件仍然是项目事实格式。保留文本/JSON 的目的不是鼓励用户手写，而是让项目事实能被 Git、导出包、迁移脚本、诊断工具和未来版本稳定理解。
-
-当前 ADR 选择以下数据流：
+引入 Host-owned `LocalMetadataStore`，使用一个用户级 SQLite 数据库：
 
 ```text
-用户通过 UI / Agent review path 修改事实
-  -> domain service 写入 JSON/Markdown/TOML/nk* 项目事实
-  -> LocalMetadataStore 从事实和 source refs 重建 SQLite 投影
-  -> UI / Agent / Search 通过 facade 查询投影
+~/.neko/
+  neko.db
+  journals/
+  logs/
+  config.toml
+  AGENTS.md
 ```
 
-不采用以下模型：
+- `neko.db`：Extension 与 TUI 共享的唯一结构化本地 metadata authority。
+- 有价值的本机状态与可重建 projection 分别声明为逻辑 `state` 和
+  `cache` 表，但共用 schema、连接、migration、backup 和 concurrency 边界。
+- 不创建 `<workspace>/.neko/neko-local.db`。
+- 不创建 `<workspace>/.neko/.cache/neko-cache.db`。
+- 不在 `globalStorageUri` 创建另一份共享 SQLite authority。
+- workspace `.neko/.cache/` 仍可保存缩略图、proxy、文档页图、生成预览等文件 artifact，但 metadata 进入用户级 `neko.db` 的 cache-owned tables。
+- `neko/` 项目事实继续使用可审阅文件，不迁入用户数据库。
+
+SQLite 是本机结构化状态、账本和查询层，不是项目事实格式，也不是媒体容器。
+
+## 为什么不用 workspace DB
+
+用户级 DB 更符合 Extension/TUI 共享和本地产品边界：
+
+- 两个 Host 不需要发现、打开和迁移每个 workspace 的数据库。
+- 支持跨项目 conversation/catalog/search/recent 查询。
+- workspace 移动后不携带 stale DB/WAL/SHM 文件。
+- 避免多 root、多窗口和 TUI 为同一项目打开不同 DB 路径。
+- workspace `.neko/` 更小，不会继续积累 package-local database。
+
+代价是用户 DB 的影响面跨 workspace，且 state/cache 共用物理故障和 vacuum 边界。当前目标只有 18 张长期核心表，双连接、双 migration、双 revision 和双 backup 的复杂度尚无测量依据。因此先使用单库，以 state-safe durability、在线备份、完整性检查、逻辑表 ownership、allowlist 分区清理和可观测修复控制风险。只有 FTS/cache 体积、维护阻塞或恢复证据证明单库不满足要求时，才通过显式 migration 物理拆分。
+
+## Workspace Identity
+
+用户级 DB 中所有 workspace-scoped row 必须携带稳定 `workspace_id`。绝对路径、active workspace、VS Code handle、cache path、Webview URI 或 runtime token 都不能作为身份。
+
+canonical checkout identity descriptor：
 
 ```text
-SQLite 作为项目事实
-  -> JSON 仅作为导出副本或调试副本
+<workspace>/.neko/workspace.json
 ```
 
-原因是 SQLite 作为项目事实会把 Git diff、分支合并、PR review、局部修复、云盘同步、打包导出和 Agent 审计都推到额外工具上。除非项目格式整体切换为 `neko/project.db` 之类的数据库格式，否则 SQLite 不应成为 confirmed assets、entities、bindings、requirements 或 visual drafts 的 canonical source。
-
-SQLite 仍然有明确价值：它替代的是“用多个 JSON manifest 手搓数据库”的部分，包括 search/FTS、semantic evidence coverage、media metadata、resource cache ledger、binding reverse index、entity occurrence、analysis jobs、LRU/GC 和 provider diagnostics。也就是说，SQLite 不是第二套事实源，而是一套可删除重建的本机 read model。
-
-## 应直接进入 SQLite 的数据
-
-以下数据应从多个 JSON manifest / index 收敛到 `LocalMetadataStore`。这里的“进入 SQLite”指记录、状态、索引和诊断进入数据库；实际媒体 artifact 仍保存在受管目录中。
-
-| 当前或计划数据                                | 建议 SQLite 表/分区                                                                    | 说明                                                                                                                                                                                                                                        |
-| --------------------------------------------- | -------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Resource cache manifest                       | `resource_cache_entries`、`resource_cache_variants`、`cache_files`                     | 替代 `.neko/.cache/resources/manifest.json`；记录 `ResourceRef`、variant、fingerprint、status、size、provider、materialized path relative to cache root。                                                                                   |
-| 文档页图、缩略图、preview variant、proxy 记录 | `resource_cache_variants`、`resource_cache_jobs`                                       | 统一记录 page-image、thumbnail、proxy、preview、fov-crop 等变体状态。                                                                                                                                                                       |
-| Proxy manifest                                | `proxy_variants` 或并入 `resource_cache_variants`                                      | 替代 `.neko/.cache/proxies/manifest.json`，避免媒体代理单独维护一套 manifest。                                                                                                                                                              |
-| Generated draft index                         | `generated_drafts`、`generated_asset_projection`                                       | 替代 `.neko/.cache/generated/index.json` 中未保存草稿的运行时索引；只记录会话可见草稿、retention、诊断和投影。已保存/提升的生成资产事实写 AssetStore 或 `neko/assets/library.json`，不能以 cache 路径作为事实。                             |
-| Media probe metadata                          | `media_metadata`                                                                       | 替代 `.neko/.cache/media-metadata.json`；记录 Engine/provider version、source fingerprint、duration、dimension、codec、diagnostics。                                                                                                        |
-| Search index 和 FTS/read model                | `search_documents`、`search_terms`、`search_partitions`                                | 替代 `.neko/.cache/search-index.json`；Search 仍只暴露 service API，不暴露 DB。                                                                                                                                                             |
-| Semantic evidence、coverage ledger 和分析 job | `semantic_sources`、`semantic_evidence`、`semantic_coverage`、`semantic_analysis_jobs` | 替代散落的 semantic sidecar/read model。记录 source ref、range、provider/model/schema/skill version、source fingerprint、freshness、diagnostics 和 job 状态；不保存模型 prompt context、cache path、Webview URI 或 confirmed entity facts。 |
-| Asset graph projection                        | `asset_graph_edges`、`asset_graph_nodes`                                               | 替代 `.neko/.cache/asset-graph.json`；仅保存关系投影，不拥有 Asset/Entity 事实。                                                                                                                                                            |
-| Entity occurrence / relationship projection   | `entity_occurrences`、`entity_relationships`                                           | 派生自 Story、Canvas、Agent、Documents、Assets；confirmed entity 仍在 `neko/` 事实文件。                                                                                                                                                    |
-| Entity binding availability / reverse index   | `entity_binding_projection`                                                            | 记录绑定可用性、orphaned 状态、反向查询和展示排序；用户确认绑定事实仍在 `neko/entity-bindings.json`。                                                                                                                                       |
-| Media library availability projection         | `media_library_status`                                                                 | 记录当前机器 resolved root、accessible、missing、remapped diagnostics；不回写 `.neko/settings.local.json` 或 `neko/settings.json`。                                                                                                         |
-| Cache touch、LRU、quota、GC 状态              | `cache_touches`、`cache_gc_runs`                                                       | 避免高频更新 JSON manifest；GC 只删除 cache artifact 和 metadata。                                                                                                                                                                          |
-| Provider diagnostics 和 rebuild jobs          | `provider_diagnostics`、`resource_cache_jobs`                                          | 记录 failed/missing/stale/unsupported 等可观察状态，支持 retry 和 fail-visible。                                                                                                                                                            |
-| Skill/Command/Processor catalog projection    | user/extension `catalog_items`                                                         | 派生自 manifest 文件和 Market contribution；manifest 仍是文件事实。                                                                                                                                                                         |
-| Conversation list/search projection           | user `conversation_index`                                                              | `Journal` 或消息文件仍是用户数据事实；列表、搜索、最近使用和统计可进 SQLite。                                                                                                                                                               |
-| Market catalog/cache projection               | user/extension `market_catalog_cache`                                                  | 包 catalog、搜索、下载缓存 metadata 可进 SQLite；用户级安装事实是否迁入 DB 需要单独兼容/导出设计。                                                                                                                                          |
-| Dashboard activity projection                 | project-local `dashboard_activity`                                                     | 若仅为可重建/可丢弃活动投影可进 cache DB；若是用户有价值的本机历史，应放项目本地 DB 而不是 cache DB。                                                                                                                                       |
-
-## 应继续使用 JSON/Markdown/TOML/项目文件的数据
-
-以下数据不应因为引入 SQLite 而迁入数据库：
-
-| 数据                                                | 位置                                                                                                                    | 原因                                                              |
-| --------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
-| 项目设置和媒体库变量                                | `neko/settings.json`                                                                                                    | 团队共享、可审阅、需要 Git diff。                                 |
-| 本机媒体库 override                                 | `.neko/settings.local.json`                                                                                             | 用户可编辑、体积小、排查直观。                                    |
-| 素材库事实                                          | `neko/assets/library.json`                                                                                              | AssetEntity、Variant、File、provenance 是项目事实。               |
-| 统一实体事实                                        | `characters.json`、`neko/entities/*.json`                                                                               | Entity ID、名称、状态和语义 metadata 是项目事实。                 |
-| 用户确认实体绑定                                    | `neko/entity-bindings.json`                                                                                             | 绑定是用户确认事实，不是缓存。                                    |
-| 实体需求和视觉草案                                  | `neko/entity-asset-requirements.json`、`neko/visual-identity-drafts.json`                                               | 可审阅、可合并、用户确认或待确认事实。                            |
-| Domain project files                                | `.nkc`、`.nkv`、`.nks`、`.nkm`、`.nkp` 等                                                                               | 项目格式契约，不由 SQLite 隐式改写。                              |
-| AGENTS / memory / Skill / Command / Processor files | `AGENTS.md`、`.neko/memory.md`、`.agents/skills/*`、`~/.agents/skills/*`、`.neko/commands/*`、`.neko/processors/*.json` | 用户可读写、可复制、可审计；Skill package 不进入 SQLite。         |
-| 用户配置                                            | `~/.neko/config.toml` 或配置文件                                                                                        | 用户管理，不是运行时索引。                                        |
-| Conversation journal / message records              | `~/.neko/conversations/*` 或 journal 文件                                                                               | 属于用户历史事实；SQLite 可做索引，但不能成为唯一不可导出的黑盒。 |
-| 日志                                                | `.neko/logs/*`                                                                                                          | append-only 文本更易排查；需要索引时再投影到 SQLite。             |
-| 用户确认 retained media                             | workspace/media-library 文件                                                                                            | 二进制源文件不应作为 SQLite blob 隐藏。                           |
-
-### 项目事实 JSON 不迁入 SQLite 的理由
-
-以下文件即使由 UI 写入、普通用户不会手工维护，也不应直接迁入 SQLite 作为事实源：
-
-| 文件                                      | 事实语义                                                                                          | 可进入 SQLite 的部分                                                                             |
-| ----------------------------------------- | ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| `neko/assets/library.json`                | 项目拥有哪些 Asset、Variant、File、source/provenance。它影响导出、绑定、复用和跨机器共享。        | asset 搜索索引、缩略图/preview/proxy metadata、media probe metadata、可用性诊断、反向引用。      |
-| `characters.json`、`neko/entities/*.json` | 已确认实体身份、名称、别名、状态和语义 metadata。Entity ID 是稳定语义身份，不能降级成 cache row。 | entity name/alias index、occurrence projection、候选匹配、相似实体建议、semantic evidence 引用。 |
-| `neko/entity-bindings.json`               | 用户确认的实体与素材/表现形式绑定，是创作决策。AI 或后台任务不能静默覆盖。                        | binding availability、orphaned/missing diagnostics、reverse lookup、展示排序和搜索投影。         |
-| `neko/entity-asset-requirements.json`     | 实体资产需求、缺口和制作状态，是可审阅的项目计划/制作事实。                                       | requirement status aggregation、Dashboard projection、提醒、搜索和筛选索引。                     |
-| `neko/visual-identity-drafts.json`        | 可审阅的视觉设定草案和创作意图。即使未确认，也不应因 cache 清理丢失。                             | 视觉草案搜索索引、相似检索、关联 semantic evidence、生成预览/thumbnail metadata。                |
-
-这些文件可通过 domain service、transaction-like write helper、schema validation 和测试来降低直接文件维护成本；不要通过迁入 cache/user SQLite 来解决写入封装问题。底层实现未来可以在 `ProjectFactStore` 之类接口后替换，但替换目标必须仍然满足项目事实格式的共享、审计、迁移和恢复要求。
-
-## 存储区域分析
-
-### 用户区
-
-适合继续文件管理：
-
-- `~/.neko/config.toml` / `config.json`
-- `~/.neko/AGENTS.md`
-- `~/.agents/skills/`
-- `~/.neko/commands/`
-- `~/.neko/prompts/`
-- `~/.neko/processors/`
-- conversation journal / message files
-- 用户可直接备份、复制、编辑的 Market 或 provider manifest
-
-适合 SQLite 管理：
-
-- Skill / Command / Prompt / Processor catalog projection。
-- Market catalog cache、搜索索引、下载缓存 metadata。
-- Conversation list/search/recent/favorite/statistics index。
-- Provider card catalog projection、启用状态投影、诊断。
-- 用户级跨项目最近资源、最近项目、最近实体/素材引用的索引。
-
-不应使用 SQLite 隐藏的内容：
-
-- 用户配置、AGENTS、portable Skill package、Processor manifest、prompt 正文。
-- 未提供导出/备份/修复方案的 conversation 原文。
-- trust state 或 entitlement 的唯一事实源，除非同时定义签名、导出和恢复策略。
-
-### 工作区项目事实 `neko/`
-
-`neko/` 是 Git-trackable project facts，不应引入 SQLite 作为默认项目格式。继续文件管理：
-
-- `neko/settings.json`
-- `neko/config.json`
-- `neko/assets/library.json`
-- `neko/entity-bindings.json`
-- `neko/entity-asset-requirements.json`
-- `neko/visual-identity-drafts.json`
-- `neko/entities/*.json`
-- 未来 team-shared prompts/processors 的显式项目事实位置
-
-适合 SQLite 的只有派生投影，但不应放在 `neko/` 下。比如实体出现点、绑定可用性、素材关系图、搜索索引应进入 `.neko/.cache/neko-cache.db`。
-
-共享语义上，`neko/` 和 `.agents/skills/` 下的事实文件是团队和导出包看到的 canonical state；`.neko/.cache/neko-cache.db` 是每台机器的本机加速器。项目协作者拉取或打开项目后，应能从 `neko/` 事实、domain files 和 source refs 重建索引，而不依赖别人机器上的 SQLite 文件。若需要共享 AI 分析结果，应共享可审阅的 evidence/export 格式或提升为用户确认事实，而不是直接提交 SQLite 数据库。
-
-### 工作区本机状态 `.neko/`
-
-项目 portable Skills 位于 `.agents/skills/`，是可检入、可复制的用户内容，不属于 `.neko/` 本机状态。
-
-`.neko/` 是 gitignored project-local state。继续文件管理：
-
-- `.neko/settings.local.json`
-- `.neko/memory.md`
-- `.neko/commands/`、`.neko/prompts/` 中用户明确创建的 project-local 内容
-- `.neko/processors/*.neko-processor.json`
-- `.neko/logs/*`
-- `.neko/state` 中需要人工排查或迁移的轻量快照
-
-可考虑 SQLite，但需要先分类为不可重建项目本地状态：
-
-- Dashboard 本地历史。
-- Agent project-local activity index。
-- 大量 project-local 最近使用/排序/展开状态。
-
-这些数据如果不可重建，不得放入 `.neko/.cache/neko-cache.db`。需要时应设计 `.neko/neko-local.db` 或等价 store，并提供备份、清理和迁移策略。
-
-### 工作区缓存 `.neko/.cache/`
-
-`.neko/.cache/` 是 SQLite 最适合落地的区域。推荐结构：
-
-```text
-.neko/.cache/
-  neko-cache.db
-  resources/
-  thumbnails/
-  proxies/
-  generated-drafts/
-  vectors/
+```json
+{
+  "version": 1,
+  "workspaceId": "<uuid>"
+}
 ```
-
-`neko-cache.db` 管理：
-
-- resource cache entries / variants / files
-- media metadata
-- proxy metadata
-- generated draft/projection index
-- search partitions and FTS/read models
-- asset/entity graph projections
-- provider diagnostics
-- materialize job queue
-- GC touch/quota/pin/session-active 状态
-
-受管目录保存实际 artifact：
-
-- 文档页图
-- 缩略图
-- proxy media
-- preview/fov-crop
-- 未保存 generated 草稿的预览/投影文件；已保存生成资产的 thumbnail/preview/proxy 派生物
-- embedding/vector sidecar 文件
 
 规则：
 
-- 删除 `.neko/.cache/` 不得损坏项目事实。
-- DB 损坏应按 cache miss/rebuild 处理，并返回 typed diagnostic。
-- SQLite 中的 materialized path 只能是相对 cache root 的内部定位，不能作为上层 durable identity。
-- Webview、Agent、Canvas、Storyboard、Search UI 不读取 DB 或 cache path，只通过 Host service 获取 projection。
+- descriptor gitignored，是轻量身份文件，不是 workspace DB。
+- descriptor 不是启动单点故障；用户级 `workspaces` registry 是其恢复副本。descriptor
+  缺失且 current locator 只有一个匹配时，Host 原子重建相同 UUID；零匹配才创建新
+  identity；多个匹配返回 typed conflict，不选择 active workspace 或生成第三个 UUID。
+- workspace 移动/重命名后 UUID 不变。
+- descriptor 出现在新 locator 时，Host 必须先检查旧 locator：旧 locator 不存在才自动
+  rebind；新旧 locator 同时存在视为复制 checkout，要求显式 clone/rebind 决策。
+- 用户 DB 中 locator 只能保存 relative path 或 `${VAR}/path`，由 `PathResolver` 解析。
+- Extension、TUI 和 workspace-scoped metadata binding 必须先经过同一个
+  descriptor/registry resolver，再创建或访问 workspace partition。
+- identity 恢复只重建 `.neko/workspace.json`；不得生成可选的 `config.toml`、
+  `memory.md`、AGENTS、Skill、项目事实或其他用户编辑内容。
+- 同一 UUID 同时出现在两个 live locator 时 fail-visible，要求显式 clone/rebind。
+- 历史行为若已把多个 non-orphan UUID 注册到同一 current locator，必须使用独立的 canonical identity selection：事务内校验精确冲突集合，将未选 UUID 标记为 orphan 并保留其全部 partition；不得误用 clone/rebind、创建第三个 UUID、自动合并或删除数据。current-locator 查询不返回 orphan，orphan 仍可按 UUID 审计和恢复。
+- 不得通过 active workspace fallback 合并未知或缺失 workspace identity。
+- 后续可以新增 Git-trackable `projectId` 关联同一项目的多个 checkout，但它不能替代本次的 local checkout identity。
 
-#### 语义索引与当前实现对照
+## Schema 与数据分类
 
-当前代码已经具备语义索引的契约和查询骨架，但还没有完成自动持久化闭环：
+长期目标固定为 18 张核心表。触碰时间、quota 与 GC eligibility 合并到 resource row；Run lifecycle 合并到 task；semantic coverage 合并到 source；Entity 与 Asset 的多种图/反向索引合并为 typed projection。临时 job/status/history、provider diagnostic history 和 log index 默认不建表：进程内临时状态留在内存，需要跨重启恢复的后台工作使用 `tasks` / `task_checkpoints`，当前诊断附着在所属 projection/catalog row，原始日志继续使用 JSONL。
 
-| 能力                   | 当前状态                                                                                                     | ADR 目标                                                                                                                              |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------- |
-| 统一内容访问读取资源   | 已有 `ContentAccessService`、`ContentIngestService` 和 Agent typed runtime adapter                           | 继续只负责 source/ref/intent/target、授权、bytes/local-path/Webview projection/Engine source，不拥有语义 evidence。                   |
-| 内容访问协议的语义参数 | 只有通用 `metadata`，没有一等 `semantic`、`analysisKind` 或 `returnSemanticEvidence`                         | 不在 ContentAccess 上扩语义协议；语义查询走 Search/Semantic facade。                                                                  |
-| 文档读取               | `ReadDocument` 支持 `content`、`manifest`、`range`、`next`、cursor 和 `imageInfo`                            | 文档读取继续返回文本、locator、image ref；语义复用通过 semantic coverage 查询获得。                                                   |
-| 图片读取               | `ReadImage` 只读取 metadata 并暴露 native multimodal attachment；不做独立 vision model analysis              | 图片视觉分析结果若要复用，必须通过语义 evidence 写入端口持久化，而不是由 ReadImage 隐式写 cache。                                     |
-| 语义 evidence 契约     | `MediaSemanticIndex` 可表达 OCR、ASR、caption、agent segment、entity mention、semantic tag 和 perception ref | 作为 semantic store 的数据契约基础，保留 source ref、range、confidence、provenance、provider/model/schema version。                   |
-| coverage 查询          | `QuerySemanticCoverage` 可返回 freshness、matched ranges、stale reasons 和 reusable/analyze planning         | 后续从 workspace cache DB 查询，而不是直接读取 sidecar 路径。                                                                         |
-| 当前 coverage 数据源   | VS Code provider 读取 `.neko/semantic-index/**/*.json` 和 character memory 文件                              | 迁移到 `LocalMetadataStore` 后，sidecar 只作为迁移/诊断输入；新成功路径不得 dual-read sidecar。                                       |
-| Agent 分析后写入       | 实体贡献已有 candidate 自动化；通用 semantic evidence 自动写入尚未闭环                                       | 新增 Host-owned `SemanticEvidenceService` 或等价 port，接收 Agent/processor 输出并写入 workspace semantic partitions。                |
-| 避免重复分析           | 目前依赖 Skill 调用 `QuerySemanticCoverage` 的协作约束                                                       | 由 `semantic_coverage` + source/range fingerprint + provider/schema/skill version 判断 fresh/stale/missing，缺口进入 job queue。      |
-| 新增大文档             | 当前 Project Search watcher 未形成通用大文档语义分析队列                                                     | import/idle/on-demand 触发 `semantic_analysis_jobs`，按 manifest/range 分块，project open 只投影已有 ledger，不执行重 OCR/embedding。 |
-| SQLite/FTS/vector      | ADR 已提出 SQLite 和 FTS/read model；统一 vector store 尚未落地                                              | SQLite + FTS 是 MVP；embedding/vector sidecar 或 vector store 二期接入，仍通过 Search/Semantic facade 暴露。                          |
+| #   | 表                         | 逻辑分类 | 用途 / authority                                                        |
+| --- | -------------------------- | -------- | ----------------------------------------------------------------------- |
+| 1   | `schema_migrations`        | system   | 单一物理数据库的 namespaced migration ledger                            |
+| 2   | `workspaces`               | state    | Workspace identity、portable locator、last-seen、duplicate/orphan state |
+| 3   | `projection_versions`      | system   | Partition/domain revision、freshness 与 rebuild requirement             |
+| 4   | `conversations`            | cache    | 从 Journal metadata 重建的会话列表与搜索 projection                     |
+| 5   | `conversation_preferences` | state    | Pin/favorite 等明确、不可重建的用户选择                                 |
+| 6   | `tasks`                    | state    | 需要跨重启保留的 Task/Run lifecycle                                     |
+| 7   | `task_checkpoints`         | state    | 最小 resumable recovery payload                                         |
+| 8   | `local_drafts`             | state    | 仅保存不可静默丢失的未提升本机草稿                                      |
+| 9   | `dashboard_activities`     | state    | 仅保存 owning package 确认为用户有价值的 activity                       |
+| 10  | `market_installations`     | state    | Installed package 与 trust decision                                     |
+| 11  | `resource_cache_entries`   | cache    | Source/artifact ledger、size、touch、quota、GC eligibility              |
+| 12  | `resource_cache_variants`  | cache    | Thumbnail/proxy/page/preview/generated variants                         |
+| 13  | `media_metadata`           | cache    | 可重建 probe 与本机 availability metadata                               |
+| 14  | `search_documents`         | cache    | Search/FTS source projection                                            |
+| 15  | `semantic_sources`         | cache    | Source fingerprint、provider/schema version 与 coverage                 |
+| 16  | `semantic_evidence`        | cache    | 按 source range 保存的可重建 semantic evidence                          |
+| 17  | `entity_asset_projections` | cache    | Entity occurrence/relationship/binding 与 Asset graph projection        |
+| 18  | `catalog_items`            | cache    | Skill/Command/Processor/Market/provider descriptor 与当前 diagnostic    |
 
-语义 evidence 的语义级别是 reference/index/evidence，不是最终项目事实。自动分析可以进入 `semantic_evidence`、`semantic_coverage` 和 entity candidate/review payload；只有用户确认或确定性来源提升后，才写入 `neko/` 下的 confirmed entity、binding、asset requirement 或 domain project facts。
+SQLite FTS virtual/shadow tables 和普通 index 是实现 artifact，不计入 18 张核心 schema 表。所有 workspace-scoped row 使用 `workspace_id` 分区；跨项目记录使用显式 global partition。
 
-### VS Code `globalStorageUri`
+M1 只创建 `schema_migrations`、`workspaces`、`projection_versions` 和 `conversations`。它只解决损坏的 conversation index、建立 workspace partition，并验证 Extension/TUI 共用同一个数据库。其余 14 张表由后续 owning-domain migration 按真实需求创建，不在 M1 预建空表。
 
-适合 SQLite 管理：
+State-owned transaction 必须独立提交并进入备份/恢复策略；cache-owned transaction 失败不能改变已提交 authority/state 的成功结果。缓存清理只能删除 allowlist 中的 cache table/partition，不能删除 `neko.db`，也不能触碰 state table、项目事实、Journal、retained artifact 或用户可编辑文件。
 
-- no-workspace resource cache metadata。
-- extension-private Market cache/index。
-- provider catalog cache。
-- extension-private generated draft/projection metadata。
-- extension session/read model。
+## 继续使用文件的数据
 
-继续文件管理：
+以下内容不因 SQLite 引入而迁入数据库：
 
-- 大型下载包、生成 artifact、模型/媒体缓存文件。
-- 需要用户手动拷贝或诊断的导出包。
+| 数据                                             | Canonical location / format                                               | 原因                                            |
+| ------------------------------------------------ | ------------------------------------------------------------------------- | ----------------------------------------------- |
+| 项目设置和媒体库变量                             | `neko/settings.json`                                                      | Git-trackable 项目事实                          |
+| 本机媒体库 override                              | `.neko/settings.local.json`                                               | 用户可编辑、轻量、易排查                        |
+| Asset library facts                              | `neko/assets/library.json`                                                | 项目资产、provenance、导出事实                  |
+| Confirmed unified entities                       | `characters.json`、`neko/entities/*.json`                                 | 稳定项目身份和语义事实                          |
+| Confirmed entity bindings                        | `neko/entity-bindings.json`                                               | 用户确认创作决策                                |
+| Entity requirements / visual drafts              | `neko/entity-asset-requirements.json`、`neko/visual-identity-drafts.json` | 可审阅项目计划/草案事实                         |
+| Domain project files                             | `.nkc`、`.nkv`、`.nks`、`.nkm`、`.nkp` 等                                 | 项目格式契约                                    |
+| AGENTS / memory / Skills / Commands / Processors | Markdown/TOML/package/manifests                                           | 用户可编辑、可复制、可审计                      |
+| Conversation transcript/events                   | Journal JSONL                                                             | append-only recovery authority                  |
+| Raw operational/audit logs                       | JSONL/log files                                                           | DB 锁定或损坏时仍可诊断                         |
+| Retained media and cache artifact bytes          | managed files                                                             | Webview URI、Engine Range、外部工具和大文件清理 |
+| Secrets                                          | SecretStorage/system keychain                                             | 不得进入普通 DB/config/log                      |
 
-`globalStorageUri` 不是 `~/.neko`。前者是 extension-owned implementation state，后者是 user-managed cross-project data。
+### Unified Entity Boundary
 
-## 接口边界
+SQLite 中的 Entity 数据只能是 projection：name/alias search、occurrence、relationship、candidate match、semantic evidence、availability 和 reverse lookup。
 
-新增或实现 SQLite 时应先定义小接口，而不是让业务代码导入 SQLite client：
+用户确认或确定性提升后的 Entity ID、名称、状态、语义 metadata、binding、asset requirement 和 visual draft 必须先写 owning project fact。SQLite 更新失败只能标记 projection stale，不能回滚已成功的项目事实，也不能把 DB row 当成 confirmed entity。
+
+未确认数据按生命周期分类：
+
+- 不可丢失的本机草稿 -> `neko.db` 的 state-owned tables。
+- 可重算的候选/匹配/分析结果 -> `neko.db` 的 cache-owned tables。
+- 用户确认后 -> owning project fact file。
+
+## Journal、日志与会话 Catalog
+
+Journal 必须记录足以重建 catalog 的 metadata event：conversation ID、workspace ID、title/title change、source、created/updated timestamp、model selection 和必要状态。
+
+Conversation catalog 是 `neko.db` 中 cache-owned 的 `conversations` projection。Extension 和 TUI 都通过 `ConversationCatalog` 查询。VS Code `workspaceState` 只保存 tabs、active selection、scroll 等 Host view state。
+
+会话 durability 规则：
+
+```text
+Journal / required state commit success
+  -> conversation is durable
+
+catalog projection failure
+  -> stale/rebuild diagnostic
+  -> conversation remains durable
+```
+
+不得因 catalog failure 在 Journal 成功后返回 `conversation-durability-failed`。
+
+原始日志保持 append-only 文件。SQLite 可以建立索引、FTS 或聚合，但数据库记录不能是唯一 debug/audit evidence。
+
+## Host Adapter Boundary
+
+共享层定义小接口，不暴露 SQL：
 
 ```text
 LocalMetadataStore
+  open()
   transaction()
-  getPartitionVersion()
-  migrate()
-  putRecord()
-  getRecord()
-  queryRecords()
-  deleteRecords()
-  compact()
+  readPartitionRevision()
+  migrateNamespace()
+  backup()
+  integrityCheck()
   dispose()
+
+WorkspaceRegistry
+ConversationCatalog
+TaskStateRepository
+ResourceMetadataRepository
+SearchProjectionRepository
+EntityProjectionRepository
+...
 ```
 
-分层要求：
+适配器：
 
-- L0 shared contracts 定义 store DTO、partition、migration version、diagnostic code，不依赖 VS Code、React、Agent 或领域包。
-- VS Code Extension Host adapter 负责 SQLite 打开、WAL、migration、busy timeout、dispose、路径解析和文件锁。
-- `ResourceCacheService`、Search、Assets、Entity projection、Agent catalog 只依赖 store interface。
-- Webview 和 TUI 只接收投影 DTO，不接收数据库路径、表名、cache path 或 SQLite error 原文。
-- `neko-engine` 继续负责二进制/媒体读取、Range、probe、decode 和派生计算；不负责纯本地元数据数据库。
+- VS Code Extension Host：`node:sqlite`。
+- 编译 Bun TUI：`bun:sqlite`。
 
-## SQLite 依赖选择
+约束：
 
-实现前需要做 packaging spike。候选方案应按以下标准评估：
+- Extension 和 TUI 运行同一 schema migration 和 store contract tests。
+- Agent Core、Webview、feature domain package 不导入 `node:sqlite` 或 `bun:sqlite`。
+- Webview/TUI presentation 不接收 DB path、table name、cache path 或原始 SQLite error。
+- `node:sqlite` 是同步 API；bulk FTS、semantic rebuild 和大型 migration 必须使用 worker，不能阻塞 Extension Host。
+- `neko-engine` 不拥有本地 metadata DB。
 
-| 方案                       | 优点                    | 风险                                                         |
-| -------------------------- | ----------------------- | ------------------------------------------------------------ |
-| Node native SQLite package | 性能好，事务和 WAL 成熟 | VS Code/Electron ABI、跨平台预编译、扩展打包和签名风险       |
-| WASM SQLite                | 打包简单，跨平台稳定    | 大库性能、文件持久化、并发和内存占用需要验证                 |
-| Rust/N-API SQLite adapter  | 可控、可复用 Rust 生态  | 不应把 Engine 变成本地项目数据库；需要独立 host adapter 边界 |
-| 保持 JSON                  | 依赖最低，易手工排查    | 多 manifest 膨胀、并发、事务、查询和 GC 问题继续存在         |
+## 运行时支持策略
 
-ADR 不指定具体库。实现提案必须先验证 VS Code Extension Host 的安装、打包、启动性能、dispose、migration、测试环境和跨平台行为。
+运行时契约为：
 
-## 迁移策略
+1. VS Code `^1.128.0`，其 Extension Host 已验证 Node `24.17.0` 与 `node:sqlite`。
+2. Node `>=24.0.0`、`@types/node ^24` 和 Node 24 CLI bundle target。
+3. Bun `>=1.3.10` 保留独立 `bun:sqlite` adapter，因为 Bun 不提供 `node:sqlite`。
+4. 启动时验证 required runtime capability；不满足时 fail-visible。
+5. 不得 fallback 到 JSON、workspace DB 或第二套 SQLite 实现。
+6. 验证 macOS/Windows/Linux、x64/arm64、Development Host、packaged VSIX、Node CLI 和 compiled Bun TUI。
 
-优先迁移顺序：
+## Cross-Host Refresh
 
-1. `ResourceCacheService` manifest：从 `.neko/.cache/resources/manifest.json` 迁到 `.neko/.cache/neko-cache.db`。
-2. proxy / thumbnail / document page / preview variant metadata：并入 resource cache variants。
-3. media metadata、generated draft/projection index、GC touch 状态。
-4. Search index、asset graph、entity occurrence / binding projection。
-5. 用户级 catalog/search projection，例如 Skill catalog、Market cache、conversation index。
+共享 DB 不等于 UI state 自动同步。每次可见 metadata transaction 同时递增 partition revision：
+
+- Extension 在 activation/focus、自己提交后和 bounded revision observation 时刷新。
+- TUI 在 command/session boundary 查询。
+- 不监听 `-wal` 文件作为业务协议。
+- 不同步 active tab、scroll、panel focus 或当前 TUI selection。
+
+所有 instance-scoped write/query 必须携带显式 workspace/conversation/task identity，不得 fallback 到 active workspace/conversation。
+
+## Migration And Recovery
 
 迁移规则：
 
-- prelaunch 内部路径可以破坏性收敛，但不能静默损坏有价值本地数据。
-- 旧 JSON 只能由显式 migrator、diagnostic 或 rejection path 读取；新成功路径不得继续 dual-read。
-- 迁移完成后旧 JSON 可保留为 `.bak` 或 diagnostic input，但默认服务不得读取它返回成功。
-- 测试必须 poison 旧 JSON 路径，证明 canonical path 命中 SQLite。
-- cache DB 可删除重建；user/project-local DB 若承载不可重建数据，必须提供导出、备份、修复或迁移。
+- Legacy JSON、workspace DB 和 package-local manifest 只能由 migrator、diagnostic 或 rejection path 读取。
+- valuable source mutation 前先备份；cache source 可以 quarantine 后重建。
+- import 使用单事务并验证 identity、row count、revision 和 integrity。
+- migration report 列出 migrated、rebuilt、quarantined、skipped、unrecoverable 和 user-action-required。
+- cutover 后 poison legacy read/write path，禁止 dual-read/dual-write。
+- malformed/zero-byte data 不能被解释为空初始化成功。
+- 不删除 Journal、raw log、settings、trust/install state、retained artifact 或 project fact。
+
+迁移顺序：
+
+1. Workspace identity 和 user DB schema。
+2. Journal metadata completeness 与 conversation catalog。
+3. Task/Run/recovery 和 valuable local state。
+4. ResourceCache/media/generated metadata。
+5. Search/semantic/Entity/Asset projections。
+6. Skill/Command/Processor/Market/provider catalogs。
+7. Legacy path poisoning、orphan GC、cleanup 和 repair tooling。
+
+Agent Task 的 prelaunch 迁移窗口已经关闭。真实本地来源完成显式审批、备份、导入、
+校验和退休后，Extension/TUI 稳态只装配 SQLite `tasks` / `task_checkpoints`
+repository，不再扫描 `.neko/tasks.json` 或 VS Code Memento Task key，也不再暴露
+Extension 审查命令、TUI slash command、approval port、source adapter 或 owner
+reconstruction parser。迁移证据保留在对应 OpenSpec verification 中，不作为永久产品
+API。经用户明确授权的本机测试 migration backup 可以在核对 row count、checkpoint count
+和 `integrity_check` 后清理；该授权不构成自动删除有价值用户数据的通用规则。
+
+### 用户诊断与处理
+
+Extension 对话框和 TUI 只展示稳定的用户诊断，不展示数据库路径、表名、SQL、
+`SQLITE_*` 原始错误或 adapter stack。完整 cause 只进入 Host 日志。
+
+| 诊断                                         | 含义                                        | 用户动作                                                          |
+| -------------------------------------------- | ------------------------------------------- | ----------------------------------------------------------------- |
+| `local-metadata-unsupported-runtime`         | 当前 VS Code/Node/Bun 缺少受支持的 SQLite   | 更新到受支持版本并重启 Host                                       |
+| `local-metadata-workspace-identity-conflict` | 同一 workspace UUID 出现在两个 live locator | copied checkout 选择 Clone；移动/恢复的 checkout 选择 Rebind      |
+| `local-metadata-migration-approval-required` | valuable legacy source 尚未逐项批准         | 逐 source 审阅；批准前不备份、不导入、不重命名、不删除            |
+| `local-metadata-migration-failed`            | 导入、identity/count 校验或退休未完成       | 保留 source/backup，查看 migration report，修复后重试             |
+| `local-metadata-backup-failed`               | safety backup 未创建                        | 修复目标目录；destructive migration 必须保持阻塞                  |
+| `local-metadata-corrupt`                     | integrity check 失败                        | 停止写入，保留原文件和备份；只重建 cache-owned projection         |
+| `local-metadata-rebuild-required`            | projection stale，但 authority 已保存       | 从 Journal、project fact 或 retained artifact 运行 owning rebuild |
+| `local-metadata-cleanup-report`              | cleanup 已完成或仍有需人工处理的条目        | 检查七类 itemized outcome，不把 user-action-required 当作 skipped |
+
+### Host-only inspection、export 与 repair
+
+以下命令只用于维护者或用户在 Host 终端中排查；它们不是 Webview API，也不得把命令输出
+原样转发到 Webview。执行 export/recover 前必须退出所有 Neko Extension Development Host、
+普通 VS Code 窗口和 TUI，保留 `neko.db`、`-wal`、`-shm` 与现有 backup，不得在原文件上
+直接运行 destructive repair。
+
+macOS/Linux：
+
+```bash
+export NEKO_DB="$HOME/.neko/neko.db"
+export NEKO_BACKUP="$HOME/.neko/neko.backup.db"
+export NEKO_RECOVERED="$HOME/.neko/neko.recovered.db"
+
+# Read-only inspection
+sqlite3 -readonly "$NEKO_DB" 'PRAGMA integrity_check;'
+sqlite3 -readonly "$NEKO_DB" \
+  'SELECT namespace, version, name FROM schema_migrations ORDER BY namespace, version;'
+
+# Consistent SQLite export/backup; never use cp while a Host may still be writing.
+sqlite3 "$NEKO_DB" ".backup '$NEKO_BACKUP'"
+sqlite3 -readonly "$NEKO_BACKUP" 'PRAGMA integrity_check;'
+
+# Last-resort recovery into a new file. Do not replace the source unless this reports ok.
+rm -f "$NEKO_RECOVERED"
+sqlite3 "$NEKO_DB" '.recover' | sqlite3 "$NEKO_RECOVERED"
+sqlite3 -readonly "$NEKO_RECOVERED" 'PRAGMA integrity_check;'
+```
+
+Windows PowerShell 使用相同 SQLite 操作，只通过 `$HOME` 解析用户级路径：
+
+```powershell
+$NekoDb = Join-Path $HOME '.neko\neko.db'
+$NekoBackup = Join-Path $HOME '.neko\neko.backup.db'
+sqlite3 -readonly $NekoDb 'PRAGMA integrity_check;'
+sqlite3 $NekoDb ".backup '$NekoBackup'"
+sqlite3 -readonly $NekoBackup 'PRAGMA integrity_check;'
+```
+
+`.recover` 只生成候选恢复文件，不等价于成功修复。恢复文件必须再次通过 schema migration
+ledger、state-owned identity/count 和 repository integrity 验证；验证失败时保留原 DB 与 backup，
+不得通过清空 DB、删除 state table 或只验证 cache 查询来宣布恢复成功。
+
+### Remote SSH 与 Container
+
+- Remote SSH 中 Extension Host 运行在远端，因此 canonical DB 是远端 Host 用户的
+  `~/.neko/neko.db`；本机 Extension UI 不会打开本机 DB 代替它。
+- Dev Container/Codespace 中使用 container/remote Host 的用户 home。重建或删除容器可能
+  删除该 Host-local DB，valuable state 需要通过受控 backup/export 保留。
+- TUI 使用它实际运行所在 Host 的用户 DB；本机 TUI 与远端 Extension 不会自动共享文件。
+- workspace locator 只解决同一 Host 内的移动与重绑，不提供 DB、Journal、Task 或 catalog
+  的跨机器同步、复制、冲突合并或云备份。
+
+## Cleanup、Backup And Orphan GC
+
+- `neko.db` 必须使用 state-safe durability；物理在线备份覆盖整个数据库，恢复时保护 state-owned rows，并可将 cache projection 标记为 stale 后重建；备份失败阻止 destructive migration。
+- Cache-owned tables 支持按 workspace/domain allowlist 分区删除重建、quota、GC 和 vacuum；不得通过删除 `neko.db` 实现 cache reset。
+- Workspace 删除或长期不可达后先标记 orphan，超过 retention 后才能清理 cache partition。
+- Valuable state partition 需要用户确认或已验证导出/迁移，不能随 orphan cache 自动删除。
+- `.neko/.cache/` artifact cleanup 与 DB metadata 删除通过 ResourceCache transaction plan 协调，失败必须暴露 stale/orphan diagnostic。
 
 ## 测试与质量门禁
 
-引入 SQLite 后至少需要：
+至少覆盖：
 
-- store contract tests：migration、transaction、rollback、WAL/busy、dispose、corruption diagnostic。
-- ResourceCache parity tests：JSON manifest fixture 迁移到 SQLite 后 resolve/ensure/project/gc 行为一致。
-- legacy path poisoning：旧 `manifest.json`、`search-index.json`、`asset-graph.json` 不得被新成功路径读取。
-- cache deletion tests：删除 `.neko/.cache/` 不影响 `neko/` 事实、domain project files、asset/entity facts。
-- boundary tests：Webview/Agent/Search UI 不导入 SQLite client，不读取 DB/cache path。
-- packaging smoke：VS Code Extension Host 启动、关闭、reload、multi-workspace、多 panel 生命周期。
+- Shared contract：classification、workspace identity、portable locator、duplicate/rebind。
+- Node/Bun store parity：migration、transaction、rollback、WAL、busy timeout、revision、dispose。
+- Cross-process：Extension/TUI 双向可见、并发写入、reload、multi-window。
+- User data：state backup/restore、corruption、failed migration、orphan retention。
+- Cache：partition rebuild、quota/GC、artifact missing/stale、vacuum。
+- Legacy poisoning：旧 conversation/manifest/search/entity/asset path 不得返回成功；旧
+  Task path、key、命令和 migration API 必须从生产装配中消失。
+- Authority path：Journal/project fact 成功后 projection failure 不改变 durable success。
+- Runtime：`Debug Dev (All)` + `vscode-extension-debugger`，compiled Bun TUI，packaged VSIX。
+- Boundaries：Webview/Agent/Search UI 不导入 SQLite client；secrets/bytes/raw logs/facts 不进入 DB。
+- Quality：`pnpm build`、`pnpm test`、`pnpm check`、legacy debt/unused checks，以及受影响 Agent evaluation。
 
 ## 后果
 
 收益：
 
-- 减少多个 JSON manifest 的重复实现和跨文件一致性问题。
-- 支持事务、增量查询、FTS/read model、引用计数、LRU/GC 和高频 touch。
-- 强化“缓存透明 + 可重建”，避免 Agent/Webview 感知 cache path。
-- 让 ContentAccess、ResourceCache、Search、Entity projection、Assets projection 共用同一套本地元数据规则。
+- Extension/TUI 共用一个用户级 metadata authority。
+- 不再发现和迁移每 workspace DB。
+- 支持事务、增量查询、FTS、跨项目 catalog、引用计数、LRU/GC 和高频 touch。
+- Valuable state 与 rebuildable cache 有独立逻辑 ownership、transaction、backup policy 和 cleanup allowlist。
+- Workspace 更干净，项目事实继续可 Git review/export。
+- Catalog 损坏不再伪装为正文或项目事实丢失。
 
 成本：
 
-- 增加 SQLite runtime、migration、packaging、备份/修复和测试复杂度。
-- 手工排查不如 JSON 直观，需要诊断命令或 inspector。
-- 必须严格区分 cache DB 与不可重建 local DB，避免把用户数据误删。
+- 引入 workspace identity、user DB backup/repair、schema ownership 和 orphan GC。
+- User DB corruption 影响多个 workspace 和两类逻辑数据，需要 state-safe durability、在线备份、integrity diagnostic 和 projection rebuild。
+- 运行时最低版本必须提高，Extension/Bun 需要两个 adapter。
+- SQLite 手工排查不如 JSON 直接，需要 inspector/export/diagnostic 命令。
+- Bulk indexing 必须避免阻塞 Extension Host。
 
-拒绝的方案：
+## 拒绝的方案
 
-- 把所有 `neko/` 项目事实迁入 SQLite：会破坏 Git diff/merge、人工审阅和项目格式可移植性。
-- 把 `neko/assets/library.json`、`characters.json`、`neko/entities/*.json`、`neko/entity-bindings.json`、`neko/entity-asset-requirements.json` 或 `neko/visual-identity-drafts.json` 直接迁入 `.neko/.cache/neko-cache.db`、`~/.neko` 用户库或 `globalStorageUri`：这些位置不是项目事实源，会导致共享、导出和数据恢复语义错误。
-- 把用户区 SQLite 当成项目事实共享层：用户区适合跨项目 catalog/search/read model，不适合保存某个 workspace 的 confirmed entities、assets 或 bindings。
-- 在没有 diff/merge、导出、备份、修复、审计和锁策略前引入 `neko/project.db` 作为项目格式：这属于单独的项目格式迁移，不是本 ADR 的 local metadata store。
-- 每个包各自维护 SQLite：会重复 schema/migration/cleanup，并重新制造跨包耦合。
-- 把缩略图、文档页图、proxy 等媒体 bytes 直接作为 SQLite blob：不利于 Webview URI、Engine Range、外部工具和大文件清理。
-- 继续无限扩展多个 JSON manifest：短期简单，但已经暴露出大型 manifest、legacy 字段污染、GC 和查询复杂度问题。
+- 每 workspace SQLite：增加发现、移动、多 root、跨 Host 和 migration 复杂度。
+- 两个用户级数据库：在 18 张核心表规模下重复 connection、migration、revision、backup 和跨 Host lifecycle；仅在测量证据证明 cache 体积、maintenance blocking 或 recovery 无法保护 state 时再显式拆分。
+- 把项目事实迁入 user DB：破坏 Git diff/merge、项目共享、导出和审计。
+- 把 confirmed assets/entities/bindings/requirements/visual drafts 放入 cache/user/globalStorage DB：这些位置不是 project fact authority。
+- 把 conversation transcript 或 raw logs 只放 SQLite：数据库损坏时无法独立恢复和诊断。
+- 把 media bytes 放 SQLite blob：不利于 Webview URI、Engine Range、外部工具和大文件清理。
+- 只使用 VS Code Memento：TUI 无法共享会话、Task 和 catalog。
+- 在 `globalStorageUri` 建共享 DB：TUI 不应依赖 VS Code 私有路径。
+- 让每个 package 自己打开 SQLite：重复 schema/migration/cleanup 并制造跨包耦合。
+- 保留 JSON fallback：形成双 authority，并继续隐藏 migration 和 corruption 缺陷。
+- 在插件内捆绑完整 Node sidecar：增加发布体积、进程生命周期、安全和跨平台复杂度。

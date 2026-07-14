@@ -120,6 +120,14 @@ Story、Canvas、Cut、Preview、Assets、Entity、Search、Agent 和 Engine 各
 
 除明确属于本地设置外，不保存绝对机器路径；也不保存 Webview URI、blob URL、stream ID、preview token 等瞬时运行时句柄。
 
+## 本地元数据与工作区身份
+
+Extension 与 TUI 共享唯一用户级数据库 `~/.neko/neko.db`。不可静默丢失的本机状态使用逻辑 `state` ownership；conversation、ResourceCache、Search、Entity/Asset 和 catalog 等可重建 read model 使用逻辑 `cache` ownership。两者共用 schema、migration、backup 与并发边界，但使用独立事务语义。
+
+Remote SSH、Dev Container 或 Codespace 使用实际运行 Extension Host/TUI 的远端用户目录和远端 `~/.neko/neko.db`。该契约只保证同一 Host 内的共享与 workspace 重绑，不提供本机与远端、不同容器或不同机器之间的会话/Task/catalog 同步。
+
+所有 workspace-scoped row 必须携带 `.neko/workspace.json` 中的稳定 UUID `workspaceId`。descriptor 与用户数据库 `workspaces` registry 通过同一个 Host resolver 协同：descriptor 删除后按唯一 portable locator 恢复原 UUID；目录移动保留 UUID；新旧 locator 同时存在或 registry 歧义时 fail-visible，要求显式 clone/rebind。identity 恢复只重建 descriptor，不生成可选配置、memory 或其他用户文件。绝对路径、active workspace、VS Code Memento、Webview URI 和 cache path 都不能作为跨 Host identity。项目事实继续位于 `neko/` 或 owning domain file；Journal、raw logs、用户可编辑文件和 artifact bytes 继续使用文件。workspace `.neko/.cache/` 不创建 SQLite 数据库或 canonical metadata manifest。
+
 ## 文档策略
 
 架构文档只描述当前决策、边界、不变量、风险和后果。不要把代码片段、命令输出、实现状态、路径索引或历史开发日志放进架构入口文档。

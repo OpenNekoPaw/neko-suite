@@ -119,6 +119,14 @@ Persistent project records store portable references:
 
 Persistent records must not store absolute machine paths unless explicitly scoped as local settings, nor transient runtime handles such as Webview URIs, blob URLs, stream IDs, or preview tokens.
 
+## Local Metadata And Workspace Identity
+
+Extension and TUI share one user-level database at `~/.neko/neko.db`. Machine-local state that must not be silently lost uses logical `state` ownership; rebuildable conversation, ResourceCache, Search, Entity/Asset, and catalog read models use logical `cache` ownership. They share one schema, migration, backup, and concurrency boundary while retaining separate transaction semantics.
+
+Remote SSH, Dev Containers, and Codespaces use the user home and `~/.neko/neko.db` of the Host where the Extension Host or TUI actually runs. This contract provides same-Host sharing and workspace rebinding only; it does not synchronize conversations, Tasks, or catalogs between local and remote machines, containers, or hosts.
+
+Every workspace-scoped row carries the stable UUID `workspaceId` from `.neko/workspace.json`. One Host resolver reconciles the descriptor with the user-database `workspaces` registry: deleting the descriptor restores the original UUID from one unique portable-locator match; moving a directory preserves its UUID; simultaneous old and new locators or ambiguous registry rows fail visibly and require an explicit clone/rebind decision. Identity recovery recreates only the descriptor, never optional config, memory, or other user-authored files. Absolute paths, the active workspace, VS Code Memento, Webview URIs, and cache paths are not cross-Host identity. Project facts remain in `neko/` or owning domain files; Journals, raw logs, user-editable content, and artifact bytes remain files. Workspace `.neko/.cache/` contains no SQLite database or canonical metadata manifest.
+
 ## Documentation Policy
 
 Architecture documentation should describe current decisions, boundaries, invariants, risks, and consequences. Do not add code snippets, command transcripts, implementation status, path indexes, or completed development logs to architecture entry documents.
