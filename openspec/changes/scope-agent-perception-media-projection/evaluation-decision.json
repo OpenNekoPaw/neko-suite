@@ -1,0 +1,77 @@
+{
+  "schema": "neko.agent-eval.authoring-decision.v2",
+  "behaviorId": "capability-tool-routing",
+  "decision": "update",
+  "suiteId": "agent-runtime.perception-routing",
+  "target": {
+    "kind": "capability",
+    "id": "perception-routing",
+    "contractHash": "sha256:a660bc6814e908a6ddc7534cf957f768e9d7d74583e4c2523949a36e62eb5e5f"
+  },
+  "userBehavior": "Analyze media once and continue the conversation without automatically replaying historical media bytes to the main chat model, while preserving explicit reinspection.",
+  "evidenceContract": {
+    "userBehavior": "Analyze media once and continue the conversation without automatically replaying historical media bytes to the main chat model, while preserving explicit reinspection.",
+    "canonicalPath": [
+      "TUI input queue",
+      "AgentSession",
+      "current-turn media read or perception",
+      "provider-aware message projection",
+      "text-only follow-up turn"
+    ],
+    "forbiddenFallback": [
+      "historical MultimodalContextPacket replay",
+      "historical PerceptionCard media reload",
+      "prompt-only assumption",
+      "direct Agent runner"
+    ],
+    "observables": [
+      {
+        "ref": "perception-projection-facts",
+        "kind": "runtime-fact",
+        "description": "Effective model, turn identity, projected native media counts, media-loader identities, Tool calls, runtime errors, and terminal idle facts from the canonical TUI owner.",
+        "required": true
+      }
+    ],
+    "expectedResult": "The originating turn projects requested media, a later text-only turn projects zero historical media, and explicit reinspection projects only the newly selected resource.",
+    "expectedFailure": "Historical packet/card replay, unrelated loader participation, model fallback, missing turn identity, runtime error, or incomplete terminal state fails visibly."
+  },
+  "coverageDelta": {
+    "schema": "neko.agent-eval.coverage-delta.v2",
+    "behaviorId": "capability-tool-routing",
+    "groups": [
+      {
+        "group": "canonical",
+        "disposition": "not-applicable",
+        "reason": "Existing perception-routing cases cover same-model and distinct-model canonical analysis routing; this change concerns later-turn lifecycle."
+      },
+      {
+        "group": "paraphrase",
+        "disposition": "not-applicable",
+        "reason": "No Prompt or Skill trigger wording changes."
+      },
+      { "group": "boundary", "disposition": "required" },
+      {
+        "group": "failure",
+        "disposition": "not-applicable",
+        "reason": "Current-turn unsupported and unavailable media failures retain existing deterministic coverage."
+      },
+      { "group": "workflow", "disposition": "required" },
+      {
+        "group": "artifact",
+        "disposition": "not-applicable",
+        "reason": "No artifact format or durable resource identity changes."
+      },
+      {
+        "group": "quality",
+        "disposition": "not-applicable",
+        "reason": "The defect concerns deterministic provider-input lifecycle, not subjective media quality."
+      },
+      { "group": "regression", "disposition": "required" },
+      {
+        "group": "holdout",
+        "disposition": "not-applicable",
+        "reason": "No Prompt or Skill optimization candidate is being tuned."
+      }
+    ]
+  }
+}
