@@ -1,0 +1,127 @@
+{
+  "schemaVersion": "neko.webview-functional.scenario.v1",
+  "id": "dashboard.skill-projection.p0",
+  "title": "Dashboard excludes feature-package command wrappers from installed Skills",
+  "ownerPackage": "neko-dashboard",
+  "tier": "p0",
+  "host": "vscode",
+  "platforms": ["darwin", "linux"],
+  "fixture": {
+    "workspace": "scripts/webview-functional/fixtures/dashboard",
+    "digestFiles": ["README.md"]
+  },
+  "extensions": [
+    {
+      "id": "neko.neko-dashboard",
+      "developmentPath": "packages/neko-dashboard"
+    },
+    {
+      "id": "neko.neko-cut",
+      "developmentPath": "packages/neko-cut"
+    },
+    {
+      "id": "neko.neko-engine",
+      "developmentPath": "packages/neko-engine"
+    },
+    {
+      "id": "neko.neko-tools",
+      "developmentPath": "packages/neko-tools"
+    },
+    {
+      "id": "neko.neko-preview",
+      "developmentPath": "packages/neko-preview"
+    }
+  ],
+  "prerequisites": [
+    {
+      "kind": "package-script",
+      "package": "neko-dashboard",
+      "script": "compile"
+    },
+    {
+      "kind": "package-script",
+      "package": "neko-cut",
+      "script": "compile"
+    },
+    {
+      "kind": "package-script",
+      "package": "neko-engine",
+      "script": "compile"
+    },
+    {
+      "kind": "package-script",
+      "package": "neko-tools",
+      "script": "compile"
+    },
+    {
+      "kind": "package-script",
+      "package": "neko-preview",
+      "script": "compile"
+    }
+  ],
+  "activation": {
+    "kind": "command",
+    "command": "neko.dashboard.show"
+  },
+  "target": {
+    "type": "iframe",
+    "extensionId": "neko.neko-dashboard"
+  },
+  "steps": [
+    {
+      "id": "wait-skill-panel",
+      "operation": "wait-visible",
+      "selector": {
+        "css": ".skill-list-panel",
+        "auditedSelectorReason": "The Dashboard installed-Skill panel owns the stable catalog count projection."
+      },
+      "timeoutMs": 60000
+    }
+  ],
+  "assertions": [
+    {
+      "id": "generate-video-command-wrapper-absent",
+      "kind": "hidden",
+      "selector": {
+        "css": "[data-skill-id=\"generate-video-clip\"]",
+        "auditedSelectorReason": "The stable Cut catalog id proves this feature-package command wrapper was filtered before Webview rendering."
+      }
+    },
+    {
+      "id": "transcribe-command-wrapper-absent",
+      "kind": "hidden",
+      "selector": {
+        "css": "[data-skill-id=\"transcribe-audio\"]",
+        "auditedSelectorReason": "The stable Cut catalog id proves a second command wrapper cannot leak into the installed-Skill list."
+      }
+    },
+    {
+      "id": "dashboard-command-observed",
+      "kind": "observation",
+      "event": "host.execute-command",
+      "source": "vscode-functional-controller"
+    },
+    {
+      "id": "no-runtime-errors",
+      "kind": "runtime-errors",
+      "expected": []
+    }
+  ],
+  "errorPolicy": {
+    "knownBenignWarningIds": [
+      "vscode-webview-local-network-access",
+      "vscode-webview-sandbox-same-origin-scripts",
+      "vscode-development-extension-marketplace-404"
+    ],
+    "expectedDiagnosticCodes": [],
+    "failOnConsoleWarning": true
+  },
+  "evidence": {
+    "domSnapshot": false,
+    "screenshot": false,
+    "logs": true,
+    "sideEffects": false
+  },
+  "timeoutMs": 60000,
+  "tags": ["dashboard", "skills", "catalog", "vscode", "p0"]
+}
