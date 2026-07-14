@@ -580,26 +580,6 @@ function buildInjectedCapabilitySet(
   const contributions: AgentCapabilityContribution[] = [];
   const contributionList = Array.from(registeredContributions);
 
-  if (context.ablation?.disableCapabilityInjection) {
-    for (const contribution of contributionList) {
-      diagnostics.push(
-        skipDiagnostic(
-          contribution,
-          'ablation-disabled',
-          'Capability injection is disabled by ablation.',
-        ),
-      );
-    }
-    return {
-      contributions,
-      promptFragments,
-      allowedTools,
-      slashCommands,
-      promptChainFragments,
-      diagnostics,
-    };
-  }
-
   const disabledIds = new Set(context.disabledContributionIds ?? []);
   const trust = new Set<AgentCapabilityTrustLevel>(
     context.allowedTrustLevels ?? ['core', 'community'],
@@ -614,14 +594,10 @@ function buildInjectedCapabilitySet(
     }
 
     contributions.push(contribution);
-    if (!context.ablation?.disablePromptFragments) {
-      promptFragments.push(...(contribution.promptFragments ?? []));
-    }
-    if (!context.ablation?.disableSkillInjection) {
-      slashCommands.push(...(contribution.slashCommands ?? []));
-      promptChainFragments.push(...(contribution.promptChainFragments ?? []));
-    }
-    if (!context.ablation?.disableToolInjection && remainingToolBudget > 0) {
+    promptFragments.push(...(contribution.promptFragments ?? []));
+    slashCommands.push(...(contribution.slashCommands ?? []));
+    promptChainFragments.push(...(contribution.promptChainFragments ?? []));
+    if (remainingToolBudget > 0) {
       for (const toolName of contribution.allowedTools ?? contribution.toolNames ?? []) {
         if (remainingToolBudget <= 0) break;
         if (!allowedTools.includes(toolName)) {
@@ -660,10 +636,6 @@ function projectSlashCommandCatalog(
     context.allowedTrustLevels ?? ['core', 'community'],
   );
   const slashCommands: AgentCapabilitySlashCommandContribution[] = [];
-
-  if (context.ablation?.disableCapabilityInjection || context.ablation?.disableSkillInjection) {
-    return slashCommands;
-  }
 
   for (const contribution of registeredContributions) {
     if (getInjectionSkipReason(contribution, context, disabledIds, trust)) {
@@ -1413,13 +1385,12 @@ function skipDiagnostic(
     reason,
     message,
     metadata: {
-      field: selectSkippedField(contribution, reason),
+      field: selectSkippedField(contribution),
     },
   };
 }
 
-function selectSkippedField(contribution: AgentCapabilityContribution, reason: string): string {
-  if (reason === 'ablation-disabled') return 'contribution';
+function selectSkippedField(contribution: AgentCapabilityContribution): string {
   if ((contribution.promptFragments?.length ?? 0) > 0) return 'promptFragments';
   if ((contribution.allowedTools?.length ?? 0) > 0 || (contribution.toolNames?.length ?? 0) > 0) {
     return 'tools';
@@ -1474,8 +1445,6 @@ function readMetadataStringArray(
 
 function toTelemetryReason(reason: string): AgentCapabilityTelemetryReason {
   switch (reason) {
-    case 'ablation-disabled':
-      return 'ablation-skipped';
     case 'host-requirement':
     case 'trust-policy':
     case 'creation-stage-requirement':
@@ -1497,7 +1466,6 @@ function createTelemetryReasonCounts(): Record<AgentCapabilityTelemetryReason, n
     'unsupported-field': 0,
     'withheld-field': 0,
     'policy-skipped': 0,
-    'ablation-skipped': 0,
   };
 }
 

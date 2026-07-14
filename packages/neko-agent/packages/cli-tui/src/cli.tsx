@@ -21,7 +21,6 @@ import {
   getProviderModels,
 } from './core/config';
 import type { CLIConfig } from './core/types';
-import { formatExperimentReport, runExperiment, type ExperimentSuiteName } from './core/experiment';
 import { CliWorkDirError, resolveCliWorkDir } from './core/cli-workdir';
 import { joinPromptParts, resolveDefaultCliInvocation } from './core/cli-invocation';
 import {
@@ -53,11 +52,9 @@ import {
   presentCliWorkDirDiagnostic,
   presentConfigLoadDiagnostic,
   presentConfigValidation,
-  presentExperimentFailure,
-  presentExperimentStart,
 } from './presentation/cli-process-presentation';
 
-export type CliCommandRuntimeClass = 'interactive-tui' | 'validation' | 'utility';
+export type CliCommandRuntimeClass = 'interactive-tui' | 'utility';
 
 export function classifyCliCommandRuntime(commandName: string | undefined): CliCommandRuntimeClass {
   switch (commandName) {
@@ -65,8 +62,6 @@ export function classifyCliCommandRuntime(commandName: string | undefined): CliC
     case 'interactive':
     case 'resume':
       return 'interactive-tui';
-    case 'experiment':
-      return 'validation';
     case 'completion':
     case 'config':
     case 'debug':
@@ -182,31 +177,6 @@ export function createCliProgram(terminal: AgentTerminalInvocationContext): Comm
       );
     },
   );
-
-  addLocaleOptions(
-    addInteractiveOptions(
-      addWorkDirOptions(
-        program
-          .command('experiment')
-          .description(t('agent.terminal.commander.command.experiment'))
-          .argument('<prompt...>', t('agent.terminal.commander.argument.experimentPrompt'))
-          .option('-s, --suite <suite>', t('agent.terminal.commander.option.suite'), 'standard')
-          .option('-r, --repetitions <n>', t('agent.terminal.commander.option.repetitions'), '1')
-          .option('-t, --timeout <ms>', t('agent.terminal.commander.option.timeout'))
-          .option('-o, --output-dir <dir>', t('agent.terminal.commander.option.outputDir'))
-          .option('-i, --isolation <mode>', t('agent.terminal.commander.option.isolation')),
-        terminal,
-      ),
-      terminal,
-    ),
-    terminal,
-  ).action(async (promptParts: string[], opts: Record<string, unknown>) => {
-    await runCliAction(
-      () =>
-        handleExperiment(joinRequiredPromptParts(promptParts, terminal), opts, program, terminal),
-      terminal,
-    );
-  });
 
   addLocaleOptions(
     addInteractiveOptions(
@@ -613,70 +583,6 @@ async function handleResume(
   });
 }
 
-async function handleExperiment(
-  prompt: string,
-  opts: Record<string, unknown>,
-  program: Command,
-  terminal: AgentTerminalInvocationContext,
-): Promise<void> {
-  const workDir = resolveCliWorkDir(withGlobalOptions(program, opts));
-  const config = loadHumanConfig(
-    workDir,
-    {
-      provider: opts['provider'] as string | undefined,
-      model: opts['model'] as string | undefined,
-      apiKey: opts['apiKey'] as string | undefined,
-    },
-    terminal,
-  );
-
-  const validation = validateConfig(config);
-  if (!validation.valid) {
-    for (const line of presentConfigValidation(validation.diagnostics, terminal.presentation, {
-      includeApiKeyHint: false,
-    })) {
-      console.error(chalk.red(line));
-    }
-    process.exit(1);
-  }
-
-  const suite = parseExperimentSuite(opts['suite'], terminal);
-  const repetitions = parsePositiveInteger(opts['repetitions'], '--repetitions', terminal);
-  const timeout = opts['timeout']
-    ? parsePositiveInteger(opts['timeout'], '--timeout', terminal)
-    : undefined;
-  const isolation = parseIsolationMode(opts['isolation'], terminal);
-
-  const experimentStart = presentExperimentStart(
-    { suite, repetitions, modelId: config.model, workDir: config.workDir },
-    terminal.presentation,
-  );
-  console.log(chalk.cyan.bold(`\n${experimentStart[0]}`));
-  for (const line of experimentStart.slice(1)) {
-    console.log(chalk.gray(line));
-  }
-
-  try {
-    const { result } = await runExperiment({
-      config,
-      prompt,
-      suite,
-      repetitions,
-      ...(timeout ? { timeout } : {}),
-      ...(typeof opts['outputDir'] === 'string' ? { outputDir: opts['outputDir'] } : {}),
-      ...(isolation ? { isolation } : {}),
-    });
-
-    console.log('');
-    console.log(formatExperimentReport(result));
-    process.exit(0);
-  } catch (error) {
-    const detail = error instanceof Error ? error.message : String(error);
-    console.error(chalk.red(presentExperimentFailure(detail, terminal.presentation)));
-    process.exit(1);
-  }
-}
-
 async function handleDebugAutomation(
   opts: Record<string, unknown>,
   program: Command,
@@ -703,67 +609,6 @@ async function handleDebugAutomation(
   } finally {
     await manager.disposeAll();
   }
-}
-
-function parseExperimentSuite(
-  value: unknown,
-  terminal: AgentTerminalInvocationContext,
-): ExperimentSuiteName {
-  if (value === 'standard' || value === 'group' || value === 'parameter') {
-    return value;
-  }
-  throw new Error(
-    presentCliProcessDiagnostic(
-      { code: 'invalid-experiment-suite', value: String(value) },
-      terminal.presentation,
-    ),
-  );
-}
-
-function parseIsolationMode(
-  value: unknown,
-  terminal: AgentTerminalInvocationContext,
-): 'none' | 'metadata-only' | 'workspace-root' | undefined {
-  if (value === undefined) return undefined;
-  if (value === 'none' || value === 'metadata-only' || value === 'workspace-root') {
-    return value;
-  }
-  throw new Error(
-    presentCliProcessDiagnostic(
-      { code: 'invalid-isolation-mode', value: String(value) },
-      terminal.presentation,
-    ),
-  );
-}
-
-function parsePositiveInteger(
-  value: unknown,
-  option: '--repetitions' | '--timeout',
-  terminal: AgentTerminalInvocationContext,
-): number {
-  const parsed = Number.parseInt(String(value), 10);
-  if (!Number.isFinite(parsed) || parsed <= 0) {
-    throw new Error(
-      presentCliProcessDiagnostic(
-        { code: 'invalid-positive-integer', option, value: String(value) },
-        terminal.presentation,
-      ),
-    );
-  }
-  return parsed;
-}
-
-function joinRequiredPromptParts(
-  parts: readonly string[] | undefined,
-  terminal: AgentTerminalInvocationContext,
-): string {
-  const prompt = joinPromptParts(parts);
-  if (!prompt) {
-    throw new Error(
-      presentCliProcessDiagnostic({ code: 'prompt-required' }, terminal.presentation),
-    );
-  }
-  return prompt;
 }
 
 function readProgramOption(opts: Record<string, unknown>): Command {
@@ -830,15 +675,7 @@ function generateCompletionScript(shell: CompletionShell): string {
   }
 }
 
-const COMPLETION_COMMANDS = [
-  'interactive',
-  'run',
-  'experiment',
-  'resume',
-  'completion',
-  'config',
-  'help',
-];
+const COMPLETION_COMMANDS = ['interactive', 'run', 'resume', 'completion', 'config', 'help'];
 
 const COMPLETION_OPTIONS = [
   '-C',

@@ -530,7 +530,7 @@
       "replacement": "Current RetryHooks tool retry path; provider/model routing remains owned by provider-router and media/service selection layers.",
       "removeAfter": "Removed after repo scan confirmed AgentExecutor and hook runner never call RetryHooks.tryFallback(), while createExecutorHooks only configures toolRetryPolicy for transient tool failures.",
       "tests": [
-        "pnpm --dir packages/neko-agent exec vitest run packages/agent/src/hooks/__tests__/executor-hooks-factory.test.ts packages/agent/src/experiment/__tests__/apply-toggles.integration.test.ts packages/agent/src/__tests__/standalone.test.ts",
+        "pnpm --dir packages/neko-agent exec vitest run packages/agent/src/hooks/__tests__/executor-hooks-factory.test.ts packages/agent/src/__tests__/standalone.test.ts",
         "rg -n \"multi-model fallback|model fallback|modelFallback|tryFallback|resetFallback|fallbackModels|maxFallbacks|onModelSwitch|currentModel\" packages/neko-agent/packages/agent/src"
       ],
       "notes": "This does not remove RetryHooks itself or runtime provider/model fallback contracts outside the executor hook chain."

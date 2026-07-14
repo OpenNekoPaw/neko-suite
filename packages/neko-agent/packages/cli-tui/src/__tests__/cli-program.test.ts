@@ -13,22 +13,23 @@ describe('createCliProgram', () => {
     expect(help).toContain('resume');
     expect(help).toContain('completion');
     expect(help).toContain('debug');
+    expect(help).not.toContain('experiment');
     expect(help).not.toContain('real-api-suite');
     expect(help).not.toContain('eval');
     expect(help).not.toContain('run');
   });
 
-  it('uses variadic prompt arguments for interactive and experiment commands', () => {
+  it('uses variadic prompt arguments for interactive and removes experiment aliases', () => {
     const program = createCliProgram(createTestAgentTerminalInvocationContext('en'));
     const interactive = program.commands.find((command) => command.name() === 'interactive');
-    const experiment = program.commands.find((command) => command.name() === 'experiment');
     const debug = program.commands.find((command) => command.name() === 'debug');
 
     expect(interactive?.helpInformation()).toContain(
       'Usage: neko interactive|i [options] [workDir] [prompt...]',
     );
     expect(program.commands.some((command) => command.name() === 'run')).toBe(false);
-    expect(experiment?.helpInformation()).toContain('Usage: neko experiment [options] <prompt...>');
+    expect(program.commands.some((command) => command.name() === 'experiment')).toBe(false);
+    expect(program.commands.flatMap((command) => command.aliases())).not.toContain('experiment');
     expect(program.commands.some((command) => command.name() === 'real-api-suite')).toBe(false);
     expect(program.commands.some((command) => command.name() === 'eval')).toBe(false);
     expect(debug?.helpInformation()).toContain('Local developer automation');
@@ -48,11 +49,13 @@ describe('createCliProgram', () => {
     expect(help).toContain('Optional prompt to submit after resume');
   });
 
-  it('classifies validation and utility commands separately from interactive TUI ownership', () => {
+  it('classifies utility commands separately from interactive TUI ownership', () => {
     expect(classifyCliCommandRuntime(undefined)).toBe('interactive-tui');
     expect(classifyCliCommandRuntime('interactive')).toBe('interactive-tui');
     expect(classifyCliCommandRuntime('resume')).toBe('interactive-tui');
-    expect(classifyCliCommandRuntime('experiment')).toBe('validation');
+    expect(() => classifyCliCommandRuntime('experiment')).toThrow(
+      'Unknown CLI command runtime class',
+    );
     expect(classifyCliCommandRuntime('completion')).toBe('utility');
     expect(classifyCliCommandRuntime('debug')).toBe('utility');
     expect(() => classifyCliCommandRuntime('run')).toThrow('Unknown CLI command runtime class');
@@ -93,7 +96,6 @@ describe('createCliProgram', () => {
 
       Commands:
         interactive|i [options] [workDir] [prompt...]  Start interactive TUI mode
-        experiment [options] <prompt...>               Run ablation experiments and write JSON/Markdown reports
         resume [options] [id] [prompt...]              Resume a previous interactive session
         completion [options] [shell]                   Generate shell completion scripts
         config                                         Manage configuration
@@ -126,7 +128,6 @@ describe('createCliProgram', () => {
 
       命令：
         interactive|i [options] [workDir] [prompt...]  启动交互式 TUI 模式
-        experiment [options] <prompt...>               运行消融实验并写入 JSON/Markdown 报告
         resume [options] [id] [prompt...]              恢复之前的交互会话
         completion [options] [shell]                   生成 shell 补全脚本
         config                                         管理配置

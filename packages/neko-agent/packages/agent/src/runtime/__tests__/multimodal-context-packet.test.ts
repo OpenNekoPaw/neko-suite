@@ -313,7 +313,7 @@ describe('multimodal-context-packet runtime', () => {
     });
   });
 
-  it('supports summary-only injection and evidence feedback ablation', () => {
+  it('supports summary-only injection and evidence feedback policy', () => {
     const feedback = createToolProducedMultimodalEvidenceFeedback({
       toolCallId: 'tool-1',
       attachments: [{ type: 'video', path: '${WORKSPACE}/clip.mp4', mimeType: 'video/mp4' }],
@@ -321,13 +321,12 @@ describe('multimodal-context-packet runtime', () => {
     const included = applyEvidenceFeedbackPolicy(feedback, { includeEvidence: true });
     const withheld = applyEvidenceFeedbackPolicy(feedback, {
       includeEvidence: false,
-      ablationDisabled: true,
     });
 
     expect(summarizeEvidenceFeedback(included)).toContain('Feedback evidence included');
     expect(withheld[0]).toMatchObject({
       withheld: true,
-      withheldReason: 'ablation',
+      withheldReason: 'policy',
     });
   });
 

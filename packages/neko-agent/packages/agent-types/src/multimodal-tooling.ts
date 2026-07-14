@@ -33,7 +33,7 @@ export interface AgentMultimodalEvidenceRef {
 }
 
 export type AgentMultimodalEvidenceWithheldReason =
-  'policy' | 'ablation' | 'payload-too-large' | 'unsupported-modality' | 'missing-payload';
+  'policy' | 'payload-too-large' | 'unsupported-modality' | 'missing-payload';
 
 export interface AgentMultimodalPacketLinkage {
   readonly conversationId?: string;
@@ -71,7 +71,6 @@ export interface AgentMultimodalEvidenceFeedbackPolicy {
   readonly includePayloads?: boolean;
   readonly allowedModalities?: readonly AgentMediaModality[];
   readonly maxPayloadBytes?: number;
-  readonly ablationDisabled?: boolean;
 }
 
 export interface AgentMediaPayloadRequest {

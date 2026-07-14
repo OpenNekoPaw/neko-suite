@@ -70,15 +70,6 @@ export interface SkillInjectionCoordinatorDeps {
 
   /** Locale used when rendering prompt modules for Track A. */
   getLocale?: () => PromptContext['locale'];
-
-  /**
-   * When false, `apply()` becomes a no-op — skills can still be matched and
-   * activated via ISkillProvider, but nothing is injected into the prompt,
-   * no permission rules are added, and no ToolSets are auto-activated.
-   * Used by the ablation framework to measure the contribution of skill
-   * injection independent of skill discovery. Default: true.
-   */
-  enableInjection?: boolean;
 }
 
 /**
@@ -128,7 +119,6 @@ export class SkillInjectionCoordinator {
       allowedToolCount: injection.allowedTools?.length ?? 0,
       allowedTools: injection.allowedTools ?? [],
       hasModelOverride: injection.model !== undefined,
-      injectionEnabled: this._deps.enableInjection !== false,
     });
     logger.debug('neko.agent.skill.injection.request.raw', {
       skillName: injection.name,
@@ -138,19 +128,6 @@ export class SkillInjectionCoordinator {
       model: injection.model,
       skill,
     });
-
-    // Ablation: when injection is disabled, short-circuit. Callers can still
-    // observe the call succeeded (no throw) but no state changes — consistent
-    // with "skill discovered but not injected" semantics.
-    if (this._deps.enableInjection === false) {
-      logger.debug('neko.agent.skill.injection.skipped', {
-        skillName: injection.name,
-        type: injection.type,
-        reason: 'disabled-by-ablation',
-        durationMs: Date.now() - startTime,
-      });
-      return;
-    }
 
     // Auto-cleanup previous injection to prevent accumulation
     if (this._activeInjection) {

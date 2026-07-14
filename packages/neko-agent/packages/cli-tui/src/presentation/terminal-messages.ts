@@ -13,8 +13,6 @@ export const CLI_TERMINAL_MESSAGES_EN = {
   'agent.terminal.commander.versionOption': 'Output the version number',
   'agent.terminal.commander.program.description': 'Neko AI Agent — Professional Terminal UI',
   'agent.terminal.commander.command.interactive': 'Start interactive TUI mode',
-  'agent.terminal.commander.command.experiment':
-    'Run ablation experiments and write JSON/Markdown reports',
   'agent.terminal.commander.command.resume': 'Resume a previous interactive session',
   'agent.terminal.commander.command.completion': 'Generate shell completion scripts',
   'agent.terminal.commander.command.config': 'Manage configuration',
@@ -28,8 +26,6 @@ export const CLI_TERMINAL_MESSAGES_EN = {
   'agent.terminal.commander.argument.workDir':
     'Working directory for workspace config and file tools',
   'agent.terminal.commander.argument.startupPrompt': 'Optional user prompt to submit after startup',
-  'agent.terminal.commander.argument.experimentPrompt':
-    'Prompt to use for every experiment variant',
   'agent.terminal.commander.argument.resumeId':
     'Conversation id to resume; omit to continue the most recent',
   'agent.terminal.commander.argument.resumePrompt': 'Optional prompt to submit after resume',
@@ -47,12 +43,6 @@ export const CLI_TERMINAL_MESSAGES_EN = {
     'Built-in Agent prompt language (auto, en, zh-cn)',
   'agent.terminal.commander.option.resume':
     'Resume a previous conversation (omit id to continue the most recent)',
-  'agent.terminal.commander.option.suite': 'Suite (standard, group, parameter)',
-  'agent.terminal.commander.option.repetitions': 'Repetitions per variant',
-  'agent.terminal.commander.option.timeout': 'Timeout per variant in milliseconds',
-  'agent.terminal.commander.option.outputDir': 'Output directory (default: .neko/experiments)',
-  'agent.terminal.commander.option.isolation':
-    'Isolation mode (none, metadata-only, workspace-root)',
   'agent.terminal.commander.option.last': 'Continue the most recent conversation',
   'agent.terminal.commander.option.configProvider': 'Provider to list models for',
   'agent.terminal.commander.option.stdio': 'Use newline-delimited JSON over stdio',
@@ -155,13 +145,6 @@ export const CLI_TERMINAL_MESSAGES_EN = {
   'agent.terminal.cli.validation.apiKeyExport': '  export ANTHROPIC_API_KEY=sk-ant-...',
   'agent.terminal.cli.validation.or': '  # or',
   'agent.terminal.cli.validation.configUpdate': '  update ~/.neko/config.toml',
-  'agent.terminal.cli.diagnostic.invalidExperimentSuite':
-    'Invalid experiment suite "{value}". Expected: standard, group, or parameter.',
-  'agent.terminal.cli.diagnostic.invalidIsolationMode':
-    'Invalid isolation mode "{value}". Expected: none, metadata-only, or workspace-root.',
-  'agent.terminal.cli.diagnostic.invalidPositiveInteger':
-    'Invalid value "{value}" for {option}. Expected a positive integer.',
-  'agent.terminal.cli.diagnostic.promptRequired': 'A prompt is required.',
   'agent.terminal.cli.diagnostic.resumeNotFound':
     'No saved TUI conversation was found in work directory: {path}',
   'agent.terminal.cli.diagnostic.invalidCompletionShell':
@@ -181,12 +164,6 @@ export const CLI_TERMINAL_MESSAGES_EN = {
     'Conflicting working directories: {firstOption} {firstPath} differs from {secondOption} {secondPath}',
   'agent.terminal.cli.workDir.missingDirectory': 'Working directory does not exist: {path}',
   'agent.terminal.cli.workDir.notDirectory': 'Working directory is not a directory: {path}',
-  'agent.terminal.cli.experiment.header': 'Running ablation experiment',
-  'agent.terminal.cli.experiment.suite': '  Suite: {suite}',
-  'agent.terminal.cli.experiment.repetitions': '  Repetitions: {count}',
-  'agent.terminal.cli.experiment.model': '  Model: {modelId}',
-  'agent.terminal.cli.experiment.workDir': '  WorkDir: {path}',
-  'agent.terminal.cli.experiment.failed': 'Experiment failed: {detail}',
   'agent.terminal.suggestion.command.mode': 'Show or switch session mode',
   'agent.terminal.suggestion.command.model': 'List or switch the current chat model',
   'agent.terminal.suggestion.command.media': 'List or switch image/video/audio models',
@@ -894,7 +871,6 @@ export const CLI_TERMINAL_MESSAGES_ZH_CN = {
   'agent.terminal.commander.versionOption': '输出版本号',
   'agent.terminal.commander.program.description': 'Neko AI Agent — 专业终端界面',
   'agent.terminal.commander.command.interactive': '启动交互式 TUI 模式',
-  'agent.terminal.commander.command.experiment': '运行消融实验并写入 JSON/Markdown 报告',
   'agent.terminal.commander.command.resume': '恢复之前的交互会话',
   'agent.terminal.commander.command.completion': '生成 shell 补全脚本',
   'agent.terminal.commander.command.config': '管理配置',
@@ -906,7 +882,6 @@ export const CLI_TERMINAL_MESSAGES_ZH_CN = {
   'agent.terminal.commander.argument.initialPrompt': '启动会话时可选提交的用户提示词',
   'agent.terminal.commander.argument.workDir': '工作区配置和文件工具使用的工作目录',
   'agent.terminal.commander.argument.startupPrompt': '启动后可选提交的用户提示词',
-  'agent.terminal.commander.argument.experimentPrompt': '所有实验变体使用的提示词',
   'agent.terminal.commander.argument.resumeId': '要恢复的对话 ID；省略则继续最近的对话',
   'agent.terminal.commander.argument.resumePrompt': '恢复后可选提交的提示词',
   'agent.terminal.commander.argument.shell': 'Shell 类型（bash、zsh、fish）',
@@ -919,11 +894,6 @@ export const CLI_TERMINAL_MESSAGES_ZH_CN = {
   'agent.terminal.commander.option.uiLocale': '终端语言（auto、en、zh-cn）',
   'agent.terminal.commander.option.promptLocale': '内置 Agent 提示词语言（auto、en、zh-cn）',
   'agent.terminal.commander.option.resume': '恢复之前的对话（省略 ID 则继续最近的对话）',
-  'agent.terminal.commander.option.suite': '实验套件（standard、group、parameter）',
-  'agent.terminal.commander.option.repetitions': '每个变体的重复次数',
-  'agent.terminal.commander.option.timeout': '每个变体的超时时间（毫秒）',
-  'agent.terminal.commander.option.outputDir': '输出目录（默认：.neko/experiments）',
-  'agent.terminal.commander.option.isolation': '隔离模式（none、metadata-only、workspace-root）',
   'agent.terminal.commander.option.last': '继续最近的对话',
   'agent.terminal.commander.option.configProvider': '要列出模型的提供者',
   'agent.terminal.commander.option.stdio': '通过 stdio 使用换行分隔的 JSON',
@@ -1020,13 +990,6 @@ export const CLI_TERMINAL_MESSAGES_ZH_CN = {
   'agent.terminal.cli.validation.apiKeyExport': '  export ANTHROPIC_API_KEY=sk-ant-...',
   'agent.terminal.cli.validation.or': '  # 或',
   'agent.terminal.cli.validation.configUpdate': '  更新 ~/.neko/config.toml',
-  'agent.terminal.cli.diagnostic.invalidExperimentSuite':
-    '无效的实验套件“{value}”。应为 standard、group 或 parameter。',
-  'agent.terminal.cli.diagnostic.invalidIsolationMode':
-    '无效的隔离模式“{value}”。应为 none、metadata-only 或 workspace-root。',
-  'agent.terminal.cli.diagnostic.invalidPositiveInteger':
-    '{option} 的值“{value}”无效。应为正整数。',
-  'agent.terminal.cli.diagnostic.promptRequired': '必须提供提示词。',
   'agent.terminal.cli.diagnostic.resumeNotFound': '工作目录中没有已保存的 TUI 对话：{path}',
   'agent.terminal.cli.diagnostic.invalidCompletionShell':
     '无效的 shell“{value}”。应为 bash、zsh 或 fish。',
@@ -1044,12 +1007,6 @@ export const CLI_TERMINAL_MESSAGES_ZH_CN = {
     '工作目录冲突：{firstOption} {firstPath} 与 {secondOption} {secondPath} 不一致',
   'agent.terminal.cli.workDir.missingDirectory': '工作目录不存在：{path}',
   'agent.terminal.cli.workDir.notDirectory': '工作目录不是目录：{path}',
-  'agent.terminal.cli.experiment.header': '正在运行消融实验',
-  'agent.terminal.cli.experiment.suite': '  套件：{suite}',
-  'agent.terminal.cli.experiment.repetitions': '  重复次数：{count}',
-  'agent.terminal.cli.experiment.model': '  模型：{modelId}',
-  'agent.terminal.cli.experiment.workDir': '  工作目录：{path}',
-  'agent.terminal.cli.experiment.failed': '实验失败：{detail}',
   'agent.terminal.suggestion.command.mode': '显示或切换会话模式',
   'agent.terminal.suggestion.command.model': '列出或切换当前对话模型',
   'agent.terminal.suggestion.command.media': '列出或切换图像、视频、音频模型',

@@ -1,0 +1,35 @@
+diff --git a/packages/neko-skills/src/builtins/creation-persona.ts b/packages/neko-skills/src/builtins/creation-persona.ts
+--- a/packages/neko-skills/src/builtins/creation-persona.ts
++++ b/packages/neko-skills/src/builtins/creation-persona.ts
+@@ -74,29 +74,6 @@ from the user's images, video, audio, data, text, and project context.
+ - If confidence is low, say what is uncertain and suggest the smallest useful
+   evidence source (runtime evidence or user clarification) instead of inventing certainty.
+-
++
+-## Rationale
+-
+-Every Proposal, Draft, and Plan should make the creative reason traceable:
+-
+-- State the decision you are making.
+-- Name the observation(s) that support it.
+-- Mention optional evidence only when it materially changes or verifies the
+-  judgment.
+-- Preserve the "why" in Draft; Plan may be more operational, but must still be
+-  traceable to the approved Draft.
+-
+-## How to present drafts
+-
+-Good Drafts have three layers:
+-
+-1. **Intent** — what the user asked for, restated
+-2. **Approach** — which atomic capabilities / stages / ordering you chose, and why
+-3. **Concrete artifact** — the actual shot list, prompt list, style sheet, etc.
+-
+-Always include the "why" — the Draft is the carrier of creative reasoning.
+-When the Plan stage derives a Task checklist, the "why" is stripped; that is
+-why you write it in the Draft.
+-
+ ## When Apply reports back
+-
++
+ - **Success**: summarize what was produced in user-facing language. Suggest next

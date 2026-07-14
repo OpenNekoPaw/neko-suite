@@ -9,14 +9,6 @@ import { formatTerminalDiagnosticLiteral } from './diagnostic-literal';
 type PresentationContext = AgentTerminalPresentationContext<AgentTerminalMessageKey>;
 
 export type CliProcessDiagnostic =
-  | Readonly<{ readonly code: 'invalid-experiment-suite'; readonly value: string }>
-  | Readonly<{ readonly code: 'invalid-isolation-mode'; readonly value: string }>
-  | Readonly<{
-      readonly code: 'invalid-positive-integer';
-      readonly option: '--repetitions' | '--timeout';
-      readonly value: string;
-    }>
-  | Readonly<{ readonly code: 'prompt-required' }>
   | Readonly<{ readonly code: 'resume-not-found'; readonly workDir: string }>
   | Readonly<{ readonly code: 'invalid-completion-shell'; readonly value: string }>
   | Readonly<{ readonly code: 'debug-stdio-required' }>;
@@ -69,21 +61,6 @@ export function presentCliProcessDiagnostic(
   context: PresentationContext,
 ): string {
   switch (diagnostic.code) {
-    case 'invalid-experiment-suite':
-      return context.t('agent.terminal.cli.diagnostic.invalidExperimentSuite', {
-        value: diagnostic.value,
-      });
-    case 'invalid-isolation-mode':
-      return context.t('agent.terminal.cli.diagnostic.invalidIsolationMode', {
-        value: diagnostic.value,
-      });
-    case 'invalid-positive-integer':
-      return context.t('agent.terminal.cli.diagnostic.invalidPositiveInteger', {
-        option: diagnostic.option,
-        value: diagnostic.value,
-      });
-    case 'prompt-required':
-      return context.t('agent.terminal.cli.diagnostic.promptRequired');
     case 'resume-not-found':
       return context.t('agent.terminal.cli.diagnostic.resumeNotFound', {
         path: diagnostic.workDir,
@@ -353,30 +330,6 @@ function presentConfigValidationDiagnostic(
         value: diagnostic.value,
       });
   }
-}
-
-export function presentExperimentFailure(detail: string, context: PresentationContext): string {
-  return context.t('agent.terminal.cli.experiment.failed', { detail });
-}
-
-export function presentExperimentStart(
-  input: {
-    readonly suite: string;
-    readonly repetitions: number;
-    readonly modelId: string;
-    readonly workDir: string;
-  },
-  context: PresentationContext,
-): readonly string[] {
-  return [
-    context.t('agent.terminal.cli.experiment.header'),
-    context.t('agent.terminal.cli.experiment.suite', { suite: input.suite }),
-    context.t('agent.terminal.cli.experiment.repetitions', {
-      count: context.format.count(input.repetitions),
-    }),
-    context.t('agent.terminal.cli.experiment.model', { modelId: input.modelId }),
-    context.t('agent.terminal.cli.experiment.workDir', { path: input.workDir }),
-  ];
 }
 
 function createLocalizedHelpConfiguration(context: PresentationContext): HelpConfiguration {

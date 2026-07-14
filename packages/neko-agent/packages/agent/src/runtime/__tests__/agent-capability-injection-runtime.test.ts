@@ -744,13 +744,6 @@ describe('agent-capability-injection-runtime', () => {
       'trust-policy',
       'disabled',
     ]);
-
-    expect(
-      runtime.inject({
-        host: 'vscode',
-        ablation: { disableCapabilityInjection: true },
-      }).contributions,
-    ).toEqual([]);
   });
 
   it('skips injection by creation stage and permission policy before prompt/tool injection', () => {
@@ -935,18 +928,12 @@ describe('agent-capability-injection-runtime', () => {
       host: 'vscode',
       permissionPolicy: { allowedScopes: [] },
     });
-    runtime.inject({
-      host: 'vscode',
-      ablation: { disableCapabilityInjection: true },
-    });
-
     const snapshot = runtime.getTelemetrySnapshot();
     expect(snapshot.fieldCounts).toMatchObject({
       used: expect.any(Number),
       'unknown-field': 1,
       'unsupported-field': 1,
       'policy-skipped': 1,
-      'ablation-skipped': 1,
     });
     expect(snapshot.events).toEqual(
       expect.arrayContaining([
@@ -956,7 +943,6 @@ describe('agent-capability-injection-runtime', () => {
           reason: 'unsupported-field',
         }),
         expect.objectContaining({ reason: 'policy-skipped' }),
-        expect.objectContaining({ reason: 'ablation-skipped' }),
         expect.objectContaining({ field: 'promptFragments', hash: expect.any(String) }),
       ]),
     );

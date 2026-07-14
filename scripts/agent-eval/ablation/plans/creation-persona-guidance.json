@@ -1,0 +1,175 @@
+{
+  "schema": "neko.agent-eval.ablation-plan.v1",
+  "id": "creation-persona-guidance-pilot",
+  "mode": "implementation",
+  "suiteId": "skill.creation-persona",
+  "caseId": "draft-rain-station-concept",
+  "baselineVariantId": "base-guidance",
+  "matrix": { "strategy": "focused", "maxVariants": 2 },
+  "repetitions": 3,
+  "comparisonPolicy": {
+    "retainEverySample": true,
+    "correctnessDominates": true,
+    "metrics": [
+      "pass-rate",
+      "hard-gates",
+      "tokens",
+      "cost",
+      "latency-p50",
+      "latency-p95",
+      "iterations",
+      "tool-calls",
+      "tool-success",
+      "retries",
+      "task-count",
+      "task-success"
+    ],
+    "quality": {
+      "kind": "scenario-rubric",
+      "rubricRef": "rubrics/rain-station-draft-quality.json"
+    }
+  },
+  "variants": [
+    {
+      "id": "base-guidance",
+      "role": "baseline",
+      "kind": "implementation",
+      "description": "Canonical creation-persona guidance from the isolated base revision.",
+      "changes": [],
+      "skillIdentity": {
+        "name": "creation-persona",
+        "source": "builtin",
+        "provenance": "builtin",
+        "rootId": "builtin-skills",
+        "relativePath": "creation-persona",
+        "fingerprint": "sha256:9c2afdf3044714259a7edc85671b6ac77daa9bb3c147dfe704b7b4c108085c34"
+      },
+      "developmentCheckpoint": {
+        "kind": "git-revision",
+        "ref": "70d98e5074fd6963c752ce43c269bf6d3a74a2b6",
+        "fingerprint": "sha256:9c2afdf3044714259a7edc85671b6ac77daa9bb3c147dfe704b7b4c108085c34"
+      },
+      "buildTarget": {
+        "sourceRevision": "70d98e5074fd6963c752ce43c269bf6d3a74a2b6",
+        "sourceFingerprint": "sha256:52c7292bbf5bf20f7cd023c1ab64be080fd659e29477a4a1aebdb3a4e4057895",
+        "buildRecipeFingerprint": "sha256:73170231c97efa997838144ddc73024225ae697808eec4f5231ab12016a6e890",
+        "buildCommands": [
+          {
+            "command": "pnpm",
+            "args": ["install", "--offline", "--frozen-lockfile"],
+            "timeoutMs": 600000
+          },
+          {
+            "command": "pnpm",
+            "args": [
+              "--filter",
+              "@neko/cli",
+              "exec",
+              "esbuild",
+              "src/cli.tsx",
+              "--bundle",
+              "--platform=node",
+              "--target=node18",
+              "--format=esm",
+              "--outfile=dist/cli.js",
+              "--minify",
+              "--external:fsevents",
+              "--external:ink",
+              "--external:react",
+              "--external:yoga-wasm-web",
+              "--banner:js=import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);"
+            ],
+            "timeoutMs": 600000
+          }
+        ],
+        "executablePath": "packages/neko-agent/packages/cli-tui/dist/cli.js",
+        "launchCommand": { "command": "node", "args": ["{executable}"] }
+      },
+      "expectedPath": [
+        "detached Git worktree",
+        "isolated TUI build",
+        "TUI App session owner",
+        "Skill lifecycle",
+        "session.facts"
+      ],
+      "forbiddenFallback": [
+        "working-tree executable",
+        "direct AgentSession runner",
+        "__ablation marker",
+        "experiment preset"
+      ]
+    },
+    {
+      "id": "without-rationale-guidance",
+      "role": "variant",
+      "kind": "implementation",
+      "description": "Recreates the old no-creation-profile-guidance intent by removing only the Rationale and Draft-presentation method from creation-persona in an isolated patch.",
+      "changes": ["skill-content"],
+      "skillIdentity": {
+        "name": "creation-persona",
+        "source": "builtin",
+        "provenance": "builtin",
+        "rootId": "builtin-skills",
+        "relativePath": "creation-persona",
+        "fingerprint": "sha256:e2f33fe4a83bba4ce63b7bf37c949ef5f731d690e60bf88be2fac2fd9934d450"
+      },
+      "developmentCheckpoint": {
+        "kind": "working-tree-patch",
+        "ref": "scripts/agent-eval/ablation/patches/creation-persona-without-rationale.patch",
+        "fingerprint": "sha256:e2f33fe4a83bba4ce63b7bf37c949ef5f731d690e60bf88be2fac2fd9934d450"
+      },
+      "buildTarget": {
+        "sourceRevision": "70d98e5074fd6963c752ce43c269bf6d3a74a2b6",
+        "sourceFingerprint": "sha256:52c7292bbf5bf20f7cd023c1ab64be080fd659e29477a4a1aebdb3a4e4057895",
+        "buildRecipeFingerprint": "sha256:123a298ce9e0663feb1cdfff4d344fce1451b227dc64b7a3eca02dd0c93e717a",
+        "buildCommands": [
+          {
+            "command": "pnpm",
+            "args": ["install", "--offline", "--frozen-lockfile"],
+            "timeoutMs": 600000
+          },
+          {
+            "command": "pnpm",
+            "args": [
+              "--filter",
+              "@neko/cli",
+              "exec",
+              "esbuild",
+              "src/cli.tsx",
+              "--bundle",
+              "--platform=node",
+              "--target=node18",
+              "--format=esm",
+              "--outfile=dist/cli.js",
+              "--minify",
+              "--external:fsevents",
+              "--external:ink",
+              "--external:react",
+              "--external:yoga-wasm-web",
+              "--banner:js=import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);"
+            ],
+            "timeoutMs": 600000
+          }
+        ],
+        "executablePath": "packages/neko-agent/packages/cli-tui/dist/cli.js",
+        "launchCommand": { "command": "node", "args": ["{executable}"] },
+        "patchFile": "scripts/agent-eval/ablation/patches/creation-persona-without-rationale.patch",
+        "patchFingerprint": "sha256:f6b5dbb019f22f9bb4806da66e299b03f2188be17093fc5b6a322ec049ad4ebc"
+      },
+      "expectedPath": [
+        "detached Git worktree",
+        "isolated Skill patch",
+        "isolated TUI build",
+        "TUI App session owner",
+        "Skill lifecycle",
+        "session.facts"
+      ],
+      "forbiddenFallback": [
+        "working-tree executable",
+        "direct AgentSession runner",
+        "__ablation marker",
+        "experiment preset"
+      ]
+    }
+  ]
+}

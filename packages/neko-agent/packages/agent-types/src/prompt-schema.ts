@@ -64,14 +64,6 @@ export interface PromptGenerationContext {
   readonly multimodalEvidenceRefs?: readonly AgentMultimodalEvidenceRef[];
   readonly toolSchemas?: readonly ToolDefinition[];
   readonly requestedSchemaPurposes?: readonly GeneratedSchemaPurpose[];
-  readonly ablation?: {
-    readonly disablePromptSchemaGenerator?: boolean;
-    readonly disablePromptFragments?: boolean;
-    readonly disableDynamicToolSchemas?: boolean;
-    readonly disableStructuredOutputSchemas?: boolean;
-    readonly disableMultimodalContext?: boolean;
-    readonly disableMultimodalEvidenceFeedback?: boolean;
-  };
 }
 
 export interface GeneratedPromptSection {

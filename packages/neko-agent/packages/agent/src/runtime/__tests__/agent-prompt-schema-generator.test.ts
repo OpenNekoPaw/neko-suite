@@ -235,7 +235,7 @@ describe('agent-prompt-schema-generator', () => {
     expect(bundle.prompt).toContain('Provider expression profiles: provider-expression:flux@1.0.0');
   });
 
-  it('reports skipped fragments, missing tool schemas, provider incompatibility, and multimodal ablation', () => {
+  it('reports skipped fragments, missing tool schemas, and provider incompatibility', () => {
     const bundle = generate({
       basePrompt: 'BASE',
       multimodalContextSummary: 'Video evidence',
@@ -249,7 +249,6 @@ describe('agent-prompt-schema-generator', () => {
       multimodalEvidenceRefs: [
         { id: 'evidence-1', source: 'tool', modality: 'image', summary: 'Preview' },
       ],
-      ablation: { disableMultimodalContext: true, disableMultimodalEvidenceFeedback: true },
     });
 
     expect(bundle.schemaBundle.toolSchemas).toEqual([]);
@@ -257,35 +256,14 @@ describe('agent-prompt-schema-generator', () => {
     expect(bundle.diagnostics.map((diagnostic) => diagnostic.reason)).toEqual([
       'prompt-fragment-skipped',
       'provider-fragment-skipped',
-      'multimodal-evidence-feedback-skipped',
-      'multimodal-context-skipped',
       'provider-incompatible-tool-schemas',
       'provider-incompatible-structured-output',
     ]);
-  });
-
-  it('can disable prompt/schema generation through ablation without host dependencies', () => {
-    const bundle = generate({
-      basePrompt: 'BASE',
-      injectedCapabilities: injected({
-        promptFragments: [{ id: 'skill:test', content: 'SKILL' }],
-        allowedTools: ['write_plan'],
-      }),
-      toolSchemas: [toolSchema],
-      ablation: { disablePromptSchemaGenerator: true },
-    });
-
-    expect(bundle.prompt).toBe('BASE');
-    expect(bundle.sections).toEqual([
-      { id: 'base', layer: 'base', content: 'BASE', priority: 100 },
-    ]);
-    expect(bundle.diagnostics).toEqual([
-      {
-        phase: 'injection',
-        code: 'agent.prompt-schema.generator-disabled',
-        reason: 'generator-disabled',
-        message: 'Prompt/schema generation is disabled by ablation.',
-      },
+    expect(bundle.sections.map((section) => section.id)).toEqual([
+      'base',
+      'schema:structured-output',
+      'ephemeral:multimodal-evidence-feedback',
+      'ephemeral:multimodal-context',
     ]);
   });
 });

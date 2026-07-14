@@ -83,7 +83,7 @@ describe('multimodal-message-projection', () => {
             modality: 'video',
             summary: 'Motion score',
             withheld: true,
-            withheldReason: 'ablation',
+            withheldReason: 'policy',
           },
         ],
       },
@@ -96,7 +96,7 @@ describe('multimodal-message-projection', () => {
           type: 'text',
           text:
             'Included feedback evidence: evidence-image [image] Generated style frame\n' +
-            'Withheld feedback evidence: evidence-video [video] Motion score (ablation)',
+            'Withheld feedback evidence: evidence-video [video] Motion score (policy)',
         },
       ],
     });

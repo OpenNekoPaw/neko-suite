@@ -19,6 +19,33 @@ function hasQuotedIdentity(source: string, identity: string): boolean {
 }
 
 describe('agent architecture boundary guards', () => {
+  it('keeps retired experiment command, exports, markers, and runtime branches absent', () => {
+    expect(existsSync(join(agentSrc, 'experiment'))).toBe(false);
+
+    const agentProductionSource = stripTypeScriptComments(
+      readSourceFiles(agentSrc, (file) => !isTestFile(file)),
+    );
+    for (const retiredSymbol of [
+      'ExperimentRunner',
+      'AblationToggles',
+      'AblationMarkerHook',
+      'applyAblationToggles',
+      'extractAblationMarker',
+      '__ablation',
+    ]) {
+      expect(agentProductionSource).not.toContain(retiredSymbol);
+    }
+
+    const agentRoot = readFileSync(join(agentSrc, 'index.ts'), 'utf-8');
+    expect(agentRoot).not.toMatch(/from ['"]\.\/experiment/u);
+
+    const cliProductionSource = stripTypeScriptComments(
+      readSourceFiles(cliTuiSrc, (file) => !isTestFile(file)),
+    );
+    expect(cliProductionSource).not.toMatch(/\.command\(['"]experiment['"]\)/u);
+    expect(cliProductionSource).not.toMatch(/core\/experiment/u);
+  });
+
   it('keeps retired JSON and Memento metadata stores out of public and Host runtime paths', () => {
     const forbiddenRuntimeSymbols = [
       'ConversationIndexStore',
@@ -1440,7 +1467,6 @@ const allowedAgentSessionFieldNames = new Set([
   '_currentTurnPlanningContext',
   '_memoryRecall',
   '_pendingConfirmations',
-  '_ablationMarker',
 ]);
 
 const approvedAgentSessionCollaboratorFields = new Set([

@@ -105,8 +105,6 @@ export class RetryHooks implements ExecutorHooks {
 export interface MemoryHooksOptions {
   /** Conversation compressor for turn-aware token management */
   compressor?: IConversationCompressor;
-  /** Disable compression in beforeThink (for ablation experiments) */
-  disableCompression?: boolean;
 }
 
 /**
@@ -115,16 +113,14 @@ export interface MemoryHooksOptions {
 export class MemoryHooks implements ExecutorHooks {
   name = 'memory';
   private compressor?: IConversationCompressor;
-  private disableCompression: boolean;
 
   constructor(options: MemoryHooksOptions = {}) {
     this.compressor = options.compressor;
-    this.disableCompression = options.disableCompression ?? false;
   }
 
   async beforeThink(context: AgentContext): Promise<AgentContext> {
     // Apply context compression via ConversationCompressor
-    if (this.compressor && !this.disableCompression) {
+    if (this.compressor) {
       const result = await this.compressor.compress(context.messages);
       context.messages = result.messages.map((m) => m.message);
     }

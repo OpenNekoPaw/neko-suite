@@ -131,12 +131,6 @@ export class ToolInjectionManager implements IToolInjectionManager {
    * Eager/lazy tools appear here only after activateToolSet().
    */
   private getDynamicTools(): string[] {
-    // Ablation: 'always-only' mode entirely skips the dynamic layer,
-    // regardless of ToolSet activation state.
-    if (this.config.injectionMode === 'always-only') {
-      return [];
-    }
-
     if (!this.toolProvider) {
       return [];
     }
@@ -190,11 +184,6 @@ export class ToolInjectionManager implements IToolInjectionManager {
    * Activate a tool set (adds its tools to the dynamic layer)
    */
   activateToolSet(toolSetName: string): void {
-    // Ablation: when dynamic activation is disabled, silently drop the call
-    // so meta tools (ActivateToolSet) become effective no-ops without error.
-    if (this.config.allowDynamicActivation === false) {
-      return;
-    }
     this.activateToolSetInternal(toolSetName);
   }
 

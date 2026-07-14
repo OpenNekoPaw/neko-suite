@@ -270,63 +270,6 @@ describe('SkillService', () => {
     expect(result).toBeNull();
     expect(confirmCallback).not.toHaveBeenCalled();
   });
-
-  // ---------------------------------------------------------------------------
-  // Ablation: setDiscoveryEnabled (P1-A Toggle 1)
-  // ---------------------------------------------------------------------------
-
-  describe('ablation: setDiscoveryEnabled', () => {
-    it('discover() short-circuits to empty result when disabled', () => {
-      const skill = makeSkill({ name: 'would-match' });
-      const registry = makeMockRegistry();
-      registry.registerSkill(skill);
-      const service = new SkillService({ registry });
-
-      service.setDiscoveryEnabled(false);
-      const result = service.discover('anything');
-
-      expect(result.found).toBe(false);
-      expect(result.matches).toEqual([]);
-      expect(result.requiresConfirmation).toBe(false);
-    });
-
-    it('re-enabling discovery restores discovery but not direct application', () => {
-      const skill = makeSkill({
-        name: 'commit-helper',
-        description: 'Help with git commits',
-        mediaWorkflow: { tags: ['git'] },
-      });
-      const registry = makeMockRegistry();
-      registry.registerSkill(skill);
-      const matcher = { match: vi.fn(() => [{ skill, relevance: 0.95, reason: 'test match' }]) };
-      const service = new SkillService({ registry, matcher });
-
-      service.setDiscoveryEnabled(false);
-      expect(service.discover('git commits').found).toBe(false);
-
-      service.setDiscoveryEnabled(true);
-      const result = service.discover('git commits');
-      expect(result.found).toBe(true);
-      expect(result.matches).toEqual([{ skill, relevance: 0.95, reason: 'test match' }]);
-    });
-
-    it('default state is enabled', () => {
-      const service = new SkillService();
-      expect(service.isDiscoveryEnabled()).toBe(true);
-    });
-
-    it('discoverAndApply returns null when discovery is disabled', async () => {
-      const skill = makeSkill({ name: 'strong' });
-      const registry = makeMockRegistry();
-      registry.registerSkill(skill);
-      const service = new SkillService({ registry });
-
-      service.setDiscoveryEnabled(false);
-      const result = await service.discoverAndApply('x');
-
-      expect(result).toBeNull();
-    });
-  });
 });
 
 describe('KeywordSkillMatcher', () => {

@@ -465,7 +465,7 @@ export function applyEvidenceFeedbackPolicy(
   feedback: readonly AgentMultimodalEvidenceFeedback[],
   policy: AgentMultimodalEvidenceFeedbackPolicy = {},
 ): readonly AgentMultimodalEvidenceRef[] {
-  const includeEvidence = policy.includeEvidence ?? !policy.ablationDisabled;
+  const includeEvidence = policy.includeEvidence ?? true;
   const allowedModalities = policy.allowedModalities ? new Set(policy.allowedModalities) : null;
 
   return feedback.map(({ evidence, artifact }) => {
@@ -476,9 +476,7 @@ export function applyEvidenceFeedbackPolicy(
       byteSize !== undefined &&
       byteSize > policy.maxPayloadBytes;
     const withheldReason = !includeEvidence
-      ? policy.ablationDisabled
-        ? 'ablation'
-        : 'policy'
+      ? 'policy'
       : !modalityAllowed
         ? 'unsupported-modality'
         : exceedsPayloadLimit

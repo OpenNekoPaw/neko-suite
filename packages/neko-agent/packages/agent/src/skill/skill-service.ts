@@ -61,7 +61,6 @@ export class SkillService {
   private readonly _matcher: ISkillMatcher;
   private readonly _toolRegistry: IToolRegistry | undefined;
   private readonly _subpackageResolver: ISubpackageResolver | null;
-  private _discoveryEnabled: boolean = true;
   private readonly _logger = getLogger('SkillService');
 
   constructor(config: SkillServiceConfig = {}) {
@@ -70,23 +69,6 @@ export class SkillService {
     this._matcher = config.matcher || createDefaultMatcher();
     this._toolRegistry = config.toolRegistry;
     this._subpackageResolver = config.subpackageResolver ?? null;
-  }
-
-  /**
-   * Toggle candidate discovery (ablation-controlled).
-   * When disabled, `discover()` returns an empty result immediately, so
-   * chat-side suggestion paths see no matches.
-   * Manual `apply()` / `discoverAndApply` unaffected for explicit invocations,
-   * but `discoverAndApply` reads through `discover()` so it will also return
-   * null when disabled.
-   */
-  setDiscoveryEnabled(enabled: boolean): void {
-    this._discoveryEnabled = enabled;
-  }
-
-  /** Current discovery-enabled state (primarily for tests / introspection). */
-  isDiscoveryEnabled(): boolean {
-    return this._discoveryEnabled;
   }
 
   // ===========================================================================
@@ -133,14 +115,6 @@ export class SkillService {
   // ===========================================================================
 
   discover(userInput: string): SkillDiscoveryResult {
-    if (!this._discoveryEnabled) {
-      return {
-        found: false,
-        matches: [],
-        requiresConfirmation: false,
-      };
-    }
-
     const matches = this._matcher.match(userInput, this.registry.listSkills());
     if (matches.length === 0) {
       return {

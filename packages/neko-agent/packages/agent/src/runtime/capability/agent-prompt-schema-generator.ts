@@ -24,32 +24,6 @@ const DEFAULT_PROVIDER_FRAGMENT_PRIORITY = 68;
 
 class DefaultAgentPromptSchemaGenerator implements AgentPromptSchemaGenerator {
   generate(context: PromptGenerationContext): GeneratedPromptBundle {
-    if (context.ablation?.disablePromptSchemaGenerator) {
-      const diagnostics = [
-        promptSchemaDiagnostic(
-          'generator-disabled',
-          'Prompt/schema generation is disabled by ablation.',
-        ),
-      ];
-      return {
-        prompt: context.basePrompt,
-        sections: [
-          {
-            id: 'base',
-            layer: 'base',
-            content: context.basePrompt,
-            priority: 100,
-          },
-        ],
-        schemaBundle: createSchemaBundle(context, diagnostics),
-        diagnostics,
-        snapshot: {
-          promptHash: stableHash(context.basePrompt),
-          schemaHash: stableHash(createSchemaBundle(context, diagnostics)),
-        },
-      };
-    }
-
     const diagnostics: AgentCapabilityDiagnostic[] = [];
     const sections = buildPromptSections(context, diagnostics);
     const prompt = composePromptSections(sections);
@@ -111,44 +85,42 @@ function buildPromptSections(
     });
   }
 
-  if (!context.ablation?.disablePromptFragments) {
-    for (const fragment of context.injectedCapabilities?.promptFragments ?? []) {
-      if (!fragment.content.trim()) {
-        diagnostics.push(
-          promptSchemaDiagnostic(
-            'prompt-fragment-skipped',
-            'Skipping an empty capability prompt fragment.',
-            { fragmentId: fragment.id },
-          ),
-        );
-        continue;
-      }
-      sections.push({
-        id: `capability:${fragment.id}`,
-        layer: context.activeSkillId ? 'skill' : 'environment',
-        content: fragment.content,
-        priority: fragment.priority ?? DEFAULT_CAPABILITY_FRAGMENT_PRIORITY,
-      });
+  for (const fragment of context.injectedCapabilities?.promptFragments ?? []) {
+    if (!fragment.content.trim()) {
+      diagnostics.push(
+        promptSchemaDiagnostic(
+          'prompt-fragment-skipped',
+          'Skipping an empty capability prompt fragment.',
+          { fragmentId: fragment.id },
+        ),
+      );
+      continue;
     }
+    sections.push({
+      id: `capability:${fragment.id}`,
+      layer: context.activeSkillId ? 'skill' : 'environment',
+      content: fragment.content,
+      priority: fragment.priority ?? DEFAULT_CAPABILITY_FRAGMENT_PRIORITY,
+    });
+  }
 
-    for (const fragment of context.providerPromptFragments ?? []) {
-      if (!fragment.content.trim()) {
-        diagnostics.push(
-          promptSchemaDiagnostic(
-            'provider-fragment-skipped',
-            'Skipping an empty provider expression fragment.',
-            { fragmentId: fragment.id },
-          ),
-        );
-        continue;
-      }
-      sections.push({
-        id: `provider:${fragment.id}`,
-        layer: 'environment',
-        content: fragment.content,
-        priority: fragment.priority ?? DEFAULT_PROVIDER_FRAGMENT_PRIORITY,
-      });
+  for (const fragment of context.providerPromptFragments ?? []) {
+    if (!fragment.content.trim()) {
+      diagnostics.push(
+        promptSchemaDiagnostic(
+          'provider-fragment-skipped',
+          'Skipping an empty provider expression fragment.',
+          { fragmentId: fragment.id },
+        ),
+      );
+      continue;
     }
+    sections.push({
+      id: `provider:${fragment.id}`,
+      layer: 'environment',
+      content: fragment.content,
+      priority: fragment.priority ?? DEFAULT_PROVIDER_FRAGMENT_PRIORITY,
+    });
   }
 
   if (context.agentsMdOverlay?.trim()) {
@@ -181,42 +153,21 @@ function buildPromptSections(
 
   const evidenceFeedbackSummary = renderEvidenceFeedbackSummary(context.multimodalEvidenceRefs);
   if (evidenceFeedbackSummary) {
-    if (
-      context.ablation?.disableMultimodalContext ||
-      context.ablation?.disableMultimodalEvidenceFeedback
-    ) {
-      diagnostics.push(
-        promptSchemaDiagnostic(
-          'multimodal-evidence-feedback-skipped',
-          'Multimodal feedback evidence was withheld by ablation.',
-        ),
-      );
-    } else {
-      sections.push({
-        id: 'ephemeral:multimodal-evidence-feedback',
-        layer: 'ephemeral',
-        content: evidenceFeedbackSummary,
-        priority: 76,
-      });
-    }
+    sections.push({
+      id: 'ephemeral:multimodal-evidence-feedback',
+      layer: 'ephemeral',
+      content: evidenceFeedbackSummary,
+      priority: 76,
+    });
   }
 
   if (context.multimodalContextSummary?.trim()) {
-    if (context.ablation?.disableMultimodalContext) {
-      diagnostics.push(
-        promptSchemaDiagnostic(
-          'multimodal-context-skipped',
-          'Multimodal context summary was withheld by ablation.',
-        ),
-      );
-    } else {
-      sections.push({
-        id: 'ephemeral:multimodal-context',
-        layer: 'ephemeral',
-        content: context.multimodalContextSummary,
-        priority: 75,
-      });
-    }
+    sections.push({
+      id: 'ephemeral:multimodal-context',
+      layer: 'ephemeral',
+      content: context.multimodalContextSummary,
+      priority: 75,
+    });
   }
 
   return sortPromptSections(sections);
@@ -254,9 +205,6 @@ function createSchemaBundle(
 }
 
 function resolveToolAllowlist(context: PromptGenerationContext): readonly string[] {
-  if (context.ablation?.disableDynamicToolSchemas) {
-    return [];
-  }
   const injected = context.injectedCapabilities?.allowedTools ?? [];
   const nodeAllowed = context.creation?.allowedToolNames;
   const source =
@@ -272,15 +220,6 @@ function resolveToolSchemas(
   providerToolMode: PromptSchemaProviderToolMode,
   diagnostics: AgentCapabilityDiagnostic[],
 ): readonly ToolDefinition[] {
-  if (context.ablation?.disableDynamicToolSchemas) {
-    diagnostics.push(
-      promptSchemaDiagnostic(
-        'tool-schemas-skipped',
-        'Dynamic tool schemas were withheld by ablation.',
-      ),
-    );
-    return [];
-  }
   if (providerToolMode === 'none') {
     if (toolAllowlist.length > 0) {
       diagnostics.push(
@@ -319,15 +258,6 @@ function resolveStructuredOutputSchemas(
   providerStructuredMode: PromptSchemaStructuredOutputMode,
   diagnostics: AgentCapabilityDiagnostic[],
 ): readonly GeneratedStructuredSchema[] {
-  if (context.ablation?.disableStructuredOutputSchemas) {
-    diagnostics.push(
-      promptSchemaDiagnostic(
-        'structured-schemas-skipped',
-        'Structured output schemas were withheld by ablation.',
-      ),
-    );
-    return [];
-  }
   if (providerStructuredMode === 'unsupported') {
     diagnostics.push(
       promptSchemaDiagnostic(
@@ -524,7 +454,7 @@ function formatEvidenceSummary(evidence: AgentMultimodalEvidenceRef): string {
 
 function renderStructuredSchemaHint(context: PromptGenerationContext): string | null {
   const purposes = context.requestedSchemaPurposes ?? inferSchemaPurposes(context);
-  if (purposes.length === 0 || context.ablation?.disableStructuredOutputSchemas) return null;
+  if (purposes.length === 0) return null;
   return [
     '## Structured Output Contract',
     `- Expected schema purposes: ${purposes.join(', ')}`,

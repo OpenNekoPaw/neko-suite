@@ -72,16 +72,6 @@ export interface ExecutorHooksFactoryConfig {
   /** Tool traits registry for conditional auto mode (creative scenarios) */
   traitsRegistry?: ToolTraitsRegistry;
 
-  /** Hook names to exclude from the chain (for ablation experiments) */
-  disableHooks?: string[];
-
-  /**
-   * When true, MemoryHooks skips context compression. Used by the
-   * ablation framework to disable the compression pathway for A/B tests.
-   * Does not affect non-experiment runs (undefined keeps the default).
-   */
-  disableCompression?: boolean;
-
   /** Pre-built creative memory hooks (recall + extraction). Inserted after MemoryHooks. */
   creativeMemoryHooks?: ExecutorHooks;
 }
@@ -114,14 +104,8 @@ export interface ExecutorHooksFactoryResult {
 export function createExecutorHooks(
   config: ExecutorHooksFactoryConfig,
 ): ExecutorHooksFactoryResult {
-  // 1. Memory hooks — ablation flags pass through only when explicitly
-  // supplied (applyAblationToggles → initializer marker extraction).
-  // Conditional spread so exactOptionalPropertyTypes doesn't see `undefined`.
   const memoryHooks = new MemoryHooks({
     compressor: config.compressor,
-    ...(config.disableCompression !== undefined && {
-      disableCompression: config.disableCompression,
-    }),
   });
 
   // 2. Validation hooks
@@ -164,16 +148,11 @@ export function createExecutorHooks(
     },
   });
 
-  // 5. Compose: built-in hooks (optionally filtered) + custom hooks
+  // 5. Compose built-in hooks and custom hooks.
   const builtinHooks: ExecutorHooks[] = [memoryHooks];
   if (config.creativeMemoryHooks) builtinHooks.push(config.creativeMemoryHooks);
   builtinHooks.push(validationHooks, permissionHooks, retryHooks);
-  const hooks: ExecutorHooks[] = [
-    ...(config.disableHooks
-      ? builtinHooks.filter((h) => !config.disableHooks!.includes(h.name!))
-      : builtinHooks),
-    ...(config.customHooks ?? []),
-  ];
+  const hooks: ExecutorHooks[] = [...builtinHooks, ...(config.customHooks ?? [])];
 
   return { hooks, permissionHooks };
 }

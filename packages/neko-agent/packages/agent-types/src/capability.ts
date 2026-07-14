@@ -251,12 +251,6 @@ export interface AgentCapabilityInjectionContext {
     readonly allowIrreversible?: boolean;
     readonly approvedContributionIds?: readonly string[];
   };
-  readonly ablation?: {
-    readonly disableCapabilityInjection?: boolean;
-    readonly disableSkillInjection?: boolean;
-    readonly disableToolInjection?: boolean;
-    readonly disablePromptFragments?: boolean;
-  };
 }
 
 export interface AgentInjectedCapabilitySet {
@@ -275,12 +269,7 @@ export interface AgentCapabilityRegistryProjection {
 }
 
 export type AgentCapabilityTelemetryReason =
-  | 'used'
-  | 'unknown-field'
-  | 'unsupported-field'
-  | 'withheld-field'
-  | 'policy-skipped'
-  | 'ablation-skipped';
+  'used' | 'unknown-field' | 'unsupported-field' | 'withheld-field' | 'policy-skipped';
 
 export type AgentCapabilityTelemetryEventKind =
   | 'field-utilization'

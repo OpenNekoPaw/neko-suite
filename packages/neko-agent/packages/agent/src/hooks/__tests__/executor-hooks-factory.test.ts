@@ -6,8 +6,7 @@
 
 import { describe, it, expect, vi } from 'vitest';
 import { createExecutorHooks } from '../executor-hooks-factory';
-import type { ExecutorHooks, AgentContext, ChatMessage } from '@neko/shared';
-import type { MemoryHooks } from '../hooks';
+import type { ExecutorHooks } from '@neko/shared';
 
 // =============================================================================
 // Helpers
@@ -18,10 +17,6 @@ function createMockCompressor() {
     compress: vi.fn().mockResolvedValue({ messages: [] }),
     estimateTokens: vi.fn().mockReturnValue(0),
   } as unknown as import('../../context').ConversationCompressor;
-}
-
-function makeContext(messages: ChatMessage[] = []): AgentContext {
-  return { messages, iteration: 0, maxIterations: 10 } as AgentContext;
 }
 
 // =============================================================================
@@ -114,52 +109,5 @@ describe('createExecutorHooks', () => {
     });
 
     expect(result.hooks.length).toBe(4);
-  });
-
-  it('should exclude hooks listed in disableHooks', () => {
-    const result = createExecutorHooks({
-      compressor: createMockCompressor(),
-      permissionMode: 'auto',
-      disableHooks: ['validation', 'retry'],
-    });
-
-    const names = result.hooks.map((h) => h.name);
-    expect(names).toEqual(['memory', 'permission']);
-  });
-
-  it('should not filter hooks when disableHooks is undefined', () => {
-    const result = createExecutorHooks({
-      compressor: createMockCompressor(),
-      permissionMode: 'auto',
-    });
-
-    expect(result.hooks.length).toBe(4);
-  });
-
-  it('disableCompression: true causes MemoryHooks.beforeThink to skip compressor', async () => {
-    const compressor = createMockCompressor();
-    const result = createExecutorHooks({
-      compressor,
-      permissionMode: 'auto',
-      disableCompression: true,
-    });
-
-    const memoryHooks = result.hooks.find((h) => h.name === 'memory') as MemoryHooks;
-    expect(memoryHooks).toBeDefined();
-
-    await memoryHooks.beforeThink!(makeContext([{ role: 'user', content: 'hi' }]));
-    expect(compressor.compress).not.toHaveBeenCalled();
-  });
-
-  it('disableCompression omitted keeps default behavior (compressor called)', async () => {
-    const compressor = createMockCompressor();
-    const result = createExecutorHooks({
-      compressor,
-      permissionMode: 'auto',
-    });
-
-    const memoryHooks = result.hooks.find((h) => h.name === 'memory') as MemoryHooks;
-    await memoryHooks.beforeThink!(makeContext([{ role: 'user', content: 'hi' }]));
-    expect(compressor.compress).toHaveBeenCalledOnce();
   });
 });
