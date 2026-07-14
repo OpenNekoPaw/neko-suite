@@ -5,6 +5,7 @@
   "version": "0.0.1",
   "publisher": "neko",
   "license": "AGPL-3.0-or-later",
+  "private": true,
   "repository": {
     "type": "git",
     "url": "https://github.com/neko/creative-suite"
@@ -44,7 +45,12 @@
     "neko.neko-story"
   ],
   "scripts": {
-    "vscode:prepublish": "echo 'Extension pack - no build required'",
-    "package": "vsce package --no-dependencies"
+    "vscode:prepublish": "node scripts/validate-manifest.mjs",
+    "test": "node --test tests/manifest.test.mjs",
+    "test:vsix": "node --test tests/vsix-artifact.test.mjs",
+    "package": "vsce package --no-dependencies --allow-missing-repository"
+  },
+  "devDependencies": {
+    "@vscode/vsce": "^3.9.2"
   }
 }
