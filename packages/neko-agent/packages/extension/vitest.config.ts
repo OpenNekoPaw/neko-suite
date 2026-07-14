@@ -11,6 +11,7 @@ export default defineConfig({
     environment: 'node',
     clearMocks: true,
     coverage: sharedCoverage({
+      include: ['src/**/*.{ts,tsx}'],
       exclude: [
         '**/node_modules/**',
         '**/dist/**',

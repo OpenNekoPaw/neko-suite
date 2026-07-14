@@ -7,7 +7,7 @@
     "./*": "./src/*"
   },
   "scripts": {
-    "test": "vitest --passWithNoTests",
+    "test": "vitest",
     "test:run": "vitest --run"
   },
   "devDependencies": {

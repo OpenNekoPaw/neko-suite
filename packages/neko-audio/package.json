@@ -11,7 +11,7 @@
     "url": "https://github.com/neko/creative-suite"
   },
   "engines": {
-    "vscode": "^1.85.0"
+    "vscode": "^1.128.0"
   },
   "categories": [
     "Other",
@@ -154,12 +154,12 @@
     "copy:l10n": "mkdir -p dist/l10n && cp -R l10n/* dist/l10n/",
     "watch": "pnpm run compile:extension -- --watch",
     "lint": "eslint src --ext ts,tsx",
-    "test": "vitest --passWithNoTests",
+    "test": "vitest",
     "package": "vsce package --no-dependencies"
   },
   "devDependencies": {
-    "@types/node": "^20.10.0",
-    "@types/vscode": "^1.85.0",
+    "@types/node": "^24.0.0",
+    "@types/vscode": "^1.125.0",
     "@neko/shared": "workspace:*",
     "esbuild": "^0.19.8",
     "typescript": "^5.3.2",

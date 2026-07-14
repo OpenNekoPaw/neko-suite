@@ -80,13 +80,7 @@ Source of truth:
    pnpm smoke:webview:runtime
    ```
 
-   For Agent evaluation harness, scenario manifest, debug automation protocol, or exported fact-contract changes:
-
-   ```bash
-   pnpm test:agent:eval
-   ```
-
-   This is a key-free harness gate, not real Agent behavior acceptance. If the change can alter prompt or Skill behavior, capability/tool registration or routing, provider/model selection, AgentSession multi-turn/queue/async/recovery behavior, or TUI Agent event projection, use `neko-agent-evaluation` to produce focused path-level evidence. Review the recorded blocking condition and residual risk when a real case could not run. Do not infer that manifest assertions passed unless the current runner executed an evaluator for them.
+   For Agent Evaluation platform, scenario, debug automation protocol, or exported fact-contract changes, run the key-free harness gate documented by the platform. This is not real Agent behavior acceptance. If the change can alter prompt or Skill behavior, capability/tool registration or routing, provider/model selection, AgentSession multi-turn/queue/async/recovery behavior, or TUI Agent event projection, use `neko-agent-evaluation` to produce focused path-level evidence. Review the recorded blocking condition and residual risk when a real case could not run. Do not infer that scenario assertions passed unless the current runner executed an evaluator for them.
 
    For Extension Webview visual, layout, interaction, focus, CSP, media preview, or lifecycle changes, use `pnpm smoke:webview:runtime` or an equivalent `vscode-extension-debugger` Skill run. Do not use Chrome, the generic Browser plugin, Playwright, or a Vite localhost page as the default validation path unless the user explicitly asks for browser-compatibility testing.
 

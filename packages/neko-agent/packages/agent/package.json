@@ -15,8 +15,8 @@
     "./*": "./src/*"
   },
   "scripts": {
-    "test": "vitest --passWithNoTests",
-    "test:run": "vitest --run --passWithNoTests"
+    "test": "vitest",
+    "test:run": "vitest --run"
   },
   "dependencies": {
     "@neko-agent/types": "workspace:*",
@@ -27,7 +27,7 @@
     "yaml": "^2.9.0"
   },
   "devDependencies": {
-    "@types/node": "^20.10.0",
+    "@types/node": "^24.0.0",
     "typescript": "^5.0.0",
     "vitest": "^4.1.2"
   },

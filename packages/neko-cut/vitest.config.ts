@@ -17,8 +17,6 @@ export default defineConfig({
     globals: true,
     environment: 'node',
     include: [
-      'packages/webview/src/**/*.test.ts',
-      'packages/webview/src/**/*.test.tsx',
       // Protocol integration tests (self-contained vi.mock('vscode'))
       'packages/extension/src/__tests__/protocol.test.ts',
       'packages/extension/src/agentCapabilityProvider.test.ts',
@@ -30,6 +28,8 @@ export default defineConfig({
       'packages/extension/src/services/**/*.test.ts',
     ],
     exclude: ['**/node_modules/**', '**/dist/**'],
-    coverage: sharedCoverage(),
+    coverage: sharedCoverage({
+      include: ['src/**/*.{ts,tsx}', 'packages/extension/src/**/*.{ts,tsx}'],
+    }),
   },
 });

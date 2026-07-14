@@ -11,7 +11,7 @@
     "url": "https://github.com/neko/creative-suite"
   },
   "engines": {
-    "vscode": "^1.85.0"
+    "vscode": "^1.128.0"
   },
   "categories": [
     "Other",
@@ -623,7 +623,7 @@
     "compile": "esbuild ./src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node",
     "watch": "pnpm run compile -- --watch",
     "lint": "eslint src --ext ts,tsx",
-    "test": "pnpm exec vitest --dir src --passWithNoTests",
+    "test": "pnpm exec vitest run",
     "test:packages": "pnpm turbo run test --filter=@neko/asset",
     "package": "vsce package --no-dependencies"
   },
@@ -634,8 +634,8 @@
     "adm-zip": "^0.5.16"
   },
   "devDependencies": {
-    "@types/node": "^20.10.0",
-    "@types/vscode": "^1.85.0",
+    "@types/node": "^24.0.0",
+    "@types/vscode": "^1.125.0",
     "esbuild": "^0.19.8",
     "typescript": "^5.3.2",
     "vitest": "^4.1.2"

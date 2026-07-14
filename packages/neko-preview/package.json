@@ -11,7 +11,7 @@
     "url": "https://github.com/neko/creative-suite"
   },
   "engines": {
-    "vscode": "^1.85.0"
+    "vscode": "^1.128.0"
   },
   "categories": [
     "Other",
@@ -35,13 +35,17 @@
   "extensionDependencies": [
     "neko.neko-engine"
   ],
-  "activationEvents": ["onCommand:neko.preview.revealDocumentLocator"],
+  "activationEvents": [
+    "onCommand:neko.preview.revealDocumentLocator"
+  ],
   "main": "./dist/extension.js",
   "contributes": {
     "languages": [
       {
         "id": "epub",
-        "extensions": [".epub"]
+        "extensions": [
+          ".epub"
+        ]
       }
     ],
     "customEditors": [
@@ -243,8 +247,8 @@
     "package": "vsce package --no-dependencies"
   },
   "devDependencies": {
-    "@types/node": "^20.10.0",
-    "@types/vscode": "^1.85.0",
+    "@types/node": "^24.0.0",
+    "@types/vscode": "^1.125.0",
     "@neko/shared": "workspace:*",
     "@neko/neko-client": "workspace:*",
     "esbuild": "^0.19.8",

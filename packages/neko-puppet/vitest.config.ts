@@ -16,8 +16,10 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'node',
-    include: ['packages/extension/src/**/*.test.ts', 'packages/webview/src/**/*.test.ts'],
+    include: ['packages/extension/src/**/*.test.ts'],
     fileParallelism: false,
-    coverage: sharedCoverage(),
+    coverage: sharedCoverage({
+      include: ['src/**/*.{ts,tsx}', 'packages/extension/src/**/*.{ts,tsx}'],
+    }),
   },
 });

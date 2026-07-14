@@ -8,7 +8,7 @@ export default defineConfig({
     environment: 'node',
     include: ['src/**/*.test.ts'],
     exclude: ['**/node_modules/**', '**/dist/**'],
-    coverage: sharedCoverage(),
+    coverage: sharedCoverage({ include: ['src/**/*.{ts,tsx}'] }),
   },
   resolve: {
     alias: {

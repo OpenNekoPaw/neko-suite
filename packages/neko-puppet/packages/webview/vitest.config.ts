@@ -8,7 +8,7 @@ export default defineConfig({
     environment: 'jsdom',
     include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
     exclude: ['**/node_modules/**', '**/dist/**'],
-    coverage: sharedCoverage(),
+    coverage: sharedCoverage({ include: ['src/**/*.{ts,tsx}'] }),
   },
   resolve: {
     alias: {

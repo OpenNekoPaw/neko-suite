@@ -1,0 +1,25 @@
+import type { MessageBundle } from '@neko/shared';
+
+export const zhCnHomeMessages: MessageBundle = {
+  'app.loading': '正在加载 Neko Home...',
+  'title.brand': 'Neko Home',
+  'workspace.personal': '个人工作区',
+  'nav.label': 'Neko Home',
+  'nav.overview': '概览',
+  'nav.assets': '资产库',
+  'nav.generations': '生成内容',
+  'nav.agent': 'Agent',
+  'nav.market': '市场',
+  'nav.skills': '技能',
+  'overview.title': '继续创作',
+  'overview.description': '查看生成内容、管理创作资源，或前往专业编辑器继续制作。',
+  'overview.createWithAgent': '使用 Agent 创作',
+  'overview.openInVSCode': '在 VSCode 中打开',
+  'overview.handoffAccepted': '已接受 VSCode 转交。',
+  'summary.resources': '资源',
+  'summary.providers': 'Provider',
+  'summary.engine': 'Engine Core',
+  'surface.empty': '暂无内容',
+  'engine.ready': 'Engine 已就绪',
+  'engine.unavailable': 'Engine 不可用',
+};

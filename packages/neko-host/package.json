@@ -6,17 +6,18 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./application": "./src/application.ts",
     "./*": "./src/*"
   },
   "scripts": {
-    "test": "vitest --passWithNoTests",
-    "test:run": "vitest --run --passWithNoTests"
+    "test": "vitest",
+    "test:run": "vitest --run"
   },
   "dependencies": {
     "@neko/shared": "workspace:*"
   },
   "devDependencies": {
-    "@types/node": "^20.10.0",
+    "@types/node": "^24.0.0",
     "typescript": "^5.8.3",
     "vitest": "^4.1.2"
   },

@@ -11,7 +11,7 @@
     "url": "https://github.com/neko/creative-suite"
   },
   "engines": {
-    "vscode": "^1.85.0"
+    "vscode": "^1.128.0"
   },
   "categories": [
     "Other",
@@ -69,8 +69,12 @@
       },
       {
         "id": "neko-canvas-file",
-        "aliases": ["Neko Canvas"],
-        "extensions": [".nkc"],
+        "aliases": [
+          "Neko Canvas"
+        ],
+        "extensions": [
+          ".nkc"
+        ],
         "icon": {
           "light": "./themes/icons/file-canvas.svg",
           "dark": "./themes/icons/file-canvas.svg"
@@ -78,8 +82,12 @@
       },
       {
         "id": "neko-audio-file",
-        "aliases": ["Neko Audio"],
-        "extensions": [".nka"],
+        "aliases": [
+          "Neko Audio"
+        ],
+        "extensions": [
+          ".nka"
+        ],
         "icon": {
           "light": "./themes/icons/file-audio.svg",
           "dark": "./themes/icons/file-audio.svg"
@@ -87,8 +95,12 @@
       },
       {
         "id": "neko-sketch-file",
-        "aliases": ["Neko Sketch"],
-        "extensions": [".nks"],
+        "aliases": [
+          "Neko Sketch"
+        ],
+        "extensions": [
+          ".nks"
+        ],
         "icon": {
           "light": "./themes/icons/file-sketch.svg",
           "dark": "./themes/icons/file-sketch.svg"
@@ -96,8 +108,13 @@
       },
       {
         "id": "neko-puppet-file",
-        "aliases": ["Neko Puppet"],
-        "extensions": [".nkp", ".inp"],
+        "aliases": [
+          "Neko Puppet"
+        ],
+        "extensions": [
+          ".nkp",
+          ".inp"
+        ],
         "icon": {
           "light": "./themes/icons/file-puppet.svg",
           "dark": "./themes/icons/file-puppet.svg"
@@ -105,8 +122,12 @@
       },
       {
         "id": "neko-model-file",
-        "aliases": ["Neko 3D Model"],
-        "extensions": [".nkm"],
+        "aliases": [
+          "Neko 3D Model"
+        ],
+        "extensions": [
+          ".nkm"
+        ],
         "icon": {
           "light": "./themes/icons/file-model.svg",
           "dark": "./themes/icons/file-model.svg"
@@ -346,8 +367,8 @@
     "package": "vsce package --no-dependencies"
   },
   "devDependencies": {
-    "@types/node": "^20.10.0",
-    "@types/vscode": "^1.85.0",
+    "@types/node": "^24.0.0",
+    "@types/vscode": "^1.125.0",
     "esbuild": "^0.19.8",
     "typescript": "^5.3.2",
     "vitest": "^4.1.2"

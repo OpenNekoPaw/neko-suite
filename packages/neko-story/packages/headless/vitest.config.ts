@@ -1,4 +1,5 @@
 import { defineConfig } from 'vitest/config';
+import { sharedCoverage } from '../../../../vitest.shared';
 
 export default defineConfig({
   test: {
@@ -6,5 +7,6 @@ export default defineConfig({
     environment: 'node',
     include: ['src/**/*.test.ts'],
     exclude: ['**/node_modules/**', '**/dist/**'],
+    coverage: sharedCoverage({ include: ['src/**/*.{ts,tsx}'] }),
   },
 });

@@ -15,6 +15,6 @@ export default defineConfig({
     globals: true,
     environment: 'node',
     include: ['src/**/*.test.ts'],
-    coverage: sharedCoverage(),
+    coverage: sharedCoverage({ include: ['src/**/*.{ts,tsx}'] }),
   },
 });

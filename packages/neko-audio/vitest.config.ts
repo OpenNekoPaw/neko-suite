@@ -18,6 +18,18 @@ export default defineConfig({
     globals: true,
     environment: 'node',
     include: ['packages/*/src/**/*.test.ts'],
-    coverage: sharedCoverage(),
+    coverage: sharedCoverage({
+      include: [
+        'src/**/*.{ts,tsx}',
+        'packages/extension/src/**/*.{ts,tsx}',
+        'packages/webview/src/**/*.{ts,tsx}',
+      ],
+      thresholds: {
+        lines: 23,
+        branches: 21,
+        functions: 24,
+        statements: 22,
+      },
+    }),
   },
 });

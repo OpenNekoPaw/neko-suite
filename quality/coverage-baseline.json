@@ -1453,28 +1453,6 @@
       "closingCondition": "Add package-owned tests for uncovered production paths and raise the owner threshold without reducing coverage include."
     },
     {
-      "owner": "packages/neko-desktop",
-      "metrics": {
-        "lines": 48.66,
-        "branches": 39.75,
-        "functions": 49.74,
-        "statements": 46.9
-      },
-      "belowDefault": [],
-      "zeroCoveredSourceFiles": [
-        "packages/neko-desktop/src/main/desktop-agent-conversation-storage.ts",
-        "packages/neko-desktop/src/main/index.ts",
-        "packages/neko-desktop/src/preload/index.ts",
-        "packages/neko-desktop/src/renderer/App.tsx",
-        "packages/neko-desktop/src/renderer/CodeEditor.tsx",
-        "packages/neko-desktop/src/renderer/creative-editor-adapters.tsx",
-        "packages/neko-desktop/src/renderer/desktop-bridge.ts",
-        "packages/neko-desktop/src/renderer/main.tsx",
-        "packages/neko-desktop/src/renderer/webview-root-types.tsx"
-      ],
-      "closingCondition": "Add package-owned tests for uncovered production paths and raise the owner threshold without reducing coverage include."
-    },
-    {
       "owner": "packages/neko-engine",
       "metrics": {
         "lines": 13.43,

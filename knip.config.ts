@@ -9,6 +9,8 @@ const config: KnipConfig = {
   ignore: [
     // Skills are runtime CLI scripts, not imported modules
     'skills/**',
+    // VS Code loads this CommonJS entry from its extension manifest at Debug Host startup.
+    'scripts/webview-functional/vscode-controller/extension.cjs',
   ],
   ignoreBinaries: [
     // Root package scripts invoke this local CI wrapper directly.
@@ -21,6 +23,8 @@ const config: KnipConfig = {
     'sharp', // Native binary, loaded at runtime
     '@img/sharp-wasm32', // Sharp WASM fallback
     'clsx',
+    // The Home application resolves Electron from its application manifest.
+    'electron',
   ],
   ignoreIssues: {
     // Internal editor API surfaces: intentionally exported for feature modules
@@ -68,6 +72,7 @@ const config: KnipConfig = {
         'scripts/check-canvas-playback-boundary.mjs',
         'scripts/compile-ts-vsix.mjs',
         'scripts/scene-render-diagnostics.mjs',
+        'scripts/webview-functional/*.test.mjs',
       ],
     },
     // ── Layer 0: Library packages ──────────────────────
@@ -130,6 +135,9 @@ const config: KnipConfig = {
     },
     'packages/neko-agent/packages/cli-tui': {
       entry: ['build-neko.ts'],
+      // Knip's Bun plugin treats `bun test <file>` as a directory project root.
+      // The dedicated Bun adapter suite is exercised by the package/CI script.
+      bun: false,
     },
     'packages/neko-agent/packages/webview': {
       ignore: [

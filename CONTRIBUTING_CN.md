@@ -150,11 +150,15 @@ cd packages/neko-cut/packages/extension
 pnpm watch
 
 # 3. 在 VS Code 中按 F5 启动扩展调试（Extension Development Host）
-# 4. 做 Webview 视觉/交互验收时，使用 VS Code debugger Skill
-pnpm smoke:webview:runtime
+# 4. 做 Webview 视觉/交互验收时，运行真实功能场景
+pnpm test:webview:functional --owner neko-cut
 ```
 
 Vite/浏览器只用于热重载和明确要求的浏览器兼容性辅助；Neko 的 Extension Webview 最终运行在 VS Code 沙箱里。涉及视觉、布局、交互、焦点、CSP、Extension/Webview message、媒体预览或 VS Code 生命周期时，必须用 Extension Development Host + `vscode-extension-debugger` Skill 验证。不要用 Chrome、Browser 插件、Playwright 或普通浏览器打开 `localhost` 作为默认运行态验收。
+
+功能包负责维护 `scripts/webview-functional/scenarios/<owner>/` 下的核心用户场景，以及 `scripts/webview-functional/fixtures/` 下对应的最小合成 workspace。场景必须通过可见 UI 和公开宿主边界完成操作，并同时断言 UI、canonical message/command/service path、持久文件或 Engine 结果、生命周期和运行错误；不得调用私有 store/handler、增加 test-only 业务命令或直接绕过项目文件服务。共享 runner 只负责 VS Code/Electron 宿主、CDP、封闭操作 schema、错误策略和报告。
+
+原始报告写入 gitignored `reports/webview-functional/`，本地只保留复现当前问题所需的最短时间；可信 PR CI artifact 默认保留 14 天。截图、DOM、日志和 side-effect manifest 只能来自隔离 fixture workspace，不得采集普通开发窗口或真实用户工作区。OpenSpec、PR 和文档只提交脱敏摘要：scenario id、命令、宿主/版本、结果、失败分类、证据位置和剩余风险；分享前必须移除 secret、token、绝对用户路径和任何非 fixture 内容。
 
 ### 开发 Rust 引擎
 
@@ -311,9 +315,11 @@ Agent 开发需要额外区分 key-free 基线和 eval 场景验收。CI 和默�
 保持 key-free；但本地改动如果影响 provider/model 选择、AI SDK message
 projection、prompt / Skill 行为、tool schema、AgentSession workflow、
 validator/recovery 策略，或 TUI/GUI 对实时 Agent 事件的投影，必须运行聚焦的
-`scripts/agent-eval` 场景，或记录为何无法运行及残余风险。使用
-`.codex/skills/neko-agent-evaluation/SKILL.md` 规划 case、canonical path、禁止的
-fallback 和证据；不要在 Neko Agent 内恢复 `neko eval` 或建立第二套编排。
+`scripts/agent-eval` v2 suite，或记录为何无法运行及残余风险。使用
+`.codex/skills/neko-agent-evaluation/SKILL.md` 先为每项受影响行为做
+`reuse | update | create | excluded` 决策，再规划 user behavior、canonical path、
+forbidden fallback、observable evidence、coverage delta 和 suite/case。不要在 Neko
+Agent 内恢复 `neko eval`、建立第二套编排，或为 Evaluation 增加 runtime-only 开关。
 
 新增 Agent 功能的默认开发/验收顺序是：先定义共享 contract、runtime path 和
 path-level 测试；再用 focused unit/contract tests 和 TUI debug automation eval
@@ -325,23 +331,32 @@ active Skill 指示器和 UI Skill 使用效果。Webview 验收不能替代 Age
 
 ```bash
 pnpm test:agent:eval
-pnpm test:agent:mock
 node scripts/agent-eval/protocol-smoke.mjs \
-  --manifest scripts/agent-eval/scenarios/creative-workflows.scenarios.json \
-  --case cat-play-image-analysis \
+  --suite skill.storyboard \
+  --case canonical-two-shot-storyboard \
   --dry-run
 ```
 
 `pnpm test:agent:eval` 是 key-free harness 自测，已经纳入 `pnpm ci:local` 和
-GitHub CI；它只证明 runner、manifest/protocol 和失败分类等 harness 行为，不能
-替代真实 TUI Agent case。真实 case 的结论还必须以当前 runner 实际执行的
-assertion evaluator 为准，不能把 metadata-only assertion、退出码为 0 或非空最终
-回答描述为完整场景验收。
+GitHub CI；它只证明 strict schema、runner/protocol、报告/失败分类和所有 indexed
+suite dry-run，不能替代真实 TUI Agent case。真实 case 使用同一 `--suite` / `--case`
+命令并移除 `--dry-run`；结论必须以当前 runner 实际执行的 assertion evaluator、
+canonical path/no-fallback facts、effective model/config 和 artifact validator 为准，
+不能把 metadata、退出码为 0、Judge 高分或非空最终回答描述为完整场景验收。
+
+默认 PR CI 不读取 provider secrets。真实 focused/nightly Evaluation 只在可信
+`main` push、schedule 或 manual dispatch 运行；fork PR 没有 secret execution path。
+原始报告写入 gitignored `reports/agent-eval/`；本地按 14 天策略由开发者清理，
+trusted-CI artifact 自动保留 14 天。
+OpenSpec/PR 只能引用脱敏 summary：suite/case/run、命令、Host Skill identity/fingerprint
+或 target hash、provider/model/effective config、fixture digest、hard-gate/artifact
+evidence、usage/cost availability、阻塞项和残余风险。不得提交 credential、hidden
+prompt、raw provider config、绝对用户路径、cache/temp/runtime handle 或未授权内容。
 
 如果本地缺少 provider 凭据、网络/provider 可用性、模型访问、creative fixture
 或 VS Code debugger 运行条件，交付说明必须记录尝试过的 eval 命令、未能运行的
 原因和残余风险；不能用 mock-only、browser-only、jsdom-only 或只看最终文本的
-证据替代 TUI debug automation eval / VS Code Webview runtime 验收。
+证据替代 TUI debug automation eval / 真实 VS Code Webview 功能验收。
 
 当修改 `.github/workflows/ci.yml`、依赖安装、Corepack/pnpm、FFmpeg setup 或 Linux runner shell 逻辑时，可用 `act` 做 GitHub Actions 形状预检：
 
@@ -361,10 +376,11 @@ pnpm ci:act -- --reuse   # 示例：复用容器加速调试
 ```bash
 pnpm smoke:engine        # engine CLI + serve /health + dispatch smoke
 pnpm smoke:webview       # 构建所有 webview 包；可用 NEKO_WEBVIEW_SMOKE_PACKAGES 限定范围
-pnpm smoke:webview:runtime
-# 默认使用 VS Code debugger + vscode-extension-debugger Skill，验证可见 Webview 运行态
-pnpm smoke:vscode-debugger -- --skill vscode-extension-debugger --require-webview
-# 连接已用 remote debugging 启动的 VS Code，采集 Skill 测试证据；不安装 VSIX
+pnpm smoke:webview:targets
+# 仅验证 VS Code page/Webview target 可发现，不能作为功能验收
+pnpm smoke:vscode:targets -- --skill vscode-extension-debugger --require-webview
+pnpm test:webview:functional:p0
+# 在隔离 Extension Development Host 中执行 P0 用户操作、持久化和错误门禁
 node scripts/smoke-webview-builds.mjs --list  # 仅列出将被构建的 webview 包
 ```
 

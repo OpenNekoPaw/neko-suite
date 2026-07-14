@@ -1,19 +1,16 @@
 import { defineConfig } from 'vitest/config';
 import path from 'path';
+import { sharedCoverage } from '../../vitest.shared';
 
 export default defineConfig({
   test: {
     globals: true,
     environment: 'node',
     include: [
-      'packages/extension/src/**/*.test.ts',
       'packages/platform/src/**/*.test.ts',
       'packages/ai-sdk/src/**/*.test.ts',
-      '../neko-skills/src/**/*.test.ts',
-      'packages/agent/src/**/*.test.ts',
       'packages/agent-types/src/**/*.test.ts',
-      'packages/cli-tui/src/**/*.test.{ts,tsx}',
-      'test-utils/src/**/*.test.ts',
+      'src/**/*.test.{ts,tsx}',
     ],
     exclude: [
       '**/node_modules/**',
@@ -28,17 +25,17 @@ export default defineConfig({
       // media-generation-service depends on deprecated task-manager path
       'packages/platform/src/media/__tests__/media-generation-service.test.ts',
     ],
-    coverage: {
-      provider: 'v8',
-      reporter: ['text', 'json-summary', 'html'],
-      exclude: [
-        '**/node_modules/**',
-        '**/dist/**',
-        '**/packages/webview/**',
-        '**/*.test.ts',
-        '**/types.ts',
+    coverage: sharedCoverage({
+      include: [
+        'src/**/*.{ts,tsx}',
+        'packages/platform/src/**/*.{ts,tsx}',
+        'packages/ai-sdk/src/**/*.{ts,tsx}',
+        'packages/agent-types/src/**/*.{ts,tsx}',
       ],
-    },
+      exclude: [
+        '**/packages/webview/**',
+      ],
+    }),
   },
   resolve: {
     alias: {

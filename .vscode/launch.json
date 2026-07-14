@@ -105,6 +105,7 @@
       "type": "extensionHost",
       "request": "launch",
       "args": [
+        "--extensionDevelopmentPath=${workspaceFolder}/scripts/webview-functional/vscode-controller",
         "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-engine",
         "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-tools",
         "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-preview",
@@ -121,7 +122,8 @@
         "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-dashboard",
         "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-live",
         "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-model",
-        "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-suite"
+        "--extensionDevelopmentPath=${workspaceFolder}/packages/neko-suite",
+        "${workspaceFolder}/../neko-test"
       ],
       "outFiles": ["${workspaceFolder}/packages/*/dist/**/*.js"],
       "preLaunchTask": "build:dev"

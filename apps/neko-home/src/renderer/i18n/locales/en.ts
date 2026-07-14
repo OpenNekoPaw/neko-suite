@@ -1,0 +1,26 @@
+import type { MessageBundle } from '@neko/shared';
+
+export const enHomeMessages: MessageBundle = {
+  'app.loading': 'Loading Neko Home...',
+  'title.brand': 'Neko Home',
+  'workspace.personal': 'Personal workspace',
+  'nav.label': 'Neko Home',
+  'nav.overview': 'Overview',
+  'nav.assets': 'Library',
+  'nav.generations': 'Generated',
+  'nav.agent': 'Agent',
+  'nav.market': 'Market',
+  'nav.skills': 'Skills',
+  'overview.title': 'Continue creating',
+  'overview.description':
+    'Review generated work, manage creative resources, or continue in a professional editor.',
+  'overview.createWithAgent': 'Create with Agent',
+  'overview.openInVSCode': 'Open in VSCode',
+  'overview.handoffAccepted': 'VSCode handoff accepted.',
+  'summary.resources': 'Resources',
+  'summary.providers': 'Providers',
+  'summary.engine': 'Engine Core',
+  'surface.empty': 'No items',
+  'engine.ready': 'Engine ready',
+  'engine.unavailable': 'Engine unavailable',
+};

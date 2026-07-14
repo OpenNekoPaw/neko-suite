@@ -17,6 +17,6 @@ export default defineConfig({
     globals: true,
     environment: 'jsdom',
     include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
-    coverage: sharedCoverage(),
+    coverage: sharedCoverage({ include: ['src/**/*.{ts,tsx}'] }),
   },
 });

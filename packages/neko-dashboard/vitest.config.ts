@@ -1,6 +1,7 @@
 import { defineConfig } from 'vitest/config';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { sharedCoverage } from '../../vitest.shared';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -14,6 +15,9 @@ export default defineConfig({
   },
   test: {
     environment: 'node',
-    include: ['packages/**/*.test.ts', 'packages/**/*.test.tsx'],
+    include: ['src/**/*.test.{ts,tsx}', 'packages/extension/src/**/*.test.{ts,tsx}'],
+    coverage: sharedCoverage({
+      include: ['src/**/*.{ts,tsx}', 'packages/extension/src/**/*.{ts,tsx}'],
+    }),
   },
 });

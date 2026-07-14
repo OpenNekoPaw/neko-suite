@@ -24,6 +24,12 @@ export default defineConfig({
     ],
     // 全仓 Turbo 并发测试时，这个包的 worker 启动容易超时，收敛为单文件串行执行以提升稳定性。
     fileParallelism: false,
-    coverage: sharedCoverage(),
+    coverage: sharedCoverage({
+      include: [
+        'src/**/*.{ts,tsx}',
+        'packages/extension/src/**/*.{ts,tsx}',
+        'packages/webview/src/**/*.{ts,tsx}',
+      ],
+    }),
   },
 });

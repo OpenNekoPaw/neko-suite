@@ -152,11 +152,15 @@ cd packages/neko-cut/packages/extension
 pnpm watch
 
 # 3. Press F5 in VS Code to launch Extension Development Host
-# 4. For Webview visual/interaction acceptance, use the VS Code debugger Skill
-pnpm smoke:webview:runtime
+# 4. For Webview visual/interaction acceptance, run a real functional scenario
+pnpm test:webview:functional --owner neko-cut
 ```
 
 Vite/browser validation is only a hot-reload aid or explicitly requested browser-compatibility check. Neko Extension Webviews ultimately run inside the VS Code sandbox. When a change affects visuals, layout, interaction, focus, CSP, Extension/Webview messages, media preview, or VS Code lifecycle, validate through Extension Development Host + the `vscode-extension-debugger` Skill. Do not use Chrome, the generic Browser plugin, Playwright, or `localhost` in a regular browser as the default runtime acceptance surface.
+
+Each owning package maintains its core user scenarios under `scripts/webview-functional/scenarios/<owner>/` and the corresponding minimal synthetic workspace under `scripts/webview-functional/fixtures/`. Scenarios must operate visible UI through public host boundaries and assert UI state, the canonical message/command/service path, durable file or Engine results, lifecycle behavior, and runtime errors. They must not call private stores or handlers, add test-only business commands, or bypass project file services. The shared runner owns only the VS Code/Electron host, CDP adapter, closed operation schema, error policy, and report mechanics.
+
+Raw reports are written to gitignored `reports/webview-functional/` and should be kept locally only as long as needed to reproduce the current issue; trusted pull-request CI artifacts default to 14-day retention. Screenshots, DOM, logs, and side-effect manifests must come only from isolated fixture workspaces, never a normal development window or real user workspace. OpenSpec, pull requests, and documentation may commit only redacted summaries containing the scenario id, command, host/version, result, failure classification, evidence location, and residual risk. Remove secrets, tokens, absolute user paths, and any non-fixture content before sharing.
 
 ### Developing the Rust Engine
 
@@ -314,10 +318,12 @@ acceptance. CI and the default `pnpm test` remain key-free. Local changes that
 affect provider/model selection, AI SDK message projection, prompt or Skill
 behavior, tool schemas, AgentSession workflow, validator/recovery policy, or
 TUI/GUI projection of live Agent events must run a focused
-`scripts/agent-eval` scenario or record why it could not run and the residual
-risk. Use `.codex/skills/neko-agent-evaluation/SKILL.md` to plan the case,
-canonical path, forbidden fallback, and evidence. Do not restore `neko eval` or
-create a second orchestration path inside Neko Agent.
+`scripts/agent-eval` v2 suite or record why it could not run and the residual
+risk. Use `.codex/skills/neko-agent-evaluation/SKILL.md` to make one
+`reuse | update | create | excluded` decision per affected behavior before
+planning user behavior, canonical path, forbidden fallback, observable evidence,
+coverage delta, and suite/case. Do not restore `neko eval`, create a second
+orchestration path inside Neko Agent, or add runtime-only Evaluation switches.
 
 The default development and acceptance order for new Agent features is: define
 the shared contract, runtime path, and path-level tests first; validate Agent
@@ -331,26 +337,39 @@ automation evaluation does not replace VS Code Webview runtime acceptance.
 
 ```bash
 pnpm test:agent:eval
-pnpm test:agent:mock
 node scripts/agent-eval/protocol-smoke.mjs \
-  --manifest scripts/agent-eval/scenarios/creative-workflows.scenarios.json \
-  --case cat-play-image-analysis \
+  --suite skill.storyboard \
+  --case canonical-two-shot-storyboard \
   --dry-run
 ```
 
 `pnpm test:agent:eval` is a key-free harness test included in `pnpm ci:local`
-and GitHub CI. It proves runner, manifest/protocol, and failure-classification
-behavior; it does not replace a real TUI Agent case. Real-case conclusions must
-also match assertion evaluators actually executed by the current runner.
-Metadata-only assertions, a zero exit code, or a non-empty final answer must not
-be described as complete scenario acceptance.
+and GitHub CI. It proves strict schemas, runner/protocol, reporting and failure
+classification, plus all indexed suite dry-runs; it does not replace a real TUI
+Agent case. Run the same `--suite` / `--case` command without `--dry-run` for the
+real case. Conclusions must match assertion evaluators actually executed by the
+current runner, canonical-path/no-fallback facts, effective model/config, and
+artifact validators. Metadata, a zero exit code, a high Judge score, or a
+non-empty final answer must not be described as complete scenario acceptance.
+
+Default pull-request CI does not read provider secrets. Real focused/nightly
+Evaluation runs only on trusted `main` pushes, schedules, or manual dispatch;
+fork pull requests have no secret execution path. Raw reports are written to
+gitignored `reports/agent-eval/`; developers clean local reports under the
+14-day policy, while trusted-CI artifacts enforce 14-day retention. OpenSpec and
+pull requests may reference only sanitized summaries:
+suite/case/run, command, Host Skill identity/fingerprint or target hash,
+provider/model/effective config, fixture digest, hard-gate/artifact evidence,
+usage/cost availability, blockers, and residual risk. Do not commit credentials,
+hidden prompts, raw provider configuration, absolute user paths,
+cache/temp/runtime handles, or unauthorized content.
 
 When credentials, network, provider/model access, and fixtures are available,
 run the same focused case without `--dry-run`. If the real case or VS Code
 debugger runtime cannot run, delivery notes must record the attempted command,
 blocking condition, and residual risk. Mock-only, browser-only, jsdom-only,
 direct-turn-injection-only, or final-text-only evidence does not replace TUI
-debug automation evaluation or VS Code Webview runtime acceptance.
+debug automation evaluation or real VS Code Webview functional acceptance.
 
 When changing `.github/workflows/ci.yml`, dependency installation, Corepack/pnpm, FFmpeg setup, or Linux runner shell logic, use `act` as a local GitHub Actions shape check:
 
@@ -370,10 +389,11 @@ For integration smoke checks:
 ```bash
 pnpm smoke:engine        # Engine CLI + serve /health + dispatch smoke
 pnpm smoke:webview       # Builds all webview packages; limit with NEKO_WEBVIEW_SMOKE_PACKAGES
-pnpm smoke:webview:runtime
-# Uses VS Code debugger + vscode-extension-debugger Skill for visible Webview runtime evidence
-pnpm smoke:vscode-debugger -- --skill vscode-extension-debugger --require-webview
-# Connects to a remote-debugging VS Code session and records Skill test evidence; does not install VSIX
+pnpm smoke:webview:targets
+# Only proves VS Code page/Webview target discovery; it is not functional acceptance
+pnpm smoke:vscode:targets -- --skill vscode-extension-debugger --require-webview
+pnpm test:webview:functional:p0
+# Runs P0 user operations, persistence, and error gates in isolated Extension Development Hosts
 node scripts/smoke-webview-builds.mjs --list  # Lists selected webview packages without building
 ```
 

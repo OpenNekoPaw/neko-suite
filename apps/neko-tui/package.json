@@ -1,0 +1,32 @@
+{
+  "name": "@neko/app-tui",
+  "version": "0.0.1",
+  "description": "Canonical terminal application composition root for Neko Suite",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "neko": "./dist/main.js",
+    "nekoagent": "./dist/main.js"
+  },
+  "scripts": {
+    "build": "tsup",
+    "build:bundle": "tsup",
+    "dev": "tsx src/main.ts",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@neko/cli": "workspace:*"
+  },
+  "devDependencies": {
+    "tsup": "^8.0.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.2"
+  },
+  "engines": {
+    "node": ">=24.0.0",
+    "bun": ">=1.3.10"
+  },
+  "license": "AGPL-3.0-or-later"
+}

@@ -1,5 +1,18 @@
 {
   "$schema": "https://turbo.build/schema.json",
+  "globalDependencies": [
+    ".github/workflows/*.yml",
+    ".dependency-cruiser.cjs",
+    "eslint.config.mjs",
+    "knip.json",
+    "package.json",
+    "pnpm-lock.yaml",
+    "pnpm-workspace.yaml",
+    "quality/**",
+    "scripts/test-orchestration/**",
+    "tsconfig.json",
+    "vitest.shared.ts"
+  ],
   "tasks": {
     "build": {
       "dependsOn": ["^build"],

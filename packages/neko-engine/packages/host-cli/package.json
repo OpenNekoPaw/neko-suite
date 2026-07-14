@@ -8,7 +8,7 @@
     "build:debug": "node ../../scripts/run-with-ffmpeg-env.js -- cargo build"
   },
   "engines": {
-    "node": ">= 18"
+    "node": ">= 24"
   },
   "license": "AGPL-3.0-or-later"
 }

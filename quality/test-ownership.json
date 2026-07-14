@@ -27,7 +27,6 @@
     { "path": "packages/neko-dashboard", "owner": "packages/neko-dashboard", "mode": "self", "sourceScope": "src/**/*.{ts,tsx}", "testScope": "src/**/*.test.{ts,tsx}" },
     { "path": "packages/neko-dashboard/packages/extension", "owner": "packages/neko-dashboard", "mode": "aggregated", "sourceScope": "src/**/*.{ts,tsx}", "testScope": "packages/extension/src/**/*.test.{ts,tsx}" },
     { "path": "packages/neko-dashboard/packages/webview", "owner": "packages/neko-dashboard/packages/webview", "mode": "self", "sourceScope": "src/**/*.{ts,tsx}", "testScope": "src/**/*.test.{ts,tsx}" },
-    { "path": "packages/neko-desktop", "owner": "packages/neko-desktop", "mode": "self", "sourceScope": "src/**/*.{ts,tsx}", "testScope": "src/**/*.test.{ts,tsx}" },
     { "path": "packages/neko-engine", "owner": "packages/neko-engine", "mode": "self", "sourceScope": "src/**/*.{ts,tsx}", "testScope": "src/**/*.test.{ts,tsx}" },
     { "path": "packages/neko-engine/packages/extension", "owner": "packages/neko-engine", "mode": "aggregated", "sourceScope": "src/**/*.{ts,tsx}", "testScope": "packages/extension/src/**/*.test.{ts,tsx}" },
     { "path": "packages/neko-engine/packages/host-napi", "owner": "packages/neko-engine", "mode": "aggregated", "sourceScope": "src/**/*.{ts,tsx}", "testScope": "scripts and native package validation" },

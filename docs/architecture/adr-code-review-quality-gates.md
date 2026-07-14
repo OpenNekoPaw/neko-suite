@@ -74,8 +74,9 @@ Neko Suite 采用“架构优先、契约优先、风险分级、证据驱动”
 | 质量门禁组合                  | `pnpm check:quality`                            |
 | Engine runtime smoke          | `pnpm smoke:engine`                             |
 | Webview build smoke           | `pnpm smoke:webview`                            |
-| Webview runtime smoke         | `pnpm smoke:webview:runtime`                    |
-| VS Code debugger Skill smoke  | `pnpm smoke:vscode-debugger -- --skill <skill>` |
+| Webview target smoke          | `pnpm smoke:webview:targets`                    |
+| VS Code debugger target smoke | `pnpm smoke:vscode:targets -- --skill <skill>` |
+| Webview functional acceptance | `pnpm test:webview:functional`                  |
 | GitHub Actions 形状预检       | `pnpm ci:act`                                   |
 
 `act` 只是本地 Linux job 形状预检，不替代 GitHub Actions。Rust macOS runner、平台打包和 release 矩阵以 GitHub Actions 为准。
@@ -88,30 +89,39 @@ Neko Suite 采用“架构优先、契约优先、风险分级、证据驱动”
 
 影响 AgentSession 多轮流程、对话历史、turn 执行、反馈提示词流、Skill 生命周期、Agent-owned Skill 触发、capability/tool 注册或路由、provider/model 路由、controller/judge 行为、异步任务观察、产物生成工作流或真实 API 场景验收的变更，应使用 `.codex/skills/neko-agent-evaluation/SKILL.md` 规划并记录聚焦的 TUI debug automation 证据。
 
-`pnpm test:agent:eval` 验证 scenario/runner、协议处理、失败分类和其他 key-free harness 行为，应进入本地与 GitHub CI 门禁；它不等于真实 Agent 行为验收。TUI debug automation 真实 case 是 opt-in 的真实 TUI runtime 验收入口，不进入默认 key-free CI，也不提供 mock lane。外部 eval 脚本可以负责 manifest、controller、judge、check 和 report，但不得 import Agent、Canvas、media、Skill 或 provider 的业务内部实现来替代真实 TUI 行为。
+每项受影响行为必须先做一个 `reuse | update | create | excluded` authoring 决策，并记录 target owner、user behavior、canonical path、forbidden fallback、observable evidence、expected result/failure 和九类 coverage delta。changed path 没有 suite owner 时必须 fail-visible；`excluded` 只能用于确定性验证足以证明真实 Agent 行为不会改变的情况。
+
+`pnpm test:agent:eval` 验证 strict v2 suite/scenario、runner/protocol、assertion/Judge parser、报告、失败分类和所有 indexed suite dry-run，应进入本地与 GitHub CI 门禁；它不等于真实 Agent 行为验收。TUI debug automation 真实 case 是 opt-in 的真实 TUI runtime 验收入口，不进入默认 key-free PR CI，也不提供 mock lane。外部 eval 脚本可以负责 authoring、suite、controller、Judge、check、comparison 和 report，但不得 import Agent、Canvas、media、Skill 或 provider 的业务内部实现来替代真实 TUI 行为。
 
 debug automation 必须复用完整 TUI App/session owner，并通过 TUI 输入队列提交消息。直接调用 Agent turn runner、绕过 TUI 输入队列或替换 runtime assembly 的结果不能作为 debug automation evidence。
 
 协议 parser、invalid request、stdio framing、timeout classification 等 debug protocol 单元测试可以 key-free；但 Agent behavior acceptance 必须使用真实配置 API，不得使用 mock provider 或 eval-only fake business tools。
 
+Skill suite 必须绑定 portable name、Host source/provenance/root/location 和 Host-computed fingerprint。同名 Skill 不得只按名称或隐藏优先级选择；Market package id、semver、发布、安装和分发状态不能替代本地开发 identity。runtime/model matrix 只能使用 canonical TUI 支持的 session-scoped immutable 配置，并从 facts 证明 requested/effective identity 与 digest；不得新增 eval-only runtime flag。
+
 交付说明或 PR 中的 debug automation 证据应包含：
 
-- manifest 路径或 intended manifest。
-- 实际命令，例如 `node scripts/agent-eval/protocol-smoke.mjs --manifest <manifest> --case <case-id>`；脚本应通过通用 debug automation 接口驱动 TUI runtime。
-- 输出目录、`result.json` / `summary.md` 路径和退出码。
-- target/controller/judge 的 provider/model identity。
+- suite/case/run id，以及 `reuse/update/create/excluded` decision 或 intended suite。
+- 实际命令，例如 `node scripts/agent-eval/protocol-smoke.mjs --suite <suite-id> --case <case-id>`；脚本应通过通用 debug automation 接口驱动 TUI runtime。
+- `reports/agent-eval/` 下的 `result.json`、`evidence.json`、`artifact-manifest.json`、`quality-report.md`、可选 Judge/aggregate/baseline diff 路径和退出码。
+- target identity/fingerprint、target/controller/Judge provider/model、effective configuration、fixture digest、usage 和 cost availability。
+- hard-gate、no-fallback、artifact validator、dropped-count 和 failure-attribution evidence refs。
 - 若未运行，明确记录阻塞原因，例如 credentials、provider availability、network、quota、model access、local workspace fixture、controller model 或 judge model 不可用。
-- 剩余风险。
+- 未执行/blocked suite、skipped stage 和剩余风险。
 
-证据结论必须以当前 runner 实际执行的 assertion evaluator 为准。manifest 中只有元数据但没有可执行 evaluator 的 assertion，不得声称已经通过；仅有进程退出码或非空最终回答也不得替代 canonical-path 和 forbidden-fallback 证据。
+证据结论必须以当前 runner 实际执行的 assertion evaluator 为准。未知字段或没有 evaluator 的 assertion 必须在 TUI spawn 前 configuration invalid；仅有 dry-run、进程退出码、Judge 高分或非空最终回答不得替代 canonical-path、effective config 和 forbidden-fallback 证据。事实集合有 dropped count 时，依赖该事实的 assertion 必须失败或 blocked。
 
 自然语言 Skill 触发证据必须区分 Agent 主动激活 Skill 和“没有激活但输出看起来不错”。对 `trigger: "natural-language"` 的 Skill case，缺少 Agent-owned activation 应视为 case fail，而不是通过 judge 文本弥补。
 
 Mock-only、direct-turn-injection-only、final-text-only、browser-only、jsdom-only、普通 TUI UI smoke、旧 `neko run` 单轮结果或旧 headless eval 结果不能声称满足 debug automation evidence；它们只能作为相邻验证记录。
 
+默认 pull-request CI 只运行 key-free harness，不读取 provider secrets。真实 focused/nightly workflow 只能在可信 `main` push、schedule 或 manual dispatch 执行，不得增加 fork PR 或 `pull_request_target` secret 路径。缺少 credential、network、quota、model、config 或 fixture 时必须输出 infrastructure blocked/fail evidence，不能用 mock/default fallback 继续成功。
+
+原始 Evaluation 报告写入 gitignored `reports/agent-eval/`。本地按 14 天保留策略由开发者负责清理；trusted-CI artifact 自动保留 14 天。OpenSpec、PR 和长期文档只提交通过 allowlist 的脱敏 summary/baseline；必须移除 credential、hidden prompt body、raw provider config、absolute user path、cache/temp/Webview/runtime handle、raw log 和未授权内容，同时保留稳定 suite/case/run、identity、assertion/artifact refs、failure classification 和 residual risk。
+
 ## 新需求可行性检查
 
-L3/L4 变更在大规模实现前必须先证明关键路径可行：可以通过 spike、fixture、失败测试、Engine smoke、Webview runtime smoke、VSCode debugger Skill smoke、VSCode 调试证据或原型完成。可行性证据写入 OpenSpec design/tasks；若无法运行，必须记录原因、风险和后续关闭方式。
+L3/L4 变更在大规模实现前必须先证明关键路径可行：可以通过 spike、fixture、失败测试、Engine smoke、Webview target smoke、VSCode debugger Skill target smoke、VSCode 调试证据或原型完成。可行性证据写入 OpenSpec design/tasks；若无法运行，必须记录原因、风险和后续关闭方式。可行性 spike 不能替代最终功能验收。
 
 ## Prelaunch 兼容策略
 
@@ -134,9 +144,17 @@ L3/L4 变更在大规模实现前必须先证明关键路径可行：可以通�
 
 ## Engine 与 Webview 专项约束
 
-Engine 变更涉及 Rust action、stream、file access、runtime state、native packaging 或 EngineClient contract 时，应单独记录 Rust/Proto/client/fixture/smoke 验证。Webview 变更涉及 runtime behavior、Extension/Webview message、layout、keyboard/focus、i18n、VSCode lifecycle、CSP、媒体 codec 兼容或 Range/seek 读取时，应单独记录 message contract、focused build/test、CSP/HTML helper 测试、Engine file-access 测试、Webview runtime smoke、VSCode debugger Skill smoke 或截图证据。
+Engine 变更涉及 Rust action、stream、file access、runtime state、native packaging 或 EngineClient contract 时，应单独记录 Rust/Proto/client/fixture/smoke 验证。Webview 变更涉及 runtime behavior、Extension/Webview message、layout、keyboard/focus、i18n、VSCode lifecycle、CSP、媒体 codec 兼容或 Range/seek 读取时，应单独记录 message contract、focused build/test、CSP/HTML helper 测试、Engine file-access 测试，以及通过 `pnpm test:webview:functional` 执行的真实 Extension Development Host 功能场景。
 
-普通浏览器、Chrome、Browser 插件、Playwright 或 Vite/localhost 只能作为热重载和显式浏览器兼容性辅助；它们不经过 VS Code Webview CSP、`webview.asWebviewUri(...)`、Extension/Webview message、焦点生命周期或 VS Code 主题注入，因此不能作为 Extension Webview 视觉/交互变更的默认验收证据。此类变更必须使用 Extension Development Host + `vscode-extension-debugger` Skill，运行 `pnpm smoke:webview:runtime` 或等价命令；若无法运行，必须记录原因、剩余风险和关闭方式。
+普通浏览器、Chrome、Browser 插件、Playwright 或 Vite/localhost 只能作为热重载和显式浏览器兼容性辅助；它们不经过 VS Code Webview CSP、`webview.asWebviewUri(...)`、Extension/Webview message、焦点生命周期或 VS Code 主题注入，因此不能作为 Extension Webview 视觉/交互变更的默认验收证据。此类变更必须使用 Extension Development Host + `vscode-extension-debugger` Skill，通过 `pnpm test:webview:functional` 运行受影响的真实功能场景；`pnpm smoke:webview:targets` 只证明 page/Webview target 可发现。若功能场景无法运行，必须记录阻塞条件、剩余风险和关闭方式。
+
+### Webview 功能场景与证据治理
+
+- owning package 维护自己的合成 fixture、用户操作、业务断言、canonical path 和 authoritative side effect；共享 runner 只维护宿主生命周期、CDP adapter、封闭操作 schema、错误分类、脱敏和报告格式。
+- 场景必须通过可见 UI、公开 VS Code/Electron 命令或消息边界和 owning project/Engine service 完成；不得直接写 fixture 文件来伪造 UI 成功，不得调用私有 store/handler，也不得增加 test-only 业务成功入口。
+- 原始 `result.json`、step/assertion evidence、DOM、日志、截图和 side-effect manifest 写入 gitignored `reports/webview-functional/`。本地证据按排障需要短期保留；可信 PR CI artifact 默认保留 14 天，nightly/release 可在对应 workflow 中显式设置不同期限。
+- 截图和 DOM 只能来自隔离 fixture workspace。不得采集普通开发窗口、真实用户工作区、用户配置、凭据、secret storage、token 或无关本机内容；误采集时必须立即删除，不能引用或提交。
+- OpenSpec、PR 和长期文档只提交脱敏摘要，包含 scenario id、命令、宿主/扩展版本、fixture identity、结果、失败分类、证据位置和剩余风险。报告 schema 未知、脱敏失败或证据越出 scenario report root 时必须 fail-visible。
 
 VS Code/Electron 在创建任意 Webview 编辑器或 Webview View 时，可能在 DevTools 中输出以下容器级 warning：
 

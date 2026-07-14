@@ -11,7 +11,7 @@
     "url": "https://github.com/neko/creative-suite"
   },
   "engines": {
-    "vscode": "^1.85.0"
+    "vscode": "^1.128.0"
   },
   "categories": [
     "Other",
@@ -278,13 +278,13 @@
     "copy:extension": "mkdir -p dist && cp packages/extension/dist/extension.js dist/extension.js",
     "watch": "pnpm run compile:extension -- --watch",
     "lint": "eslint packages --ext ts,tsx",
-    "test": "pnpm exec vitest --dir packages/extension --passWithNoTests",
+    "test": "pnpm exec vitest run",
     "test:packages": "pnpm turbo run test --filter=@neko-sketch/webview",
     "package": "vsce package --no-dependencies"
   },
   "devDependencies": {
-    "@types/node": "^20.10.0",
-    "@types/vscode": "^1.85.0",
+    "@types/node": "^24.0.0",
+    "@types/vscode": "^1.125.0",
     "esbuild": "^0.19.8",
     "typescript": "^5.3.2"
   }
