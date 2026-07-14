@@ -10,6 +10,7 @@ Human-readable architecture decisions, review policies, and validation matrices 
 | ------------------------------------------- | ------------------------------------------------------------------------------------------------ |
 | `ledgers/code-debt-surface-ledger.json`     | Repository-wide non-Agent legacy, fallback, and deprecated surface ledger.                       |
 | `ledgers/agent-code-debt-lcd-register.json` | Agent-specific legacy compatibility debt register for Agent boundary checks and review evidence. |
+| `local-metadata-runtime-matrix.json`        | Supported SQLite Host, OS, architecture, and minimum runtime matrix.                             |
 | `skill-development-history/history.json`    | Immutable, evidence-linked local Skill development checkpoints; excludes Market release state.   |
 
 ## Rules

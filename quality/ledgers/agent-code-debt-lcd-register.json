@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "owner": "neko-agent-architecture",
-  "updatedAt": "2026-07-08",
+  "updatedAt": "2026-07-13",
   "qualityGate": {
     "failingProductionSemanticClasses": ["delete-now", "migrate-now", "needs-review"],
     "retainedEntryRequirements": ["owner", "replacement", "removeAfter", "tests"],

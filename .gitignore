@@ -46,14 +46,15 @@ test/
 test-results/
 playwright-report/
 
-# 本地 Agent evaluation 运行证据（提交稳定摘要，不提交原始运行产物）
-reports/neko-eval/
+# 本地测试与评估运行证据（提交稳定摘要，不提交原始运行产物）
+/reports/
 
 # 缓存
 .npm-cache/
 .turbo/
 .parcel-cache/
 .cache/
+.tmp/
 __pycache__/
 *.py[cod]
 
@@ -97,5 +98,3 @@ coverage/
 
 # 系统杂项
 .DS_Store
-# Local Agent Evaluation evidence (trusted CI uploads this directory as an artifact).
-/reports/agent-eval/
