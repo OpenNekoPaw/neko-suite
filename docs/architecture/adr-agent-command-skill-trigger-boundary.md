@@ -44,7 +44,7 @@ Skill 注入核心仍由 `SkillInjectionCoordinator` 和已有 Skill runtime 负
 
 - `agent-types` 定义跨 Webview、Extension、CLI/TUI 可共享的触发 contract、输入解析结果和 projection 类型。
 - `agent` runtime 继续保持 host-agnostic；它只接收“激活某个 Skill”的 typed request，不知道 React、VS Code 或 DOM 事件。
-- `webview` 和 `cli-tui` 只负责输入菜单、过滤、展示和消息发送；不导入 `@neko/agent` runtime。
+- `webview` 和 `apps/neko-tui` 只负责各自宿主的输入菜单、过滤、展示和消息发送；Agent 业务行为通过 `@neko/agent` 公共 runtime contract 组合。
 - `extension` 只做 host adapter 和 dispatch，不把 Skill 业务逻辑沉淀在 Webview message router。
 - Skill 显式激活、Agent `ActivateSkill` 和命令参数插值最终都进入同一 Skill injection path。
 - 未知 `/command`、未知 `$skill`、命名冲突、禁用 Skill、缺失 Skill 内容或非法参数应 fail-visible，不能 no-op 或退回自然语言伪装成功。

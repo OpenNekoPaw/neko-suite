@@ -35,7 +35,8 @@ Agent 是 Neko Suite 的横切创作智能层，不是一个创作领域。它�
 | `platform`    | host-agnostic 平台桥、配置、provider glue 和能力注入                                  |
 | `extension`   | VS Code commands、配置桥、host adapters、会话入口、资源授权                           |
 | `webview`     | Chat UI、输入、消息投影、用户反馈、短生命周期 UI 状态                                 |
-| `cli-tui`     | Terminal TUI/headless shell，复用 runtime 能力                                        |
+
+`apps/neko-tui` 是 Terminal TUI/headless 产品 owner，负责 Commander、Ink、terminal projection、Node host composition 和 debug automation，并复用上述 runtime 能力。
 
 ## 包职责边界
 
@@ -47,7 +48,7 @@ Agent 是 Neko Suite 的横切创作智能层，不是一个创作领域。它�
 | `platform`    | host-agnostic platform glue、tool provider、market skill adapter、配置解析、能力注入                                      | 依赖 React/Webview，实现 VS Code UI                  |
 | `extension`   | VS Code command、Webview bridge、file/resource/auth/engine/entity/search host adapter、lifecycle/disposable               | 沉淀 Agent runtime 决策或 prompt 拼装                |
 | `webview`     | Chat、settings、skill catalog、creation/task/artifact projection、用户确认                                                | 导入 runtime/platform/ai-sdk，执行工具或访问文件系统 |
-| `cli-tui`     | Terminal TUI/headless shell 和 TUI adapter                                                                                | 绕过 runtime 另建 Agent 业务路径                     |
+| `apps/neko-tui` | Terminal TUI/headless shell、TUI adapter、Node host composition 与 executable                                           | 绕过 runtime 另建 Agent 业务路径                     |
 
 ## 架构视图
 
@@ -404,8 +405,8 @@ Evaluation 是横切审阅面，不是默认 IDC 阶段，也不是独立 workfl
 
 开发期 Agent evaluation 是仓库脚本能力，不是 Agent 产品能力或独立的 CLI 业务编排：
 
-- `packages/neko-agent` 只提供通用 debug automation 控制面和中立事实投影；session、输入队列、Skill 生命周期、运行配置、任务观察和产物投影必须继续走 canonical TUI runtime。每条 controller 消息都进入 TUI input queue，不得 direct-import Agent turn runner 或建立第二套 `AgentSession` assembly。
-- `scripts/agent-eval` 是唯一平台 owner，拥有 `reuse | update | create | excluded` authoring 决策、严格 v2 suite/scenario、fixture、controller、hard assertion、artifact check、Judge、baseline/comparison、报告和退出码；不得把这些职责放回 `cli-tui`、Agent capability 或 runtime Skill。
+- `apps/neko-tui` 提供通用 debug automation 控制面和中立事实投影；session、输入队列、Skill 生命周期、运行配置、任务观察和产物投影必须继续走 canonical TUI runtime。每条 controller 消息都进入 TUI input queue，不得 direct-import Agent turn runner 或建立第二套 `AgentSession` assembly。
+- `scripts/agent-eval` 是唯一平台 owner，拥有 `reuse | update | create | excluded` authoring 决策、严格 v2 suite/scenario、fixture、controller、hard assertion、artifact check、Judge、baseline/comparison、报告和退出码；不得把这些职责放回 TUI application、Agent capability 或 runtime Skill。
 - 每项行为先定义 user behavior、canonical path、forbidden fallback、observable evidence、expected result/failure，再编写 prompt。缺失 facts 或公开 validator 时 Evaluation 必须 blocked，不能退化成最终文本、metadata 或人工假设。
 - debug automation 只能增加本地开发自动化普遍需要的 typed facts：Skill/Prompt fragment、effective runtime/model config、Tool/task/continuation、artifact、diagnostic、usage/timing/retry 和 dropped count。不得暴露 suite、case、variant、assertion、rubric、score、baseline、optimizer、pass/fail 或 report 概念，也不得投影 hidden prompt body 和 credential。
 - Skill suite 使用 portable name 与 Host-owned `source + provenance + rootId + relativePath + fingerprint` 确定被测开发快照。同名不同来源/位置是不同 Host identity；Market package id、semver、发布、安装和分发历史不属于 Evaluation 身份。

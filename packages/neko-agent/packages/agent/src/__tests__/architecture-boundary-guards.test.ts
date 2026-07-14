@@ -5,11 +5,12 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../../../..');
+const workspaceRoot = resolve(repoRoot, '../..');
 const agentSrc = join(repoRoot, 'packages/agent/src');
 const packageRoot = join(repoRoot, 'packages');
 const webviewSrc = join(packageRoot, 'webview/src');
 const extensionSrc = join(packageRoot, 'extension/src');
-const cliTuiSrc = join(packageRoot, 'cli-tui/src');
+const tuiSrc = join(workspaceRoot, 'apps/neko-tui/src/tui');
 const agentTypesSrc = join(packageRoot, 'agent-types/src');
 const testUtilsSrc = join(repoRoot, 'test-utils/src');
 
@@ -40,7 +41,7 @@ describe('agent architecture boundary guards', () => {
     expect(agentRoot).not.toMatch(/from ['"]\.\/experiment/u);
 
     const cliProductionSource = stripTypeScriptComments(
-      readSourceFiles(cliTuiSrc, (file) => !isTestFile(file)),
+      readSourceFiles(tuiSrc, (file) => !isTestFile(file)),
     );
     expect(cliProductionSource).not.toMatch(/\.command\(['"]experiment['"]\)/u);
     expect(cliProductionSource).not.toMatch(/core\/experiment/u);
@@ -68,7 +69,7 @@ describe('agent architecture boundary guards', () => {
       join(agentSrc, 'session/index.ts'),
       join(agentSrc, 'task/index.ts'),
     ];
-    const hostRuntimeSources = [...listFiles(extensionSrc), ...listFiles(cliTuiSrc)].filter(
+    const hostRuntimeSources = [...listFiles(extensionSrc), ...listFiles(tuiSrc)].filter(
       (file) => (file.endsWith('.ts') || file.endsWith('.tsx')) && !isTestFile(file),
     );
     const testUtilitySources = listFiles(testUtilsSrc).filter(
@@ -100,7 +101,7 @@ describe('agent architecture boundary guards', () => {
     const productionSources = [
       ...listFiles(agentSrc),
       ...listFiles(extensionSrc),
-      ...listFiles(cliTuiSrc),
+      ...listFiles(tuiSrc),
       ...listFiles(agentTypesSrc),
       ...testUtilitySources,
     ].filter((file) => (file.endsWith('.ts') || file.endsWith('.tsx')) && !isTestFile(file));
