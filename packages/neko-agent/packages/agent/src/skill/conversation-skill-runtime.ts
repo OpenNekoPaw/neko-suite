@@ -10,10 +10,6 @@ import type {
   SkillLifecycleSlot,
 } from '@neko/shared';
 import {
-  buildAgentPromptChainStartedObservation,
-  type AgentPromptChainObservation,
-} from '@neko-agent/types';
-import {
   createAgentCapabilityActivationIntent,
   createAgentCapabilityActivationProgressEvent,
 } from '@neko/shared';
@@ -47,24 +43,9 @@ export interface ConversationSkillRuntimeLogger {
   error(message: string, details?: unknown): void;
 }
 
-export interface ConversationSkillPromptChainObservationPort {
-  recordPromptChainObservation(input: AgentPromptChainObservation): AgentPromptChainObservation;
-}
-
-export interface ConversationSkillPromptChainContext {
-  readonly creationId: string;
-  readonly iterationId: string;
-  readonly promptChainId: string;
-  readonly checkpointId?: string;
-  readonly skillRecordId?: string;
-  readonly reason?: string;
-  readonly metadata?: Record<string, unknown>;
-}
-
 export interface ConversationSkillRuntimeDeps {
   readonly skillService?: SkillService;
   readonly agentBridge?: ConversationSkillAgentBridge;
-  readonly promptChainObservationPort?: ConversationSkillPromptChainObservationPort;
   readonly onActivationProgress?: (
     conversationId: string,
     events: readonly AgentCapabilityActivationProgressEvent[],
@@ -80,7 +61,6 @@ export interface ApplySlashSkillCommandInput {
   readonly source?: 'user-explicit' | 'agent-tool';
   readonly requestedBy?: 'user' | 'agent';
   readonly reason?: string;
-  readonly creation?: ConversationSkillPromptChainContext;
 }
 
 export interface ApplySkillInvocationInput {
@@ -92,13 +72,11 @@ export interface ApplySkillInvocationInput {
   readonly reason?: string;
   readonly slot?: SkillLifecycleSlot;
   readonly lifetime?: SkillLifecycleLifetime;
-  readonly creation?: ConversationSkillPromptChainContext;
 }
 
 export interface ExecuteSkillInput {
   readonly skillId: string;
   readonly conversationId: string;
-  readonly creation?: ConversationSkillPromptChainContext;
 }
 
 export interface AutoActivateSkillInput {
@@ -170,17 +148,11 @@ export class ConversationSkillRuntime {
       };
     }
 
-    return this._applySkill(
-      input.conversationId,
-      skill,
-      input.args,
-      {
-        source: input.source ?? 'user-explicit',
-        requestedBy: input.requestedBy ?? 'user',
-        reason: input.reason ?? `Slash command /${input.command}`,
-      },
-      input.creation,
-    );
+    return this._applySkill(input.conversationId, skill, input.args, {
+      source: input.source ?? 'user-explicit',
+      requestedBy: input.requestedBy ?? 'user',
+      reason: input.reason ?? `Slash command /${input.command}`,
+    });
   }
 
   async applySkillInvocation(
@@ -236,19 +208,13 @@ export class ConversationSkillRuntime {
       };
     }
 
-    return this._applySkill(
-      input.conversationId,
-      loadedSkill,
-      input.args,
-      {
-        source: input.source ?? 'user-explicit',
-        requestedBy: input.requestedBy ?? 'user',
-        reason: input.reason ?? `Skill invocation ${formatSkillInvocationName(skillName)}`,
-        ...(input.slot ? { slot: input.slot } : {}),
-        ...(input.lifetime ? { lifetime: input.lifetime } : {}),
-      },
-      input.creation,
-    );
+    return this._applySkill(input.conversationId, loadedSkill, input.args, {
+      source: input.source ?? 'user-explicit',
+      requestedBy: input.requestedBy ?? 'user',
+      reason: input.reason ?? `Skill invocation ${formatSkillInvocationName(skillName)}`,
+      ...(input.slot ? { slot: input.slot } : {}),
+      ...(input.lifetime ? { lifetime: input.lifetime } : {}),
+    });
   }
 
   async executeSkill(input: ExecuteSkillInput): Promise<SkillApplicationResult | null> {
@@ -265,17 +231,11 @@ export class ConversationSkillRuntime {
       return { applied: false, error: `Unknown skill: ${input.skillId}` };
     }
 
-    return this._applySkill(
-      input.conversationId,
-      skill,
-      undefined,
-      {
-        source: 'user-explicit',
-        requestedBy: 'user',
-        reason: `Execute skill ${skill.name}`,
-      },
-      input.creation,
-    );
+    return this._applySkill(input.conversationId, skill, undefined, {
+      source: 'user-explicit',
+      requestedBy: 'user',
+      reason: `Execute skill ${skill.name}`,
+    });
   }
 
   async activateDomainSkill(
@@ -460,16 +420,8 @@ export class ConversationSkillRuntime {
       readonly slot?: SkillLifecycleSlot;
       readonly lifetime?: SkillLifecycleLifetime;
     } = { source: 'user-explicit', requestedBy: 'user' },
-    creation?: ConversationSkillPromptChainContext,
   ): Promise<SkillApplicationResult> {
     const now = this._deps.now?.() ?? Date.now();
-    if (creation && !this._deps.promptChainObservationPort) {
-      return {
-        applied: false,
-        error:
-          'Agent-native creation metadata was supplied, but no prompt-chain observation port is configured.',
-      };
-    }
     const intent = createAgentCapabilityActivationIntent({
       conversationId,
       source: activation.source,
@@ -577,13 +529,6 @@ export class ConversationSkillRuntime {
         });
       }
       this.applySkillInjection(conversationId, injection, skill);
-      this._recordPromptChainObservation({
-        conversationId,
-        skill,
-        lifecycleRecordId,
-        activation,
-        creation,
-      });
       emit('projected', 'succeeded', {
         ...(lifecycleRecordId ? { recordId: lifecycleRecordId } : {}),
       });
@@ -606,40 +551,6 @@ export class ConversationSkillRuntime {
         error: error instanceof Error ? error.message : String(error),
       };
     }
-  }
-
-  private _recordPromptChainObservation(input: {
-    readonly conversationId: string;
-    readonly skill: Skill;
-    readonly lifecycleRecordId?: string;
-    readonly activation: {
-      readonly source: 'user-explicit' | 'agent-tool';
-      readonly requestedBy: 'user' | 'agent';
-      readonly reason?: string;
-    };
-    readonly creation?: ConversationSkillPromptChainContext;
-  }): void {
-    const creation = input.creation;
-    if (!creation) return;
-
-    this._deps.promptChainObservationPort?.recordPromptChainObservation(
-      buildAgentPromptChainStartedObservation({
-        creationId: creation.creationId,
-        iterationId: creation.iterationId,
-        promptChainId: creation.promptChainId,
-        observedAt: this._deps.now?.() ?? Date.now(),
-        skillName: input.skill.name,
-        skillRecordId: creation.skillRecordId ?? input.lifecycleRecordId,
-        reason: creation.reason ?? input.activation.reason,
-        metadata: {
-          ...(creation.metadata ?? {}),
-          conversationId: input.conversationId,
-          source: input.activation.source,
-          requestedBy: input.activation.requestedBy,
-          ...(creation.checkpointId ? { checkpointId: creation.checkpointId } : {}),
-        },
-      }),
-    );
   }
 
   private _getLifecycleRuntime(): SkillLifecycleRuntime | null {

@@ -1,4 +1,4 @@
-> **Implementation dependency (2026-07-14):** apply [`retire-idc-and-align-agent-creative-planning`](../retire-idc-and-align-agent-creative-planning/) first. Existing planning-projection and `CapabilityIntent` scaffolds are not accepted architecture: remove them or keep them unconnected unless focused evaluation proves a minimal derived read view is necessary. Plan/TODO/Markdown continue through the no-IDC ordinary Agent turn and typed Tool-call boundary; there is no Apply runtime, global current revision, target-completion evaluator, or asset-promotion prerequisite.
+> **Implementation dependency (2026-07-14):** apply [`retire-idc-and-align-agent-creative-planning`](../retire-idc-and-align-agent-creative-planning/) first. Existing planning-projection and `CapabilityIntent` scaffolds are not accepted architecture. Plan/TODO/Markdown continue through the no-IDC ordinary Agent turn and typed Tool-call boundary; there is no Apply runtime, global current revision, target-completion evaluator, plan authorization token, or asset-promotion prerequisite.
 
 ## 1. Baseline Audit and Contract Mapping
 
@@ -10,96 +10,77 @@
 - [x] 1.6 Audit every canonical Image operation from tool/capability entry through its final executor and Provider validation, distinguishing editor/writeback availability from deterministic, perception, generative, or hybrid production support; record current false-positive/degraded/unavailable declarations.
 - [x] 1.7 Audit Entity/Asset/Character revision, Storyboard shot reference, project dependency, Quality stale-state, preflight, export lineage, and deliverable verification contracts that can support character dependencies and direct deliverable checks without a new Agent-owned state model.
 - [x] 1.8 Audit current Plan Mode, plan approval, `brief.md`/`plan.md`, bounded TODO, document analysis, ordinary approved execution, and replan paths; identify any direct execution of Markdown, stale approval reuse, hidden workflow state, or planning-time executor/schema capture.
+- [x] 1.9 Audit model-independent creative intent, reference roles, Provider/model/version/profile support, session effective configuration, actual request evidence, result lineage, and Quality ownership; identify any static model matrix, marketing-derived support, or historical-result fallback.
 
 ## 2. Canonical Tool Context And Experimental Scaffold Cleanup
 
 - [x] 2.1 Characterize the existing `CreativeCapabilityPlanningProjection` scaffold, its consumers, duplicated fields, and parity tests; record that it is experimental rather than an accepted public or execution contract.
 - [x] 2.2 Audit its validators and fields for duplicated Tool schema/support authority, runtime/cache/Webview identity leakage, Provider handles, project truth, or plan-runtime semantics.
-- [ ] 2.3 Remove the scaffold and related exports/tests if current Tool definitions, registry, Skill context, `GetContext`, and owning diagnostics pass the focused capability-selection evaluations.
-- [ ] 2.4 If and only if ablation proves a material context omission, mis-selection, or token-budget failure, reduce the scaffold to a bounded read-only summary derived from the same registry; it must remain optional, disposable, and incapable of execution.
-- [ ] 2.5 Correct canonical Tool descriptions/schema/results first so creative purpose, input/output, mutation, execution kind, support/limits, permissions, diagnostics, and quality expectations come from the owning contribution.
-- [ ] 2.6 Add architecture tests rejecting a parallel creative catalog, Provider-purpose allowlist, duplicate support matrix, planning runtime, or required planning-projection handshake.
+- [x] 2.3 Remove the scaffold and related exports/tests if current Tool definitions, registry, Skill context, `GetContext`, and owning diagnostics pass the focused capability-selection evaluations.
+- [x] 2.4 If and only if ablation proves a material context omission, mis-selection, or token-budget failure, reduce the scaffold to a bounded read-only summary derived from the same registry; it must remain optional, disposable, and incapable of execution. (Not adopted: focused before/after real-Agent evidence found no need for a derived view.)
+- [x] 2.5 Correct canonical Tool descriptions/schema/results first so creative purpose, input/output, mutation, execution kind, support/limits, permissions, diagnostics, and quality expectations come from the owning contribution.
+- [x] 2.6 Add architecture tests rejecting a parallel creative catalog, Provider-purpose allowlist, duplicate support matrix, planning runtime, or required planning-projection handshake.
+- [x] 2.7 Add architecture tests rejecting a global model capability matrix, Prompt Manager/execution catalog, model-marketing support inference, or Prompt-example retrieval as a prerequisite for ordinary Agent execution.
 
 ## 3. Capability Context Evaluation And Optional Optimization
 
-- [ ] 3.1 Run focused real-Agent selection cases against the existing Tool/Skill/`GetContext` path and measure capability omission, wrong-technique selection, schema confusion, and token/context cost.
-- [ ] 3.2 Improve existing Tool injection/filtering and `GetContext` output where the cases expose concrete gaps; do not require a domain-index/discovery/selected-schema prompt chain.
-- [ ] 3.3 Prove the selected operation always executes through the normal Tool/lifecycle registry and its current schema, with no planning-specific resolver or executor.
+- [x] 3.1 Run focused real-Agent selection cases against the existing Tool/Skill/`GetContext` path and measure capability omission, wrong-technique selection, schema confusion, and token/context cost.
+- [x] 3.2 Improve existing Tool injection/filtering and `GetContext` output where the cases expose concrete gaps; do not require a domain-index/discovery/selected-schema prompt chain.
+- [x] 3.3 Prove the selected operation always executes through the normal Tool/lifecycle registry and its current schema, with no planning-specific resolver or executor.
 - [x] 3.4 Ensure disabled, uninstalled, untrusted, incompatible, or unsupported capabilities are omitted from executable candidates or exposed as unavailable, never projected as a likely success path.
 - [x] 3.5 Add collision diagnostics for duplicate canonical capability ownership and selected-executor ambiguity while preserving multiple legitimate technique candidates for Agent comparison.
-- [ ] 3.6 If task 3.1 proves a compact derived view necessary, measure it on the real PromptComposer path and keep a test proving disabling it leaves ordinary Tool selection and execution functional.
+- [x] 3.6 If task 3.1 proves a compact derived view necessary, measure it on the real PromptComposer path and keep a test proving disabling it leaves ordinary Tool selection and execution functional. (Not adopted: the measured gap was fixed in canonical `GetContext`; no derived view was justified.)
 
-## 4. Current-File And Project-Grounded Agent Replanning
+## 4. Minimal Agent Runtime And Native Approval Cleanup
 
-- [ ] 4.1 Replace the broad history-scanning creative snapshot with bounded, on-demand reads of current files/ResourceRefs, applicable owning project revisions, generated results, Task results, and Quality facts relevant to the current Agent goal.
-- [ ] 4.2 Ensure each consequential `.nk*` project mutation carries and deterministically validates current/base revision after async task or capability completion; ordinary files use file/ResourceRef plus digest/lineage, and no global revision or second Creation/workflow state store may be introduced.
-- [ ] 4.3 Update next-action guidance so the existing Agent loop queries current facts, compares real capability candidates, and proposes the normal typed Tool call while deterministic resolve, validation, approval, policy, and execution remain in existing runtimes.
-- [ ] 4.4 Add continuation tests proving context compaction, session resume, or a new turn reads current files, ResourceRefs, and applicable owning project revisions instead of replaying assistant text, TODO state, legacy trace, or stale active-editor context.
-- [ ] 4.5 Add path tests proving a returned project revision invalidates prior observations and stale QualityEvidence before downstream mutation, export, or delivery.
-- [ ] 4.6 Record minimal capability-selection/replan trace evidence for evaluation and audit without using trace rows as recovery state or project truth.
-- [ ] 4.7 Include owning character/reference revision dependencies and target completion evidence in transient observation when available; prove Agent state does not duplicate Entity, Asset, Storyboard, Cut, Audio, Quality, or Export truth.
-- [ ] 4.8 Ground comic, novel, screenplay, PDF, illustration, image-sequence, and existing-project plans in actual files and owning structured source evidence; add fail-visible diagnostics for missing page/panel/scene/character/source-trace or project inputs.
-- [ ] 4.9 Integrate Plan Mode with the existing read-only Tool/capability context so generated Markdown plans expose supported/degraded/unavailable/partial paths as concrete work units without creating tasks or mutations.
-- [ ] 4.10 Remove or keep unconnected any `CapabilityIntent` graph/plan contract; approved execution must form an ordinary typed Tool call in the current Agent turn and must not persist resolved executors, Provider handles, cache/Webview identities, or full schemas in Markdown/frontmatter.
-- [ ] 4.11 Bind plan approval to plan content digest, critical input file/ResourceRef or applicable project revision, target, and explicit cost/risk/mutation/delivery scope using the existing Approval owner; do not introduce a Plan Manager or approval store.
-- [ ] 4.12 Implement current-turn re-read and re-resolve for Markdown, input files/projects, capability support/schema, Provider/model limits and policy before each consequential action; do not add an Apply runtime.
-- [ ] 4.13 Invalidate or replan when documents, project revisions, capabilities or Provider support change; require renewed approval for material target/technique/cost-risk/mutation/delivery changes and trace bounded replans that remain inside the approved scope.
-- [ ] 4.14 Add poison tests proving Markdown/TODO edits cannot trigger side effects, old executor/schema snapshots cannot run, and Plan Mode cannot create media tasks, project mutations, asset-library imports or exports.
+- [x] 4.1 Replace the broad history-scanning creative snapshot with bounded, on-demand reads of current files/ResourceRefs, generated results, Task results, and applicable owning facts relevant to the current Agent goal.
+- [x] 4.2 Delete the fixed `MediaProductionWorkflowRunState` shared DTO, Agent stage orchestrators, Task-backed workflow state store, recovery coordinator, public exports, and tests; preserve user files/projects/settings and ordinary Task data.
+- [x] 4.3 Remove the architecture-test whitelist for legacy media workflow files and poison their filenames, exported symbols, fixed stage ids, workflow state store, recovery, and authoring/pre-export orchestrator paths.
+- [x] 4.4 Remove creative-plan-specific `ApprovalBinding` and `creator-replan-policy` from Agent core; keep creator review on the generic `ApprovalRequest.context`/user-prompt path and keep every actual Tool operation under its current permission/cost/mutation/delivery policy.
+- [x] 4.5 Add focused Approval tests proving permission, creator-review, and quality-gate channels work through the generic ApprovalEngine without creative scope fields, and a prior creator review cannot bypass a current Tool approval.
+- [x] 4.6 Audit formal prompt-chain observation consumers; do not extend checkpoint state for this capability, and remove only genuinely dead observation code in a separately bounded cleanup if another lifecycle still owns it.
+- [x] 4.7 Preserve native Task-result observation/continuation and generic perception evidence; prove they report one task/result to the current conversation without deciding the next creative action or recreating workflow state.
+- [x] 4.8 Inventory residual non-core creative semantics in `agent`, `agent-types`, and generic `platform`, including creation profile/guidance, creative summarization, hard-coded Skill routing, domain validators, and media-specific Task/result projection; assign each to delete, genericize, or owning extension.
+- [x] 4.9 Remove creation profile and creation guidance runtime contracts from Agent/Platform core; keep genuinely generic autoheal/recovery under the existing validation/runtime plane without a compatibility alias.
+- [x] 4.10 Remove the creative-specific context summarizer and hard-coded media Skill routing from Agent core; preserve only metadata-driven generic context compression and Skill discovery/activation.
+- [ ] 4.11 Move Storyboard/media-specific validation and Task/result interpretation out of Agent core into existing owning validator/capability contribution boundaries; do not create a generic creative facade.
+- [ ] 4.12 Add architecture poison tests rejecting creative profiles, creative guidance, creative summarizers, hard-coded domain routing, domain validators/projectors, `CreativeAgent`, and `MediaPlanner` in Agent/Platform core.
+- [ ] 4.13 Replace the direct Canvas `CreativeAiRunRuntime`/lane/apply command path with a Canvas-owned capability contribution that enters the ordinary Agent turn, Tool approval, Task, and result-continuation lifecycle; remove `creative-ai-run-runtime.ts`, `storyboard-action-task-runtime.ts`, and the Canvas-specific command executor without adding a compatibility scheduler.
+- [ ] 4.14 Remove hard-coded file-to-video, retry-creation, prompt/script media command, and Canvas Storyboard action intent builders from `agent-entry-intent-runtime.ts`; any retained shortcut must come from the invoking Host or owning capability metadata and enter the ordinary Agent request path.
+- [ ] 4.15 Mark the earlier Canvas creative invocation/run ADRs as superseded or narrowly owning-package-only, then extend architecture poison and core-ablation evidence so the direct creative run/lane scheduler and Agent-owned Storyboard action runtime cannot return success.
 
-## 5. Prompt-Chain and Creative Media Skill Convergence
+## 5. Prompt, Skill, Markdown, And Dynamic Agent Behavior
 
-- [ ] 5.1 Revise `media-production` guidance from a mandatory linear stage sequence into optional/repeatable production milestones and method checkpoints governed by current artifacts, diagnostics, approvals, and target deliverables.
-- [ ] 5.2 Update `storyboard`, `image`, `video`, `video-editing`, and `media-quality-review` guidance to state selection, handoff, completion, and recovery invariants without naming package tools or embedding execution schemas.
-- [ ] 5.3 Keep prompt-chain observations limited to started/checkpoint/skipped/reordered/completed with explicit reasons, and add tests proving they do not satisfy Artifact validators or Quality/Export Gates.
-- [ ] 5.4 Add tests proving an existing valid Storyboard revision can cause a recorded skip, a diagnostic can cause a recorded reorder/repeat, and neither action creates workflow nodes or transitions.
-- [ ] 5.5 Extend builtin/custom Skill protocol-backflow tests so capability planning metadata cannot be copied into natural-language Skill content as tool names, parameters, polling, path, Webview, or package authoring instructions.
+- [ ] 5.1 Update supported-language core default/Plan Prompt variants with semantically equivalent observe-decide-act-observe discipline, current-result completion states, native Approval usage, and instruction/content language separation.
+- [x] 5.2 Revise `media-production` guidance from mandatory stages into optional/repeatable milestones selected from current evidence; update `storyboard`, `image`, `video`, `video-editing`, and `media-quality-review` only where focused evaluation exposes a method gap.
+- [x] 5.3 Keep `brief.md` and `plan.md` as optional ordinary Markdown naming conventions written through existing file tools; add no plan schema, parser, manager, special button, authorization token, or Markdown-to-Tool compiler.
+- [ ] 5.4 Ground plans in current Read/document/perception evidence and require structured page/panel/scene/character artifacts only when the selected downstream owning Tool requires them.
+- [ ] 5.5 Add capability-neutral image/reference guidance for deterministic vs generative editing, reference remix, and multi-view character sheets; use one generation when current support permits and repair only observed defects.
+- [ ] 5.6 Keep Prompt examples outside execution, keep model-independent creative intent separate from Provider/model support, and preserve target content language/protected strings across localized guidance.
+- [ ] 5.7 Extend prompt/Skill protocol-backflow and bilingual behavior tests without introducing Provider names, Tool tutorials, Prompt dialect tables, polling, output-path protocols, fixed pipelines, or model-fingerprint routing in Skill content.
 
-## 6. Cross-Domain Production Strategy Selection
+## 6. Owning Capability Boundary And Follow-Ups
 
-- [ ] 6.1 Correct Agent-visible Tool/capability semantics for canonical Storyboard, Image, Video, Canvas, Cut, and Quality capabilities using only owning package contributions and current file/project identities.
-- [ ] 6.2 Correct the same semantics for Sketch/frame animation, Puppet, Model/Scene, Audio, Export, optional Asset-library import, Engine media operations, and managed External Processors; expose missing production support as explicit diagnostics rather than stubs.
-- [ ] 6.3 Implement capability-neutral shot/scene strategy guidance that compares generative video, keyframe video, Puppet, frame animation, layered 2D, 3D scene/camera, and compositing when those capabilities are registered.
-- [ ] 6.4 Add tests proving illustration animation does not default to generative video when another declared technique better matches source/target requirements, and unavailable techniques are explained rather than silently substituted.
-- [ ] 6.5 Add provider path tests proving end-frame, reference video, duration, motion/camera, enhancement, extension, or other unsupported controls fail before dispatch and trigger a compatible Agent replan.
-- [ ] 6.6 Identify authoring intents that cannot safely use existing low-level operations; for each real gap, either add a small owning-package transactional capability returning an exact revision or split it into a separate owning-package OpenSpec instead of implementing it in Agent.
-- [ ] 6.7 Correct Image operation registration/support so deterministic crop/resize/rotate/mask/layer/composite paths, perception OCR/segmentation/depth/pose paths, generative inpaint/outpaint/colorize/redraw paths, and hybrid multi-operation paths expose their actual executors and constraints.
-- [ ] 6.8 Add path tests proving deterministic comic panel edits do not invoke image generation, generative edits preserve source/mask/unmodified-region/lineage semantics, and UI-only or Provider-incompatible tools remain degraded/unavailable.
-- [ ] 6.9 Add comic/illustration preparation selection tests for logical panel interpretation, physical crop, semantic layering, text removal/background repair, optional colorization, and direct-source reuse without enforcing one fixed preparation sequence.
-- [ ] 6.10 Integrate or adapt owning character/reference revision dependency projections needed by shot planning and quality stale-state; if the audit finds missing Character domain schemas, create a separate animation-production OpenSpec rather than adding them to Agent runtime.
+- [ ] 6.1 Ensure Agent strategy selection compares only currently registered Tool/capability semantics and current diagnostics across Storyboard, Image/Video, Canvas, Sketch, Puppet, Scene, Cut, Audio, Quality, Export, and managed processors.
+- [ ] 6.2 Record missing or unsafe authoring, character/reference dependency, Quality, preflight, Export, Provider-control, or image-executor support as owning-package gaps; create focused owning OpenSpecs instead of implementing facades, orchestrators, shared workflow DTOs, or fallback behavior in Agent.
+- [ ] 6.3 Verify stale-risk project mutation uses only owner-specific revision/digest validation, ordinary text uses VS Code document/file conflict semantics, generated output uses ResourceRef/digest/lineage, and Agent only passes opaque owner facts.
+- [ ] 6.4 Ensure unavailable/degraded capability, validator, approval denial, Task failure, stale evidence, and Quality/Export results return through ordinary Tool/Task results so the next Agent turn can reason from them without a recovery coordinator.
+- [ ] 6.5 Verify target completion is reasoned from direct owning files/results/validators and current Quality/Export evidence; do not add an Agent target-completion evaluator or pre-export orchestrator.
 
-## 7. Transactional Authoring and Quality Feedback Paths
+## 7. Focused Agent Evaluation
 
-- [ ] 7.1 Verify Storyboard-to-Canvas, accepted-shot-to-Cut, generated files, optional asset-library import, audio authoring, project quality, preflight, and export paths return actual files/ResourceRefs/digests or exact owning project revisions suitable for the next Agent turn.
-- [ ] 7.2 Implement or adapt the minimal Cut-owned Animatic authoring operation if the audit proves existing headless APIs cannot atomically create a revision from accepted Storyboard timing and temporary audio.
-- [ ] 7.3 Add failure/rollback tests proving transactional authoring never leaves a success projection for partial project mutations and never falls back to active Webview state or direct `.nk*` assembly.
-- [ ] 7.4 Wire unavailable/degraded, validator, approval denial, task failure, stale evidence, and Quality Gate results back into the next Agent turn as structured recovery evidence.
-- [ ] 7.5 Enforce deterministic approval and cost policies before expensive batch generation, external processors, project mutation, export, and delivery; test denial-to-smaller-batch or alternative-technique replanning.
-- [ ] 7.6 Complete or explicitly depend on owning preflight/export/deliverable verification requirements needed to prove stale project evidence cannot authorize final delivery; do not simulate missing release gates inside Agent.
-- [ ] 7.7 Add direct-deliverable checks for Storyboard, Animatic, pilot/sample, and final outputs by composing existing owning validators, Quality, and Export results; do not add a central target-completion evaluator, and return a missing-capability/partial-deliverable result when required outputs cannot be created or validated.
-- [ ] 7.8 Create the follow-up animation-production domain OpenSpec for any confirmed gaps in adaptation, Character/Style/Color Bible, Animatic, multi-shot dependency, post-production completeness, or final-deliverable profile contracts; keep those implementations outside Agent runtime.
+- [x] 7.1 Reuse the existing `media-production` suite and current facts wherever they already expose Tool calls, Tasks, diagnostics, approvals, files/ResourceRefs, and forbidden fallback; do not add creative trace fields solely for Evaluation.
+- [ ] 7.2 Add or update a canonical case proving source analysis -> current capability choice -> ordinary Tool call -> Task/result observation -> next Agent decision works after fixed media workflow deletion.
+- [ ] 7.3 Add a boundary case poisoning all retired media workflow imports/exports and proving no stage, workflow state store, recovery coordinator, project-authoring orchestrator, pre-export orchestrator, or prompt-chain checkpoint state participates.
+- [ ] 7.4 Add a creator-review/approved-execution case proving generic ApprovalEngine handles review while the actual costly or mutating Tool still passes its own current approval.
+- [ ] 7.5 Reuse or update focused illustration-technique and character-reference cases for dynamic technique selection, actual generated output observation, bilingual content constraints, and no Provider-specific/fallback pipeline.
+- [ ] 7.6 Add a core-ablation case proving the same creative Skill/Tool/subagent path works with all creative-core specializations absent, and fails visibly only when the owning extension itself is unavailable.
 
-## 8. Agent Evaluation Scenarios
+## 8. Documentation, Validation, And Quality Review
 
-- [ ] 8.1 Extend the script-driven evaluation manifest and facts contract for capability candidates, selected canonical capability, artifact/revision inputs and outputs, rejection/unavailability reasons, approval, diagnostics, replan reason, and legacy-path poison evidence.
-- [ ] 8.2 Add a real Agent case for comic or screenplay to Storyboard/Animatic that reuses an existing valid revision, skips redundant guidance, invokes canonical Canvas/Cut authoring, and proves prompt-chain observations are not completion authority.
-- [ ] 8.3 Add a real Agent case for illustration-to-animation that compares available generative video, layered/Sketch, Puppet, or Scene techniques and invokes the selected owning capability.
-- [ ] 8.4 Add a real provider-backed case where an unsupported end-frame or reference control is rejected before dispatch and the Agent changes provider, prepares a compatible artifact, chooses another technique, or requests a user-visible scope change.
-- [ ] 8.5 Add a recovery case where a mutation creates a new revision, prior QualityEvidence becomes stale, and the Agent reruns the owning review before export/delivery.
-- [ ] 8.6 Poison legacy workflow run/node/transition/fixed-stage paths in evaluation and prove the Agent-native session/turn, capability lifecycle, task, approval, validator, and artifact paths complete without them.
-- [ ] 8.7 Run ablations for the existing Tool context, any optional derived summary, prompt-chain guidance, file/project grounding, and recovery diagnostics; record whether each component materially affects correct Tool selection and path completion.
-- [ ] 8.8 Add a real comic preparation case that chooses deterministic split/crop and perception/OCR before a bounded generative repair, preserves character/source references, and proves generic full-image regeneration is not used for deterministic steps.
-- [ ] 8.9 Add a character revision recovery case where an approved appearance or color revision changes, dependent shot evidence becomes stale, and the Agent selects repair/review before acceptance.
-- [ ] 8.10 Add target-completion cases proving Animatic may finish at its own deliverable boundary while an animation-final request remains incomplete until accepted shots, final Cut/Audio/subtitle revisions, preflight, export lineage, and verification are current.
-- [ ] 8.11 Add a real document-grounded Plan Mode case that analyzes a comic or screenplay into structured source evidence and a Markdown plan, reports unavailable/partial paths, and proves no mutating or provider-consuming execution occurred without its declared policy and approval.
-- [ ] 8.12 Add approved-execution/replan cases proving current capability/schema/input re-resolution, stale-plan rejection, bounded recovery inside approval scope, and renewed approval for material production-technique or delivery changes.
-
-## 9. Documentation, Quality Gates, and Release Readiness
-
-- [ ] 9.1 Keep [`docs/architecture/adr-agent-directed-creative-orchestration-and-domain-capability-boundary.md`](../../../docs/architecture/adr-agent-directed-creative-orchestration-and-domain-capability-boundary.md), Plan Mode/Agent architecture, and video/image/character domain documentation aligned with canonical Tool-context awareness, Markdown/ordinary-Tool separation, current-turn re-resolution, image execution kinds, character revision dependencies, direct deliverable checks, and the prompt-chain/executable-result distinction.
-- [ ] 9.2 Update creative Skill authoring guidance and capability contribution documentation with the single-source projection rule and examples that do not leak tool protocol into Skill content.
-- [ ] 9.3 Run focused unit/contract/integration tests and affected package typechecks/builds, then run `pnpm check`, `pnpm test`, and `pnpm build` for the cross-package Agent/capability change.
-- [ ] 9.4 Run `pnpm check:legacy-debt`, `pnpm check:unused`, and prompt/Skill protocol-backflow checks; prove removed or poisoned workflow paths cannot return success.
-- [ ] 9.5 Run `pnpm test:agent:eval` as harness self-validation and execute all focused real Agent/provider cases from section 8 with model/provider identity, capability trace, artifact revisions, and residual risks recorded.
-- [ ] 9.6 Run affected Canvas/Cut Extension Development Host functional scenarios through `vscode-extension-debugger` if capability discovery, authoring handoff, approval, task, diagnostic, or revision projection changes visible Webview behavior.
-- [ ] 9.7 Run an Extension Development Host Plan Mode scenario covering document analysis, Markdown plan review/edit/approval, zero-side-effect planning, approved-execution re-resolution, and stale-plan/reapproval UI diagnostics.
-- [ ] 9.8 Run `neko-quality-review`, classify the L3 architecture/runtime risk, and record unimplemented owning capabilities, provider limitations, optional evaluators, token-budget trade-offs, blocked validations, and remaining release risks before declaring completion.
+- [x] 8.1 Align the Agent-directed orchestration ADR, Plan Mode/Agent architecture, and relevant domain documents with minimal Agent ownership, native Approval, optional Markdown, removed fixed workflow runtime, and owning-package follow-ups.
+- [ ] 8.2 Run focused `@neko/shared`/Agent contract and Approval tests, affected package typechecks/builds, and `openspec validate --strict`.
+- [x] 8.3 Run `pnpm check:legacy-debt`, `pnpm check:unused`, and architecture/protocol-backflow guards; prove removed workflow and creative approval-policy paths cannot return success.
+- [ ] 8.4 Run `pnpm test:agent:eval` as harness validation and the focused real Agent cases selected in section 7; record model/provider identity, canonical path, forbidden fallback, outputs, blocked evidence, and residual risk.
+- [ ] 8.5 Run applicable repository `pnpm check`, `pnpm test`, and `pnpm build` gates proportional to the cross-package L3 change; run Extension Development Host scenarios only if user-visible Webview behavior changes.
+- [x] 8.6 Run `neko-quality-review`, record five-layer ownership findings and remaining owning-domain capability gaps, and do not declare the whole creative capability complete while those external gaps remain.

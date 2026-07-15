@@ -1,6 +1,10 @@
 import { createHash } from 'node:crypto';
 import type { AgentMessageQueueSnapshot } from '@neko-agent/types';
-import type { Task } from '@neko/shared';
+import type {
+  CanvasWorkspaceProjectionResult,
+  GeneratedAssetRevisionRef,
+  Task,
+} from '@neko/shared';
 import type { PromptCompositionFragmentProjection } from '@neko/agent';
 import type { TuiConversationStores } from '../../runtime/tui-application-runtime';
 import type { Message } from '../../types/state';
@@ -17,7 +21,10 @@ import type {
 } from './types';
 import type { TuiConversationPersistenceSnapshot } from '../../host/tui-sqlite-conversation-storage';
 import { TuiDebugAutomationProtocolError } from './protocol';
-import { projectTaskOutputArtifactFacts } from '../artifact-fact-projector';
+import {
+  projectGeneratedOutputLifecycleArtifactFacts,
+  projectTaskOutputArtifactFacts,
+} from '../artifact-fact-projector';
 
 const FACT_LIMITS = Object.freeze({
   turns: 512,
@@ -29,6 +36,7 @@ const FACT_LIMITS = Object.freeze({
   continuations: 512,
   promptComposition: 256,
   artifacts: 512,
+  workspaceBoardProjections: 128,
   runtimeErrors: 256,
   canvasMessageSummaries: 128,
   canvasToolCallSummaries: 128,
@@ -44,6 +52,8 @@ export interface TuiAutomationSessionHandle {
   readonly getConversationPersistenceSnapshot: () => TuiConversationPersistenceSnapshot | null;
   readonly getMessageQueueSnapshot: () => AgentMessageQueueSnapshot | null;
   readonly getPromptCompositionProjection?: () => readonly PromptCompositionFragmentProjection[];
+  readonly getWorkspaceBoardProjections?: () => readonly CanvasWorkspaceProjectionResult[];
+  readonly getGeneratedOutputLifecycles?: () => readonly GeneratedAssetRevisionRef[];
 }
 
 export interface TuiAutomationAppPortOptions {
@@ -138,7 +148,14 @@ export function createTuiAutomationAppPort(
         [...stores.agent.getState().activeSkillLifecycleRecords],
         FACT_LIMITS.skillActivations,
       );
-      const artifacts = bounded(readArtifactFacts(stores, rawTasks), FACT_LIMITS.artifacts);
+      const artifacts = bounded(
+        readArtifactFacts(stores, rawTasks, handle.getGeneratedOutputLifecycles?.() ?? []),
+        FACT_LIMITS.artifacts,
+      );
+      const workspaceBoardProjections = bounded(
+        projectWorkspaceBoardProjectionFacts(handle.getWorkspaceBoardProjections?.() ?? []),
+        FACT_LIMITS.workspaceBoardProjections,
+      );
       const runtimeErrors = bounded(readRuntimeErrors(stores), FACT_LIMITS.runtimeErrors);
       const canvas = readCanvasFacts(stores);
       const markdown = options.readMarkdownFacts();
@@ -169,6 +186,7 @@ export function createTuiAutomationAppPort(
         continuations: continuations.items,
         promptComposition: promptComposition.items,
         artifacts: artifacts.items,
+        workspaceBoardProjections: workspaceBoardProjections.items,
         runtimeErrors: runtimeErrors.items,
         canvas: canvas.value,
         markdown,
@@ -177,6 +195,9 @@ export function createTuiAutomationAppPort(
           inputTokens: agentState.usage.input,
           outputTokens: agentState.usage.output,
           totalTokens: agentState.usage.total,
+          ...(agentState.contextTokens.count !== null
+            ? { contextTokens: agentState.contextTokens.count }
+            : {}),
         },
         timing: {
           capturedAt: Date.now(),
@@ -198,6 +219,7 @@ export function createTuiAutomationAppPort(
           continuations: continuations.completeness,
           promptComposition: promptComposition.completeness,
           artifacts: artifacts.completeness,
+          workspaceBoardProjections: workspaceBoardProjections.completeness,
           runtimeErrors: runtimeErrors.completeness,
           canvasMessageSummaries: canvas.messageSummaries,
           canvasToolCallSummaries: canvas.toolCallSummaries,
@@ -210,6 +232,18 @@ export function createTuiAutomationAppPort(
       };
     },
   };
+}
+
+function projectWorkspaceBoardProjectionFacts(
+  results: readonly CanvasWorkspaceProjectionResult[],
+): TuiDebugAutomationSessionFacts['workspaceBoardProjections'] {
+  return results.map((result) => ({
+    status: result.status,
+    ...(result.target ? { targetKind: result.target.kind } : {}),
+    ...(result.revision ? { revision: result.revision } : {}),
+    nodeIds: [...(result.nodeIds ?? [])],
+    diagnosticCodes: result.diagnostics.map((diagnostic) => diagnostic.code),
+  }));
 }
 
 async function waitForSubmissionAcceptance(
@@ -705,6 +739,7 @@ function bounded<T>(
 function readArtifactFacts(
   stores: TuiConversationStores,
   tasks: readonly Task[],
+  generatedOutputLifecycles: readonly GeneratedAssetRevisionRef[],
 ): TuiDebugAutomationSessionFacts['artifacts'] {
   const facts = [
     ...stores.conversation
@@ -713,6 +748,7 @@ function readArtifactFacts(
         (message.timelineRows ?? []).flatMap((row) => row.artifactFacts ?? []),
       ),
     ...projectTaskOutputArtifactFacts(tasks),
+    ...projectGeneratedOutputLifecycleArtifactFacts(generatedOutputLifecycles),
   ];
   const unique = new Map<string, (typeof facts)[number]>();
   for (const fact of facts)

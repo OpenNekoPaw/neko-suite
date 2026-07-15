@@ -41,9 +41,6 @@ export async function handleTUISkillInvocation(
   error?: string;
   diagnosticCode?: string;
   agentPrompt?: string;
-  executionOverrides?: {
-    metadata?: Record<string, unknown>;
-  };
   lifecycleActivation?: {
     readonly skillName: string;
     readonly args?: string;
@@ -73,7 +70,6 @@ export async function handleTUISkillInvocation(
     error,
     diagnosticCode,
     agentPrompt: result.agentPrompt,
-    executionOverrides: result.executionOverrides,
     lifecycleActivation: result.lifecycleActivation,
   };
 }

@@ -123,20 +123,8 @@ describe('agent-prompt-schema-generator', () => {
       basePrompt: 'BASE',
       profiles: {
         skillProfileReferences: [
-          { profileId: 'studio.creation.review', kind: 'creation', relationship: 'requires' },
           { profileId: 'studio.shot-review', kind: 'artifact', relationship: 'produces' },
         ],
-        creationProfile: {
-          profileId: 'studio.creation.review',
-          kind: 'creation',
-          version: '1.0.0',
-          source: 'package',
-          defaultStageId: 'research',
-          stages: [
-            { stageId: 'research', purpose: 'Research source context.' },
-            { stageId: 'review', purpose: 'Review output.' },
-          ],
-        },
         artifactProfiles: [
           {
             profileId: 'studio.shot-review',
@@ -170,7 +158,7 @@ describe('agent-prompt-schema-generator', () => {
 
     expect(bundle.sections.map((section) => section.id)).toEqual(['base', 'profiles:resolved']);
     expect(bundle.prompt).toContain('## Profile Projection');
-    expect(bundle.prompt).toContain('requires:creation:studio.creation.review');
+    expect(bundle.prompt).toContain('produces:artifact:studio.shot-review');
     expect(bundle.prompt).toContain('Artifact profiles: studio.shot-review@1 (GenericTable)');
     expect(bundle.prompt).toContain('Provider expression profiles: provider-expression:flux@1.0.0');
   });

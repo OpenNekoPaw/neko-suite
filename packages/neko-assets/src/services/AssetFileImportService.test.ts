@@ -15,8 +15,8 @@ afterEach(async () => {
   );
 });
 
-describe('AssetFileImportService legacy generated sources', () => {
-  it('imports an available legacy source without deleting, moving, or rewriting it', async () => {
+describe('AssetFileImportService generated output promotion', () => {
+  it('creates a distinct Asset identity without Board projection or source mutation', async () => {
     const fixture = await createLegacySource();
     const entity = createEntity();
     const importFile = vi.fn(async () => ({ entity }));
@@ -28,6 +28,7 @@ describe('AssetFileImportService legacy generated sources', () => {
     });
 
     await expect(service.importFile(fixture.sourcePath)).resolves.toEqual(entity);
+    expect(entity.id).not.toBe('generated-output:legacy');
     await expect(readFile(fixture.sourcePath, 'utf8')).resolves.toBe('legacy bytes');
     expect(importFile).toHaveBeenCalledWith(fixture.sourcePath);
     expect(didImport).toHaveBeenCalledOnce();
@@ -53,7 +54,7 @@ describe('AssetFileImportService legacy generated sources', () => {
     await expect(readFile(fixture.sourcePath, 'utf8')).resolves.toBe('legacy bytes');
   });
 
-  it('returns the library identity for an already-imported legacy source', async () => {
+  it('returns the library identity for an already-imported generated source', async () => {
     const fixture = await createLegacySource();
     const entity = createEntity();
     const importFile = vi.fn(async () => ({ entity }));

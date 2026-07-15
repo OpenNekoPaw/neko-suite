@@ -301,6 +301,8 @@ Cut 继续拥有真正的视频剪辑 timeline：
 
 Canvas 发送给 Cut 的内容是一次有序剪辑初稿快照。导入之后，`.nkv` 内部顺序和剪辑状态由 Cut 管理。Cut 不应默认反向改写 Canvas 顺序。
 
+仓库可以同时存在并打开多个 `.nkv`，它们是独立项目，不共享“当前 Cut”持久状态。任何导入或 timeline mutation 必须在跨越 authoring 边界前携带显式 `.nkv` document URI 与 expected revision，或显式创建新项目。活动/最近编辑器、文件名相似度、普通 generated-output 完成和 Workspace Board projection 都不得隐式选择目标；交互命令只有在 adapter 固化其 owning editor identity/revision 后才能调用同一 authoring path。
+
 ## 预览 UI 形态
 
 Canvas 编辑与预览必须合并在同一个 Canvas Editor Webview 中，不再维护独立 Canvas Preview Webview。预览能力作为 Canvas Editor Webview 内的 `PlaybackWorkspace` 子工作区存在，并分为可组合组件：
@@ -353,7 +355,7 @@ Cut 不应直接把完整 `CanvasPlaybackPlan` 当作 timeline 编辑模型。Cu
 
 ### CanvasCutDraftPayload
 
-`CanvasCutDraftPayload` 是 Canvas 发送给 Cut 的窄协议，用于生成 `.nkv` 初稿。它应包含：
+`CanvasCutDraftPayload` 是 Canvas 发送给 Cut 的窄协议，用于生成 `.nkv` 初稿。payload 描述内容快照，不拥有目标选择；调用 authoring capability 时还必须提供显式 existing/new Cut target。它应包含：
 
 - source canvas uri / revision。
 - route id。
@@ -387,14 +389,14 @@ cue 字段的来源应是 Canvas 当前已接受的节点 metadata、关联 Stor
 
 ## Agent 集成
 
-Agent 需要感知并可展示 Canvas 顺序，但不拥有自己的 timeline，也不实现独立视频播放器。Agent 的分工是理解、展示、诊断、确认和调度；Canvas Editor Webview 内的 `PlaybackWorkspace`、Cut 和 `neko-preview` / Engine 负责实际播放与媒体运行时。
+Agent 需要感知并可展示 Canvas 顺序，但不拥有自己的 timeline、活动 Cut target，也不实现独立视频播放器。Agent 的分工是理解、展示、诊断、确认和调用 owning capability；Canvas Editor Webview 内的 `PlaybackWorkspace`、Cut 和 `neko-preview` / Engine 负责实际播放与媒体运行时。
 
 Agent 可以：
 
 - 读取当前 `CanvasPlaybackPlan`。
 - 展示 route 摘要、有序清单、导入 Cut 前确认和轻量预览卡片。
 - 诊断缺失素材、入口不明确、分支歧义和时长异常。
-- 在用户确认后调用 Canvas/Cut capability 发送当前 route 到 Cut。
+- 在用户确认并明确 existing/new `.nkv` target 后调用 Canvas/Cut capability 发送选定 route 到 Cut。
 - 通过高层 command 请求 Canvas 调整顺序。
 - 显示或聚焦 Canvas Editor Webview 内的 `PlaybackWorkspace`、Cut Preview / Timeline 或资源预览，并传递 route、unit、sequence 或 clip 的定位意图。
 - 通过 Engine、Preview、Media LSP 或领域工具读取 probe、关键帧、缩略图、字幕、音频峰值、质量诊断等可分析数据。
@@ -406,6 +408,7 @@ Agent 不得：
 - 在 Agent Chat 内复制 Canvas `PlaybackWorkspace` / Cut Preview 的完整播放器。
 - 直接操作 Canvas 或 Cut Webview store。
 - 直接修改 `.nkv` 私有结构。
+- 从活动/最近编辑器或生成结果隐式推断 `.nkv` target。
 - 绕过确认执行中高风险剪辑或导入操作。
 
 ### Agent 交互形态

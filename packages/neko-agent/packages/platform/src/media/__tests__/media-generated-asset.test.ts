@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildGeneratedMediaAssets,
   computeAspectRatioLabel,
+  createStableGeneratedOutputId,
   inferGeneratedMediaMimeType,
   toStableGeneratedAssetUri,
 } from '../media-generated-asset';
@@ -19,6 +20,7 @@ describe('media generated asset helpers', () => {
   });
 
   it('builds generated image assets with lineage metadata', () => {
+    const assetId = createStableGeneratedOutputId('task-1', 0, 'sha256:image');
     expect(
       buildGeneratedMediaAssets({
         hostOutputPaths: ['/tmp/image.png'],
@@ -41,12 +43,11 @@ describe('media generated asset helpers', () => {
             characterIds: ['char-1', ''],
           },
         },
-        generateAssetId: () => 'asset-1',
         now: () => '2026-01-01T00:00:00.000Z',
       }),
     ).toEqual([
       {
-        id: 'asset-1',
+        id: assetId,
         path: '/tmp/image.png',
         mimeType: 'image/png',
         generatedAt: '2026-01-01T00:00:00.000Z',
@@ -55,7 +56,7 @@ describe('media generated asset helpers', () => {
         sourceNodeId: 'node-1',
         characterIds: ['char-1'],
         lifecycle: expect.objectContaining({
-          assetId: 'asset-1',
+          assetId,
           contentDigest: 'sha256:image',
           mediaKind: 'image',
           generation: {
@@ -68,8 +69,8 @@ describe('media generated asset helpers', () => {
           },
         }),
         assetRef: {
-          assetId: 'asset-1',
-          uri: 'generated-assets/asset-1.png',
+          assetId,
+          uri: `generated-assets/${assetId}.png`,
           mimeType: 'image/png',
         },
         type: 'generated-image',
@@ -88,7 +89,6 @@ describe('media generated asset helpers', () => {
         taskId: 'task-video',
         outputs: [{ type: 'video', url: 'https://example.test/video.mp4' }],
         taskType: 'video',
-        generateAssetId: () => 'video-1',
         now: () => '2026-01-01T00:00:00.000Z',
       })[0],
     ).toEqual(
@@ -108,7 +108,6 @@ describe('media generated asset helpers', () => {
         taskId: 'task-audio',
         outputs: [{ type: 'audio', url: 'https://example.test/audio.mp3' }],
         taskType: 'audio',
-        generateAssetId: () => 'audio-1',
         now: () => '2026-01-01T00:00:00.000Z',
       })[0],
     ).toEqual(

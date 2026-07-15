@@ -8,7 +8,10 @@
   "modelProfiles": [{ "id": "configured-default", "selection": "configured-default", "configurationHash": "sha256:e183fac48c090594694dc19a3e356145a40821960e6f06ad1a4b67e8dfc6f915" }],
   "judgeProfiles": [],
   "fixtures": [{ "id": "empty-workspace", "root": "shared-fixtures/empty-workspace", "source": "repository", "digest": "sha256:789049929d67cf16d190dc363325175f3d63ef62ca210de508ede615e2376081", "mutable": true }],
-  "cases": [{ "id": "image-quality-feedback-iteration", "file": "cases/image-quality-feedback-iteration.json", "group": "workflow", "visibility": "public" }],
+  "cases": [
+    { "id": "image-quality-feedback-iteration", "file": "cases/image-quality-feedback-iteration.json", "group": "workflow", "visibility": "public" },
+    { "id": "generated-output-workspace-board", "file": "cases/generated-output-workspace-board.json", "group": "workflow", "visibility": "public" }
+  ],
   "rubricRefs": [],
   "baselinePolicy": { "mode": "none" },
   "reportPolicy": { "rawRetentionDays": 14, "trustedCiRetentionDays": 14, "committedSummary": true, "includeHistory": false }

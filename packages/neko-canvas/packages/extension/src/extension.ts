@@ -29,7 +29,7 @@ import {
   resolveLogLevelSetting,
   watchLogLevel,
 } from '@neko/shared/vscode/extension';
-import type { AssetEntity, AssetFile, NekoAgentAPI, NekoAssetsAPI } from '@neko/shared';
+import type { AssetEntity, AssetFile, NekoAssetsAPI } from '@neko/shared';
 import { NEKO_EXTENSION_IDS } from '@neko/shared';
 import { getRootLogger, setRootLogger } from './utils/logger';
 import { setErrorHandler, handleError } from './utils/errorHandler';
@@ -45,26 +45,18 @@ import {
 } from './editor/narrativePreviewFeatureGate';
 import { CanvasCreativeAiApplyAdapter } from './creativeAiCanvasAdapter';
 import { CanvasProjectAuthoringService } from './services/canvasProjectAuthoringService';
-import { CanvasBoardIndexService } from './services/canvasBoardIndexService';
-import { CanvasBoardResolverService } from './services/canvasBoardResolverService';
-import { CanvasBoardDeliveryService } from './services/canvasBoardDeliveryService';
-import { CanvasGeneratedDraftProjectionService } from './services/canvasGeneratedDraftProjectionService';
-import { CanvasGeneratedDraftPromotionOrchestrator } from './services/canvasGeneratedDraftPromotionOrchestrator';
+import { WorkspaceBoardProjector } from './services/workspaceBoardProjector';
+import { registerWorkspaceBoardFunctionalAcceptance } from './debug/workspaceBoardFunctionalAcceptance';
 
 // Extension state
 let canvasEditorProvider: CanvasEditorProvider;
 let canvasOutlineProvider: CanvasOutlineProvider;
 let canvasStatusBar: CanvasStatusBar;
 let canvasProjectAuthoringService: CanvasProjectAuthoringService;
-let canvasBoardIndexService: CanvasBoardIndexService;
-let canvasBoardResolverService: CanvasBoardResolverService;
-let canvasBoardDeliveryService: CanvasBoardDeliveryService;
-let canvasGeneratedDraftProjectionService: CanvasGeneratedDraftProjectionService;
-let canvasGeneratedDraftPromotionOrchestrator: CanvasGeneratedDraftPromotionOrchestrator;
+let workspaceBoardProjector: WorkspaceBoardProjector;
 
 /** Cached assets API reference (resolved once, reused across calls). */
 let assetsAPI: NekoAssetsAPI | undefined;
-let agentAPI: NekoAgentAPI | undefined;
 
 function parseCanvasDocumentUri(documentUri: string | undefined): vscode.Uri | undefined {
   return documentUri ? vscode.Uri.parse(documentUri) : undefined;
@@ -77,15 +69,6 @@ async function getAssetsAPI(): Promise<NekoAssetsAPI | undefined> {
   if (!ext.isActive) await ext.activate();
   assetsAPI = ext.exports;
   return assetsAPI;
-}
-
-async function getAgentAPI(): Promise<NekoAgentAPI | undefined> {
-  if (agentAPI) return agentAPI;
-  const extension = vscode.extensions.getExtension<NekoAgentAPI>(NEKO_EXTENSION_IDS.NEKO_AGENT);
-  if (!extension) return undefined;
-  if (!extension.isActive) await extension.activate();
-  agentAPI = extension.exports;
-  return agentAPI;
 }
 
 async function getAssetEntities(): Promise<AssetEntity[]> {
@@ -218,62 +201,17 @@ export async function activate(
     canvasEditorProvider,
     logger,
   });
-  canvasBoardIndexService = new CanvasBoardIndexService({ logger });
-  canvasBoardResolverService = new CanvasBoardResolverService({
-    index: canvasBoardIndexService,
-    creator: canvasProjectAuthoringService,
-  });
-  canvasGeneratedDraftProjectionService = new CanvasGeneratedDraftProjectionService({
-    lifecycle: {
-      resolve: async (resourceRef) => {
-        const api = await getAgentAPI();
-        if (!api) {
-          return {
-            status: 'unavailable',
-            diagnostic: 'Neko Agent generated-output lifecycle API is unavailable.',
-          };
-        }
-        return api.resolveGeneratedOutput(resourceRef);
-      },
-      setReviewPin: async (resourceRef, input) => {
-        const api = await getAgentAPI();
-        if (!api) throw new Error('Neko Agent generated-output lifecycle API is unavailable.');
-        await api.setGeneratedOutputReviewPin(resourceRef, input);
-      },
-    },
-    publisher: {
-      publish: (projection) => canvasEditorProvider.publishGeneratedDraftProjection(projection),
-      remove: (projectionId, targetPath) =>
-        canvasEditorProvider.removeGeneratedDraftProjection(projectionId, targetPath),
-    },
-  });
-  canvasEditorProvider.setGeneratedDraftProjectionProvider(canvasGeneratedDraftProjectionService);
-  canvasGeneratedDraftPromotionOrchestrator = new CanvasGeneratedDraftPromotionOrchestrator({
-    drafts: canvasGeneratedDraftProjectionService,
-    getAssetsApi: async () => {
-      const api = await getAssetsAPI();
-      if (!api) throw new Error('Neko Assets generated candidate promotion API is unavailable.');
-      return api;
-    },
+  workspaceBoardProjector = new WorkspaceBoardProjector({
     authoring: canvasProjectAuthoringService,
-    resolveDocumentUri: (relativePath) => {
-      const folder = vscode.workspace.workspaceFolders?.[0];
-      if (!folder) throw new Error('No workspace folder open for Canvas Board promotion.');
-      return vscode.Uri.file(path.join(folder.uri.fsPath, relativePath)).toString();
-    },
   });
-  canvasEditorProvider.setGeneratedDraftPromotionHandler(
-    async (request) =>
-      (await canvasGeneratedDraftPromotionOrchestrator.promoteAndApply(request)).promotion,
-  );
-  canvasEditorProvider.setGeneratedDraftDiscardHandler((projectionId, discardUnsaved) =>
-    canvasGeneratedDraftProjectionService.disposeProjection(projectionId, discardUnsaved),
-  );
-  canvasBoardDeliveryService = new CanvasBoardDeliveryService({
-    index: canvasBoardIndexService,
-    authoring: canvasProjectAuthoringService,
-    generatedDrafts: canvasGeneratedDraftProjectionService,
-  });
+  if (context.extensionMode === vscode.ExtensionMode.Development) {
+    registerWorkspaceBoardFunctionalAcceptance({
+      context,
+      projector: workspaceBoardProjector,
+      getActiveDocumentUri: () => canvasEditorProvider.getActiveCanvasDocumentUri(),
+      revealDocument: (uri) => canvasEditorProvider.revealCanvasDocument(uri),
+    });
+  }
   canvasEditorProvider.setHeadlessAssetImporter((asset) =>
     canvasProjectAuthoringService.importAsset({ asset }),
   );
@@ -370,9 +308,7 @@ export async function activate(
       importAsset: (request) => canvasProjectAuthoringService.importAssetAuthoring(request),
     },
     boards: {
-      query: (query) => canvasBoardIndexService.query(query),
-      resolve: (input) => canvasBoardResolverService.resolve(input),
-      deliver: (input) => canvasBoardDeliveryService.deliver(input),
+      project: (input) => workspaceBoardProjector.project(input),
     },
     canvas: {
       create: (config) => createCanvas(config),

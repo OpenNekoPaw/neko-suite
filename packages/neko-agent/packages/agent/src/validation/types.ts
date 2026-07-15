@@ -50,32 +50,12 @@ export interface ValidationHooksOptions {
   imageConstraints?: Partial<ImageConstraints>;
   /** Output constraints */
   outputConstraints?: Partial<OutputConstraints>;
+  /** Domain validators contributed by owning Skill/capability packages. */
+  outputValidationAdapters?: readonly import('@neko/shared').AgentOutputValidationAdapter[];
   /** Callback on validation error */
   onValidationError?: (error: ValidationError) => void;
   /** Callback on validation warning */
   onValidationWarning?: (warning: ValidationWarning) => void;
-  /**
-   * Optional Agent-native creation feedback sink. Validators run after the
-   * assistant output has streamed; this sink records diagnostics for the Agent
-   * to revise/continue/ask-user on a later turn without rewriting the visible
-   * streamed output.
-   */
-  creationFeedback?: {
-    recordValidationFeedback(input: {
-      readonly creationId: string;
-      readonly iterationId: string;
-      readonly validatorId: string;
-      readonly status: 'failed' | 'warning' | 'passed';
-      readonly diagnostics: readonly {
-        readonly severity: 'info' | 'warning' | 'error';
-        readonly code: string;
-        readonly message: string;
-        readonly path?: string;
-        readonly metadata?: Record<string, unknown>;
-      }[];
-      readonly metadata?: Record<string, unknown>;
-    }): unknown;
-  };
 }
 
 /**

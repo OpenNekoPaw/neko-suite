@@ -261,6 +261,10 @@ export interface MediaCanvasNode extends CanvasNodeBase {
     runtimeThumbnailPath?: string;
     /** Media type hint */
     mediaType?: 'video' | 'image' | 'audio';
+    /** Creator-facing label for generated and imported media. */
+    title?: string;
+    /** Stable projection lineage. Runtime locations are forbidden. */
+    provenance?: CanvasSerializableRecord;
     /** Duration in seconds (for video/audio) */
     duration?: number;
   };

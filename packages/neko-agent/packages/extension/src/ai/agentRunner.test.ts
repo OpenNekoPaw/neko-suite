@@ -658,6 +658,19 @@ describe('AgentRunner', () => {
       );
     });
 
+    it('registers owning output validators through the generic validation plane', async () => {
+      await runner.configure({
+        platform: mockPlatform,
+        systemPrompt: 'Test prompt',
+      });
+
+      expect(
+        latestRuntimeAssemblyInput?.validationLoop?.outputValidationAdapters?.map(
+          (adapter) => adapter.id,
+        ),
+      ).toContain('creative-table.storyboard');
+    });
+
     it('应该优先使用配置显式传入的 OperationToolAdapterRegistry', async () => {
       const explicitRegistry = { list: vi.fn(), findPlanner: vi.fn() };
 

@@ -1,13 +1,4 @@
-import type {
-  EntityAssetBindingRole,
-  EntityAssetRequirement,
-  RepresentationKind,
-  VisualIdentityDraft,
-  RenderableGeneratedAsset,
-  RenderableGeneratedDraft,
-  ChildRunScope,
-  TaskRunScope,
-} from '@neko/shared';
+import type { RenderableGeneratedAsset, ChildRunScope, TaskRunScope } from '@neko/shared';
 export type AgentWorkItemTaskStatus =
   'queued' | 'processing' | 'completed' | 'failed' | 'cancelled';
 
@@ -43,8 +34,6 @@ export interface AgentBackgroundTask {
     height?: number;
     duration?: number;
     assets?: RenderableGeneratedAsset[];
-    drafts?: RenderableGeneratedDraft[];
-    creativeEntity?: AgentMediaTaskCreativeEntityContext;
   };
   error?: string;
   steps?: AgentWorkItemTaskStep[];
@@ -124,45 +113,6 @@ export interface AgentMediaTaskError {
 }
 
 export type AgentMediaTaskResult = NonNullable<AgentBackgroundTask['result']>;
-
-export interface AgentMediaTaskCreativeEntityBindingCandidate {
-  readonly entityId: string;
-  readonly entityKind: 'character';
-  readonly generatedAssetId: string;
-  readonly roles: readonly EntityAssetBindingRole[];
-  readonly sourceNodeId?: string;
-}
-
-export type AgentMediaTaskCreativeEntityAction =
-  | {
-      readonly kind: 'review-visual-draft';
-      readonly entityId: string;
-      readonly draftId: string;
-      readonly generatedAssetIds: readonly string[];
-    }
-  | {
-      readonly kind: 'confirm-binding';
-      readonly entityId: string;
-      readonly entityKind: 'character';
-      readonly generatedAssetId: string;
-      readonly role: EntityAssetBindingRole;
-    }
-  | {
-      readonly kind: 'generate-missing-representation' | 'bind-existing';
-      readonly entityId: string;
-      readonly entityKind: 'character';
-      readonly requiredKinds: readonly RepresentationKind[];
-    };
-
-export interface AgentMediaTaskCreativeEntityContext {
-  readonly characterIds: readonly string[];
-  readonly sourceNodeId?: string;
-  readonly generatedAssetIds: readonly string[];
-  readonly visualDrafts: readonly VisualIdentityDraft[];
-  readonly requirements: readonly EntityAssetRequirement[];
-  readonly bindingCandidates: readonly AgentMediaTaskCreativeEntityBindingCandidate[];
-  readonly actions: readonly AgentMediaTaskCreativeEntityAction[];
-}
 
 export interface AgentMediaTaskView {
   scope: TaskRunScope;

@@ -224,6 +224,15 @@ function m2Facts() {
       diagnostics: [],
     },
   ];
+  facts.workspaceBoardProjections = [
+    {
+      status: 'projected',
+      targetKind: 'workspace',
+      revision: HASH,
+      nodeIds: ['workspace-inbox', 'generated-output-1'],
+      diagnosticCodes: [],
+    },
+  ];
   Object.assign(facts.evidenceCompleteness, {
     turnToolCalls: { limit: 256, droppedCount: 0 },
     skillActivations: { limit: 128, droppedCount: 0 },
@@ -231,6 +240,7 @@ function m2Facts() {
     continuations: { limit: 512, droppedCount: 0 },
     promptComposition: { limit: 256, droppedCount: 0 },
     artifacts: { limit: 512, droppedCount: 0 },
+    workspaceBoardProjections: { limit: 128, droppedCount: 0 },
   });
   return facts;
 }
@@ -397,6 +407,35 @@ describe('M2 typed path hard gates', () => {
       m2Facts(),
     );
     expect(result).toMatchObject({ status: 'pass' });
+  });
+
+  it('proves a generated output reached the canonical Workspace Board projection', () => {
+    const assertion = {
+      id: 'workspace-board',
+      kind: 'workspace-board-projection',
+      status: 'projected',
+      targetKind: 'workspace',
+      minNodeIds: 2,
+      revisionRequired: true,
+      diagnosticsEmpty: true,
+      evidenceRef: 'workspace-board-facts',
+    };
+
+    expect(evaluateHardGates([assertion], m2Facts())[0]).toMatchObject({ status: 'pass' });
+
+    const incomplete = m2Facts();
+    incomplete.evidenceCompleteness.workspaceBoardProjections.droppedCount = 1;
+    expect(evaluateHardGates([assertion], incomplete)[0]).toMatchObject({
+      status: 'fail',
+      message: expect.stringContaining('evidence for workspaceBoardProjections is incomplete'),
+    });
+
+    const missingRevision = m2Facts();
+    delete missingRevision.workspaceBoardProjections[0].revision;
+    expect(evaluateHardGates([assertion], missingRevision)[0]).toMatchObject({
+      status: 'fail',
+      message: expect.stringContaining('no revision evidence'),
+    });
   });
 
   it.each([

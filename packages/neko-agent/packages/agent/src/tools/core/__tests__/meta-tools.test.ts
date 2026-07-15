@@ -60,6 +60,102 @@ describe('core meta tools', () => {
           },
         ],
         toolCategories: [],
+        toolCategoryScope: 'registered-inventory-with-current-callable-overlap',
+      },
+    });
+  });
+
+  it('separates registered Tool-group inventory from the current callable Tool list', async () => {
+    const categoryRegistry = createCategoryRegistryMock();
+    vi.mocked(categoryRegistry.listCategories).mockReturnValue([
+      {
+        id: 'generation',
+        displayName: 'Generation',
+        description: 'Generation tools',
+        layer: 'domain',
+      },
+    ] as never);
+    vi.mocked(categoryRegistry.getToolsByCategory).mockReturnValue([
+      { name: 'GenerateImage' },
+    ] as never);
+    const groupRegistry = createGroupRegistryMock();
+    vi.mocked(groupRegistry.list).mockReturnValue([
+      {
+        name: 'ai-generation',
+        description: 'Registered AI generation inventory',
+        enabled: true,
+        tools: ['GenerateImage', 'GenerateVideo'],
+      },
+    ] as never);
+
+    const tool = new GetContextTool(categoryRegistry, groupRegistry, {
+      getToolsForTurn: vi.fn(() => ['GenerateImage']),
+    } as never);
+
+    await expect(tool.execute({ includeTools: true })).resolves.toEqual({
+      success: true,
+      data: {
+        toolCategories: [
+          {
+            name: 'ai-generation',
+            description: 'Registered AI generation inventory',
+            registeredToolCount: 2,
+            callableToolCount: 1,
+            callableExposure: 'partial',
+          },
+        ],
+        toolCategoryScope: 'registered-inventory-with-current-callable-overlap',
+        tools: [{ category: 'Generation', tools: ['GenerateImage'] }],
+        toolListScope: 'current-callable',
+        toolDiscoveryNotes: [
+          'Only names in tools are currently callable. toolCategories is registered inventory and must not be treated as executable support.',
+          'registeredToolCount never proves callability. callableToolCount only reports overlap with the current Tool list and does not prove that a specific input, Provider, model, or control is supported.',
+          'Provider capability catalogs and lifecycle descriptors are separate from callable tool availability.',
+          'If a needed provider tool is absent, inspect registered skills and activate the relevant supplemental skill in referenceSkill when it should not replace the domain skill.',
+        ],
+      },
+    });
+  });
+
+  it('reports dynamically injected callable Tools that have no category projection', async () => {
+    const categoryRegistry = createCategoryRegistryMock();
+    vi.mocked(categoryRegistry.listCategories).mockReturnValue([
+      {
+        id: 'generation',
+        displayName: 'Generation',
+        description: 'Generation tools',
+        layer: 'domain',
+      },
+    ] as never);
+    const groupRegistry = createGroupRegistryMock();
+    vi.mocked(groupRegistry.list).mockReturnValue([
+      {
+        name: 'ai-generation',
+        description: 'Registered AI generation inventory',
+        enabled: true,
+        tools: ['GenerateImage'],
+      },
+    ] as never);
+    const tool = new GetContextTool(categoryRegistry, groupRegistry, {
+      getToolsForTurn: vi.fn(() => ['Read', 'GenerateImage']),
+    } as never);
+
+    const result = await tool.execute({ includeTools: true });
+
+    expect(result).toMatchObject({
+      success: true,
+      data: {
+        toolCategories: [
+          expect.objectContaining({
+            name: 'ai-generation',
+            callableToolCount: 1,
+            callableExposure: 'all',
+          }),
+        ],
+        tools: [
+          { category: 'Generation', tools: [] },
+          { category: 'Dynamically injected', tools: ['GenerateImage', 'Read'] },
+        ],
       },
     });
   });
@@ -74,6 +170,7 @@ describe('core meta tools', () => {
     expect(tool.description).toContain('never construct or guess a skill name');
     tool.setRegisteredSkillNames(['storyboard', 'review']);
     expect(tool.parameters.properties.skillName?.enum).toEqual(['storyboard', 'review']);
+    expect(tool.parameters.required).toContain('slot');
     tool.setSkillProvider({
       listSkills: vi.fn(),
       getActiveSkill: vi.fn(),
@@ -85,6 +182,7 @@ describe('core meta tools', () => {
       tool.execute({
         skillName: 'commit',
         reason: 'User asked for a commit message after I inspected the request.',
+        slot: 'domainSkill',
       }),
     ).resolves.toEqual({
       success: true,
@@ -92,12 +190,14 @@ describe('core meta tools', () => {
         activated: true,
         skillName: 'commit',
         reason: 'User asked for a commit message after I inspected the request.',
+        slot: 'domainSkill',
         allowedTools: ['bash'],
       },
     });
     expect(activateSkill).toHaveBeenCalledWith({
       name: 'commit',
       reason: 'User asked for a commit message after I inspected the request.',
+      slot: 'domainSkill',
     });
   });
 
@@ -126,6 +226,7 @@ describe('core meta tools', () => {
       tool.execute({
         skillName: 'quality-assessment',
         reason: 'Review generated image quality with the canonical media gate.',
+        slot: 'domainSkill',
       }),
     ).resolves.toEqual({
       success: true,
@@ -134,6 +235,7 @@ describe('core meta tools', () => {
         skillName: 'media-quality-review',
         requestedSkillName: 'quality-assessment',
         reason: 'Review generated image quality with the canonical media gate.',
+        slot: 'domainSkill',
         diagnostics: [
           {
             code: 'legacy-skill-alias',
@@ -201,6 +303,7 @@ describe('core meta tools', () => {
         {
           skillName: 'commit',
           reason: '用户要求提交说明。',
+          slot: 'domainSkill',
         },
         { metadata: { locale: 'zh-cn' } },
       ),
@@ -210,6 +313,7 @@ describe('core meta tools', () => {
         activated: true,
         skillName: 'commit',
         reason: '用户要求提交说明。',
+        slot: 'domainSkill',
         allowedTools: ['bash'],
       },
     });
@@ -238,9 +342,13 @@ describe('core meta tools', () => {
       deactivateSkill: vi.fn(),
     });
 
-    const english = await tool.execute({ skillName: 'skill-原文', reason: 'needed' });
+    const english = await tool.execute({
+      skillName: 'skill-原文',
+      reason: 'needed',
+      slot: 'domainSkill',
+    });
     const chinese = await tool.execute(
-      { skillName: 'skill-原文', reason: 'needed' },
+      { skillName: 'skill-原文', reason: 'needed', slot: 'domainSkill' },
       { metadata: { locale: 'zh-cn' } },
     );
 
@@ -271,7 +379,9 @@ describe('core meta tools', () => {
       success: false,
       error: 'Invalid skill activation arguments.',
     });
-    await expect(tool.execute({ skillName: 'commit', reason: '   ' })).resolves.toEqual({
+    await expect(
+      tool.execute({ skillName: 'commit', reason: '   ', slot: 'domainSkill' }),
+    ).resolves.toEqual({
       success: false,
       error: 'An activation reason is required.',
     });
@@ -284,7 +394,7 @@ describe('core meta tools', () => {
 
     await expect(
       activateTool.execute(
-        { skillName: 'commit', reason: 'needed' },
+        { skillName: 'commit', reason: 'needed', slot: 'domainSkill' },
         { metadata: { locale: 'zh-cn' } },
       ),
     ).resolves.toEqual({
@@ -312,7 +422,7 @@ describe('core meta tools', () => {
     });
     await expect(
       activateTool.execute(
-        { skillName: 'commit', reason: '   ' },
+        { skillName: 'commit', reason: '   ', slot: 'domainSkill' },
         { metadata: { locale: 'zh-cn' } },
       ),
     ).resolves.toEqual({
@@ -352,18 +462,18 @@ describe('core meta tools', () => {
     expect(deactivateSkill).toHaveBeenCalled();
   });
 
-  it('returns locked Creation stage persona diagnostics through GetContext and DeactivateSkill', async () => {
+  it('returns locked runtime Skill diagnostics through GetContext and DeactivateSkill', async () => {
     const deactivateSkill = vi.fn(async () => ({
       success: false,
       code: 'deactivation-rejected' as const,
       diagnostics: [
         {
           code: 'locked-deactivation' as const,
-          message: 'Creation stage persona is cleared when its owning stage exits',
+          message: 'Runtime-owned prompt-chain Skill cannot be cleared manually',
           conversationId: 'conv-1',
-          recordId: 'record-stage',
-          skillName: 'creation-persona',
-          slot: 'stagePersona' as const,
+          recordId: 'record-runtime',
+          skillName: 'runtime-reference',
+          slot: 'promptChainSkill' as const,
         },
       ],
     }));
@@ -373,12 +483,12 @@ describe('core meta tools', () => {
       getActiveSkillLifecycle: vi.fn(async () => ({
         records: [
           {
-            id: 'record-stage',
-            skillName: 'creation-persona',
-            slot: 'stagePersona' as const,
-            owner: 'creation-profile' as const,
+            id: 'record-runtime',
+            skillName: 'runtime-reference',
+            slot: 'promptChainSkill' as const,
+            owner: 'runtime' as const,
             clearable: false,
-            lockedReason: 'Creation stage persona is cleared when its owning stage exits',
+            lockedReason: 'Runtime-owned prompt-chain Skill cannot be cleared manually',
             status: 'active' as const,
           },
         ],
@@ -399,8 +509,8 @@ describe('core meta tools', () => {
           activeSkillLifecycle: {
             records: [
               expect.objectContaining({
-                id: 'record-stage',
-                slot: 'stagePersona',
+                id: 'record-runtime',
+                slot: 'promptChainSkill',
                 clearable: false,
               }),
             ],
@@ -411,14 +521,14 @@ describe('core meta tools', () => {
     );
     const contextResult = await contextTool.execute({});
     expect(JSON.stringify(contextResult)).not.toContain(
-      'Creation stage persona is cleared when its owning stage exits',
+      'Runtime-owned prompt-chain Skill cannot be cleared manually',
     );
-    await expect(deactivateTool.execute({ recordId: 'record-stage' })).resolves.toEqual({
+    await expect(deactivateTool.execute({ recordId: 'record-runtime' })).resolves.toEqual({
       success: false,
       error:
-        'The skill was not deactivated. Details: {"code":"locked-deactivation","conversationId":"conv-1","skillName":"creation-persona","slot":"stagePersona","recordId":"record-stage"}',
+        'The skill was not deactivated. Details: {"code":"locked-deactivation","conversationId":"conv-1","skillName":"runtime-reference","slot":"promptChainSkill","recordId":"record-runtime"}',
     });
-    expect(deactivateSkill).toHaveBeenCalledWith({ recordId: 'record-stage' });
+    expect(deactivateSkill).toHaveBeenCalledWith({ recordId: 'record-runtime' });
   });
 
   it('creates a complete portable Skill through the per-conversation provider', async () => {

@@ -29,15 +29,6 @@ describe('slash adapter Skill invocation presentation', () => {
         output: 'Skill 已激活：quality-review',
         lifecycleActivation: { skillName: 'quality-review', args: 'changed files' },
         agentPrompt: 'changed files',
-        executionOverrides: {
-          metadata: {
-            agentCreation: {
-              entrySignal: 'prompt-chain-skill',
-              taskShape: 'multi-step',
-              creationKind: 'skill:quality-review',
-            },
-          },
-        },
       }),
     );
     expect(onOutput).toHaveBeenCalledWith('Skill 已激活：quality-review');

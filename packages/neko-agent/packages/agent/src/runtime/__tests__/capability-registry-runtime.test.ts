@@ -2,7 +2,6 @@ import { describe, expect, it, vi } from 'vitest';
 import type {
   AgentCapabilityProvider,
   ArtifactProfileDescriptor,
-  CreationProfileDescriptor,
   PromptFragment,
   ProviderCard,
   Skill,
@@ -11,7 +10,6 @@ import type {
 import { ToolRegistry } from '../../tools';
 import {
   ArtifactProfileRegistry,
-  CreationProfileRegistry,
   ProviderExpressionProfileRegistry,
   composeAgentProfiles,
 } from '../../profile';
@@ -236,12 +234,10 @@ describe('CapabilityRegistryRuntime', () => {
   it('registers profile contributions through canonical profile registries', () => {
     const toolRegistry = new ToolRegistry();
     const artifactProfileRegistry = new ArtifactProfileRegistry();
-    const creationProfileRegistry = new CreationProfileRegistry();
     const providerExpressionProfileRegistry = new ProviderExpressionProfileRegistry();
     const runtime = new CapabilityRegistryRuntime({
       toolRegistry,
       artifactProfileRegistry,
-      creationProfileRegistry,
       providerExpressionProfileRegistry,
     });
     const artifactProfile: ArtifactProfileDescriptor = {
@@ -251,14 +247,6 @@ describe('CapabilityRegistryRuntime', () => {
       version: 1,
       source: 'package',
       columns: [{ columnId: 'shotId', cellType: 'string', required: true }],
-    };
-    const creationProfile: CreationProfileDescriptor = {
-      profileId: 'studio.creation.review',
-      kind: 'creation',
-      version: '1.0.0',
-      source: 'package',
-      defaultStageId: 'research',
-      stages: [{ stageId: 'research', purpose: 'Research.' }],
     };
     const providerCard: ProviderCard = {
       providerId: 'flux',
@@ -275,16 +263,12 @@ describe('CapabilityRegistryRuntime', () => {
       {
         ...createProvider('neko.profiles', []),
         getArtifactProfiles: () => [artifactProfile],
-        getCreationProfiles: () => [creationProfile],
         getProviderCards: () => [providerCard],
       },
       { extensionContext: {} },
     );
 
     expect(artifactProfileRegistry.get('studio.shot-review', 1)).toEqual(artifactProfile);
-    expect(creationProfileRegistry.get('studio.creation.review', '1.0.0')).toEqual(
-      creationProfile,
-    );
     expect(providerExpressionProfileRegistry.get('provider-expression:flux', '1.0.0')).toEqual(
       expect.objectContaining({
         profileId: 'provider-expression:flux',
@@ -296,8 +280,9 @@ describe('CapabilityRegistryRuntime', () => {
     runtime.unregisterProvider('neko.profiles');
 
     expect(artifactProfileRegistry.get('studio.shot-review', 1)).toBeUndefined();
-    expect(creationProfileRegistry.get('studio.creation.review', '1.0.0')).toBeUndefined();
-    expect(providerExpressionProfileRegistry.get('provider-expression:flux', '1.0.0')).toBeUndefined();
+    expect(
+      providerExpressionProfileRegistry.get('provider-expression:flux', '1.0.0'),
+    ).toBeUndefined();
   });
 
   it('lets a provider ship a Skill and profile in the same package while resolving by id', () => {

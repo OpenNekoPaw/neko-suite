@@ -12,7 +12,6 @@ import {
   type CommandContext,
   type CommandResult,
   type ChatMessage,
-  createSkillExecutionCreationMetadata,
   executeSlashCommand,
   isSlashCommand as checkIsSlashCommand,
   parseSlashCommand as parseCommand,
@@ -45,10 +44,6 @@ export interface SlashCommandResult {
   skillSemantic?: SkillSemanticResult;
   /** Prompt to continue into agent execution after command handling */
   agentPrompt?: string;
-  /** Optional metadata overrides for AgentSession.execute() */
-  executionOverrides?: {
-    metadata?: Record<string, unknown>;
-  };
   /** Lifecycle activation requested by an explicit Skill-backed slash command. */
   lifecycleActivation?: {
     readonly skillName: string;
@@ -60,9 +55,6 @@ export interface SkillInvocationResult {
   readonly handled: boolean;
   readonly semantic: SkillSemanticResult;
   readonly agentPrompt?: string;
-  readonly executionOverrides?: {
-    readonly metadata?: Record<string, unknown>;
-  };
   readonly lifecycleActivation?: {
     readonly skillName: string;
     readonly args?: string;
@@ -230,9 +222,6 @@ function createCommandArtifactSlashResult(
     ...(argsText
       ? {
           agentPrompt: argsText,
-          executionOverrides: {
-            metadata: createSkillExecutionCreationMetadata(skill),
-          },
         }
       : {}),
     lifecycleActivation: {
@@ -298,9 +287,6 @@ export async function handleSkillInvocation(
     ...(parsed.args
       ? {
           agentPrompt: parsed.args,
-          executionOverrides: {
-            metadata: createSkillExecutionCreationMetadata(loadedSkill),
-          },
         }
       : {}),
   };

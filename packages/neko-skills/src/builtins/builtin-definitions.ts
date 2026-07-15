@@ -29,7 +29,6 @@ export type { BuiltinSkillOptions, LocalizedBuiltinSkillContent };
 export { getScriptGenerationSkill, scriptGenerationSkill } from './script-generation';
 export {
   CREATIVE_MEDIA_PROFILES,
-  CREATIVE_MEDIA_WORKFLOW_STAGES,
   getCanonicalCreativeMediaSkills,
   imageSkill,
   mediaProductionSkill,
@@ -37,7 +36,6 @@ export {
   storyboardSkill,
   videoSkill,
   type CreativeMediaProfileDescriptor,
-  type CreativeMediaWorkflowStageDescriptor,
 } from './creative-media';
 
 export { getSkillCreatorSkill, skillCreatorSkill } from './skill-creator';

@@ -1,34 +1,37 @@
 /**
- * TimelineToolExecutor
- *
- * Delegates timeline tool operations (deterministic transforms on ProjectData)
- * to a strategy-based handler registry. Execution is serialized to prevent
- * concurrent read/write race conditions.
- *
- * - Prefers active VideoEditorModel (write-back triggers VSCode undo/redo)
- * - Falls back to ProjectSession when no active editor is available
+ * Explicit-document executor for deterministic Cut timeline transforms.
  */
 
 import * as vscode from 'vscode';
-import type { ProjectData } from '@neko/shared';
-import { createDefaultProject } from '@neko/shared';
+import { createDefaultProject, type ProjectData } from '@neko/shared';
 import { getService } from '../base';
 import { IEditorRegistry } from '../editor/common/editorRegistry';
 import type { VideoEditorModel } from '../editor/video/videoEditorModel';
-import { IProjectSessionService } from './ProjectSessionService';
-import { createToolRegistry } from './tools';
-import type { IToolHandler } from './tools';
+import { createNkvProjectRef } from './CutProjectQualityFacade';
+import { ProjectSessionService } from './ProjectSessionService';
+import { createToolRegistry, type IToolHandler } from './tools';
 import { normalizePathsForSave } from './tools/helpers';
 
-/**
- * Tool execution result (local type, replaces @neko/agent ToolResult)
- */
 interface ToolResult {
   success: boolean;
   error?: string;
   data?: unknown;
   duration?: number;
 }
+
+export interface TimelineToolExecutionTarget {
+  readonly documentUri: string;
+  readonly expectedProjectRevision?: string;
+}
+
+const READ_ONLY_TOOL_NAMES = new Set([
+  'GetTimelineInfo',
+  'GetElementInfo',
+  'ListElements',
+  'ListEffects',
+  'ListTransitions',
+  'GetKeyframes',
+]);
 
 export class TimelineToolExecutor {
   private pending: Promise<void> = Promise.resolve();
@@ -38,83 +41,73 @@ export class TimelineToolExecutor {
     this.registry = createToolRegistry();
   }
 
-  async execute(toolName: string, params: Record<string, unknown>): Promise<ToolResult> {
+  async execute(
+    toolName: string,
+    params: Record<string, unknown>,
+    target: TimelineToolExecutionTarget,
+  ): Promise<ToolResult> {
     const start = Date.now();
-
-    // Serialize execution to prevent concurrent read/write data loss
     const run = async (): Promise<ToolResult> => {
-      const editorRegistry = getService(IEditorRegistry);
-      const projectSession = getService(IProjectSessionService);
-
-      if (!editorRegistry) {
-        return {
-          success: false,
-          error: 'EditorRegistry service not available',
-          duration: Date.now() - start,
-        };
+      const targetUri = parseCutDocumentUri(target?.documentUri);
+      if (!targetUri) {
+        return failed('Cut timeline operations require an explicit file .nkv documentUri.', start);
       }
 
-      const active = editorRegistry.getActiveEditor();
-      let model: VideoEditorModel | null =
-        active && active.type === 'video' ? (active as unknown as VideoEditorModel) : null;
-
-      const sessionInfo = projectSession?.getInfo() ?? null;
-      if (!model && sessionInfo?.path) {
-        const maybe = editorRegistry.getEditorByUri(vscode.Uri.file(sessionInfo.path));
-        if (maybe && maybe.type === 'video') {
-          model = maybe as unknown as VideoEditorModel;
-        }
-      }
-
-      let project: ProjectData | null = null;
-      let writeBack: ((next: ProjectData) => Promise<void>) | null = null;
-      let projectFilePath: string | undefined;
-
-      if (model) {
-        project = model.getProjectData();
-        projectFilePath = model.uri.fsPath;
-        writeBack = async (next) => {
-          await model!.syncSavedProjectData(await normalizePathsForSave(next, model!.uri.fsPath));
-        };
-      } else if (projectSession?.isLoaded()) {
-        project = projectSession.getProjectData();
-        projectFilePath = sessionInfo?.path;
-        writeBack = async (next) => {
-          await projectSession.updateProjectData(
-            await normalizePathsForSave(next, projectFilePath),
-          );
-        };
-      }
-
-      if (!project || !writeBack) {
-        return {
-          success: false,
-          error:
-            'No project loaded. Open a .nkv file or call POST /api/v1/project/load|create first.',
-          duration: Date.now() - start,
-        };
-      }
-
-      // Delegate to handler via registry lookup
       const handler = this.registry.get(toolName);
-      if (!handler) {
-        return {
-          success: false,
-          error: `Unknown tool: ${toolName}`,
-          duration: Date.now() - start,
-        };
+      if (!handler) return failed(`Unknown tool: ${toolName}`, start);
+      if (!READ_ONLY_TOOL_NAMES.has(toolName) && !target.expectedProjectRevision) {
+        return failed(
+          'missing-project-revision: durable Cut timeline mutation requires expectedProjectRevision.',
+          start,
+        );
       }
 
-      const result = handler.apply(project, toolName, params);
-      if (!result.success) {
-        return { success: false, error: result.error, duration: Date.now() - start };
-      }
+      const editor = getService(IEditorRegistry)?.getEditorByUri(targetUri);
+      const model = editor?.type === 'video' ? (editor as unknown as VideoEditorModel) : undefined;
+      const session = model ? undefined : new ProjectSessionService();
 
-      if (result.updatedProject) {
-        await writeBack(result.updatedProject);
-      }
+      try {
+        if (session) await session.load(targetUri.fsPath);
+        const project = model?.getProjectData() ?? session?.getProjectData() ?? null;
+        if (!project) return failed(`Cut project is unavailable: ${target.documentUri}`, start);
 
-      return { success: true, data: result.data, duration: Date.now() - start };
+        const actualRevision = createNkvProjectRef(target.documentUri, project).projectRevision;
+        if (target.expectedProjectRevision && target.expectedProjectRevision !== actualRevision) {
+          return failed(
+            `stale-project-revision: expected ${target.expectedProjectRevision}, received ${actualRevision}.`,
+            start,
+          );
+        }
+
+        const result = handler.apply(project, toolName, params);
+        if (!result.success) return failed(result.error ?? `Cut ${toolName} failed.`, start);
+
+        if (result.updatedProject) {
+          if (model) {
+            await model.syncSavedProjectData(
+              await normalizePathsForSave(result.updatedProject, targetUri.fsPath),
+            );
+          } else {
+            await session!.updateProjectData(
+              await normalizePathsForSave(result.updatedProject, targetUri.fsPath),
+            );
+          }
+        }
+
+        const data =
+          toolName === 'GetTimelineInfo' && typeof result.data === 'object' && result.data !== null
+            ? {
+                ...result.data,
+                documentUri: target.documentUri,
+                projectRevision: actualRevision,
+              }
+            : result.data;
+        return { success: true, data, duration: Date.now() - start };
+      } catch (error) {
+        return failed(error instanceof Error ? error.message : String(error), start);
+      } finally {
+        session?.dispose();
+      }
     };
 
     const task = this.pending.then(run, run) as Promise<ToolResult>;
@@ -126,9 +119,20 @@ export class TimelineToolExecutor {
   }
 }
 
-/**
- * Convenience: create an empty project (fallback for ProjectSession.create)
- */
+function parseCutDocumentUri(documentUri: string | undefined): vscode.Uri | undefined {
+  if (!documentUri) return undefined;
+  try {
+    const uri = vscode.Uri.parse(documentUri, true);
+    return uri.scheme === 'file' && uri.fsPath.toLowerCase().endsWith('.nkv') ? uri : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function failed(error: string, start: number): ToolResult {
+  return { success: false, error, duration: Date.now() - start };
+}
+
 export function createEmptyProject(): ProjectData {
   return createDefaultProject();
 }

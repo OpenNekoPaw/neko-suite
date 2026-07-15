@@ -5,7 +5,6 @@ import type {
   IToolCategoryRegistry,
   IToolGroupRegistry,
   IArtifactProfileRegistry,
-  ICreationProfileRegistry,
   IProviderCardRegistry,
   IProviderExpressionProfileRegistry,
   IOperationToolAdapterRegistry,
@@ -46,17 +45,6 @@ export interface IRuntimeWorkspaceFsOps {
 }
 
 /**
- * Agent creation guidance/bootstrap contract.
- *
- * This is not a creation runtime. Existing Agent session/turn/capability
- * machinery owns lifecycle, validation, approval, state, provenance, and
- * side-effect decisions. This port only carries reusable recovery services.
- */
-export interface ICreationGuidanceRuntime {
-  readonly autohealChainFactory?: import('@neko/shared').AgentAutohealChainFactory;
-}
-
-/**
  * Workspace runtime persistence contract.
  *
  * Freezes the workspace-backed persistence plane used by session bootstrap:
@@ -85,7 +73,6 @@ export interface ICapabilityRuntime {
   readonly toolCategoryRegistry?: IToolCategoryRegistry;
   readonly providerCardRegistry?: IProviderCardRegistry;
   readonly artifactProfileRegistry?: IArtifactProfileRegistry;
-  readonly creationProfileRegistry?: ICreationProfileRegistry;
   readonly providerExpressionProfileRegistry?: IProviderExpressionProfileRegistry;
   readonly promptFragments?: readonly PromptFragment[];
   readonly operationToolAdapterRegistry?: IOperationToolAdapterRegistry;
@@ -108,6 +95,8 @@ export interface IValidationLoop {
   readonly validationCoordinator?: IValidationCoordinator;
   readonly validationCoordinatorFactory?: import('@neko/shared').AgentValidationCoordinatorFactory;
   readonly toolResultValidationAdapters?: readonly AgentToolResultValidationAdapter[];
+  readonly autohealChainFactory?: import('@neko/shared').AgentAutohealChainFactory;
+  readonly outputValidationAdapters?: readonly import('@neko/shared').AgentOutputValidationAdapter[];
 }
 
 /**
@@ -116,7 +105,6 @@ export interface IValidationLoop {
  * Hosts may supply any subset; explicit session-config fields still win.
  */
 export interface AgentRuntimeConfig {
-  readonly creationGuidance?: ICreationGuidanceRuntime;
   readonly workspaceStore?: IWorkspaceRuntimeStore;
   readonly capabilityRuntime?: ICapabilityRuntime;
   readonly validationLoop?: IValidationLoop;

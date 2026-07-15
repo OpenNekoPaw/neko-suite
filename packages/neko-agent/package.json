@@ -35,6 +35,7 @@
   "activationEvents": [
     "onView:neko.aiAssistant",
     "onCommand:neko.agent.showLogs",
+    "onCommand:neko.agent.retainAndProjectGeneratedOutput",
     "onCommand:neko.agent.getDashboardTaskSource",
     "onCommand:neko.agent.characterDialogue",
     "onCommand:neko.agent.embodyCharacter",
@@ -104,6 +105,11 @@
         "command": "neko.agent.showLogs",
         "title": "%neko.agent.showLogs.title%",
         "icon": "$(output)",
+        "category": "NekoAgent"
+      },
+      {
+        "command": "neko.agent.retainAndProjectGeneratedOutput",
+        "title": "%neko.agent.retainAndProjectGeneratedOutput.title%",
         "category": "NekoAgent"
       },
       {

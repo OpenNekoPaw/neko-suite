@@ -15,7 +15,7 @@ pub mod traits;
 #[cfg(test)]
 mod architecture_tests;
 
-pub use decoder::FfmpegAudioDecoder;
+pub use decoder::{CorruptTailPolicy, FfmpegAudioDecoder};
 pub use encoder::FfmpegAudioEncoder;
 pub use error::{AudioError, AudioResult, Error, Result};
 pub use mic_capture::MicCaptureService;

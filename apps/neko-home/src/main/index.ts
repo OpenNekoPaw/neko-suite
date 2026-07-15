@@ -11,6 +11,7 @@ import {
 import homePackage from '../../package.json';
 import {
   HOME_BRIDGE_CHANNELS,
+  normalizeHomeSessionOperationRequest,
   type HomeSnapshot,
 } from '../shared/contracts';
 import { createHomeApplicationHandoffPort } from './application-handoff';
@@ -27,6 +28,7 @@ import { createHomeSkillFileSnapshotRuntime } from './home-agent-snapshot-runtim
 import { createElectronHomeCommandExecutor } from './home-electron-command-executor';
 import { createHomeResourceSurfaceSnapshot } from './home-resource-surfaces';
 import { createHomeProjectFileIoAdapter } from './home-workspace-file-io';
+import { HomeSessionRuntimeRegistry } from './home-session-runtime';
 
 const HOME_WINDOW = { width: 1280, height: 820, minWidth: 920, minHeight: 640 } as const;
 const applicationIdentity: NekoApplicationIdentity = {
@@ -41,6 +43,7 @@ let handlersRegistered = false;
 let configRuntime: { root: string; user: FileUserConfigManager; config: ConfigManager } | undefined;
 let conversationRuntime: { root: string; runtime: HomeAgentConversationRuntime; projection: InMemoryHomeAgentProjectionRuntime } | undefined;
 let snapshotRuntime: { root: string; runtime: HomeAgentSnapshotRuntime } | undefined;
+let sessionRuntime: { root: string; registry: HomeSessionRuntimeRegistry } | undefined;
 
 function registerBridgeHandlers(): void {
   if (handlersRegistered) return;
@@ -61,6 +64,25 @@ function registerBridgeHandlers(): void {
       getSnapshotRuntime: getSnapshotRuntime,
     }),
   );
+  ipcMain.handle(HOME_BRIDGE_CHANNELS.manageSession, (_event, rawRequest) => {
+    const request = normalizeHomeSessionOperationRequest(rawRequest);
+    const registry = getSessionRuntimeRegistry();
+    const session = (() => {
+      switch (request.type) {
+        case 'create':
+          return registry.createSession(request.config);
+        case 'select':
+          return registry.selectSession(request.sessionId);
+        case 'queue':
+          return registry.enqueue(request, request.prompt);
+        case 'cancel':
+          return registry.cancel(request);
+        case 'resume':
+          return registry.resume(request);
+      }
+    })();
+    return { sessionId: session.sessionId, runtimeId: session.runtimeId, status: session.status };
+  });
   ipcMain.handle(HOME_BRIDGE_CHANNELS.handoff, async (_event, rawRequest) => {
     const request = parseNekoApplicationHandoffRequest(rawRequest, {
       expectedSource: applicationIdentity,
@@ -77,6 +99,7 @@ async function createHomeSnapshot(): Promise<HomeSnapshot> {
     probeHomeEngineCore(),
     createHomeResourceSurfaceSnapshot({ workspaceRoot }),
   ]);
+  const sessions = getSessionRuntimeRegistry();
   return {
     application: applicationIdentity,
     workspace: {
@@ -87,7 +110,28 @@ async function createHomeSnapshot(): Promise<HomeSnapshot> {
     engine,
     resourceSurfaces: resources.resourceSurfaces,
     resourceProviders: resources.providerSnapshots,
+    sessionProjection: {
+      ...(sessions.getSelectedSessionId()
+        ? { selectedSessionId: sessions.getSelectedSessionId() }
+        : {}),
+      sessions: sessions.listSessions().map((session) => ({
+        sessionId: session.sessionId,
+        runtimeId: session.runtimeId,
+        status: session.status,
+        queuedCount: session.queue.filter((item) => item.status === 'queued').length,
+        taskCount: session.tasks.length,
+      })),
+    },
   };
+}
+
+function getSessionRuntimeRegistry(): HomeSessionRuntimeRegistry {
+  const root = resolveHomeWorkspaceRoot();
+  if (sessionRuntime?.root === root) return sessionRuntime.registry;
+  const registry = new HomeSessionRuntimeRegistry();
+  registry.createSession({ workspaceRoot: root });
+  sessionRuntime = { root, registry };
+  return registry;
 }
 
 function getConfigRuntime() {

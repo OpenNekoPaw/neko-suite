@@ -5,31 +5,26 @@ import {
   toProviderExpressionProfile,
   validateAgentProfileDescriptorSet,
   validateArtifactProfileDescriptor,
-  validateCreationProfileDescriptor,
   validateGenericTable,
   validateProviderExpressionProfileDescriptor,
   type AgentProfileIdentity,
   type ArtifactProfileDescriptor,
-  type CreationProfileDescriptor,
   type GenericTable,
   type ProviderCard,
 } from '..';
 
 describe('Agent profile shared contracts', () => {
   it('validates Agent profile identity, kind, source, version, and duplicates', () => {
-    const valid: AgentProfileIdentity<'creation', string> = {
-      profileId: 'studio.creation.review',
-      kind: 'creation',
+    const valid: AgentProfileIdentity<'artifact', string> = {
+      profileId: 'studio.artifact.review',
+      kind: 'artifact',
       version: '1.0.0',
       source: 'package',
     };
 
     expect(validateAgentProfileDescriptorSet([valid]).ok).toBe(true);
     expect(
-      validateAgentProfileDescriptorSet([
-        valid,
-        { ...valid, source: 'project' },
-      ]).diagnostics,
+      validateAgentProfileDescriptorSet([valid, { ...valid, source: 'project' }]).diagnostics,
     ).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ code: 'duplicate-profile-id', severity: 'error' }),
@@ -74,9 +69,7 @@ describe('Agent profile shared contracts', () => {
         columns: [{ columnId: 'shotId', cellType: 'spreadsheet' }],
       }).diagnostics,
     ).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ code: 'malformed-profile-descriptor' }),
-      ]),
+      expect.arrayContaining([expect.objectContaining({ code: 'malformed-profile-descriptor' })]),
     );
   });
 
@@ -106,38 +99,6 @@ describe('Agent profile shared contracts', () => {
     expect(result.diagnostics).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ code: 'skill-local-profile-persisted', severity: 'error' }),
-      ]),
-    );
-  });
-
-  it('validates Creation Profile stages, transitions, and stage personas', () => {
-    const profile: CreationProfileDescriptor = {
-      profileId: 'studio.research-generate-review',
-      kind: 'creation',
-      version: '1.0.0',
-      source: 'package',
-      defaultStageId: 'research',
-      stages: [
-        { stageId: 'research', purpose: 'Collect source context.' },
-        { stageId: 'review', purpose: 'Review generated output.' },
-      ],
-      transitions: [{ fromStageId: 'research', toStageId: 'review', condition: 'review-passed' }],
-      stagePersonas: [{ stageId: 'review', skillId: 'reviewer-persona' }],
-      approvalPolicy: { policy: 'before-side-effect' },
-      reviewPolicy: { policy: 'on-stage-exit', validatorIds: ['studio.review'] },
-      recoveryPolicy: { policy: 'revise-previous-stage', maxAttempts: 2 },
-      lifecycleConstraints: [{ constraintId: 'review-before-persist', kind: 'requires-review' }],
-    };
-
-    expect(validateCreationProfileDescriptor(profile)).toEqual({ ok: true, diagnostics: [] });
-    expect(
-      validateCreationProfileDescriptor({
-        ...profile,
-        transitions: [{ fromStageId: 'research', toStageId: 'publish' }],
-      }).diagnostics,
-    ).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ code: 'malformed-profile-descriptor' }),
       ]),
     );
   });
@@ -175,14 +136,14 @@ describe('Agent profile shared contracts', () => {
     );
   });
 
-  it('collects explicit Skill profile references and mediaWorkflow shorthand', () => {
+  it('collects supported Skill profile references and mediaWorkflow shorthand', () => {
     expect(
       collectSkillProfileReferences({
         profileReferences: [
           {
-            profileId: 'studio.creation.review',
-            kind: 'creation',
-            relationship: 'requires',
+            profileId: 'provider-expression:studio',
+            kind: 'provider-expression',
+            relationship: 'prefers',
             versionRange: '^1.0.0',
           },
         ],
@@ -190,9 +151,9 @@ describe('Agent profile shared contracts', () => {
       }),
     ).toEqual([
       {
-        profileId: 'studio.creation.review',
-        kind: 'creation',
-        relationship: 'requires',
+        profileId: 'provider-expression:studio',
+        kind: 'provider-expression',
+        relationship: 'prefers',
         versionRange: '^1.0.0',
       },
       {
@@ -212,7 +173,7 @@ describe('Agent profile shared contracts', () => {
       typeMetadata: {
         type: 'profile',
         data: {
-          profileKinds: ['artifact', 'creation'],
+          profileKinds: ['artifact', 'provider-expression'],
           profiles: [
             {
               profileId: 'studio.storyboard.v1',
@@ -221,8 +182,8 @@ describe('Agent profile shared contracts', () => {
               displayName: 'Studio Storyboard',
             },
             {
-              profileId: 'studio.creation.review',
-              kind: 'creation',
+              profileId: 'provider-expression:studio',
+              kind: 'provider-expression',
               version: '1.0.0',
             },
           ],
@@ -234,7 +195,7 @@ describe('Agent profile shared contracts', () => {
       packageId: '@studio/storyboard-profiles',
       name: 'storyboard-profiles',
       version: '1.0.0',
-      profileKinds: ['artifact', 'creation'],
+      profileKinds: ['artifact', 'provider-expression'],
       profiles: [
         {
           profileId: 'studio.storyboard.v1',
@@ -243,8 +204,8 @@ describe('Agent profile shared contracts', () => {
           displayName: 'Studio Storyboard',
         },
         {
-          profileId: 'studio.creation.review',
-          kind: 'creation',
+          profileId: 'provider-expression:studio',
+          kind: 'provider-expression',
           version: '1.0.0',
         },
       ],

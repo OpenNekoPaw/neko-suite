@@ -30,6 +30,7 @@ import type { DashboardExportServiceEntry } from '../../services/dashboardTaskSo
 import { ExportPresetService } from '../../services/ExportPresetService';
 import { getService, getLogger } from '../../base';
 import { isAssetMessage, handleAssetMessage } from '../../handlers/assetHandlers';
+import { createNkvProjectRef } from '../../services/CutProjectQualityFacade';
 
 const logger = getLogger('VideoEditorProvider');
 import { IStatusBar } from '../../views/statusBar';
@@ -906,8 +907,15 @@ export class VideoEditorProvider implements vscode.CustomEditorProvider<VideoPro
               name: string;
             } | null>('neko.agent.getDndPayload');
             if (payload) {
+              const documentUri = document.uri.toString();
+              const expectedProjectRevision = createNkvProjectRef(
+                documentUri,
+                model.getProjectData(),
+              ).projectRevision;
               await vscode.commands.executeCommand('neko.cut.authoring.importGeneratedClip', {
                 assetPath: payload.path,
+                target: { kind: 'file', documentUri },
+                expectedProjectRevision,
               });
               await vscode.commands.executeCommand('neko.agent.clearDndPayload');
               logger.info(`DnD drop accepted: ${payload.name}`);

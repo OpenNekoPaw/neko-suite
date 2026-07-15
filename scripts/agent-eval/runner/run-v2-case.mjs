@@ -257,6 +257,9 @@ async function runV2Sample(selection, options = {}) {
         retries: readNonNegativeInteger(facts?.retries?.taskRetryCount),
         inputTokens: readNonNegativeInteger(facts?.usage?.inputTokens),
         outputTokens: readNonNegativeInteger(facts?.usage?.outputTokens),
+        ...(readNonNegativeInteger(facts?.usage?.contextTokens) !== undefined
+          ? { contextTokens: readNonNegativeInteger(facts?.usage?.contextTokens) }
+          : {}),
         ...(readOptionalNonNegativeNumber(facts?.usage?.costUsd) !== undefined
           ? { costUsd: readOptionalNonNegativeNumber(facts?.usage?.costUsd) }
           : {}),

@@ -25,13 +25,22 @@
 - Extension Host 管 custom editor、resource URI、StatusBar、导出命令和 Engine 授权。
 - Story/Canvas/Cut/Preview 之间通过共享 contract、asset/entity/search 引用连接，不直接 import 对方实现。
 - Canvas 的播放路线是 `CanvasPlaybackPlan` 的投影；默认以 Route Storyboard Matrix / route navigator 展示多分支、容器内连续节点和预览选择；它可以生成发送到 Cut 的剪辑初稿快照，但不成为 Cut 剪辑 timeline。
-- Cut timeline 和 `.nkv` 是剪辑、轨道、clip、效果、字幕、音频和导出的权威；从 Canvas 导入后由 Cut 管理剪辑事实。
+- Cut timeline 和 `.nkv` 是剪辑、轨道、clip、效果、字幕、音频和导出的权威；多个 `.nkv` 是相互独立的普通项目，从 Canvas 导入后由被显式选定的 Cut 项目管理剪辑事实。
 - Agent 可以读取和展示 Canvas 顺序，并在确认后触发 Canvas -> Cut 导入；Agent 不维护独立 timeline 顺序，也不承担视频播放器职责，Canvas 路线播放由 Canvas Editor Webview 内的 `PlaybackWorkspace` 负责，Cut 结果播放由 Cut 或 `neko-preview` / Engine 负责。
+- 所有 durable Cut mutation 必须携带显式 `.nkv` document identity 和 expected revision，或显式 `new` target。活动/最近编辑器、普通生成完成和 Workspace Board 投影都不能隐式选择 Cut 项目；generated-output/Board-to-Cut 只通过用户或 Agent 明确表达的 authoring intent 发生。
 - 被动状态进入 native StatusBar，Timeline 和画布交互状态留在 Webview。
 
 ### Agent 驱动的影视化与动画化
 
 视频领域不提供固定“漫画/剧本/小说/插画 -> 动画”的中央流水线。Agent 读取当前来源和项目证据，按镜头选择分格/OCR、角色参考、Storyboard、图片准备、Puppet/逐帧/2.5D/3D/生成视频、Animatic、Audio、Quality 和 Export 等当前真实可用能力；每一步由 owning package 返回文件、ResourceRef、Task result、project revision 或 diagnostic。
+
+角色和镜头参考可以来自参考图启发的新内容生成或多视图角色卡。Agent 不根据猜测的参考图来源模型选择 Provider；当前图片 capability 明确支持单张多视图时可以一次生成，并在实际结果复查和必要审批后作为后续镜头参考。正式角色引用继续由 Entity/Asset/Character owner 管理，Video/Cut 只消费稳定引用和适用 revision。
+
+影视生成 Prompt 的指导语言、创作者内容语言和 Provider 执行指令语言相互独立。视频模型偏好英文指令时，中文角色名、对白、字幕和画面文字仍必须按批准内容保留；模型不能可靠支持时应在生成前暴露 diagnostic，并显式选择字幕或后期文字策略。
+
+镜头主体、动作、运镜、时长意图、角色/场景连续性、first-frame/last-frame 等参考角色和验收条件是模型无关创作语义；当前 Provider/model/version/profile 是否接受对应输入、如何传递、支持的实际时长/控制和 Prompt 方言属于模型绑定执行事实。切换模型或 profile 后必须重新 resolve/validate，不能沿用旧参数或支持声明。
+
+Prompt 图库或单次成功视频/图片可以帮助 Agent理解表达方式，但不能成为 Video capability truth、Provider selector 或完成证据。实际请求必须记录有效模型和输入引用，实际片段与后续 Quality/Cut 结果才证明镜头可用。
 
 复杂制作可以使用 creator-review Markdown 和 living `plan.md`，但它们不编译成 timeline、DAG 或 Tool 调用。近期 TODO 不复制完整 shot graph；Canvas Storyboard、Cut timeline、生成文件和 Task result 才是进度与完成事实。缺少 owning capability 时必须返回 blocked/partial 和最小可交付结果。
 

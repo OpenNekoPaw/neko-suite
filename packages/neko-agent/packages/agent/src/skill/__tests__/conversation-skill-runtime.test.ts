@@ -5,7 +5,6 @@ import type {
   SkillDiscoveryResult,
   SkillInjection,
 } from '@neko/shared';
-import type { AgentPromptChainObservation } from '@neko-agent/types';
 import { ConversationSkillRuntime } from '../conversation-skill-runtime';
 
 function createSkill(
@@ -538,100 +537,5 @@ describe('ConversationSkillRuntime', () => {
       expect.objectContaining({ name: 'quality-review' }),
       skill,
     );
-  });
-
-  it('records prompt-chain observation for explicit skill invocation with Agent-native creation metadata', async () => {
-    const skill = createSkill('storyboard');
-    const skillService = createSkillService([skill]);
-    const observations: AgentPromptChainObservation[] = [];
-    const promptChainObservationPort = {
-      recordPromptChainObservation: vi.fn((observation: AgentPromptChainObservation) => {
-        observations.push(observation);
-        return observation;
-      }),
-    };
-    const runtime = new ConversationSkillRuntime({
-      skillService: skillService as any,
-      promptChainObservationPort,
-      now: () => 301,
-    });
-
-    const result = await runtime.applySkillInvocation({
-      skillName: 'storyboard',
-      conversationId: 'conv-1',
-      reason: 'Generate storyboard table',
-      creation: {
-        creationId: 'creation-1',
-        iterationId: 'iteration-1',
-        promptChainId: 'storyboard.creation',
-        checkpointId: 'skill-activated',
-      },
-    });
-
-    expect(result).toEqual(expect.objectContaining({ applied: true, skill }));
-    expect(promptChainObservationPort.recordPromptChainObservation).toHaveBeenCalledTimes(1);
-    expect(observations).toEqual([
-      expect.objectContaining({
-        kind: 'started',
-        creationId: 'creation-1',
-        iterationId: 'iteration-1',
-        promptChainId: 'storyboard.creation',
-        skillName: 'storyboard',
-        observedAt: 301,
-        reason: 'Generate storyboard table',
-        metadata: expect.objectContaining({
-          checkpointId: 'skill-activated',
-          source: 'user-explicit',
-          requestedBy: 'user',
-        }),
-      }),
-    ]);
-  });
-
-  it('fails visibly when prompt-chain metadata is supplied without an observation port', async () => {
-    const skill = createSkill('storyboard');
-    const skillService = createSkillService([skill]);
-    const runtime = new ConversationSkillRuntime({
-      skillService: skillService as any,
-      now: () => 301,
-    });
-
-    const result = await runtime.applySkillInvocation({
-      skillName: 'storyboard',
-      conversationId: 'conv-1',
-      reason: 'Generate storyboard table',
-      creation: {
-        creationId: 'creation-1',
-        iterationId: 'iteration-1',
-        promptChainId: 'storyboard.creation',
-      },
-    });
-
-    expect(result).toEqual({
-      applied: false,
-      error:
-        'Agent-native creation metadata was supplied, but no prompt-chain observation port is configured.',
-    });
-  });
-
-  it('does not create prompt-chain observation when skill invocation has no creation metadata', async () => {
-    const skill = createSkill('quality-review');
-    const skillService = createSkillService([skill]);
-    const promptChainObservationPort = {
-      recordPromptChainObservation: vi.fn(
-        (observation: AgentPromptChainObservation) => observation,
-      ),
-    };
-    const runtime = new ConversationSkillRuntime({
-      skillService: skillService as any,
-      promptChainObservationPort,
-    });
-
-    await runtime.applySkillInvocation({
-      skillName: 'quality-review',
-      conversationId: 'conv-1',
-    });
-
-    expect(promptChainObservationPort.recordPromptChainObservation).not.toHaveBeenCalled();
   });
 });

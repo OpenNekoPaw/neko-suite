@@ -127,22 +127,6 @@ function collectDurableIdentityDiagnostics(
   }
   seen.add(value);
 
-  if (
-    isResourceRef(value) &&
-    value.kind === 'generated' &&
-    value.source.kind === 'generated-asset'
-  ) {
-    diagnostics.push(
-      createCanvasAuthoringDiagnostic(
-        'error',
-        'unpromoted-generated-resource-identity',
-        'Canvas durable data must use promoted Asset identity instead of generated-output ResourceRef identity.',
-        { target: path, received: value.id },
-      ),
-    );
-    return;
-  }
-
   if (Array.isArray(value)) {
     value.forEach((item, index) =>
       collectDurableIdentityDiagnostics(item, `${path}[${index}]`, diagnostics, seen),

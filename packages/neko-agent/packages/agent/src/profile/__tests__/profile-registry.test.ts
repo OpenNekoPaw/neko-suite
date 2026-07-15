@@ -1,14 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type {
-  ArtifactProfileDescriptor,
-  CreationProfileDescriptor,
-  ProviderExpressionProfileDescriptor,
-} from '@neko/shared';
-import {
-  ArtifactProfileRegistry,
-  CreationProfileRegistry,
-  ProviderExpressionProfileRegistry,
-} from '../profile-registry';
+import type { ArtifactProfileDescriptor, ProviderExpressionProfileDescriptor } from '@neko/shared';
+import { ArtifactProfileRegistry, ProviderExpressionProfileRegistry } from '../profile-registry';
 
 describe('Agent profile registries', () => {
   it('records duplicate diagnostics without silently hiding source layers', () => {
@@ -54,17 +46,8 @@ describe('Agent profile registries', () => {
     );
   });
 
-  it('supports creation and provider expression profile families', () => {
-    const creationRegistry = new CreationProfileRegistry();
+  it('supports provider expression profiles', () => {
     const providerExpressionRegistry = new ProviderExpressionProfileRegistry();
-    const creationProfile: CreationProfileDescriptor = {
-      profileId: 'studio.creation.review',
-      kind: 'creation',
-      version: '1.0.0',
-      source: 'package',
-      defaultStageId: 'research',
-      stages: [{ stageId: 'research', purpose: 'Research source context.' }],
-    };
     const expressionProfile: ProviderExpressionProfileDescriptor = {
       profileId: 'provider-expression:flux',
       kind: 'provider-expression',
@@ -79,10 +62,8 @@ describe('Agent profile registries', () => {
       trainingProfile: { styleAffinities: { photorealistic: 3 }, antiBiasStrategies: [] },
     };
 
-    expect(creationRegistry.register(creationProfile).ok).toBe(true);
     expect(providerExpressionRegistry.register(expressionProfile).ok).toBe(true);
 
-    expect(creationRegistry.get('studio.creation.review')).toEqual(creationProfile);
     expect(providerExpressionRegistry.get('provider-expression:flux')).toEqual(expressionProfile);
   });
 });

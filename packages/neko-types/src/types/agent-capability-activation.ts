@@ -11,11 +11,7 @@ export const AGENT_CAPABILITY_ACTIVATION_SOURCES = ['user-explicit', 'agent-tool
 
 export type AgentCapabilityActivationSource = (typeof AGENT_CAPABILITY_ACTIVATION_SOURCES)[number];
 
-export const AGENT_CAPABILITY_ACTIVATION_TARGETS = [
-  'skill',
-  'creation-profile',
-  'execution-mode',
-] as const;
+export const AGENT_CAPABILITY_ACTIVATION_TARGETS = ['skill', 'execution-mode'] as const;
 
 export type AgentCapabilityActivationTarget = (typeof AGENT_CAPABILITY_ACTIVATION_TARGETS)[number];
 

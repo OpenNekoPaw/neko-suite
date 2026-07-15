@@ -47,7 +47,7 @@ function facts(overrides = {}) {
       { id: 'u1', role: 'user', source: 'user', content: 'hello' },
       { id: 'a1', role: 'assistant', content: 'done' },
     ],
-    usage: { inputTokens: 12, outputTokens: 4, totalTokens: 16 },
+    usage: { inputTokens: 12, outputTokens: 4, totalTokens: 16, contextTokens: 120 },
     iteration: { current: 2, max: 100 },
     tasks: [],
     retries: { taskRetryCount: 1, tasksWithRetries: 1 },
@@ -73,6 +73,7 @@ describe('v2 single-case orchestration', () => {
         expect(child).toEqual({ stdout: null });
         expect(input).toMatchObject({ sessionParams: {}, includeHistory: false });
         workspace = spawn.mock.calls[0][1].at(-1);
+        expect(workspace).toContain(join('reports', 'agent-eval', '.workspaces'));
         await expect(fs.readFile(join(workspace, '.fixture-id'), 'utf8')).resolves.toContain(
           'empty-agent-eval-workspace-v1',
         );
@@ -99,7 +100,7 @@ describe('v2 single-case orchestration', () => {
     );
     expect(run.result).toMatchObject({
       artifactRefs: ['asset:scene-1'],
-      usage: { inputTokens: 12, outputTokens: 4, retries: 1 },
+      usage: { inputTokens: 12, outputTokens: 4, contextTokens: 120, retries: 1 },
     });
     expect(spawn).toHaveBeenCalledWith(
       process.execPath,

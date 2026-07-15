@@ -648,6 +648,54 @@ describe('createTuiAutomationAppPort', () => {
     ]);
   });
 
+  it('projects bounded Workspace Board outcomes without exposing document URIs', async () => {
+    const port = createTuiAutomationAppPort({
+      stores: runtime.conversation.stores,
+      readHandle: () => ({
+        isReady: true,
+        submit: async () => undefined,
+        cancel: () => undefined,
+        listTasks: async () => [],
+        getCurrentConversationId: () => 'conversation-1',
+        getHistory: () => [],
+        getMessageQueueSnapshot: () => null,
+        getConversationPersistenceSnapshot: memoryPersistenceSnapshot,
+        getWorkspaceBoardProjections: () => [
+          {
+            version: 1,
+            status: 'projected',
+            target: {
+              kind: 'workspace',
+              documentUri: 'file:///private/workspace/neko/boards/workspace.nkc',
+            },
+            revision: `sha256:${'c'.repeat(64)}`,
+            nodeIds: ['workspace-inbox', 'generated-output-1'],
+            diagnostics: [],
+          },
+        ],
+      }),
+      readMarkdownFacts: () => ({ pathEvents: [], droppedPathEventCount: 0 }),
+    });
+
+    const facts = await port.readFacts({ sessionId: 'debug-session-1', includeHistory: false });
+
+    expect(facts.workspaceBoardProjections).toEqual([
+      {
+        status: 'projected',
+        targetKind: 'workspace',
+        revision: `sha256:${'c'.repeat(64)}`,
+        nodeIds: ['workspace-inbox', 'generated-output-1'],
+        diagnosticCodes: [],
+      },
+    ]);
+    expect(facts.evidenceCompleteness.workspaceBoardProjections).toEqual({
+      limit: 128,
+      droppedCount: 0,
+    });
+    expect(JSON.stringify(facts.workspaceBoardProjections)).not.toContain('documentUri');
+    expect(JSON.stringify(facts.workspaceBoardProjections)).not.toContain('/private/workspace');
+  });
+
   it('collects revision-bound generated-output facts from completed media tasks', async () => {
     const port = createTuiAutomationAppPort({
       stores: runtime.conversation.stores,
@@ -729,6 +777,7 @@ describe('createTuiAutomationAppPort', () => {
     runtime.conversation.stores.agent
       .getState()
       .updateUsage({ inputTokens: 10, outputTokens: 5, totalTokens: 15 });
+    runtime.conversation.stores.agent.getState().setContextTokenCount(321);
     const port = createTuiAutomationAppPort({
       stores: runtime.conversation.stores,
       readHandle: () => ({
@@ -746,7 +795,12 @@ describe('createTuiAutomationAppPort', () => {
     const facts = await port.readFacts({ sessionId: 'debug-session-1', includeHistory: true });
     expect(facts.turns).toHaveLength(512);
     expect(facts.history).toHaveLength(512);
-    expect(facts.usage).toEqual({ inputTokens: 10, outputTokens: 5, totalTokens: 15 });
+    expect(facts.usage).toEqual({
+      inputTokens: 10,
+      outputTokens: 5,
+      totalTokens: 15,
+      contextTokens: 321,
+    });
     expect(facts.timing).toMatchObject({ firstTurnAt: 9, lastTurnAt: 520 });
     expect(facts.retries).toEqual({ taskRetryCount: 0, tasksWithRetries: 0 });
     expect(facts.evidenceCompleteness).toMatchObject({

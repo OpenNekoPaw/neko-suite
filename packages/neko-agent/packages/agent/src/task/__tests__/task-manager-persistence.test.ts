@@ -248,20 +248,20 @@ describe('TaskManager Persistence', () => {
       expect(executor).not.toHaveBeenCalled();
     });
 
-    it('should preserve snapshot-only workflow tasks without replaying their executor', async () => {
+    it('should preserve generic snapshot-only tasks without replaying their executor', async () => {
       const executor: TaskExecutor = vi.fn().mockResolvedValue({ data: 'duplicated mutation' });
       manager.registerExecutor('workflow', executor);
 
       await storage.save({
-        scope: taskScope('media_production_workflow'),
-        id: 'media_production_workflow',
+        scope: taskScope('snapshot_only_task'),
+        id: 'snapshot_only_task',
         type: 'workflow',
         status: 'running',
         input: {
           type: 'workflow',
           payload: {
-            kind: 'media-production-workflow',
-            workflowRunId: 'workflow-1',
+            kind: 'external-snapshot',
+            snapshotId: 'snapshot-1',
           },
           lifecycle: { recoverPolicy: 'snapshot-only' },
         },
@@ -280,9 +280,9 @@ describe('TaskManager Persistence', () => {
       const resumed = await manager.resumePendingTasks();
       await vi.runAllTimersAsync();
 
-      expect(resumed).toEqual([taskScope('media_production_workflow')]);
+      expect(resumed).toEqual([taskScope('snapshot_only_task')]);
       expect(executor).not.toHaveBeenCalled();
-      expect(await storage.load(taskScope('media_production_workflow'))).toEqual(
+      expect(await storage.load(taskScope('snapshot_only_task'))).toEqual(
         expect.objectContaining({ status: 'pending', retryCount: 1 }),
       );
     });

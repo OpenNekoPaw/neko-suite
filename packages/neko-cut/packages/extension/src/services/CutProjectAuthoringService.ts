@@ -15,7 +15,6 @@ import {
   NEKO_PROJECT_AUTHORING_CONTRACT_VERSION,
   createNekoProjectAuthoringDiagnostic,
   createNekoProjectAuthoringResult,
-  validateNekoProjectAuthoringTarget,
 } from '@neko/shared';
 import { createServiceId } from '../base';
 import type { IProjectSessionService } from './ProjectSessionService';
@@ -29,6 +28,10 @@ import {
   type CutStoryboardImportPayload,
   type CutStoryboardTimelineRef,
 } from './cutStoryboardAuthoring';
+import {
+  validateCutProjectAuthoringTarget,
+  type CutProjectAuthoringTargetMode,
+} from './cutProjectAuthoringTarget';
 
 export interface CutProjectAuthoringCreateOptions {
   readonly name?: string;
@@ -48,11 +51,13 @@ export interface CutProjectAuthoringCreateRequest {
 
 export interface CutProjectAuthoringUpdateRequest {
   readonly target: NekoProjectAuthoringTarget;
+  readonly expectedProjectRevision?: string;
   readonly projectData: ProjectData;
 }
 
 export interface CutProjectAuthoringImportGeneratedClipRequest {
   readonly target: NekoProjectAuthoringTarget;
+  readonly expectedProjectRevision?: string;
   readonly sourcePath?: string;
   readonly bytes?: Uint8Array;
   readonly name?: string;
@@ -67,6 +72,7 @@ export interface CutProjectAuthoringImportGeneratedClipRequest {
 
 export interface CutProjectAuthoringImportMediaSourceRequest {
   readonly target: NekoProjectAuthoringTarget;
+  readonly expectedProjectRevision?: string;
   readonly sourcePath: string;
   readonly name?: string;
   readonly mediaType?: CutTimelineClipMediaType;
@@ -80,12 +86,14 @@ export interface CutProjectAuthoringImportMediaSourceRequest {
 
 export interface CutProjectAuthoringImportStoryboardRequest {
   readonly target: NekoProjectAuthoringTarget;
+  readonly expectedProjectRevision?: string;
   readonly payload: unknown;
   readonly createProjectOptions?: CutProjectAuthoringCreateOptions;
 }
 
 export interface CutProjectAuthoringImportCanvasDraftRequest {
   readonly target: NekoProjectAuthoringTarget;
+  readonly expectedProjectRevision?: string;
   readonly payload: CanvasCutDraftPayload;
   readonly createProjectOptions?: CutProjectAuthoringCreateOptions;
 }
@@ -117,6 +125,7 @@ export type CutProjectSourceIngest = (
 export interface CutProjectAuthoringServiceOptions {
   readonly ingestSource?: CutProjectSourceIngest;
   readonly createId?: () => string;
+  readonly createProjectSession?: () => IProjectSessionService;
 }
 
 export interface ICutProjectAuthoringService {
@@ -156,12 +165,13 @@ export class CutProjectAuthoringService implements ICutProjectAuthoringService {
   async loadProject(
     request: CutProjectAuthoringLoadRequest,
   ): Promise<NekoProjectAuthoringResult<ProjectData>> {
-    const target = resolveFileBackedTarget(request.target, { createNewAllowed: false });
+    const target = resolveFileBackedTarget(request.target, 'existing');
     if (!target.ok) return target.result;
+    const { projectSession, dispose } = this.createOperationProjectSession();
 
     try {
-      await this.projectSession.load(target.filePath);
-      const project = this.projectSession.getProjectData();
+      await projectSession.load(target.filePath);
+      const project = projectSession.getProjectData();
       if (!project) {
         return failedResult(
           request.target,
@@ -190,18 +200,21 @@ export class CutProjectAuthoringService implements ICutProjectAuthoringService {
         'write-failed',
         formatError(error, 'Failed to load Cut project.'),
       );
+    } finally {
+      dispose();
     }
   }
 
   async createProject(
     request: CutProjectAuthoringCreateRequest,
   ): Promise<NekoProjectAuthoringResult<ProjectData>> {
-    const target = resolveFileBackedTarget(request.target, { createNewAllowed: true });
+    const target = resolveFileBackedTarget(request.target, 'create');
     if (!target.ok) return target.result;
+    const { projectSession, dispose } = this.createOperationProjectSession();
 
     try {
-      await this.projectSession.createFile(target.filePath, request.options);
-      const project = this.projectSession.getProjectData();
+      await projectSession.createFile(target.filePath, request.options);
+      const project = projectSession.getProjectData();
       if (!project) {
         return failedResult(
           request.target,
@@ -231,19 +244,29 @@ export class CutProjectAuthoringService implements ICutProjectAuthoringService {
         'write-failed',
         formatError(error, 'Failed to create Cut project.'),
       );
+    } finally {
+      dispose();
     }
   }
 
   async updateProjectData(
     request: CutProjectAuthoringUpdateRequest,
   ): Promise<NekoProjectAuthoringResult<ProjectData>> {
-    const target = resolveFileBackedTarget(request.target, { createNewAllowed: false });
+    const target = resolveFileBackedTarget(request.target, 'existing');
     if (!target.ok) return target.result;
+    const { projectSession, dispose } = this.createOperationProjectSession();
 
     try {
-      await this.projectSession.load(target.filePath);
-      await this.projectSession.updateProjectData(request.projectData);
-      const project = this.projectSession.getProjectData() ?? request.projectData;
+      await projectSession.load(target.filePath);
+      const revisionFailure = validateExpectedProjectRevision(
+        request.target,
+        target.documentUri,
+        projectSession.getProjectData(),
+        request.expectedProjectRevision,
+      );
+      if (revisionFailure) return revisionFailure;
+      await projectSession.updateProjectData(request.projectData);
+      const project = projectSession.getProjectData() ?? request.projectData;
       return createNekoProjectAuthoringResult({
         ok: true,
         documentUri: target.documentUri,
@@ -265,13 +288,15 @@ export class CutProjectAuthoringService implements ICutProjectAuthoringService {
         'write-failed',
         formatError(error, 'Failed to update Cut project.'),
       );
+    } finally {
+      dispose();
     }
   }
 
   async importGeneratedClip(
     request: CutProjectAuthoringImportGeneratedClipRequest,
   ): Promise<NekoProjectAuthoringResult<CutProjectAuthoringImportedClip>> {
-    const target = resolveFileBackedTarget(request.target, { createNewAllowed: true });
+    const target = resolveFileBackedTarget(request.target, 'existing-or-create');
     if (!target.ok) return target.result;
     if (!this.options.ingestSource) {
       return failedResult(
@@ -280,11 +305,12 @@ export class CutProjectAuthoringService implements ICutProjectAuthoringService {
         'Cut generated clip import requires a source ingest port.',
       );
     }
+    const { projectSession, dispose } = this.createOperationProjectSession();
 
     try {
       const created = target.targetKind === 'new';
       if (created) {
-        await this.projectSession.createFile(target.filePath, {
+        await projectSession.createFile(target.filePath, {
           ...request.createProjectOptions,
           name:
             request.createProjectOptions?.name ??
@@ -293,8 +319,16 @@ export class CutProjectAuthoringService implements ICutProjectAuthoringService {
             'Generated Clip Timeline',
         });
       } else {
-        await this.projectSession.load(target.filePath);
+        await projectSession.load(target.filePath);
       }
+
+      const revisionFailure = validateExpectedProjectRevision(
+        request.target,
+        target.documentUri,
+        projectSession.getProjectData(),
+        request.expectedProjectRevision,
+      );
+      if (revisionFailure) return revisionFailure;
 
       const sourceRequest = createGeneratedClipSourceRequest(request, target.documentUri);
       const sourceIngest = await this.options.ingestSource(target.documentUri, sourceRequest);
@@ -324,7 +358,18 @@ export class CutProjectAuthoringService implements ICutProjectAuthoringService {
         });
       }
 
-      const project = this.projectSession.getProjectData();
+      if (!created && request.expectedProjectRevision) {
+        await projectSession.load(target.filePath);
+        const postIngestRevisionFailure = validateExpectedProjectRevision(
+          request.target,
+          target.documentUri,
+          projectSession.getProjectData(),
+          request.expectedProjectRevision,
+        );
+        if (postIngestRevisionFailure) return postIngestRevisionFailure;
+      }
+
+      const project = projectSession.getProjectData();
       if (!project) {
         return failedResult(
           request.target,
@@ -344,7 +389,7 @@ export class CutProjectAuthoringService implements ICutProjectAuthoringService {
         ...(request.trackIndex !== undefined ? { trackIndex: request.trackIndex } : {}),
         ...(this.options.createId ? { createId: this.options.createId } : {}),
       });
-      await this.projectSession.updateProjectData(clip.projectData);
+      await projectSession.updateProjectData(clip.projectData);
 
       return createNekoProjectAuthoringResult({
         ok: true,
@@ -377,13 +422,15 @@ export class CutProjectAuthoringService implements ICutProjectAuthoringService {
         'write-failed',
         formatError(error, 'Failed to import generated clip into Cut project.'),
       );
+    } finally {
+      dispose();
     }
   }
 
   async importMediaSource(
     request: CutProjectAuthoringImportMediaSourceRequest,
   ): Promise<NekoProjectAuthoringResult<CutProjectAuthoringImportedClip>> {
-    const target = resolveFileBackedTarget(request.target, { createNewAllowed: true });
+    const target = resolveFileBackedTarget(request.target, 'existing-or-create');
     if (!target.ok) return target.result;
     if (!this.options.ingestSource) {
       return failedResult(
@@ -392,11 +439,12 @@ export class CutProjectAuthoringService implements ICutProjectAuthoringService {
         'Cut media source import requires a source ingest port.',
       );
     }
+    const { projectSession, dispose } = this.createOperationProjectSession();
 
     try {
       const created = target.targetKind === 'new';
       if (created) {
-        await this.projectSession.createFile(target.filePath, {
+        await projectSession.createFile(target.filePath, {
           ...request.createProjectOptions,
           name:
             request.createProjectOptions?.name ??
@@ -405,8 +453,16 @@ export class CutProjectAuthoringService implements ICutProjectAuthoringService {
             'Media Timeline',
         });
       } else {
-        await this.projectSession.load(target.filePath);
+        await projectSession.load(target.filePath);
       }
+
+      const revisionFailure = validateExpectedProjectRevision(
+        request.target,
+        target.documentUri,
+        projectSession.getProjectData(),
+        request.expectedProjectRevision,
+      );
+      if (revisionFailure) return revisionFailure;
 
       const sourceRequest = createMediaSourceAddRequest(request, target.documentUri);
       const sourceIngest = await this.options.ingestSource(target.documentUri, sourceRequest);
@@ -436,7 +492,18 @@ export class CutProjectAuthoringService implements ICutProjectAuthoringService {
         });
       }
 
-      const project = this.projectSession.getProjectData();
+      if (!created && request.expectedProjectRevision) {
+        await projectSession.load(target.filePath);
+        const postIngestRevisionFailure = validateExpectedProjectRevision(
+          request.target,
+          target.documentUri,
+          projectSession.getProjectData(),
+          request.expectedProjectRevision,
+        );
+        if (postIngestRevisionFailure) return postIngestRevisionFailure;
+      }
+
+      const project = projectSession.getProjectData();
       if (!project) {
         return failedResult(
           request.target,
@@ -456,7 +523,7 @@ export class CutProjectAuthoringService implements ICutProjectAuthoringService {
         ...(request.trackIndex !== undefined ? { trackIndex: request.trackIndex } : {}),
         ...(this.options.createId ? { createId: this.options.createId } : {}),
       });
-      await this.projectSession.updateProjectData(clip.projectData);
+      await projectSession.updateProjectData(clip.projectData);
 
       return createNekoProjectAuthoringResult({
         ok: true,
@@ -489,6 +556,8 @@ export class CutProjectAuthoringService implements ICutProjectAuthoringService {
         'write-failed',
         formatError(error, 'Failed to import media source into Cut project.'),
       );
+    } finally {
+      dispose();
     }
   }
 
@@ -506,6 +575,7 @@ export class CutProjectAuthoringService implements ICutProjectAuthoringService {
     return this.importStoryboardPayload({
       target: request.target,
       payload,
+      expectedProjectRevision: request.expectedProjectRevision,
       createProjectOptions: request.createProjectOptions,
     });
   }
@@ -523,6 +593,7 @@ export class CutProjectAuthoringService implements ICutProjectAuthoringService {
     return this.importStoryboardPayload({
       target: request.target,
       payload: projection.payload,
+      expectedProjectRevision: request.expectedProjectRevision,
       createProjectOptions: {
         ...request.createProjectOptions,
         name: request.createProjectOptions?.name ?? projection.payload.projectName,
@@ -533,15 +604,17 @@ export class CutProjectAuthoringService implements ICutProjectAuthoringService {
   private async importStoryboardPayload(request: {
     readonly target: NekoProjectAuthoringTarget;
     readonly payload: CutStoryboardImportPayload;
+    readonly expectedProjectRevision?: string;
     readonly createProjectOptions?: CutProjectAuthoringCreateOptions;
   }): Promise<NekoProjectAuthoringResult<CutProjectAuthoringImportedStoryboard>> {
-    const target = resolveFileBackedTarget(request.target, { createNewAllowed: true });
+    const target = resolveFileBackedTarget(request.target, 'existing-or-create');
     if (!target.ok) return target.result;
+    const { projectSession, dispose } = this.createOperationProjectSession();
 
     try {
       const created = target.targetKind === 'new';
       if (created) {
-        await this.projectSession.createFile(target.filePath, {
+        await projectSession.createFile(target.filePath, {
           ...request.createProjectOptions,
           name:
             request.createProjectOptions?.name ??
@@ -549,10 +622,18 @@ export class CutProjectAuthoringService implements ICutProjectAuthoringService {
             request.payload.projectName,
         });
       } else {
-        await this.projectSession.load(target.filePath);
+        await projectSession.load(target.filePath);
       }
 
-      const project = this.projectSession.getProjectData();
+      const revisionFailure = validateExpectedProjectRevision(
+        request.target,
+        target.documentUri,
+        projectSession.getProjectData(),
+        request.expectedProjectRevision,
+      );
+      if (revisionFailure) return revisionFailure;
+
+      const project = projectSession.getProjectData();
       if (!project) {
         return failedResult(
           request.target,
@@ -566,7 +647,7 @@ export class CutProjectAuthoringService implements ICutProjectAuthoringService {
         payload: request.payload,
         ...(this.options.createId ? { createId: this.options.createId } : {}),
       });
-      await this.projectSession.updateProjectData(timeline.projectData);
+      await projectSession.updateProjectData(timeline.projectData);
 
       return createNekoProjectAuthoringResult({
         ok: true,
@@ -596,8 +677,40 @@ export class CutProjectAuthoringService implements ICutProjectAuthoringService {
         'write-failed',
         formatError(error, 'Failed to import storyboard into Cut project.'),
       );
+    } finally {
+      dispose();
     }
   }
+
+  private createOperationProjectSession(): {
+    readonly projectSession: IProjectSessionService;
+    readonly dispose: () => void;
+  } {
+    const projectSession = this.options.createProjectSession?.() ?? this.projectSession;
+    return {
+      projectSession,
+      dispose: this.options.createProjectSession ? () => projectSession.dispose() : () => undefined,
+    };
+  }
+}
+
+function validateExpectedProjectRevision<TData>(
+  target: NekoProjectAuthoringTarget,
+  documentUri: string,
+  project: ProjectData | null,
+  expectedProjectRevision: string | undefined,
+): NekoProjectAuthoringResult<TData> | undefined {
+  if (!expectedProjectRevision || target.kind === 'new') return undefined;
+  if (!project) {
+    return failedResult(target, 'write-failed', 'Cut project loaded without project data.');
+  }
+  const actualProjectRevision = createNkvProjectRef(documentUri, project).projectRevision;
+  if (actualProjectRevision === expectedProjectRevision) return undefined;
+  return failedResult(
+    target,
+    'stale-project-revision',
+    `Cut project revision changed: expected ${expectedProjectRevision}, received ${actualProjectRevision}.`,
+  );
 }
 
 type ResolvedCutAuthoringTarget =
@@ -605,7 +718,7 @@ type ResolvedCutAuthoringTarget =
       readonly ok: true;
       readonly filePath: string;
       readonly documentUri: string;
-      readonly targetKind: 'active' | 'file' | 'new';
+      readonly targetKind: 'file' | 'new';
     }
   | {
       readonly ok: false;
@@ -614,11 +727,9 @@ type ResolvedCutAuthoringTarget =
 
 function resolveFileBackedTarget(
   target: NekoProjectAuthoringTarget,
-  options: { readonly createNewAllowed: boolean },
+  mode: CutProjectAuthoringTargetMode,
 ): ResolvedCutAuthoringTarget {
-  const validation = validateNekoProjectAuthoringTarget(target, {
-    createNewAllowed: options.createNewAllowed,
-  });
+  const validation = validateCutProjectAuthoringTarget(target, mode);
   if (!validation.ok) {
     return {
       ok: false,
@@ -628,7 +739,7 @@ function resolveFileBackedTarget(
       }),
     };
   }
-  if (!target.documentUri) {
+  if (!target.documentUri || (target.kind !== 'file' && target.kind !== 'new')) {
     return {
       ok: false,
       result: failedResult(
@@ -644,7 +755,7 @@ function resolveFileBackedTarget(
     ok: true,
     filePath: documentUriToFilePath(target.documentUri),
     documentUri: target.documentUri,
-    targetKind: target.kind ?? 'file',
+    targetKind: target.kind,
   };
 }
 

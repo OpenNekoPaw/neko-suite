@@ -29,6 +29,7 @@ import {
   createDefaultOperationToolAdapterRegistry,
   createValidationCoordinatorFactory,
   createQualityReviewValidationAdapter,
+  createStoryboardOutputValidationAdapter,
   getCreativePresets,
 } from '@neko/skills';
 import {
@@ -331,13 +332,12 @@ export class AgentRunnerRuntimeAdapter implements AgentRunnerPort<IAgentConfig, 
         createDefaultOperationToolAdapterRegistry(),
       promptLocale: config.locale === 'zh' ? 'zh-cn' : 'en',
       providerExpressionTargets: config.providerExpressionTargets,
-      creationGuidance: {
-        autohealChainFactory: createAutohealChain,
-      },
       capabilityRuntime,
       validationLoop: {
+        autohealChainFactory: createAutohealChain,
         validationCoordinatorFactory: createValidationCoordinatorFactory(),
         toolResultValidationAdapters: [createQualityReviewValidationAdapter()],
+        outputValidationAdapters: [createStoryboardOutputValidationAdapter()],
       },
       getCapabilityPromptFragments: () => getCapabilityDiscoveryService().getAllPromptFragments(),
       toolCategoryRegistry: config.toolCategoryRegistry,

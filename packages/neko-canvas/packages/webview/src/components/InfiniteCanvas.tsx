@@ -24,7 +24,6 @@ import {
   type CanvasInteractionPhase,
 } from '../utils/renderRefreshTiering';
 import { SelectionContextToolbar } from './selection/SelectionContextToolbar';
-import { GeneratedDraftLayer } from './generated/GeneratedDraftLayer';
 import { resolveCanvasDropContainer } from '../utils/containerMembership';
 
 // =============================================================================
@@ -444,8 +443,6 @@ export function InfiniteCanvas({
             onConnectionUpdate?.(connectionId, updates)
           }
         />
-
-        <GeneratedDraftLayer viewport={viewport} />
 
         {dropTargetPreview && (
           <div

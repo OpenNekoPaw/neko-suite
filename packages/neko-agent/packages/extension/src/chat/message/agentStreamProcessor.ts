@@ -41,6 +41,7 @@ import type { ConversationBridge } from '../conversationBridge';
 import type { GeneratedAssetIndex } from '@neko/platform/media/generated-asset-index';
 import { maybeAttachInferredEntityMemoryContribution } from '@neko/skills';
 import { MediaTaskDeliveryHost } from '../../services/mediaTaskDeliveryHost';
+import type { WorkspaceBoardProjectionHost } from '../../services/workspaceBoardProjectionHost';
 import type { AgentDashboardWorkItemSource } from '../../services/dashboardWorkItemSource';
 import type { AgentLocalResourceAccess } from '../../services/localResourceAccess';
 import {
@@ -49,7 +50,6 @@ import {
 } from './entityMemoryContributionAutomation';
 import { projectValueForWebviewResourceDisplay } from './webviewResourceProjection';
 import { getLogger } from '../../base';
-import type { AgentCanvasBoardWorkSession } from '../../services/agentCanvasBoardWorkRuntime';
 
 const logger = getLogger('AgentStreamProcessor');
 
@@ -108,6 +108,7 @@ export interface AgentStreamProcessorDeps {
   ) => Promise<boolean>;
   /** VSCode-only media delivery host adapter. */
   mediaDeliveryHost?: MediaTaskDeliveryHost;
+  workspaceBoardProjection?: Pick<WorkspaceBoardProjectionHost, 'projectGeneratedAssets'>;
   /** Optional runtime perception/backfill adapter for completed media tasks. */
   mediaBackfill?: {
     readonly perceptionPipeline?: IPerceptionPipeline;
@@ -169,7 +170,6 @@ export class AgentStreamProcessor {
     conversationId: string,
     events: AsyncIterable<AgentEvent>,
     callbacks: StreamCallbacks,
-    canvasBoardWork?: AgentCanvasBoardWorkSession,
   ): Promise<StreamProcessingResult> {
     const media = this.deps.platform?.media;
     const conversationProjection = this.deps.getConversationProjection(conversationId);
@@ -283,6 +283,25 @@ export class AgentStreamProcessor {
             context.taskType,
           );
           if (
+            this.deps.workspaceBoardProjection &&
+            delivery.deliveryPlan.generatedAssets.length > 0
+          ) {
+            const projectionResults =
+              await this.deps.workspaceBoardProjection.projectGeneratedAssets(
+                delivery.deliveryPlan.generatedAssets,
+              );
+            for (const projection of projectionResults) {
+              if (projection.status === 'blocked') {
+                logger.warn(
+                  'Generated output persisted but Workspace Board projection was blocked',
+                  {
+                    diagnostics: projection.diagnostics,
+                  },
+                );
+              }
+            }
+          }
+          if (
             context.toolCallId &&
             delivery.deliveryPlan.generatedAssets.length > 0 &&
             delivery.deliveryPlan.shouldPersistResultUrls
@@ -293,12 +312,6 @@ export class AgentStreamProcessor {
               assets: delivery.deliveryPlan.generatedAssets,
               understandingModels: readMediaTaskUnderstandingModels(task),
             });
-          }
-          if (delivery.deliveryPlan.generatedAssets.length > 0) {
-            await canvasBoardWork?.deliverGeneratedAssets(
-              context.taskId,
-              delivery.deliveryPlan.generatedAssets,
-            );
           }
           return {
             progress: delivery.view,

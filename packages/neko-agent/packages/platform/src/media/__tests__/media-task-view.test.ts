@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import {
-  createMediaTaskActionCandidate,
   createMediaTaskView,
   createMediaTaskProgressView,
   getMediaTaskConversationId,
@@ -32,62 +31,6 @@ describe('media task view helpers', () => {
     expect(getMediaTaskConversationId(task as any)).toBe('conv-1');
     expect(matchesMediaTaskConversation(task as any, 'conv-1')).toBe(true);
     expect(matchesMediaTaskConversation(task as any, 'conv-2')).toBe(false);
-  });
-
-  it('projects a media task into an action candidate for host task controls', () => {
-    expect(
-      createMediaTaskActionCandidate({
-        id: 'task-1',
-        request: {
-          prompt: 'cat',
-          metadata: {
-            conversationId: 'conv-1',
-            characterIds: ['char_linxia'],
-            sourceNodeId: 'node-1',
-          },
-        },
-        outputs: [{ type: 'image', url: 'https://example.test/image.png' }],
-      } as any),
-    ).toMatchObject({
-      id: 'task-1',
-      conversationId: 'conv-1',
-      resultUrl: 'https://example.test/image.png',
-      creativeEntity: {
-        characterIds: ['char_linxia'],
-        sourceNodeId: 'node-1',
-        generatedAssetIds: [],
-        actions: [
-          {
-            kind: 'generate-missing-representation',
-            entityId: 'char_linxia',
-            entityKind: 'character',
-            requiredKinds: ['portrait', 'reference'],
-          },
-          {
-            kind: 'bind-existing',
-            entityId: 'char_linxia',
-            entityKind: 'character',
-            requiredKinds: ['portrait', 'reference'],
-          },
-        ],
-      },
-    });
-  });
-
-  it('does not expose managed cache paths as task action result urls', () => {
-    expect(
-      createMediaTaskActionCandidate({
-        id: 'task-1',
-        request: {
-          prompt: 'cat',
-          metadata: { conversationId: 'conv-1' },
-        },
-        outputs: [{ type: 'image', url: '/repo/.neko/.cache/generated/image.png' }],
-      } as any),
-    ).toEqual({
-      id: 'task-1',
-      conversationId: 'conv-1',
-    });
   });
 
   it('projects media task progress into a background task update view', () => {
@@ -142,18 +85,6 @@ describe('media task view helpers', () => {
             renderUri: 'webview://video.mp4',
           },
         ],
-        creativeEntity: expect.objectContaining({
-          characterIds: ['char_linxia'],
-          sourceNodeId: 'node-1',
-          generatedAssetIds: ['asset-1'],
-          bindingCandidates: [
-            expect.objectContaining({
-              entityId: 'char_linxia',
-              generatedAssetId: 'asset-1',
-              roles: ['motion'],
-            }),
-          ],
-        }),
       },
       error: undefined,
       updatedAt: '2026-01-01T00:00:02.000Z',
@@ -246,23 +177,6 @@ describe('media task view helpers', () => {
             renderUri: 'webview://local-image.png',
           },
         ],
-        creativeEntity: expect.objectContaining({
-          characterIds: ['char_linxia'],
-          generatedAssetIds: ['asset-1'],
-          visualDrafts: [
-            expect.objectContaining({
-              characterId: 'char_linxia',
-              generatedAssetIds: ['asset-1'],
-            }),
-          ],
-          bindingCandidates: [
-            expect.objectContaining({
-              entityId: 'char_linxia',
-              generatedAssetId: 'asset-1',
-              roles: ['portrait', 'reference'],
-            }),
-          ],
-        }),
       },
     });
   });

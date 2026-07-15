@@ -364,6 +364,137 @@ describe('agent architecture boundary guards', () => {
     expect(existingFiles).toEqual([]);
   });
 
+  it('keeps creation profiles and creation-specific runtime planes out of core', () => {
+    const sharedSrc = join(workspaceRoot, 'packages/neko-types/src');
+    const productionFiles = [
+      ...listFiles(agentSrc),
+      ...listFiles(agentTypesSrc),
+      ...listFiles(extensionSrc),
+      ...listFiles(tuiSrc),
+      ...listFiles(sharedSrc),
+    ].filter((file) => (file.endsWith('.ts') || file.endsWith('.tsx')) && !isTestFile(file));
+    const forbiddenPatterns = [
+      /\bCreationProfile(?:Descriptor|Registry|Stage|Transition|PromptGuidance)?\b/,
+      /\bICreationProfileRegistry\b/,
+      /\bcreationProfileRegistry\b/,
+      /\bgetCreationProfiles\b/,
+      /\bICreationGuidanceRuntime\b/,
+      /\bcreationGuidance\b/,
+      /['"`]creation-profile['"`]/,
+    ];
+    const violations = productionFiles.flatMap((file) => {
+      const source = stripTypeScriptComments(readFileSync(file, 'utf-8'));
+      return forbiddenPatterns
+        .filter((pattern) => pattern.test(source))
+        .map((pattern) => `${relative(workspaceRoot, file)} matches ${pattern}`);
+    });
+    const forbiddenFiles = [
+      join(sharedSrc, 'types/creation-profile.ts'),
+      join(agentSrc, 'profile/creation-profile-registry.ts'),
+      join(agentSrc, 'runtime/creation-guidance-runtime.ts'),
+    ]
+      .filter((file) => existsSync(file))
+      .map((file) => relative(workspaceRoot, file).replace(/\\/g, '/'));
+
+    expect([...violations, ...forbiddenFiles]).toEqual([]);
+  });
+
+  it('keeps creative compression and hard-coded domain Skill routing out of Agent core', () => {
+    const sharedSrc = join(workspaceRoot, 'packages/neko-types/src');
+    const productionFiles = [
+      ...listFiles(agentSrc),
+      ...listFiles(agentTypesSrc),
+      ...listFiles(sharedSrc),
+    ].filter((file) => (file.endsWith('.ts') || file.endsWith('.tsx')) && !isTestFile(file));
+    const forbiddenPatterns = [
+      /\bCreativeSummarizer\b/,
+      /\bMessageClassifier\b/,
+      /\bCreativeCompressionConfig\b/,
+      /\bcreativeCompression\b/,
+      /\bcreativeMediaWorkflowTermFragments\b/,
+      /\bcomicDocumentSourceTermFragments\b/,
+      /\bfocusedProductionTermFragments\b/,
+      /\bbroadOrchestrationTermFragments\b/,
+      /\bartifactKeywords\b/,
+    ];
+    const violations = productionFiles.flatMap((file) => {
+      const source = stripTypeScriptComments(readFileSync(file, 'utf-8'));
+      return forbiddenPatterns
+        .filter((pattern) => pattern.test(source))
+        .map((pattern) => `${relative(workspaceRoot, file)} matches ${pattern}`);
+    });
+    const forbiddenFiles = [
+      join(agentSrc, 'context/creative-summarizer.ts'),
+      join(agentSrc, 'context/message-classifier.ts'),
+    ]
+      .filter((file) => existsSync(file))
+      .map((file) => relative(workspaceRoot, file).replace(/\\/g, '/'));
+
+    expect([...violations, ...forbiddenFiles]).toEqual([]);
+
+    const skillRoutingSource = stripTypeScriptComments(
+      [join(agentSrc, 'skill/skill-matcher.ts'), join(agentSrc, 'skill/skill-system-prompt.ts')]
+        .map((file) => readFileSync(file, 'utf-8'))
+        .join('\n'),
+    );
+    for (const hardCodedDomainRoute of [
+      /storyboard, animation, video/i,
+      /Canvas\/Cut handoff/i,
+      /分镜、动画、视频/u,
+      /Canvas\/Cut 交接/u,
+    ]) {
+      expect(skillRoutingSource).not.toMatch(hardCodedDomainRoute);
+    }
+  });
+
+  it('keeps domain validators and task-result projectors out of Agent core', () => {
+    const coreProjectionFiles = [
+      join(agentSrc, 'validation/output-validator.ts'),
+      join(agentSrc, 'validation/validation-hooks.ts'),
+      join(agentSrc, 'task/task-view-projector.ts'),
+      join(agentTypesSrc, 'work-item.ts'),
+      join(agentTypesSrc, 'work-item-projector.ts'),
+    ];
+    const forbiddenPatterns = [
+      /\bcreativeEntity\b/,
+      /generated-storyboard/,
+      /\b(?:validate|project|sanitize)Storyboard\w*\b/,
+      /\bStoryboard(?:Output)?Validator\b/,
+    ];
+    const violations = coreProjectionFiles.flatMap((file) => {
+      const source = stripTypeScriptComments(readFileSync(file, 'utf-8'));
+      return forbiddenPatterns
+        .filter((pattern) => pattern.test(source))
+        .map((pattern) => `${relative(workspaceRoot, file)} matches ${pattern}`);
+    });
+    const forbiddenFiles = [
+      join(agentSrc, 'validation/storyboard-output-validator.ts'),
+      join(agentSrc, 'task/media-task-creative-entity.ts'),
+      join(packageRoot, 'platform/src/media/media-task-creative-entity.ts'),
+    ]
+      .filter((file) => existsSync(file))
+      .map((file) => relative(workspaceRoot, file).replace(/\\/g, '/'));
+
+    expect([...violations, ...forbiddenFiles]).toEqual([]);
+  });
+
+  it('keeps creative Agent and planner services out of Agent and Platform core', () => {
+    const productionFiles = [
+      ...listFiles(agentSrc),
+      ...listFiles(agentTypesSrc),
+      ...listFiles(join(packageRoot, 'platform/src')),
+    ].filter((file) => (file.endsWith('.ts') || file.endsWith('.tsx')) && !isTestFile(file));
+    const forbiddenPatterns = [/\bCreativeAgent\b/, /\bMediaPlanner\b/];
+    const violations = productionFiles.flatMap((file) => {
+      const source = stripTypeScriptComments(readFileSync(file, 'utf-8'));
+      return forbiddenPatterns
+        .filter((pattern) => pattern.test(source))
+        .map((pattern) => `${relative(workspaceRoot, file)} matches ${pattern}`);
+    });
+
+    expect(violations).toEqual([]);
+  });
+
   it('keeps Canvas generation runtime out of Agent runtime ownership', () => {
     const forbiddenRuntimeFiles = [join(agentSrc, 'runtime/canvas-generation-runtime.ts')];
     const existingFiles = forbiddenRuntimeFiles
@@ -1253,8 +1384,13 @@ describe('agent architecture boundary guards', () => {
     expect(violations).toEqual([]);
   });
 
-  it('keeps prompt-chain observation ports from being named as creation runtimes', () => {
-    const sourceFiles = [...listFiles(agentSrc), ...listFiles(join(packageRoot, 'agent-types/src'))]
+  it('keeps prompt-chain guidance free of creation observation state', () => {
+    const sourceFiles = [
+      ...listFiles(agentSrc),
+      ...listFiles(join(packageRoot, 'agent-types/src')),
+      ...listFiles(extensionSrc),
+      ...listFiles(tuiSrc),
+    ]
       .filter((file) => file.endsWith('.ts') || file.endsWith('.tsx'))
       .filter((file) => !isTestFile(file))
       .map((file) => ({
@@ -1268,6 +1404,13 @@ describe('agent architecture boundary guards', () => {
       /\bcreationRuntime\??:/,
       /\b_deps\.creationRuntime\b/,
       /\bcreation runtime is configured\b/i,
+      /\bAgentPromptChainObservation(?:Base|Kind)?\b/,
+      /\bConversationSkillPromptChain(?:ObservationPort|Context)\b/,
+      /\bpromptChainObservationPort\b/,
+      /\bcreationFeedback\b/,
+      /\bcreateSkillExecutionCreationMetadata\b/,
+      /\bmergeCreationExecutionMetadata\b/,
+      /\bagentCreation\s*[?:]/,
     ];
     const violations = sourceFiles.flatMap(({ relativePath, source }) =>
       forbiddenPatterns
@@ -1275,20 +1418,24 @@ describe('agent architecture boundary guards', () => {
         .map((pattern) => `${relativePath} matches ${pattern}`),
     );
 
-    expect(violations).toEqual([]);
+    const forbiddenFiles = [
+      join(agentTypesSrc, 'prompt-chain-observation.ts'),
+      join(agentSrc, 'session/creation-execution-metadata.ts'),
+      join(agentSrc, 'session/creation-kind.ts'),
+    ]
+      .filter((file) => existsSync(file))
+      .map((file) => relative(repoRoot, file).replace(/\\/g, '/'));
+
+    expect([...violations, ...forbiddenFiles]).toEqual([]);
   });
 
   it('poisons fixed creative Workflow runtimes and executable prompt-chain plan schemas', () => {
-    const legacyFixedWorkflowFiles = new Set([
-      'packages/agent/src/index.ts',
-      'packages/agent/src/media-production/early-stage-orchestrator.ts',
-      'packages/agent/src/media-production/index.ts',
-    ]);
     const sourceFiles = [
       ...listFiles(agentSrc),
       ...listFiles(agentTypesSrc),
       ...listFiles(extensionSrc),
       ...listFiles(webviewSrc),
+      ...listFiles(join(workspaceRoot, 'packages/neko-skills/src')),
     ]
       .filter((file) => file.endsWith('.ts') || file.endsWith('.tsx'))
       .filter((file) => !isTestFile(file))
@@ -1313,14 +1460,22 @@ describe('agent architecture boundary guards', () => {
         .map((pattern) => `${relativePath} matches ${pattern}`),
     );
 
-    const fixedStageViolations = sourceFiles.flatMap(({ relativePath, source }) => {
-      if (legacyFixedWorkflowFiles.has(relativePath)) {
-        return [];
-      }
-      return [/\bMediaProductionStageExecutorPort\b/, /\bMEDIA_PRODUCTION_STAGE_IDS\b/]
+    const fixedStageViolations = sourceFiles.flatMap(({ relativePath, source }) =>
+      [
+        /\bMediaProductionWorkflowRunState\b/,
+        /\bMediaProductionStageExecutorPort\b/,
+        /\bMediaProductionWorkflowStateStorePort\b/,
+        /\bMediaProductionWorkflowRecoveryCoordinator\b/,
+        /\bMediaProductionProjectAuthoringOrchestrator\b/,
+        /\bMediaProductionPreExportGateOrchestrator\b/,
+        /\bTaskBackedMediaProductionWorkflowStateStore\b/,
+        /\bMEDIA_PRODUCTION_(?:EARLY_)?STAGE_IDS\b/,
+        /\bCREATIVE_MEDIA_WORKFLOW_STAGES\b/,
+        /\bCreativeMediaWorkflowStageDescriptor\b/,
+      ]
         .filter((pattern) => pattern.test(source))
-        .map((pattern) => `${relativePath} matches ${pattern}`);
-    });
+        .map((pattern) => `${relativePath} matches ${pattern}`),
+    );
 
     const promptChainPlanPatterns = [
       /\bAgentPromptChainExecutablePlan\b/,
@@ -1339,8 +1494,15 @@ describe('agent architecture boundary guards', () => {
       'packages/agent/src/runtime/workflow-runtime.ts',
       'packages/agent/src/runtime/creative-workflow-runtime.ts',
       'packages/agent/src/workflow/workflow-runtime.ts',
+      'packages/agent/src/media-production/early-stage-orchestrator.ts',
+      'packages/agent/src/media-production/project-authoring-orchestrator.ts',
+      'packages/agent/src/media-production/pre-export-gate-orchestrator.ts',
+      'packages/agent/src/media-production/workflow-recovery-coordinator.ts',
+      'packages/agent/src/task/media-production-workflow-state.ts',
+      'packages/extension/src/services/mediaProductionProjectAuthoringResolver.ts',
       'packages/agent-types/src/prompt-chain-executable-plan.ts',
       'packages/agent-types/src/prompt-chain-workflow.ts',
+      '../neko-types/src/types/media-production-workflow.ts',
     ].filter((file) => existsSync(join(repoRoot, file)));
 
     expect([
@@ -1349,6 +1511,165 @@ describe('agent architecture boundary guards', () => {
       ...promptChainViolations,
       ...forbiddenFiles,
     ]).toEqual([]);
+  });
+
+  it('poisons parallel creative catalogs and required planning-projection handshakes', () => {
+    const platformSrc = join(packageRoot, 'platform/src');
+    const sourceFiles = [
+      ...listFiles(agentSrc),
+      ...listFiles(agentTypesSrc),
+      ...listFiles(extensionSrc),
+      ...listFiles(platformSrc),
+    ]
+      .filter((file) => (file.endsWith('.ts') || file.endsWith('.tsx')) && !isTestFile(file))
+      .map((file) => ({
+        relativePath: relative(repoRoot, file).replace(/\\/g, '/'),
+        source: stripTypeScriptComments(readFileSync(file, 'utf-8')),
+      }));
+    const forbiddenPatterns = [
+      /\bCreativeToolCatalog\b/,
+      /\bCreativeCapabilityCatalog\b/,
+      /\bProviderPurposeAllowlist\b/,
+      /\bCreativeProviderPurposeMap\b/,
+      /\bAgentCapabilityPlanningProjection\b/,
+      /\bAgentCapabilityPlanningMetadata\b/,
+      /\bCapabilityPlanningRuntime\b/,
+      /\bPlanningProjectionHandshake\b/,
+      /\bgetPlanningDomainIndex\b/,
+      /\bdiscoverPlanningCapabilities\b/,
+      /\binjectSelectedPlanningCapability\b/,
+      /\bplanningProjectionRequired\b/,
+      /\brequirePlanningProjection\b/,
+    ];
+    const violations = sourceFiles.flatMap(({ relativePath, source }) =>
+      forbiddenPatterns
+        .filter((pattern) => pattern.test(source))
+        .map((pattern) => `${relativePath} matches ${pattern}`),
+    );
+    const forbiddenFiles = [
+      join(agentTypesSrc, 'capability-planning.ts'),
+      join(agentSrc, 'runtime/capability/agent-capability-planning-projection.ts'),
+      join(agentSrc, 'runtime/capability/creative-capability-catalog.ts'),
+      join(agentSrc, 'runtime/capability/capability-planning-runtime.ts'),
+    ]
+      .filter((file) => existsSync(file))
+      .map((file) => relative(repoRoot, file).replace(/\\/g, '/'));
+
+    expect([...violations, ...forbiddenFiles]).toEqual([]);
+  });
+
+  it('poisons broad creative history snapshots and duplicated observation state', () => {
+    const sourceFiles = [
+      ...listFiles(agentSrc),
+      ...listFiles(agentTypesSrc),
+      ...listFiles(extensionSrc),
+      ...listFiles(webviewSrc),
+    ]
+      .filter((file) => (file.endsWith('.ts') || file.endsWith('.tsx')) && !isTestFile(file))
+      .map((file) => ({
+        relativePath: relative(repoRoot, file).replace(/\\/g, '/'),
+        source: stripTypeScriptComments(readFileSync(file, 'utf-8')),
+      }));
+    const forbiddenPatterns = [
+      /\bCreativeObservationSnapshot\b/,
+      /\bAgentCreativeObservationSnapshot\b/,
+      /\bCreativeObservationAssembler\b/,
+      /\bCreativeObservationContext\b/,
+      /\bApprovalDecisionHistoryProjection\b/,
+      /\bCreativeTargetCompletionEvaluator\b/,
+      /\bcollectCreativeObservationFromHistory\b/,
+      /\bscanCreativeHistoryPayloads\b/,
+      /\bbuildCreativeObservationSnapshot\b/,
+    ];
+    const violations = sourceFiles.flatMap(({ relativePath, source }) =>
+      forbiddenPatterns
+        .filter((pattern) => pattern.test(source))
+        .map((pattern) => `${relativePath} matches ${pattern}`),
+    );
+    const forbiddenFiles = [
+      join(agentTypesSrc, 'creative-observation.ts'),
+      join(agentSrc, 'runtime/creative-observation-assembler.ts'),
+      join(agentSrc, 'runtime/creative-observation-context.ts'),
+      join(agentSrc, 'runtime/creative-target-completion-evaluator.ts'),
+      join(agentSrc, 'runtime/approval-decision-history-projection.ts'),
+    ]
+      .filter((file) => existsSync(file))
+      .map((file) => relative(repoRoot, file).replace(/\\/g, '/'));
+
+    expect([...violations, ...forbiddenFiles]).toEqual([]);
+  });
+
+  it('keeps creative plan policy out of the generic Approval runtime', () => {
+    const approvalSrc = join(agentSrc, 'approval');
+    const sourceFiles = listFiles(approvalSrc)
+      .filter((file) => file.endsWith('.ts') && !isTestFile(file))
+      .map((file) => ({
+        relativePath: relative(repoRoot, file).replace(/\\/g, '/'),
+        source: stripTypeScriptComments(readFileSync(file, 'utf-8')),
+      }));
+    const forbiddenPatterns = [
+      /\bApprovalBinding\b/,
+      /\bCreatorReplan(?:Kind|Assessment)?\b/,
+      /\bassessCreatorReplan\b/,
+      /\bPlanApprovalStore\b/,
+    ];
+    const violations = sourceFiles.flatMap(({ relativePath, source }) =>
+      forbiddenPatterns
+        .filter((pattern) => pattern.test(source))
+        .map((pattern) => `${relativePath} matches ${pattern}`),
+    );
+    const forbiddenFiles = [join(approvalSrc, 'creator-replan-policy.ts')]
+      .filter((file) => existsSync(file))
+      .map((file) => relative(repoRoot, file).replace(/\\/g, '/'));
+
+    expect([...violations, ...forbiddenFiles]).toEqual([]);
+  });
+
+  it('poisons global creative model matrices and executable Prompt-example catalogs', () => {
+    const platformSrc = join(packageRoot, 'platform/src');
+    const nekoSkillsSrc = join(workspaceRoot, 'packages/neko-skills/src');
+    const sourceFiles = [
+      ...listFiles(agentSrc),
+      ...listFiles(agentTypesSrc),
+      ...listFiles(extensionSrc),
+      ...listFiles(platformSrc),
+      ...listFiles(nekoSkillsSrc),
+    ]
+      .filter((file) => (file.endsWith('.ts') || file.endsWith('.tsx')) && !isTestFile(file))
+      .map((file) => ({
+        relativePath: relative(workspaceRoot, file).replace(/\\/g, '/'),
+        source: stripTypeScriptComments(readFileSync(file, 'utf-8')),
+      }));
+    const forbiddenPatterns = [
+      /\bGlobalModelCapabilityMatrix\b/,
+      /\bCreativeModelCapabilityMatrix\b/,
+      /\bAgentModelSupportMatrix\b/,
+      /\bModelMarketingSupport\b/,
+      /\binferCreativeMediaSupportFromModelName\b/,
+      /\bpromoteSupportFromPromptExample\b/,
+      /\bpromoteSupportFromHistoricalResult\b/,
+      /\bCreativePromptManager\b/,
+      /\bPromptExecutionCatalog\b/,
+      /\bPromptExampleExecutionCatalog\b/,
+      /\bPromptExampleRetrievalRuntime\b/,
+      /\bPromptExampleResolverPrerequisite\b/,
+    ];
+    const violations = sourceFiles.flatMap(({ relativePath, source }) =>
+      forbiddenPatterns
+        .filter((pattern) => pattern.test(source))
+        .map((pattern) => `${relativePath} matches ${pattern}`),
+    );
+    const forbiddenFiles = [
+      join(agentSrc, 'provider/global-model-capability-matrix.ts'),
+      join(agentSrc, 'prompt/creative-prompt-manager.ts'),
+      join(agentSrc, 'prompt/prompt-execution-catalog.ts'),
+      join(agentSrc, 'prompt/prompt-example-retrieval-runtime.ts'),
+      join(agentTypesSrc, 'model-capability-matrix.ts'),
+    ]
+      .filter((file) => existsSync(file))
+      .map((file) => relative(workspaceRoot, file).replace(/\\/g, '/'));
+
+    expect([...violations, ...forbiddenFiles]).toEqual([]);
   });
 
   it('poisons retired IDC stage, persona, run, and executable-plan runtime paths', () => {

@@ -18,9 +18,6 @@ describe('createAgentCapabilityRuntimeRegistries', () => {
       }),
     );
     expect(registries.artifactProfileRegistry.get('comic-shot-asset-prep', 1)).toBeUndefined();
-    expect(registries.creationProfileRegistry.get('idc.default', '1.0.0')).toEqual(
-      expect.objectContaining({ profileId: 'idc.default', source: 'builtin' }),
-    );
     expect(registries.providerExpressionProfileRegistry.list()).toEqual([]);
   });
 });

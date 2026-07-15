@@ -38,6 +38,35 @@ describe('v2 contained artifact checks', () => {
     ]);
   });
 
+  it('proves a contained directory has generated regular files without fixed names', async () => {
+    const workspace = await createWorkspace();
+    const check = {
+      id: 'generated-files',
+      kind: 'directory-files',
+      evidenceRef: 'generated-file-facts',
+      path: 'neko/generated/image',
+      minFiles: 1,
+    };
+
+    expect(await evaluateArtifactChecks([check], { workspace, facts: {} })).toEqual([
+      expect.objectContaining({ status: 'fail' }),
+    ]);
+
+    await fs.mkdir(join(workspace, 'neko/generated/image'), { recursive: true });
+    await fs.writeFile(join(workspace, 'neko/generated/image/generated-output.png'), 'image');
+
+    expect(await evaluateArtifactChecks([check], { workspace, facts: {} })).toEqual([
+      expect.objectContaining({
+        status: 'pass',
+        details: expect.objectContaining({
+          path: 'neko/generated/image',
+          fileCount: 1,
+          validatorId: 'contained-regular-files',
+        }),
+      }),
+    ]);
+  });
+
   it('validates a real contained JSON file through an audited public CLI', async () => {
     const workspace = await createWorkspace();
     const content = '{"ok":true}\n';

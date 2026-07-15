@@ -57,12 +57,11 @@ export interface ApprovalRequest {
    */
   paradigm: ApprovalParadigm;
   subject: ApprovalSubject;
-  /** Current content and scope covered by this decision. */
-  binding?: ApprovalBinding;
   /**
    * Structured context the strategy pack inspects — e.g. tool args,
-   * creator-review details, quality report. Opaque shape kept to keep the
-   * engine type-stable across channels.
+   * current creator-review document identity/digest, or a quality report.
+   * Opaque shape keeps the engine type-stable and prevents creative-domain
+   * policy from leaking into the generic approval contract.
    */
   context?: Record<string, unknown>;
   /** Unique id so call sites can correlate responses with requests. */
@@ -71,23 +70,6 @@ export interface ApprovalRequest {
   at: number;
   /** Runtime trace context for structured debug logs. */
   trace?: AgentTraceContext;
-}
-
-export interface ApprovalBinding {
-  /** Digest of the reviewed Markdown or equivalent serialized decision content. */
-  contentDigest: string;
-  /** Observable deliverable or decision target covered by this approval. */
-  target: string;
-  /** Stable identities of inputs whose material change invalidates approval. */
-  criticalInputIds: readonly string[];
-  /** Story, character, style, sound, or technique decisions covered by approval. */
-  creativeScope: readonly string[];
-  /** Approved cost or risk limit, expressed in the owning policy vocabulary. */
-  costRiskCeiling: string;
-  /** Authorized project, asset, or file mutation boundaries. */
-  mutationScope: readonly string[];
-  /** Approved export, publish, send, or other delivery boundary. */
-  deliveryBoundary: string;
 }
 
 // =============================================================================

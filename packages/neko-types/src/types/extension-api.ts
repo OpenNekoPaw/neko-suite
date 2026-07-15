@@ -35,13 +35,9 @@ import type {
   CanvasUpdateBlockResult,
 } from './canvas-agent-operations';
 import type {
-  CanvasBoardDeliveryRequest,
-  CanvasBoardDeliveryResult,
-  CanvasBoardQuery,
-  CanvasBoardQueryResult,
-  CanvasBoardResolutionInput,
-  CanvasBoardResolutionResult,
-} from './canvas-board-routing';
+  CanvasWorkspaceProjectionRequest,
+  CanvasWorkspaceProjectionResult,
+} from './canvas-workspace-board';
 import type { CanvasHeadlessAuthoringTarget } from './canvas-headless-authoring';
 import type {
   CanvasMarkdownCapabilityInput,
@@ -74,11 +70,6 @@ import type { DocumentArchiveResourceRef } from './document-reading';
 import type { SkillCatalogMeta } from './skill';
 import type { ProjectSearchVisualResource } from './project-cache-search';
 import type { ResourceRef, ResourceVariantRequest } from './resource-cache';
-import type {
-  CanvasGeneratedDraftMediaKind,
-  CanvasGeneratedDraftPromotionRequest,
-  CanvasGeneratedDraftPromotionResult,
-} from './canvas-generated-draft-groups';
 
 export interface NekoDisposableLike {
   dispose(): void;
@@ -139,6 +130,8 @@ export interface TimelineElementUpdate {
  * Timeline information
  */
 export interface TimelineInfo {
+  documentUri: string;
+  projectRevision: string;
   duration: number;
   fps: number;
   width: number;
@@ -174,6 +167,15 @@ export interface NekoCutTimelineElement {
   [key: string]: unknown;
 }
 
+export interface CutTimelineDocumentTarget {
+  readonly documentUri: string;
+  readonly expectedProjectRevision?: string;
+}
+
+export interface CutTimelineCanvasDraftImportRequest extends CutTimelineDocumentTarget {
+  readonly payload: CanvasCutDraftPayload;
+}
+
 export interface CutProjectAuthoringCreateOptions {
   readonly name?: string;
   readonly width?: number;
@@ -183,6 +185,7 @@ export interface CutProjectAuthoringCreateOptions {
 
 export interface CutProjectAuthoringImportGeneratedClipRequest {
   readonly target: import('../project-authoring').NekoProjectAuthoringTarget;
+  readonly expectedProjectRevision?: string;
   readonly sourcePath?: string;
   readonly bytes?: Uint8Array;
   readonly name?: string;
@@ -227,63 +230,44 @@ export interface NekoCutAPI {
     /**
      * Get information about the current timeline
      */
-    getInfo(): Promise<TimelineInfo>;
+    getInfo(target: CutTimelineDocumentTarget): Promise<TimelineInfo>;
 
     /**
      * Add a new element to the timeline
      * @returns The ID of the created element
      */
-    addElement(config: TimelineElementConfig): Promise<string>;
+    addElement(target: CutTimelineDocumentTarget, config: TimelineElementConfig): Promise<string>;
 
     /**
      * Update an existing timeline element
      */
-    updateElement(id: string, updates: TimelineElementUpdate): Promise<void>;
+    updateElement(
+      target: CutTimelineDocumentTarget,
+      id: string,
+      updates: TimelineElementUpdate,
+    ): Promise<void>;
 
     /**
      * Delete an element from the timeline
      */
-    deleteElement(id: string): Promise<void>;
+    deleteElement(target: CutTimelineDocumentTarget, id: string): Promise<void>;
 
     /**
      * List all elements in the timeline
      */
-    listElements(): Promise<NekoCutTimelineElement[]>;
+    listElements(target: CutTimelineDocumentTarget): Promise<NekoCutTimelineElement[]>;
 
     /**
      * Reveal the owning Cut timeline surface. Playback and timeline focus stay in Cut.
      */
-    reveal(request?: CutTimelineRevealRequest): Promise<boolean>;
+    reveal(request: CutTimelineRevealRequest & { readonly projectUri: string }): Promise<boolean>;
 
     /**
-     * Import a Canvas route snapshot into the active Cut project.
+     * Import a Canvas route snapshot into an explicitly identified Cut project.
      */
-    importCanvasDraft(payload: CanvasCutDraftPayload): Promise<CutCanvasDraftImportResult>;
-  };
-
-  /**
-   * AI-powered generation capabilities.
-   * All methods are no-ops (return rejected promise) when neko-agent is not installed.
-   */
-  ai: {
-    /**
-     * Generate a video clip from a text prompt and optionally a reference image.
-     * The generated clip is automatically imported into the asset library and added
-     * to the timeline at the specified position.
-     *
-     * @returns The ID of the newly created timeline element.
-     */
-    generateVideoForClip(options: {
-      prompt: string;
-      /** Track to insert into (default: first video track) */
-      trackId?: string;
-      /** Start time in seconds (default: end of track) */
-      startTime?: number;
-      /** Reference image base64 for image-to-video generation */
-      referenceImageBase64?: string;
-      /** Duration hint in seconds — actual duration depends on provider */
-      durationHint?: number;
-    }): Promise<string>;
+    importCanvasDraft(
+      request: CutTimelineCanvasDraftImportRequest,
+    ): Promise<CutCanvasDraftImportResult>;
   };
 }
 
@@ -457,11 +441,9 @@ export interface NekoCanvasAPI {
   /** Explicit-target, Webview-independent durable .nkc authoring. */
   readonly authoring: NekoCanvasAuthoringAPI;
 
-  /** Canvas-owned query and deterministic resolution for ordinary Board `.nkc` documents. */
+  /** Canvas-owned durable Workspace Board projection. */
   readonly boards: {
-    query(query: CanvasBoardQuery): Promise<CanvasBoardQueryResult>;
-    resolve(input: CanvasBoardResolutionInput): Promise<CanvasBoardResolutionResult>;
-    deliver(input: CanvasBoardDeliveryRequest): Promise<CanvasBoardDeliveryResult>;
+    project(input: CanvasWorkspaceProjectionRequest): Promise<CanvasWorkspaceProjectionResult>;
   };
 
   canvas: {
@@ -966,27 +948,6 @@ export type { NekoModelAPI };
 // NekoAssets API
 // =============================================================================
 
-/** Extension-host source evidence for one generated candidate promotion. */
-export interface NekoAssetsGeneratedCandidateSource {
-  readonly candidateId: string;
-  readonly title: string;
-  readonly mediaKind: CanvasGeneratedDraftMediaKind;
-  readonly mimeType: string;
-  readonly revision: string;
-  readonly contentDigest: string;
-  /** Host-local source path. This value must never be projected to a Webview or persisted. */
-  readonly sourcePath: string;
-  readonly taskId: string;
-  readonly runId?: string;
-  readonly provider?: string;
-  readonly prompt?: string;
-}
-
-export interface NekoAssetsGeneratedCandidatePromotionInput {
-  readonly request: CanvasGeneratedDraftPromotionRequest;
-  readonly sources: readonly NekoAssetsGeneratedCandidateSource[];
-}
-
 /**
  * NekoAssets Extension API
  * Exported by neko-assets extension for programmatic asset library access.
@@ -1001,14 +962,6 @@ export interface NekoAssetsAPI {
    * Returns the created/existing entity and rejects visibly on unavailable source or import failure.
    */
   importFile(uri: { fsPath: string }): Promise<import('./asset/entity').AssetEntity>;
-
-  /**
-   * Promote selected generated candidates into AssetLibrary ownership.
-   * The caller resolves Host-local source paths; this API validates and materializes them.
-   */
-  promoteGeneratedCandidates(
-    input: NekoAssetsGeneratedCandidatePromotionInput,
-  ): Promise<CanvasGeneratedDraftPromotionResult>;
 
   /** Get the thumbnail file path for a given asset file path. */
   getThumbnailPath(filePath: string): Promise<string | undefined>;

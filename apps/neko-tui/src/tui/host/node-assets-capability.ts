@@ -29,6 +29,9 @@ function createNodeAssetsApi(host: NekoHostPorts): NekoAssetsAPI {
       await library.flush();
       return result.entity;
     },
+    promoteGeneratedCandidates: async () => {
+      throw new Error('Generated candidate promotion is only available in the VS Code Host.');
+    },
     getThumbnailPath: async () => undefined,
     getMediaLibraryRoots: async () => [],
     resolveEntityUri: async () => undefined,

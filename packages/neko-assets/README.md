@@ -13,7 +13,7 @@
 - **入口**：`src/extension.ts`（单包结构）
 - **子包**：`packages/asset`（`@neko/asset` 素材库核心逻辑）
 - **依赖**：`@neko/asset`、`@neko/shared`
-- **生成候选提升**：`GeneratedCandidatePromotionService` 是 generated-output → AssetEntity/Variant/File 的 canonical adapter；支持 revision/digest 校验、逐项幂等结果与 partial failure。Canvas 不选择资产物理路径，也不直接写 `library.json`。
+- **显式素材入库**：`AssetFileImportService` 是工作区文件（包括 `neko/generated/` 输出）进入 AssetLibrary 的 canonical adapter。Canvas 投影不要求 Asset 身份，也不选择资产物理路径或直接写 `library.json`。
 
 ## Architecture
 

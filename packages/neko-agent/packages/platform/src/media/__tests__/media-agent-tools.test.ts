@@ -98,6 +98,8 @@ describe('registerMediaAgentTools', () => {
     const tts = byName.get('GenerateTTS');
 
     expect(image?.description).toContain('异步图像生成 Task');
+    expect(image?.description).toContain('generated 草稿');
+    expect(image?.description).toContain('Quality');
     expect(image?.description).toContain('不是 SubAgent ID');
     expect(image?.description).toContain('禁止传给 subagent 或 subagent_output');
     expect(image?.description).toContain('Task observation/continuation');
@@ -107,10 +109,13 @@ describe('registerMediaAgentTools', () => {
     expect(getPropertyDescription(image, 'prompt')).not.toContain('Text description');
 
     expect(transform?.description).toContain('异步图像编辑任务');
+    expect(transform?.description).toContain('不是确定性裁切');
     expect(getPropertyDescription(transform, 'sourceImageUri')).toContain('源图像');
     expect(getPropertyDescription(transform, 'operationPlan')).toContain('可审阅');
 
     expect(video?.description).toContain('异步视频生成 Task');
+    expect(video?.description).toContain('不要因为目标是“动画”');
+    expect(video?.description).toContain('generated clip 草稿');
     expect(video?.description).toContain('禁止传给 subagent 或 subagent_output');
     expect(getPropertyDescription(video, 'prompt')).toBe('视频生成或编辑提示词。');
     expect(getPropertyDescription(video, 'referenceImageUri')).toContain('图生视频');
@@ -124,6 +129,39 @@ describe('registerMediaAgentTools', () => {
     expect(tts?.description).toContain('禁止传给 subagent 或 subagent_output');
     expect(getPropertyDescription(tts, 'text')).toBe('要朗读的文本。');
     expect(getPropertyDescription(tts, 'sourceCueId')).toContain('对白 cue ID');
+  });
+
+  it('declares owner-side runtime, cost, mutation, and result-review semantics', () => {
+    const registry = new ToolRegistry();
+    registerMediaAgentTools(registry, createMediaMock() as never);
+
+    const image = registry.get('GenerateImage');
+    const transform = registry.get('TransformImage');
+    const video = registry.get('GenerateVideo');
+
+    expect(image).toMatchObject({
+      safetyKind: 'non-destructive-mutation',
+      requirements: { mediaService: true },
+      traits: { cost: 'moderate', reversible: true, locality: 'network', impactLevel: 'low' },
+    });
+    expect(image?.description).toContain('generated draft');
+    expect(image?.description).toContain('current model support');
+    expect(image?.description).toContain('actual image');
+
+    expect(transform).toMatchObject({
+      safetyKind: 'non-destructive-mutation',
+      requirements: { mediaService: true, contentAccess: true },
+      traits: { cost: 'moderate', reversible: true, locality: 'network', impactLevel: 'low' },
+    });
+    expect(transform?.description).toContain('not deterministic crop');
+
+    expect(video).toMatchObject({
+      safetyKind: 'non-destructive-mutation',
+      requirements: { mediaService: true, contentAccess: true },
+      traits: { cost: 'expensive', reversible: true, locality: 'network', impactLevel: 'low' },
+    });
+    expect(video?.description).toContain('animation goal alone');
+    expect(video?.description).toContain('generated clip draft');
   });
 
   it('keeps media Task IDs out of the SubAgent result path in English definitions', () => {

@@ -116,9 +116,9 @@ describe('AgentSessionRunner', () => {
     const intent = createAgentCapabilityActivationIntent({
       conversationId: 'conv-1',
       source: 'agent-tool',
-      target: 'creation-profile',
+      target: 'skill',
       action: 'activate',
-      name: 'creation-profile',
+      name: 'test-skill',
       requestedBy: 'agent',
       createdAt: 100,
     });

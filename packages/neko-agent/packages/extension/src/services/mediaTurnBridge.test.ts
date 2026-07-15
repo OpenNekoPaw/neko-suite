@@ -179,15 +179,10 @@ describe('MediaTurnBridge', () => {
     });
   });
 
-  it('resolves Board work before direct generation and delivers retained outputs to that session', async () => {
+  it('keeps direct generation independent from legacy Board routing', async () => {
     const created = createMediaTask({ status: 'pending', progress: 0 });
     const completed = createMediaTask({ status: 'completed', progress: 100 });
     const asset = createGeneratedImageAsset('/workspace/neko/generated/image/asset-1.png');
-    const deliverGeneratedAssets = vi.fn(async () => undefined);
-    const begin = vi.fn(async () => ({
-      deliverGeneratedAssets,
-      deliverSelectedReferences: vi.fn(async () => undefined),
-    }));
     const generateImage = vi.fn().mockResolvedValue(created);
     const bridge = new MediaTurnBridge({
       platform: {
@@ -230,7 +225,6 @@ describe('MediaTurnBridge', () => {
           },
         })),
       } as never,
-      canvasBoardWork: { begin } as never,
       generateMessageId: () => 'run:1',
     });
 
@@ -241,8 +235,8 @@ describe('MediaTurnBridge', () => {
       mediaModel: { providerId: 'openai', modelId: 'gpt-image-1', category: 'image' },
     });
 
-    expect(begin).toHaveBeenCalledBefore(generateImage);
-    expect(deliverGeneratedAssets).toHaveBeenCalledWith('task-1', [asset]);
+    expect(generateImage).toHaveBeenCalledOnce();
+    expect(JSON.stringify(bridge)).not.toContain('canvasBoardWork');
   });
 });
 

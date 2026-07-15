@@ -29,8 +29,7 @@ export const builtinSkillLocales: Readonly<Record<string, BuiltinSkillLocaleMap>
   'media-production': {
     'zh-cn': {
       name: '媒体制作',
-      description:
-        '编排从来源归一化、分镜、生成和质量 Gate 到项目 authoring、导出与交付验证的完整流程。',
+      description: '根据当前证据和 owning capability 动态选择下一步，并在每个真实结果后重新判断。',
       tags: ['媒体制作', '编排', '导出'],
     },
   },

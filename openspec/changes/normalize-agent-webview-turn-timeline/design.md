@@ -278,6 +278,24 @@ of keeping a fallback that masks broken timeline projection.
 Rejected alternative: keep old and new rendering in parallel and choose whichever
 produces output. That prevents path-level acceptance and will hide ordering bugs.
 
+### 9. Late conversation projections retain cross-turn chronology
+
+An assistant turn can reach the Webview projection after a later user message is
+already present, for example when the user queues or sends a follow-up while the
+previous turn is still being projected. A newly projected assistant message must
+be inserted before the first existing message with a later timestamp. Matching
+message ids continue to update in place so projection refreshes cannot move an
+already rendered turn.
+
+Rationale: Timeline sequence defines order inside one turn, while message
+timestamps define order between persisted user messages and late-arriving turn
+projections. Transport arrival order is not presentation order.
+
+Rejected alternative: sort the entire message array after every update. A global
+sort would unnecessarily re-own stable history ordering and could move existing
+equal-timestamp records; insertion limits the correction to the newly projected
+message.
+
 ## Risks / Trade-offs
 
 - Timeline DTO scope grows beyond current Webview messages -> Keep the contract

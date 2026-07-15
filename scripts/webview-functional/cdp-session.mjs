@@ -1,7 +1,7 @@
 import { setTimeout as delay } from 'node:timers/promises';
 import WebSocket from 'ws';
 
-async function listCdpTargets(port) {
+export async function listCdpTargets(port) {
   const response = await fetch(`http://127.0.0.1:${port}/json`);
   if (!response.ok) {
     throw new Error(`CDP target request failed with HTTP ${response.status}`);

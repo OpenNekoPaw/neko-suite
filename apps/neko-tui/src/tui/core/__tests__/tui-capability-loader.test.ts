@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   ArtifactProfileRegistry,
-  CreationProfileRegistry,
   ProviderCardRegistry,
   ProviderExpressionProfileRegistry,
   SkillRegistry,
@@ -11,7 +10,6 @@ import {
 import type {
   AgentCapabilityProvider,
   ArtifactProfileDescriptor,
-  CreationProfileDescriptor,
   AgentReferenceContributor,
   PromptFragment,
   ProviderCard,
@@ -49,7 +47,6 @@ function createLoader(toolRegistry = new ToolRegistry()) {
   const toolGroupRegistry = new ToolGroupRegistry();
   const providerCardRegistry = new ProviderCardRegistry();
   const artifactProfileRegistry = new ArtifactProfileRegistry();
-  const creationProfileRegistry = new CreationProfileRegistry();
   const providerExpressionProfileRegistry = new ProviderExpressionProfileRegistry();
   return {
     toolRegistry,
@@ -57,7 +54,6 @@ function createLoader(toolRegistry = new ToolRegistry()) {
     toolGroupRegistry,
     providerCardRegistry,
     artifactProfileRegistry,
-    creationProfileRegistry,
     providerExpressionProfileRegistry,
     loader: createTuiCapabilityLoader({
       toolRegistry,
@@ -65,7 +61,6 @@ function createLoader(toolRegistry = new ToolRegistry()) {
       toolGroupRegistry,
       providerCardRegistry,
       artifactProfileRegistry,
-      creationProfileRegistry,
       providerExpressionProfileRegistry,
     }),
   };
@@ -76,7 +71,6 @@ function createLocalizedLoader(toolRegistry = new ToolRegistry()) {
   const toolGroupRegistry = new ToolGroupRegistry();
   const providerCardRegistry = new ProviderCardRegistry();
   const artifactProfileRegistry = new ArtifactProfileRegistry();
-  const creationProfileRegistry = new CreationProfileRegistry();
   const providerExpressionProfileRegistry = new ProviderExpressionProfileRegistry();
   return {
     toolRegistry,
@@ -84,7 +78,6 @@ function createLocalizedLoader(toolRegistry = new ToolRegistry()) {
     toolGroupRegistry,
     providerCardRegistry,
     artifactProfileRegistry,
-    creationProfileRegistry,
     providerExpressionProfileRegistry,
     loader: createTuiCapabilityLoader({
       toolRegistry,
@@ -92,7 +85,6 @@ function createLocalizedLoader(toolRegistry = new ToolRegistry()) {
       toolGroupRegistry,
       providerCardRegistry,
       artifactProfileRegistry,
-      creationProfileRegistry,
       providerExpressionProfileRegistry,
       locale: 'zh',
     }),
@@ -356,7 +348,6 @@ describe('createTuiCapabilityLoader', () => {
     const {
       loader,
       artifactProfileRegistry,
-      creationProfileRegistry,
       providerExpressionProfileRegistry,
     } = createLoader();
     const artifactProfile = createArtifactProfile('studio.storyboard');
@@ -364,7 +355,6 @@ describe('createTuiCapabilityLoader', () => {
       ...createArtifactProfile('studio.vscode-storyboard'),
       requirements: { vscode: true },
     } satisfies ArtifactProfileDescriptor & { readonly requirements: { readonly vscode: true } };
-    const creationProfile = createCreationProfile('studio.creation');
     const providerExpressionProfile = createProviderExpressionProfile('provider-expression:flux');
     const vscodeExpressionProfile = {
       ...createProviderExpressionProfile('provider-expression:vscode'),
@@ -375,7 +365,6 @@ describe('createTuiCapabilityLoader', () => {
     const provider = createProvider({
       id: 'profile-provider',
       getArtifactProfiles: () => [artifactProfile, vscodeArtifactProfile],
-      getCreationProfiles: () => [creationProfile],
       getProviderExpressionProfiles: () => [providerExpressionProfile, vscodeExpressionProfile],
     });
 
@@ -383,7 +372,6 @@ describe('createTuiCapabilityLoader', () => {
 
     expect(artifactProfileRegistry.get('studio.storyboard', 1)).toBe(artifactProfile);
     expect(artifactProfileRegistry.get('studio.vscode-storyboard', 1)).toBeUndefined();
-    expect(creationProfileRegistry.get('studio.creation', '1.0.0')).toBe(creationProfile);
     expect(providerExpressionProfileRegistry.get('provider-expression:flux', '1.0.0')).toBe(
       providerExpressionProfile,
     );
@@ -392,7 +380,6 @@ describe('createTuiCapabilityLoader', () => {
     ).toBeUndefined();
     expect(result.providers[0]?.loaded).toEqual([
       { kind: 'artifactProfile', name: 'studio.storyboard@1' },
-      { kind: 'creationProfile', name: 'studio.creation@1.0.0' },
       { kind: 'providerExpressionProfile', name: 'provider-expression:flux@1.0.0' },
     ]);
     expect(result.providers[0]?.skipped).toEqual(
@@ -420,17 +407,6 @@ function createArtifactProfile(profileId: string): ArtifactProfileDescriptor {
     version: 1,
     source: 'package',
     columns: [{ columnId: 'shotId', cellType: 'string', required: true }],
-  };
-}
-
-function createCreationProfile(profileId: string): CreationProfileDescriptor {
-  return {
-    profileId,
-    kind: 'creation',
-    version: '1.0.0',
-    source: 'package',
-    defaultStageId: 'draft',
-    stages: [{ stageId: 'draft', purpose: 'Draft the requested artifact.' }],
   };
 }
 

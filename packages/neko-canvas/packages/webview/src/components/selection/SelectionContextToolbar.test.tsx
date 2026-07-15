@@ -1,9 +1,45 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import type { GroupCanvasNode } from '@neko/shared';
+import { createResourceRef, type CanvasNode, type GroupCanvasNode } from '@neko/shared';
 import { SelectionContextToolbar } from './SelectionContextToolbar';
 
 describe('SelectionContextToolbar', () => {
+  it('places foundational fullscreen in the overflow actions', () => {
+    const node: CanvasNode = {
+      id: 'media',
+      type: 'media',
+      position: { x: 100, y: 100 },
+      size: { width: 280, height: 200 },
+      zIndex: 1,
+      data: {
+        mediaType: 'image',
+        resourceRef: createResourceRef({
+          id: 'resource-image',
+          scope: 'project',
+          provider: 'workspace',
+          kind: 'media',
+          source: { kind: 'file', projectRelativePath: 'assets/image.png' },
+          locator: { kind: 'file', path: 'assets/image.png' },
+          fingerprint: { strategy: 'identity', value: 'image-v1' },
+        }),
+      },
+    } as CanvasNode;
+
+    const markup = renderToStaticMarkup(
+      <SelectionContextToolbar
+        nodes={[node]}
+        selectedNodeIds={[node.id]}
+        viewport={{ pan: { x: 0, y: 0 }, zoom: 1 }}
+        viewportSize={{ width: 800, height: 600 }}
+      />,
+    );
+
+    expect(markup).toContain('data-selection-overflow="true"');
+    expect(markup).toContain(
+      'data-selection-overflow-actions="node:open-content-overlay delete-selection"',
+    );
+  });
+
   it('renders outside Canvas scaling with a clamped screen-space position', () => {
     const node: GroupCanvasNode = {
       id: 'note',

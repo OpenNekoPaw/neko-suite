@@ -920,6 +920,10 @@ function createNodeFromSpec(input: {
             ? { thumbnailPath: asString(data['thumbnailPath']) }
             : {}),
           mediaType: inferMediaType(data['mediaType']),
+          ...(asString(data['title']) ? { title: asString(data['title']) } : {}),
+          ...(isRecord(data['provenance'])
+            ? { provenance: toCanvasSerializableRecord(data['provenance']) }
+            : {}),
           ...(typeof data['duration'] === 'number' ? { duration: data['duration'] } : {}),
         },
       };

@@ -16,6 +16,7 @@ import type {
   ToolParameters,
   ToolQueryBeforeMutateGuidance,
   ToolResult,
+  ToolRuntimeRequirements,
   ToolSafetyKind,
   ToolTargetRequirements,
   ToolTraits,
@@ -147,6 +148,7 @@ export function createTool(config: {
   safetyKind?: ToolSafetyKind;
   targetRequirements?: ToolTargetRequirements;
   queryBeforeMutate?: ToolQueryBeforeMutateGuidance;
+  requirements?: ToolRuntimeRequirements;
   traits?: ToolTraits;
   domain?: CreativeDomainMetadata;
   isConcurrencySafe?: boolean;
@@ -164,6 +166,7 @@ export function createTool(config: {
     ...(config.safetyKind ? { safetyKind: config.safetyKind } : {}),
     ...(config.targetRequirements ? { targetRequirements: config.targetRequirements } : {}),
     ...(config.queryBeforeMutate ? { queryBeforeMutate: config.queryBeforeMutate } : {}),
+    ...(config.requirements ? { requirements: config.requirements } : {}),
     // Fail-Closed: default all safety flags to false
     isConcurrencySafe: config.isConcurrencySafe ?? false,
     isReadOnly: config.isReadOnly ?? false,
@@ -206,6 +209,8 @@ export interface BuildToolConfig {
   targetRequirements?: ToolTargetRequirements;
   /** Preferred structured query tools to run before this mutation. */
   queryBeforeMutate?: ToolQueryBeforeMutateGuidance;
+  /** Runtime services or Host affordances required before the Tool is executable. */
+  requirements?: ToolRuntimeRequirements;
   traits?: ToolTraits;
   domain?: CreativeDomainMetadata;
   execute: (args: Record<string, unknown>, options?: ToolExecuteOptions) => Promise<ToolResult>;
@@ -252,6 +257,7 @@ export function buildTool(config: BuildToolConfig): Tool {
     safetyKind: config.safetyKind,
     targetRequirements: config.targetRequirements,
     queryBeforeMutate: config.queryBeforeMutate,
+    requirements: config.requirements,
     execute: config.execute,
     // Preset provides base, explicit flags override
     requiresConfirmation: config.requiresConfirmation ?? preset?.requiresConfirmation,

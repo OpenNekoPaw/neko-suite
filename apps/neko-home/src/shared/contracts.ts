@@ -11,6 +11,7 @@ export const HOME_BRIDGE_GLOBAL = 'nekoHome';
 export const HOME_BRIDGE_CHANNELS = {
   getSnapshot: 'neko-home:getSnapshot',
   sendAgentRuntimeMessage: 'neko-home:sendAgentRuntimeMessage',
+  manageSession: 'neko-home:manageSession',
   handoff: 'neko-home:handoff',
 } as const;
 
@@ -130,6 +131,19 @@ export interface HomeAgentHostMessageResult {
   readonly diagnostics?: readonly HomeAgentRuntimeDiagnostic[];
 }
 
+export type HomeSessionOperationRequest =
+  | { readonly type: 'create'; readonly config?: Readonly<Record<string, unknown>> }
+  | { readonly type: 'select'; readonly sessionId: string }
+  | { readonly type: 'queue'; readonly sessionId: string; readonly runtimeId: string; readonly prompt: string }
+  | { readonly type: 'cancel'; readonly sessionId: string; readonly runtimeId: string }
+  | { readonly type: 'resume'; readonly sessionId: string; readonly runtimeId: string };
+
+export interface HomeSessionOperationResult {
+  readonly sessionId: string;
+  readonly runtimeId: string;
+  readonly status: 'idle' | 'running' | 'cancelled';
+}
+
 export interface HomeEngineCoreSnapshot {
   readonly port: number;
   readonly availability: 'ready' | 'unavailable';
@@ -146,12 +160,43 @@ export interface HomeSnapshot {
   readonly engine: HomeEngineCoreSnapshot;
   readonly resourceSurfaces: readonly ResourceSurfaceSnapshot[];
   readonly resourceProviders: readonly WorkbenchResourceProviderSnapshot[];
+  readonly sessionProjection: {
+    readonly selectedSessionId?: string;
+    readonly sessions: readonly {
+      readonly sessionId: string;
+      readonly runtimeId: string;
+      readonly status: 'idle' | 'running' | 'cancelled';
+      readonly queuedCount: number;
+      readonly taskCount: number;
+    }[];
+  };
 }
 
 export interface NekoHomeBridge {
   getSnapshot(): Promise<HomeSnapshot>;
   sendAgentRuntimeMessage(request: HomeAgentRuntimeMessageRequest): Promise<HomeAgentHostMessageResult>;
+  manageSession(request: HomeSessionOperationRequest): Promise<HomeSessionOperationResult>;
   handoff(request: NekoApplicationHandoffRequest): Promise<NekoApplicationHandoffResult>;
+}
+
+export function normalizeHomeSessionOperationRequest(input: unknown): HomeSessionOperationRequest {
+  if (!isUnknownRecord(input)) throw new Error('Home session operation must be an object.');
+  const type = input['type'];
+  if (type === 'create') {
+    const config = input['config'];
+    if (config !== undefined && !isUnknownRecord(config)) {
+      throw new Error('Home session config must be an object.');
+    }
+    return config ? { type, config } : { type };
+  }
+  const sessionId = requiredOperationString(input, 'sessionId');
+  if (type === 'select') return { type, sessionId };
+  const runtimeId = requiredOperationString(input, 'runtimeId');
+  if (type === 'cancel' || type === 'resume') return { type, sessionId, runtimeId };
+  if (type === 'queue') {
+    return { type, sessionId, runtimeId, prompt: requiredOperationString(input, 'prompt') };
+  }
+  throw new Error(`Unknown Home session operation: ${String(type)}`);
 }
 
 export function isHomeBridgeChannel(value: string): value is HomeBridgeChannel {
@@ -207,4 +252,15 @@ function normalizeRelativePath(value: unknown): string {
 
 function isUnknownRecord(value: unknown): value is Readonly<Record<string, unknown>> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function requiredOperationString(
+  input: Readonly<Record<string, unknown>>,
+  key: string,
+): string {
+  const value = input[key];
+  if (typeof value !== 'string' || value.trim().length === 0) {
+    throw new Error(`Home session operation ${key} is required.`);
+  }
+  return value;
 }

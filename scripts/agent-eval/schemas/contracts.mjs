@@ -476,6 +476,15 @@ const ASSERTION_SCHEMA = s.union([
     kind: s.literal('no-fallback'),
     forbiddenRefs: EXTERNAL_ID_LIST,
   }),
+  s.object({
+    ...ASSERTION_COMMON,
+    kind: s.literal('workspace-board-projection'),
+    status: s.enum(['projected', 'noop']),
+    targetKind: s.literal('workspace'),
+    minNodeIds: s.integer({ min: 1 }),
+    revisionRequired: s.boolean(),
+    diagnosticsEmpty: s.boolean(),
+  }),
 ]);
 
 const ARTIFACT_CHECK_SCHEMA = s.union([
@@ -484,6 +493,13 @@ const ARTIFACT_CHECK_SCHEMA = s.union([
     kind: s.literal('file-absent'),
     evidenceRef: ID,
     path: PATH,
+  }),
+  s.object({
+    id: ID,
+    kind: s.literal('directory-files'),
+    evidenceRef: ID,
+    path: PATH,
+    minFiles: s.integer({ min: 1 }),
   }),
   s.object({
     id: ID,
@@ -573,6 +589,7 @@ const USAGE_SCHEMA = s.object(
   {
     inputTokens: s.integer({ min: 0 }),
     outputTokens: s.integer({ min: 0 }),
+    contextTokens: s.integer({ min: 0 }),
     costUsd: s.number({ min: 0 }),
   },
 );
@@ -853,11 +870,13 @@ export const DEFAULT_EXECUTION_SUPPORT = Object.freeze({
     'structured-output',
     'markdown-path',
     'artifact',
+    'workspace-board-projection',
     'no-fallback',
   ]),
   artifactCheckKinds: new Set([
     'file',
     'file-absent',
+    'directory-files',
     'resource-ref',
     'generated-asset',
     'project-revision',

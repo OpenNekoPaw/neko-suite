@@ -1,35 +1,59 @@
 import { describe, expect, it } from 'vitest';
-import type { ToolResult, TimelineElementUpdate } from '@neko/shared';
+import type { CutTimelineDocumentTarget, ToolResult, TimelineElementUpdate } from '@neko/shared';
 import { TOOL_NAMES_TIMELINE } from '@neko/shared';
 import { TimelineToolBridge, type TimelineToolRunner } from './timelineToolBridge';
 
 class MockTimelineToolRunner implements TimelineToolRunner {
-  readonly calls: Array<{ toolName: string; params: Record<string, unknown> }> = [];
+  readonly calls: Array<{
+    toolName: string;
+    params: Record<string, unknown>;
+    target: CutTimelineDocumentTarget;
+  }> = [];
   private readonly results = new Map<string, ToolResult>();
 
   setResult(toolName: string, result: ToolResult): void {
     this.results.set(toolName, result);
   }
 
-  async execute(toolName: string, params: Record<string, unknown>): Promise<ToolResult> {
-    this.calls.push({ toolName, params });
+  async execute(
+    toolName: string,
+    params: Record<string, unknown>,
+    target: CutTimelineDocumentTarget,
+  ): Promise<ToolResult> {
+    this.calls.push({ toolName, params, target });
     return this.results.get(toolName) ?? { success: true, data: undefined };
   }
 }
+
+const READ_TARGET = { documentUri: 'file:///workspace/edit.nkv' } as const;
+const WRITE_TARGET = {
+  documentUri: 'file:///workspace/edit.nkv',
+  expectedProjectRevision: 'revision-1',
+} as const;
 
 describe('TimelineToolBridge', () => {
   it('unwraps timeline info from executor results', async () => {
     const runner = new MockTimelineToolRunner();
     runner.setResult('GetTimelineInfo', {
       success: true,
-      data: { duration: 12, fps: 24, width: 1920, height: 1080, trackCount: 3 },
+      data: {
+        documentUri: READ_TARGET.documentUri,
+        projectRevision: 'revision-1',
+        duration: 12,
+        fps: 24,
+        width: 1920,
+        height: 1080,
+        trackCount: 3,
+      },
     });
 
     const bridge = new TimelineToolBridge(runner);
-    const info = await bridge.getInfo();
+    const info = await bridge.getInfo(READ_TARGET);
 
     expect(info.duration).toBe(12);
-    expect(runner.calls).toEqual([{ toolName: 'GetTimelineInfo', params: {} }]);
+    expect(runner.calls).toEqual([
+      { toolName: 'GetTimelineInfo', params: {}, target: READ_TARGET },
+    ]);
   });
 
   it('maps AddTimelineElement media types to internal AddElement payload', async () => {
@@ -46,6 +70,7 @@ describe('TimelineToolBridge', () => {
       startTime: 5,
       duration: 3,
       source: '/tmp/clip.mp4',
+      ...WRITE_TARGET,
     });
 
     expect(result.success).toBe(true);
@@ -59,6 +84,7 @@ describe('TimelineToolBridge', () => {
           duration: 3,
           src: '/tmp/clip.mp4',
         },
+        target: WRITE_TARGET,
       },
     ]);
   });
@@ -67,7 +93,7 @@ describe('TimelineToolBridge', () => {
     const runner = new MockTimelineToolRunner();
     const bridge = new TimelineToolBridge(runner);
 
-    await bridge.updateElement('elem-1', {
+    await bridge.updateElement(WRITE_TARGET, 'elem-1', {
       startTime: 2,
       transitionIn: { type: 'fade', duration: 0.5 },
       speed: 1.25,
@@ -77,6 +103,7 @@ describe('TimelineToolBridge', () => {
       {
         toolName: 'UpdateElement',
         params: { elementId: 'elem-1', startTime: 2 },
+        target: WRITE_TARGET,
       },
       {
         toolName: 'SetTransition',
@@ -88,10 +115,12 @@ describe('TimelineToolBridge', () => {
           easing: undefined,
           params: undefined,
         },
+        target: WRITE_TARGET,
       },
       {
         toolName: 'SetPlaybackSpeed',
         params: { elementId: 'elem-1', speed: 1.25 },
+        target: WRITE_TARGET,
       },
     ]);
   });
@@ -102,12 +131,14 @@ describe('TimelineToolBridge', () => {
 
     await bridge.executeAgentTool(TOOL_NAMES_TIMELINE.ADD_TRACK, {
       type: 'audio',
+      ...WRITE_TARGET,
     });
 
     expect(runner.calls).toEqual([
       {
         toolName: 'AddTrack',
         params: { type: 'audio', name: 'Audio' },
+        target: WRITE_TARGET,
       },
     ]);
   });
@@ -122,7 +153,7 @@ describe('TimelineToolBridge', () => {
     });
 
     const bridge = new TimelineToolBridge(runner);
-    const elements = await bridge.listElements();
+    const elements = await bridge.listElements(READ_TARGET);
 
     expect(elements).toHaveLength(1);
     expect(elements[0]?.id).toBe('elem-1');

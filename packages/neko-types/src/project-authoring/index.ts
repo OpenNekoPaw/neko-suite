@@ -43,6 +43,8 @@ export type NekoProjectAuthoringDiagnosticCode =
   | 'runtime-handle-persisted'
   | 'cache-source-persisted'
   | 'source-resolution-failed'
+  | 'missing-project-revision'
+  | 'stale-project-revision'
   | 'write-failed';
 
 export type NekoProjectAuthoringDiagnosticValue = ProjectFileDiagnosticValue;

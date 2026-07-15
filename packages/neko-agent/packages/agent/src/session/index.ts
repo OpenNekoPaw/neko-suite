@@ -12,11 +12,6 @@ export {
   type ConversationJournalSource,
 } from './conversation-journal-metadata';
 export * from './agent-session';
-export { createSkillCreationKind, encodeCreationKindSegment } from './creation-kind';
-export {
-  createSkillExecutionCreationMetadata,
-  mergeCreationExecutionMetadata,
-} from './creation-execution-metadata';
 export {
   initializeSession,
   type SessionComponents,

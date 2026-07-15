@@ -69,7 +69,7 @@ AssetLibrary
 | 素材库事实        | `neko/assets/library.json`                         | 是        | AssetEntity、Variant、File、标签、来源  |
 | 媒体库配置        | `neko/settings.json` + `.neko/settings.local.json` | 部分      | 团队共享变量 + 本机路径覆盖             |
 | 市场安装记录      | global/project market install record               | 视 scope  | package、version、trust、install target |
-| 生成资产索引      | generated index / promoted source                  | 视 source | Agent/tool 输出提升后的素材来源         |
+| Generated-output 索引 | local metadata + `neko/generated/<kind>/` source | source 由项目决定 | 与 AssetLibrary identity 分离的生成结果 |
 | 缩略图/代理/probe | `.neko/.cache/`                                    | 否        | 可重建派生层                            |
 | 语义索引          | `.neko/.cache/` 或 Search provider                 | 否        | OCR、ASR、embedding、vision evidence    |
 
@@ -109,29 +109,29 @@ local file / media library / generated output / market package / remote source
 | workspace file     | 保存 workspace-relative path                                      |
 | media library file | 保存 `${VAR}/path`，变量来自 media library settings               |
 | external file      | 复制到项目/媒体库，或注册为 local-link 并提示可移植性             |
-| generated output   | 先 promote，再成为 generated source 或 AssetEntity                |
+| generated output   | 可保持 generated-output identity；需要素材库能力时显式 promote 为独立 AssetEntity |
 | market package     | 校验 manifest、signature、trust、entitlement，再写安装记录        |
 | remote URL         | 保存 remote source、checksum/provenance，必要时 materialize cache |
 
 导入不等于绑定实体。文件名和路径可以产生绑定建议，但 confirmed binding 必须走统一实体层。
 
-### 生成候选的提升边界
+### Generated output 的提升边界
 
-未提升 generated output 是 revision/digest 绑定的运行时资源身份，不是 `AssetEntity`。Canvas runtime review Group、Agent task result 和 Webview render URI 都不能据此推断素材库 membership。
+Creator-visible generated output 是 revision/digest 绑定、保存在 `neko/generated/<kind>/` 的工作区资源，不是 runtime scratch，也不是 `AssetEntity`。Agent task result、普通 Canvas Inbox node 和 Webview render URI 都不能据此推断素材库 membership。
 
 ```text
-generated candidate + revision + digest + provenance
+generated output + revision + digest + provenance
   -> AssetLibrary/AssetStore promotion facade
   -> AssetEntity + Variant + File ownership
   -> stable Asset identity/source ref
-  -> revision-checked Canvas/领域项目 authoring
+  -> optional Asset-backed Canvas/领域项目 authoring
 ```
 
 - 单项与批量提升使用稳定 request/candidate identity，并返回逐项结果；重放不得重复创建 AssetEntity。
 - 部分成功保留已创建的 Asset，失败项保持可重试并携带诊断；不尝试跨 Asset 与 Canvas 文件写入做虚假全局回滚。
 - Asset 保存成功而 Board revision 冲突时，Asset 继续有效；重试必须显式绑定预期 target，不能改投活动 Canvas。
-- 新提升不得把 `neko/generated/<kind>/` 当作中转或 canonical source root。物理文件位置由 AssetStore ingest policy 决定，消费者只依赖返回的 Asset identity/source ref。
-- 既有 `neko/generated/<kind>/` 是受保护的 legacy durable input：可显式、幂等导入，但不得删除、移动或自动改写原 Canvas 引用。
+- `neko/generated/<kind>/` 是 generated-output 的 canonical source root，但不是 AssetStore root。Promotion 根据 AssetStore ingest policy 创建或注册独立 Asset source，不移动、删除或改写原 generated source。
+- Workspace Board 可以直接持久化 generated-output `ResourceRef`；Asset promotion 是可选整理动作，不是恢复或显示前置条件。
 - Canvas 删除引用不等于 Asset 删除；AssetEntity/file 删除继续走素材库自己的引用检查与确认策略。
 
 ## 素材技术元数据

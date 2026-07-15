@@ -53,6 +53,9 @@ describe('createCliProgram', () => {
     expect(classifyCliCommandRuntime(undefined)).toBe('interactive-tui');
     expect(classifyCliCommandRuntime('interactive')).toBe('interactive-tui');
     expect(classifyCliCommandRuntime('resume')).toBe('interactive-tui');
+    expect(classifyCliCommandRuntime('image')).toBe('direct-media');
+    expect(classifyCliCommandRuntime('video')).toBe('direct-media');
+    expect(classifyCliCommandRuntime('audio')).toBe('direct-media');
     expect(() => classifyCliCommandRuntime('experiment')).toThrow(
       'Unknown CLI command runtime class',
     );
@@ -96,6 +99,9 @@ describe('createCliProgram', () => {
 
       Commands:
         interactive|i [options] [workDir] [prompt...]  Start interactive TUI mode
+        image [options] <prompt...>                    Generate an image directly without Agent execution
+        video [options] <prompt...>                    Generate a video directly without Agent execution
+        audio [options] <prompt...>                    Generate audio directly without Agent execution
         resume [options] [id] [prompt...]              Resume a previous interactive session
         completion [options] [shell]                   Generate shell completion scripts
         config                                         Manage configuration
@@ -128,6 +134,9 @@ describe('createCliProgram', () => {
 
       命令：
         interactive|i [options] [workDir] [prompt...]  启动交互式 TUI 模式
+        image [options] <prompt...>                    不经过 Agent 直接生成图像
+        video [options] <prompt...>                    不经过 Agent 直接生成视频
+        audio [options] <prompt...>                    不经过 Agent 直接生成音频
         resume [options] [id] [prompt...]              恢复之前的交互会话
         completion [options] [shell]                   生成 shell 补全脚本
         config                                         管理配置

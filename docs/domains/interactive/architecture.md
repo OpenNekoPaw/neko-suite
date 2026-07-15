@@ -30,6 +30,8 @@ Canvas 预览路线与 Cut 剪辑时间线的跨领域边界见 [`../../architec
 
 Canvas 基础模式不是单一 AI 卡片模式，而是面向多类型创作节点的 Creative Graph。专业模式在同一底层图数据上进一步开放更多节点类型、连接语义和可执行工作流能力。
 
+工作区默认创作汇聚面是普通文件 `neko/boards/workspace.nkc`。Canvas Workspace Board projector 可以把已声明的 Markdown、文件引用和 creator-visible generated output 写成普通持久 Inbox 节点；调用方也可以显式选择其他 `.nkc`，但不存在活动/最近/会话画布自动路由。`.nkc` 自身拥有节点、连接、空间位置和用户编辑，目录只负责文件发现，不能从目录树、Agent 会话或 `neko/generated/` 重建画布布局。
+
 | 模式     | 定位                                               | 能力边界                                                                                                                                                                                                                          |
 | -------- | -------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 基础模式 | 快速创作与素材组织                                 | 右侧创建目录只显示文件/引用、文本与 Markdown 文档、剧本呈现、图片/音频/视频，以及中性的 Group/Artboard；不显示 Storyboard 表、Scene/Shot/Gallery、timeline/workflow、Agent/Tool/Skill/Model/Provider 等专业创建入口 |
@@ -43,13 +45,13 @@ Canvas 基础模式不是单一 AI 卡片模式，而是面向多类型创作节
 
 ## Board 目录约定
 
-Board 与 Canvas 是同一个概念：`neko/boards/*.nkc` 都是普通 `.nkc`，使用现有 codec、revision、source policy、节点和连接语义。`neko/boards/` 只用于 Agent 未指定目标时的默认检索与创建，不产生 Draft、Board profile、`.nkdraft`、升级或转换流程。
+Board 与 Canvas 是同一个概念：`neko/boards/*.nkc` 都是普通 `.nkc`，使用现有 codec、revision、source policy、节点和连接语义，不产生 Draft、Board profile、`.nkdraft`、升级或转换流程。
 
-未指定目标的创作运行按固定顺序解析：显式 Canvas → 有效会话/任务绑定 → 唯一精确 project/work/scope 匹配 → 创建新的 `neko/boards/<safe-name>.nkc`。不得用活动/最近画布、专业目录画布、文件名或语义相似度静默替代。每次 turn/task/run 在异步工作前冻结 document/canvas/revision 身份，完成时只向该目标写入；冲突或删除返回可见诊断。
+未指定显式目标时，Canvas Workspace Board projector 只创建或更新 `neko/boards/workspace.nkc`。调用方也可以显式指定其他普通 `.nkc`；系统不通过会话/任务 binding、project/work/scope、活动/最近文档、文件名或语义相似度选择目标。冲突、缺失或非法 target 返回可见 diagnostic，不改投其他 Canvas。
 
-Agent 自动写入的 Markdown 与已持久化文件/引用通过 Canvas 公共 headless authoring；不得直接改 `.nkc` JSON。未提升的图片/音频/视频生成结果只作为 Extension-owned runtime review Group 投影，不进入 `.nkc`。用户显式 Save to Assets 后，AssetLibrary/AssetStore 返回稳定 Asset identity，Canvas 才能向冻结的 Board target revision 写入普通 Group 与 Asset-backed children；不得回退活动 Canvas。
+Host 把已声明的 typed Markdown、稳定文件引用和 creator-visible generated output 交给 Canvas 公共 headless authoring，不直接改 `.nkc` JSON。生成媒体先由 owning service 持久化到 `neko/generated/<kind>/` 并建立 digest/lifecycle/`ResourceRef`，随后可直接写成普通持久 Inbox Group/Media 节点；AssetLibrary promotion 是独立可选动作。删除 Canvas Group/节点只删除 Canvas 引用，不删除 generated source 或 AssetLibrary 实体。
 
-`neko/generated/<kind>/` 只保留历史文件读取和显式导入。新生成结果不得写入该目录作为 Canvas retention；导入历史来源不会删除、移动或静默重写原文件与既有 Canvas 引用。删除 Canvas Group/节点也只删除 Canvas 引用，不删除 AssetLibrary 实体或文件。
+`.nkc` 是空间布局权威。目录树、生成目录和 Agent 会话不能重建节点位置、尺寸、分组、标题或批注；同一 provenance 的重放必须保留用户空间编辑。
 
 ## 与 Scene Live profile 的关系
 

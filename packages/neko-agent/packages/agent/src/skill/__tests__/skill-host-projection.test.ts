@@ -60,7 +60,7 @@ describe('Skill Host projection', () => {
             },
             {
               id: 'style-v1',
-              kind: 'creation',
+              kind: 'provider-expression',
               relationship: 'prefers',
             },
           ],

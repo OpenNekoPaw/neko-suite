@@ -55,11 +55,28 @@ function createTimelineTool(
   parameters: ToolParameters,
   options: Pick<Tool, 'isReadOnly' | 'isConcurrencySafe' | 'isDestructive'> = {},
 ): Tool {
+  const required = new Set(parameters.required ?? []);
+  required.add('documentUri');
+  if (options.isReadOnly !== true) required.add('expectedProjectRevision');
   return {
     name,
     description,
     category: 'timeline',
-    parameters,
+    parameters: {
+      ...parameters,
+      properties: {
+        ...parameters.properties,
+        documentUri: {
+          type: 'string',
+          description: 'Explicit file URI of the target .nkv project.',
+        },
+        expectedProjectRevision: {
+          type: 'string',
+          description: 'Required current project revision for timeline mutations.',
+        },
+      },
+      required: [...required],
+    },
     ...options,
     async execute(args: Record<string, unknown>) {
       return bridge.executeAgentTool(name, args);
@@ -148,15 +165,23 @@ class NekoCutCapabilityProviderImpl implements AgentCapabilityProvider {
     return [
       {
         name: TOOL_NAMES_TIMELINE.CUT_GET_TIMELINE_INFO,
-        description: 'Get read-only information about the current Cut timeline.',
+        description: 'Get read-only information about an explicitly identified Cut timeline.',
         category: 'timeline',
-        parameters: { type: 'object', properties: {} },
+        parameters: {
+          type: 'object',
+          properties: {
+            documentUri: { type: 'string', description: 'Explicit file URI of the .nkv project.' },
+          },
+          required: ['documentUri'],
+        },
         isReadOnly: true,
         isConcurrencySafe: true,
         safetyKind: 'read-only-query',
-        async execute() {
+        async execute(args) {
           try {
-            const data = await api.timeline.getInfo();
+            const documentUri = readOptionalString(args.documentUri);
+            if (!documentUri) return { success: false, error: 'documentUri is required.' };
+            const data = await api.timeline.getInfo({ documentUri });
             return { success: true, data };
           } catch (err) {
             return { success: false, error: `Failed to get Cut timeline info: ${String(err)}` };
@@ -171,17 +196,20 @@ class NekoCutCapabilityProviderImpl implements AgentCapabilityProvider {
         parameters: {
           type: 'object',
           properties: {
-            projectUri: { type: 'string', description: 'Optional Cut project URI.' },
+            projectUri: { type: 'string', description: 'Explicit Cut project URI.' },
             sequenceId: { type: 'string', description: 'Optional sequence id to focus.' },
             clipId: { type: 'string', description: 'Optional clip id to focus.' },
           },
+          required: ['projectUri'],
         },
         isReadOnly: true,
         safetyKind: 'read-only-query',
         async execute(args) {
           try {
+            const projectUri = readOptionalString(args.projectUri);
+            if (!projectUri) return { success: false, error: 'projectUri is required.' };
             const revealed = await api.timeline.reveal({
-              projectUri: typeof args.projectUri === 'string' ? args.projectUri : undefined,
+              projectUri,
               sequenceId: typeof args.sequenceId === 'string' ? args.sequenceId : undefined,
               clipId: typeof args.clipId === 'string' ? args.clipId : undefined,
             });
@@ -194,7 +222,7 @@ class NekoCutCapabilityProviderImpl implements AgentCapabilityProvider {
       {
         name: TOOL_NAMES_TIMELINE.CUT_IMPORT_CANVAS_DRAFT,
         description:
-          'Import a CanvasCutDraftPayload into the active Cut project. Requires confirmation because Cut owns .nkv timeline state after import.',
+          'Import a CanvasCutDraftPayload into an explicitly identified Cut project. Requires confirmation because Cut owns .nkv timeline state after import.',
         category: 'timeline',
         parameters: {
           type: 'object',
@@ -203,8 +231,16 @@ class NekoCutCapabilityProviderImpl implements AgentCapabilityProvider {
               type: 'object',
               description: 'CanvasCutDraftPayload snapshot produced by Canvas.',
             },
+            documentUri: {
+              type: 'string',
+              description: 'Explicit file URI of the target .nkv project.',
+            },
+            expectedProjectRevision: {
+              type: 'string',
+              description: 'Current target project revision.',
+            },
           },
-          required: ['draft'],
+          required: ['draft', 'documentUri', 'expectedProjectRevision'],
         },
         requiresConfirmation: true,
         safetyKind: 'confirmation-gated',
@@ -227,7 +263,19 @@ class NekoCutCapabilityProviderImpl implements AgentCapabilityProvider {
             if (!draft) {
               return { success: false, error: 'cut.importCanvasDraft requires a draft payload.' };
             }
-            const data = await api.timeline.importCanvasDraft(draft);
+            const documentUri = readOptionalString(args.documentUri);
+            const expectedProjectRevision = readOptionalString(args.expectedProjectRevision);
+            if (!documentUri || !expectedProjectRevision) {
+              return {
+                success: false,
+                error: 'cut.importCanvasDraft requires documentUri and expectedProjectRevision.',
+              };
+            }
+            const data = await api.timeline.importCanvasDraft({
+              payload: draft,
+              documentUri,
+              expectedProjectRevision,
+            });
             return { success: data.accepted, data };
           } catch (err) {
             return { success: false, error: `Failed to import Canvas draft: ${String(err)}` };
@@ -607,8 +655,16 @@ class NekoCutCapabilityProviderImpl implements AgentCapabilityProvider {
                     type: 'number' as const,
                     description: 'Requested duration in seconds (default: 5)',
                   },
+                  documentUri: {
+                    type: 'string' as const,
+                    description: 'Explicit file URI of the target .nkv project.',
+                  },
+                  expectedProjectRevision: {
+                    type: 'string' as const,
+                    description: 'Current target project revision.',
+                  },
                 },
-                required: ['prompt'],
+                required: ['prompt', 'documentUri', 'expectedProjectRevision'],
               },
               async execute(args: Record<string, unknown>, options?: ToolExecuteOptions) {
                 const prompt = args.prompt as string;
@@ -640,19 +696,38 @@ class NekoCutCapabilityProviderImpl implements AgentCapabilityProvider {
                 const videoUrl = completed.outputs[0]!.url;
                 const resolvedTrackId = (args.trackId as string) ?? 'track-0';
                 const resolvedStartTime = (args.startTime as number) ?? 0;
+                const documentUri = readOptionalString(args.documentUri);
+                const expectedProjectRevision = readOptionalString(args.expectedProjectRevision);
+                if (!documentUri || !expectedProjectRevision) {
+                  return {
+                    success: false,
+                    error:
+                      'Timeline video generation requires documentUri and expectedProjectRevision.',
+                  };
+                }
 
-                const elementId = await api.timeline.addElement({
-                  type: 'video',
+                const importResult = await api.authoring.importGeneratedClip({
+                  target: { kind: 'file', documentUri },
+                  expectedProjectRevision,
+                  sourcePath: videoUrl,
+                  mediaType: 'video',
                   trackId: resolvedTrackId,
                   startTime: resolvedStartTime,
                   duration: durationHint,
-                  source: videoUrl,
                 });
+                if (!importResult.ok || !importResult.data) {
+                  return {
+                    success: false,
+                    error:
+                      importResult.diagnostics.map((diagnostic) => diagnostic.message).join('; ') ||
+                      'Cut failed to import the generated video.',
+                  };
+                }
 
                 return {
                   success: true,
                   data: {
-                    elementId,
+                    elementId: importResult.data.elementId,
                     trackId: resolvedTrackId,
                     startTime: resolvedStartTime,
                     videoUrl,
@@ -711,4 +786,8 @@ class NekoCutCapabilityProviderImpl implements AgentCapabilityProvider {
       },
     ];
   }
+}
+
+function readOptionalString(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim().length > 0 ? value : undefined;
 }

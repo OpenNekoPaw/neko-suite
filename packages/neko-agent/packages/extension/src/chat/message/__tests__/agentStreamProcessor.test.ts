@@ -1600,8 +1600,6 @@ describe('AgentStreamProcessor', () => {
         mediaDeliveryHost: mediaDeliveryHost as any,
         taskResultObservations: { handleTerminalTask },
       });
-      const deliverGeneratedAssets = vi.fn(async () => undefined);
-
       const processing = processor.processStream(
         webview as any,
         'conv-1',
@@ -1626,7 +1624,6 @@ describe('AgentStreamProcessor', () => {
           },
         ]),
         callbacks,
-        { deliverGeneratedAssets } as never,
       );
       await waitForCondition(() => progressCallback !== undefined);
 
@@ -1677,10 +1674,6 @@ describe('AgentStreamProcessor', () => {
       expect(followUpPrompts[0]).toContain('"resourceRef"');
       expect(followUpPrompts[0]).toContain('Do not use the task id');
       expect(followUpPrompts[0]).not.toContain('- asset: asset-1');
-      expect(deliverGeneratedAssets).toHaveBeenCalledWith(
-        'task-media',
-        expect.arrayContaining([expect.objectContaining({ id: 'asset-1' })]),
-      );
     });
 
     it('should backfill completed media assets with stable refs and trigger perception', async () => {

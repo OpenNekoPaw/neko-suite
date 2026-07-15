@@ -8,7 +8,7 @@
  * Hook execution order: Memory → Validation → Permission → Custom hooks
  */
 
-import type { ExecutorHooks } from '@neko/shared';
+import type { AgentOutputValidationAdapter, ExecutorHooks } from '@neko/shared';
 import type { ConversationCompressor } from '../context';
 import type { IPermissionManager } from '../permission/permission-manager-types';
 import type { PermissionMode, PermissionRules } from '../permission/types';
@@ -62,6 +62,9 @@ export interface ExecutorHooksFactoryConfig {
     mermaidPreValidate?: boolean;
     onValidationFail?: 'warn' | 'error' | 'retry' | 'silent';
   };
+
+  /** Domain output validators supplied by owning capability packages. */
+  outputValidationAdapters?: readonly AgentOutputValidationAdapter[];
 
   /** Validation warning callback */
   onValidationWarning?: (warning: ValidationWarning) => void;
@@ -118,6 +121,7 @@ export function createExecutorHooks(
       mermaidPreValidate: true,
       onValidationFail: 'retry',
     },
+    outputValidationAdapters: config.outputValidationAdapters,
     onValidationWarning: config.onValidationWarning,
     onValidationError: config.onValidationError,
   });

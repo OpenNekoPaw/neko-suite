@@ -26,6 +26,13 @@ ownership.
 - **AND** activating that conversation MUST render the same ordered active-turn
   timeline without rebuilding order from the currently visible conversation
 
+#### Scenario: Late assistant projection precedes a later user message
+- **WHEN** an assistant turn projection arrives after a user message whose
+  timestamp is later than the projected turn
+- **THEN** the Webview MUST insert the assistant turn at its chronological
+  position before that later user message
+- **AND** it MUST NOT render transport arrival order as conversation order
+
 ### Requirement: Streaming text segments close before structural items
 The Agent Webview SHALL place streamed assistant text at the current turn cursor
 and close the active text segment before rendering structural items such as tool

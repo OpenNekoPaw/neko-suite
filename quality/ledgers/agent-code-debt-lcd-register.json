@@ -343,7 +343,7 @@
     {
       "id": "LCD-015",
       "package": "neko-agent",
-      "surface": "packages/neko-agent/packages/cli-tui/src/core/config.ts global/project config path legacy aliases",
+      "surface": "apps/neko-tui/src/tui/core/config.ts global/project config path legacy aliases",
       "kind": "canonical-compatibility",
       "semanticClass": "migrate-now",
       "status": "removed",
@@ -351,7 +351,7 @@
       "replacement": "getUserConfigDir(), getUserConfigPath(), getWorkspaceConfigDir(), and getWorkspaceConfigPath()",
       "removeAfter": "Removed after repo scan found no caller outside the CLI barrel re-export; prelaunch CLI API does not keep old global/project aliases.",
       "tests": [
-        "rg -n \"getGlobalConfigDir|getGlobalConfigPath|getProjectConfigPath\" packages/neko-agent/packages/cli-tui packages/neko-agent/packages/agent quality/ledgers/agent-code-debt-lcd-register.json",
+        "rg -n \"getGlobalConfigDir|getGlobalConfigPath|getProjectConfigPath\" apps/neko-tui packages/neko-agent/packages/agent quality/ledgers/agent-code-debt-lcd-register.json",
         "pnpm check:agent-boundaries"
       ],
       "notes": "CLI build currently fails on unrelated markdown ?raw loader baseline in @neko/agent skill builtins; stale scan guards this specific alias removal."

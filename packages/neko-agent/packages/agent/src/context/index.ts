@@ -29,14 +29,6 @@ export {
   type LLMSummarizerConfig,
 } from './llm-summarizer';
 
-// Creative-domain compression
-export { MessageClassifier, createMessageClassifier } from './message-classifier';
-export {
-  CreativeSummarizer,
-  createCreativeSummarizer,
-  type CreativeSummarizerConfig,
-} from './creative-summarizer';
-
 // Creative version log
 export {
   CreativeVersionLog,
@@ -74,12 +66,6 @@ export type {
   SummarizationResult,
   ISummarizer,
   IConversationCompressor,
-  // Creative-domain compression types
-  CreativeInfoType,
-  MessageClassification,
-  IMessageClassifier,
-  CreativeSummaryBudget,
-  CreativeCompressionConfig,
   // Context persistence types
   SerializableContextItem,
   SerializableContextState,

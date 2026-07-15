@@ -12,7 +12,8 @@ import type { ProjectData, TimelineElement } from '@neko/shared';
 import { CENTERED_TRANSFORM } from '@neko/shared';
 import { ServiceCollection, setGlobalServices } from '../base';
 import { IEditorRegistry } from '../editor/common/editorRegistry';
-import { TimelineToolExecutor } from './TimelineToolExecutor';
+import { createNkvProjectRef } from './CutProjectQualityFacade';
+import { TimelineToolExecutor, type TimelineToolExecutionTarget } from './TimelineToolExecutor';
 import { saveCutProjectFile } from '../editor/video/cutProjectFilePersistence';
 
 vi.mock('../editor/video/cutProjectFilePersistence', () => ({
@@ -31,6 +32,15 @@ vi.mock('vscode', () => ({
       path: filePath,
       toString: () => `file://${filePath}`,
     }),
+    parse: (value: string) => {
+      const filePath = value.replace(/^file:\/\//, '');
+      return {
+        scheme: value.startsWith('file://') ? 'file' : 'unknown',
+        fsPath: filePath,
+        path: filePath,
+        toString: () => value,
+      };
+    },
   },
   workspace: {
     workspaceFolders: [{ uri: { fsPath: '/test' }, name: 'test', index: 0 }],
@@ -90,6 +100,14 @@ function createBaseProject(): ProjectData {
   };
 }
 
+function createTarget(project: ProjectData): TimelineToolExecutionTarget {
+  const documentUri = 'file:///test/project.nkv';
+  return {
+    documentUri,
+    expectedProjectRevision: createNkvProjectRef(documentUri, project).projectRevision,
+  };
+}
+
 describe('TimelineToolExecutor', () => {
   let executor: TimelineToolExecutor;
   let model: MockVideoEditorModel;
@@ -107,22 +125,43 @@ describe('TimelineToolExecutor', () => {
     model = new MockVideoEditorModel(createBaseProject());
 
     const mockEditorRegistry = {
-      getActiveEditor: () => model as any,
-      getEditorByUri: () => undefined,
+      getActiveEditor: vi.fn(),
+      getEditorByUri: () => model as any,
     };
     services.set(IEditorRegistry, mockEditorRegistry as any);
 
     executor = new TimelineToolExecutor();
   });
 
-  it('AddElement 应该新增元素并仅写回一次', async () => {
-    const result = await executor.execute('AddElement', {
-      trackId: 'track-1',
-      type: 'media',
-      startTime: 0,
-      duration: 5,
-      src: './assets/a.mp4',
+  it('returns document identity and revision for an explicit read target', async () => {
+    const result = await executor.execute(
+      'GetTimelineInfo',
+      {},
+      { documentUri: 'file:///test/project.nkv' },
+    );
+
+    expect(result).toMatchObject({
+      success: true,
+      data: {
+        documentUri: 'file:///test/project.nkv',
+        projectRevision: expect.stringMatching(/^nkv:/),
+        trackCount: 1,
+      },
     });
+  });
+
+  it('AddElement 应该新增元素并仅写回一次', async () => {
+    const result = await executor.execute(
+      'AddElement',
+      {
+        trackId: 'track-1',
+        type: 'media',
+        startTime: 0,
+        duration: 5,
+        src: './assets/a.mp4',
+      },
+      createTarget(model.getProjectData()),
+    );
 
     expect(result.success).toBe(true);
     expect(model.savedSyncs).toHaveLength(1);
@@ -141,13 +180,17 @@ describe('TimelineToolExecutor', () => {
   });
 
   it('AddShape 应该在 track.shapes 中新增形状', async () => {
-    const result = await executor.execute('AddShape', {
-      trackId: 'track-1',
-      shapeType: 'rectangle',
-      position: { x: 10, y: 20 },
-      size: { width: 30, height: 40 },
-      style: { fillColor: '#ff0000', strokeColor: '#00ff00', strokeWidth: 4 },
-    });
+    const result = await executor.execute(
+      'AddShape',
+      {
+        trackId: 'track-1',
+        shapeType: 'rectangle',
+        position: { x: 10, y: 20 },
+        size: { width: 30, height: 40 },
+        style: { fillColor: '#ff0000', strokeColor: '#00ff00', strokeWidth: 4 },
+      },
+      createTarget(model.getProjectData()),
+    );
 
     expect(result.success).toBe(true);
     expect(model.savedSyncs).toHaveLength(1);
@@ -191,16 +234,20 @@ describe('TimelineToolExecutor', () => {
     const services = new ServiceCollection();
     setGlobalServices(services);
     services.set(IEditorRegistry, {
-      getActiveEditor: () => model as any,
-      getEditorByUri: () => undefined,
+      getActiveEditor: vi.fn(),
+      getEditorByUri: () => model as any,
     } as any);
     executor = new TimelineToolExecutor();
 
-    const result = await executor.execute('UpdateElement', {
-      elementId: 'elem-1',
-      startTime: 2,
-      transform: { x: 0.25, y: 0.75, rotation: 15 },
-    });
+    const result = await executor.execute(
+      'UpdateElement',
+      {
+        elementId: 'elem-1',
+        startTime: 2,
+        transform: { x: 0.25, y: 0.75, rotation: 15 },
+      },
+      createTarget(model.getProjectData()),
+    );
 
     expect(result.success).toBe(true);
     expect(model.savedSyncs).toHaveLength(1);
@@ -214,24 +261,32 @@ describe('TimelineToolExecutor', () => {
   });
 
   it('UpdateShape 应该更新形状属性', async () => {
-    const addResult = await executor.execute('AddShape', {
-      trackId: 'track-1',
-      shapeType: 'ellipse',
-      position: { x: 25, y: 35 },
-      size: { width: 40, height: 60 },
-      style: { fillColor: '#ffffff' },
-    });
+    const addResult = await executor.execute(
+      'AddShape',
+      {
+        trackId: 'track-1',
+        shapeType: 'ellipse',
+        position: { x: 25, y: 35 },
+        size: { width: 40, height: 60 },
+        style: { fillColor: '#ffffff' },
+      },
+      createTarget(model.getProjectData()),
+    );
 
     expect(addResult.success).toBe(true);
     const shapeId = (addResult.data as { shapeId: string }).shapeId;
 
-    const updateResult = await executor.execute('UpdateShape', {
-      elementId: shapeId,
-      position: { x: 60, y: 70 },
-      size: { width: 80, height: 100 },
-      style: { strokeColor: '#123456', strokeWidth: 6, opacity: 0.5 },
-      visible: false,
-    });
+    const updateResult = await executor.execute(
+      'UpdateShape',
+      {
+        elementId: shapeId,
+        position: { x: 60, y: 70 },
+        size: { width: 80, height: 100 },
+        style: { strokeColor: '#123456', strokeWidth: 6, opacity: 0.5 },
+        visible: false,
+      },
+      createTarget(model.getProjectData()),
+    );
 
     expect(updateResult.success).toBe(true);
 
@@ -274,12 +329,16 @@ describe('TimelineToolExecutor', () => {
     const services = new ServiceCollection();
     setGlobalServices(services);
     services.set(IEditorRegistry, {
-      getActiveEditor: () => model as any,
-      getEditorByUri: () => undefined,
+      getActiveEditor: vi.fn(),
+      getEditorByUri: () => model as any,
     } as any);
     executor = new TimelineToolExecutor();
 
-    const result = await executor.execute('DeleteElement', { elementId: 'elem-1' });
+    const result = await executor.execute(
+      'DeleteElement',
+      { elementId: 'elem-1' },
+      createTarget(model.getProjectData()),
+    );
 
     expect(result.success).toBe(true);
     expect(model.savedSyncs).toHaveLength(1);
@@ -313,12 +372,16 @@ describe('TimelineToolExecutor', () => {
     const services = new ServiceCollection();
     setGlobalServices(services);
     services.set(IEditorRegistry, {
-      getActiveEditor: () => model as any,
-      getEditorByUri: () => undefined,
+      getActiveEditor: vi.fn(),
+      getEditorByUri: () => model as any,
     } as any);
     executor = new TimelineToolExecutor();
 
-    const result = await executor.execute('SplitElement', { elementId: 'elem-1', splitTime: 3 });
+    const result = await executor.execute(
+      'SplitElement',
+      { elementId: 'elem-1', splitTime: 3 },
+      createTarget(model.getProjectData()),
+    );
 
     expect(result.success).toBe(true);
     expect(model.savedSyncs).toHaveLength(1);
@@ -363,15 +426,19 @@ describe('TimelineToolExecutor', () => {
     const services = new ServiceCollection();
     setGlobalServices(services);
     services.set(IEditorRegistry, {
-      getActiveEditor: () => model as any,
-      getEditorByUri: () => undefined,
+      getActiveEditor: vi.fn(),
+      getEditorByUri: () => model as any,
     } as any);
     executor = new TimelineToolExecutor();
 
-    const result = await executor.execute('SetColorCorrection', {
-      elementId: 'elem-1',
-      contrast: 10,
-    });
+    const result = await executor.execute(
+      'SetColorCorrection',
+      {
+        elementId: 'elem-1',
+        contrast: 10,
+      },
+      createTarget(model.getProjectData()),
+    );
 
     expect(result.success).toBe(true);
     expect(model.savedSyncs).toHaveLength(1);
@@ -381,5 +448,57 @@ describe('TimelineToolExecutor', () => {
     expect(updatedElement.colorCorrection).toBeDefined();
     expect(updatedElement.colorCorrection.enabled).toBe(true);
     expect(updatedElement.colorCorrection.basic.contrast).toBe(10);
+  });
+
+  it('rejects a mutation without a revision before applying or saving it', async () => {
+    const before = model.getProjectData();
+
+    const result = await executor.execute(
+      'AddElement',
+      {
+        trackId: 'track-1',
+        type: 'media',
+        startTime: 0,
+        duration: 5,
+        src: './assets/a.mp4',
+      },
+      { documentUri: 'file:///test/project.nkv' },
+    );
+
+    expect(result).toMatchObject({
+      success: false,
+      error: expect.stringContaining('missing-project-revision'),
+    });
+    expect(model.getProjectData()).toBe(before);
+    expect(model.savedSyncs).toHaveLength(0);
+  });
+
+  it('rejects a stale revision without retargeting the active editor', async () => {
+    const activeEditorLookup = vi.fn();
+    const targetEditorLookup = vi.fn(() => model as any);
+    const services = new ServiceCollection();
+    setGlobalServices(services);
+    services.set(IEditorRegistry, {
+      getActiveEditor: activeEditorLookup,
+      getEditorByUri: targetEditorLookup,
+    } as any);
+    executor = new TimelineToolExecutor();
+
+    const result = await executor.execute(
+      'AddTrack',
+      { type: 'audio', name: 'Audio' },
+      {
+        documentUri: 'file:///test/project.nkv',
+        expectedProjectRevision: 'stale-revision',
+      },
+    );
+
+    expect(result).toMatchObject({
+      success: false,
+      error: expect.stringContaining('stale-project-revision'),
+    });
+    expect(targetEditorLookup).toHaveBeenCalledOnce();
+    expect(activeEditorLookup).not.toHaveBeenCalled();
+    expect(model.savedSyncs).toHaveLength(0);
   });
 });

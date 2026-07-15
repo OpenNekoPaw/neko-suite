@@ -15,3 +15,4 @@ export {
 } from './script-scene-search-runtime';
 
 export * from './storyboard-source-normalization';
+export * from './storyboard-output-validation';

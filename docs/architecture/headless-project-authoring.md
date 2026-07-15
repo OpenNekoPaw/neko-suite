@@ -75,11 +75,11 @@ Client adapters may choose different presentation behavior, but they must pass t
 
 ## Source Identity
 
-Source-bearing authoring requests must use shared content access, generated asset promotion, and project-file source policy before save.
+Source-bearing authoring requests must use shared content access, the owning generated-output or Asset identity, and project-file source policy before save.
 
 Durable facts may store stable refs, `ContentFileSourceRef`, `ContentDocumentSourceRef`, `ResourceRef`, asset/entity IDs, workspace-relative paths, `${VAR}/path`, or project-owned JSON. They must not persist Webview URIs, blob URLs, cache paths, temp paths, Engine tokens, stream IDs, range URLs, preview URLs, or unpromoted generated cache artifacts.
 
-For Canvas Board delivery, Markdown and already-durable file/reference outputs may author automatically. Unpromoted binary media must first remain in an Extension-owned runtime review Group. Explicit promotion returns Asset-backed refs, after which one composite Canvas mutation writes an ordinary manual Group and children to the frozen Board revision. Promotion success never authorizes active-document fallback, and runtime Group/projection IDs must be rejected by the `.nkc` codec.
+For Canvas Board delivery, Markdown, durable file references, and creator-visible generated outputs may author as ordinary persistent nodes. Generated binary media must first be committed under `neko/generated/<kind>/` with stable lifecycle/`ResourceRef`; Asset promotion is optional and creates a distinct identity. With no explicit target the Canvas projector writes only `neko/boards/workspace.nkc`; explicit targets name an ordinary `.nkc`. Active/recent documents, conversation binding, runtime Group IDs, cache paths, and Webview projections must be rejected by the durable authoring path.
 
 ## Validation
 

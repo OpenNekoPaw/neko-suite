@@ -7,18 +7,13 @@ import type {
   AgentProfileValidationResult,
   AgentProfileVersion,
   ArtifactProfileDescriptor,
-  CreationProfileDescriptor,
   IAgentProfileRegistry,
   ProviderExpressionProfileDescriptor,
 } from '@neko/shared';
-import {
-  validateAgentProfileIdentity,
-} from '@neko/shared';
+import { validateAgentProfileIdentity } from '@neko/shared';
 
 export type AgentProfileDescriptor =
-  | ArtifactProfileDescriptor
-  | CreationProfileDescriptor
-  | ProviderExpressionProfileDescriptor;
+  ArtifactProfileDescriptor | ProviderExpressionProfileDescriptor;
 
 export interface AgentProfileRegistryOptions<
   TProfile extends AgentProfileIdentity = AgentProfileIdentity,
@@ -41,9 +36,9 @@ const SOURCE_LAYER_ORDER: readonly AgentProfileSource[] = [
   'skill-local',
 ];
 
-export class AgentProfileRegistry<TProfile extends AgentProfileIdentity>
-  implements IAgentProfileRegistry<TProfile>
-{
+export class AgentProfileRegistry<
+  TProfile extends AgentProfileIdentity,
+> implements IAgentProfileRegistry<TProfile> {
   private readonly entriesByProfileKey = new Map<string, AgentProfileRegistryEntry<TProfile>[]>();
   private readonly diagnostics: AgentProfileDiagnostic[] = [];
   private nextOrder = 0;
@@ -65,10 +60,7 @@ export class AgentProfileRegistry<TProfile extends AgentProfileIdentity>
       this.diagnostics.push(duplicateDiagnostic);
     }
 
-    this.entriesByProfileKey.set(key, [
-      ...entries,
-      { profile, order: this.nextOrder++ },
-    ]);
+    this.entriesByProfileKey.set(key, [...entries, { profile, order: this.nextOrder++ }]);
 
     return {
       ok: !diagnostics.some((diagnostic) => diagnostic.severity === 'error'),
@@ -76,19 +68,16 @@ export class AgentProfileRegistry<TProfile extends AgentProfileIdentity>
     };
   }
 
-  unregister(
-    profileId: string,
-    source?: AgentProfileSource,
-    version?: TProfile['version'],
-  ): void {
-    const keys = version === undefined ? this.findKeysForProfileId(profileId) : [toProfileKey(profileId, version)];
+  unregister(profileId: string, source?: AgentProfileSource, version?: TProfile['version']): void {
+    const keys =
+      version === undefined
+        ? this.findKeysForProfileId(profileId)
+        : [toProfileKey(profileId, version)];
     for (const key of keys) {
       const entries = this.entriesByProfileKey.get(key);
       if (!entries) continue;
       const remaining =
-        source === undefined
-          ? []
-          : entries.filter((entry) => entry.profile.source !== source);
+        source === undefined ? [] : entries.filter((entry) => entry.profile.source !== source);
       if (remaining.length === 0) {
         this.entriesByProfileKey.delete(key);
       } else {
@@ -108,7 +97,9 @@ export class AgentProfileRegistry<TProfile extends AgentProfileIdentity>
     return this.resolveEntries(candidates);
   }
 
-  list(filter: AgentProfileFilter<TProfile['kind'], TProfile['version']> = {}): readonly TProfile[] {
+  list(
+    filter: AgentProfileFilter<TProfile['kind'], TProfile['version']> = {},
+  ): readonly TProfile[] {
     return Array.from(this.entriesByProfileKey.values())
       .map((entries) => this.resolveEntries(entries))
       .filter((profile): profile is TProfile => profile !== undefined)
@@ -184,12 +175,6 @@ export class ArtifactProfileRegistry extends AgentProfileRegistry<ArtifactProfil
   }
 }
 
-export class CreationProfileRegistry extends AgentProfileRegistry<CreationProfileDescriptor> {
-  constructor() {
-    super({ kind: 'creation' });
-  }
-}
-
 export class ProviderExpressionProfileRegistry extends AgentProfileRegistry<ProviderExpressionProfileDescriptor> {
   constructor() {
     super({ kind: 'provider-expression' });
@@ -200,16 +185,6 @@ export function createArtifactProfileRegistry(
   profiles: readonly ArtifactProfileDescriptor[] = [],
 ): ArtifactProfileRegistry {
   const registry = new ArtifactProfileRegistry();
-  for (const profile of profiles) {
-    registry.register(profile);
-  }
-  return registry;
-}
-
-export function createCreationProfileRegistry(
-  profiles: readonly CreationProfileDescriptor[] = [],
-): CreationProfileRegistry {
-  const registry = new CreationProfileRegistry();
   for (const profile of profiles) {
     registry.register(profile);
   }
@@ -261,7 +236,8 @@ function compareRegistryEntries<TProfile extends AgentProfileIdentity>(
   right: AgentProfileRegistryEntry<TProfile>,
 ): number {
   return (
-    SOURCE_LAYER_ORDER.indexOf(left.profile.source) - SOURCE_LAYER_ORDER.indexOf(right.profile.source) ||
+    SOURCE_LAYER_ORDER.indexOf(left.profile.source) -
+      SOURCE_LAYER_ORDER.indexOf(right.profile.source) ||
     compareProfileVersions(left.profile.version, right.profile.version) ||
     left.order - right.order
   );

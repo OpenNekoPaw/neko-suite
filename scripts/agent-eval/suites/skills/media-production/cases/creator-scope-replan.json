@@ -22,7 +22,7 @@
     { "id": "final-idle", "kind": "wait-for-idle", "timeoutMs": 180000 }
   ],
   "assertions": [
-    { "id": "skill", "kind": "skill", "identity": { "name": "media-production", "source": "builtin", "provenance": "builtin", "rootId": "builtin-skills", "relativePath": "media-production", "fingerprint": "sha256:1c92f1e586afefea575ec405543c6a84dbba207ddb1758f02a50e6a2f99d20e7" }, "status": "injected", "evidenceRef": "replan-facts" },
+    { "id": "skill", "kind": "skill", "identity": { "name": "media-production", "source": "builtin", "provenance": "builtin", "rootId": "builtin-skills", "relativePath": "media-production", "fingerprint": "sha256:48049d177c8262a3f5526d15342c0696137be8516509a41c5c8f37ea02e45592" }, "status": "injected", "evidenceRef": "replan-facts" },
     { "id": "output", "kind": "structured-output", "format": "markdown", "requiredFields": ["生成式视频", "写实恐怖", "高", "4K", "旧审批", "重新审批", "交付"], "locale": "zh-cn", "evidenceRef": "replan-facts" },
     { "id": "no-image", "kind": "tool-call", "name": "GenerateImage", "status": "absent", "evidenceRef": "replan-facts" },
     { "id": "no-video", "kind": "tool-call", "name": "GenerateVideo", "status": "absent", "evidenceRef": "replan-facts" },

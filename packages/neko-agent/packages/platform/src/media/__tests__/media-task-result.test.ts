@@ -3,6 +3,7 @@ import {
   finalizeCompletedMediaTaskOutputs,
   getMediaTaskPrimaryOutputUrl,
 } from '../media-task-result';
+import { createStableGeneratedOutputId } from '../media-generated-asset';
 import type { MediaTask } from '../types';
 
 describe('media-task-result', () => {
@@ -23,7 +24,6 @@ describe('media-task-result', () => {
       taskType: 'image',
       outputDir: '/repo/.neko/.cache/generated',
       saveOutputs: vi.fn(),
-      generateAssetId: () => 'asset-1',
       computeContentDigest: vi.fn().mockResolvedValue('sha256:image'),
     });
 
@@ -35,8 +35,9 @@ describe('media-task-result', () => {
 
   it('saves completed outputs and registers generated assets', async () => {
     const saveOutputs = vi.fn().mockResolvedValue(['/repo/.neko/.cache/generated/image.png']);
-    const assetIndex = { add: vi.fn() };
+    const assetIndex = { add: vi.fn(), remove: vi.fn() };
     const task = makeTask({ status: 'completed' });
+    const assetId = createStableGeneratedOutputId('task-1', 0, 'sha256:image');
 
     const result = await finalizeCompletedMediaTaskOutputs({
       task,
@@ -44,29 +45,28 @@ describe('media-task-result', () => {
       outputDir: '/repo/.neko/.cache/generated',
       saveOutputs,
       assetIndex,
-      generateAssetId: () => 'asset-1',
       computeContentDigest: vi.fn().mockResolvedValue('sha256:image'),
     });
 
     expect(saveOutputs).toHaveBeenCalledWith(task.scope, '/repo/.neko/.cache/generated', {
       transcodeFile: undefined,
     });
-    expect(result.resultUrls).toEqual(['generated-assets/asset-1.png']);
-    expect(result.thumbnailUrl).toBe('generated-assets/asset-1.png');
+    expect(result.resultUrls).toEqual([`generated-assets/${assetId}.png`]);
+    expect(result.thumbnailUrl).toBe(`generated-assets/${assetId}.png`);
     expect(result.hostOutputPaths).toEqual(['/repo/.neko/.cache/generated/image.png']);
     expect(result.generatedAssets).toHaveLength(1);
     expect(result.generatedAssets[0]?.assetRef).toEqual({
-      assetId: 'asset-1',
-      uri: 'generated-assets/asset-1.png',
+      assetId,
+      uri: `generated-assets/${assetId}.png`,
       mimeType: 'image/png',
     });
     expect(assetIndex.add).toHaveBeenCalledWith(
       expect.objectContaining({
-        id: 'asset-1',
+        id: assetId,
         path: '/repo/.neko/.cache/generated/image.png',
         type: 'generated-image',
         lifecycle: expect.objectContaining({
-          assetId: 'asset-1',
+          assetId,
           contentDigest: 'sha256:image',
           generation: expect.objectContaining({ taskId: 'task-1', providerId: 'openai' }),
         }),
@@ -74,22 +74,58 @@ describe('media-task-result', () => {
     );
   });
 
-  it('falls back to remote outputs when saving fails', async () => {
+  it('fails visibly when completed outputs cannot be persisted', async () => {
     const warn = vi.fn();
+    const assetIndex = { add: vi.fn(), remove: vi.fn() };
 
-    const result = await finalizeCompletedMediaTaskOutputs({
-      task: makeTask({ status: 'completed' }),
-      taskType: 'image',
-      outputDir: '/repo/.neko/.cache/generated',
-      saveOutputs: vi.fn().mockRejectedValue(new Error('download failed')),
-      generateAssetId: () => 'asset-1',
-      logger: { warn },
-    });
-
-    expect(result.resultUrls).toEqual(['https://example.com/image.png']);
-    expect(result.hostOutputPaths).toEqual([]);
-    expect(result.generatedAssets).toEqual([]);
+    await expect(
+      finalizeCompletedMediaTaskOutputs({
+        task: makeTask({ status: 'completed' }),
+        taskType: 'image',
+        outputDir: '/repo/neko/generated/image',
+        saveOutputs: vi.fn().mockRejectedValue(new Error('download failed')),
+        assetIndex,
+        logger: { warn },
+      }),
+    ).rejects.toThrow('download failed');
     expect(warn).toHaveBeenCalled();
+  });
+
+  it('rolls back indexed entries when a later output cannot be indexed', async () => {
+    const firstId = createStableGeneratedOutputId('task-1', 0, 'sha256:first');
+    const assetIndex = {
+      add: vi
+        .fn()
+        .mockResolvedValueOnce(undefined)
+        .mockRejectedValueOnce(new Error('index failed')),
+      remove: vi.fn().mockResolvedValue(true),
+    };
+
+    await expect(
+      finalizeCompletedMediaTaskOutputs({
+        task: makeTask({
+          outputs: [
+            { type: 'image', url: 'https://example.com/first.png' },
+            { type: 'image', url: 'https://example.com/second.png' },
+          ],
+        }),
+        taskType: 'image',
+        outputDir: '/repo/neko/generated/image',
+        saveOutputs: vi
+          .fn()
+          .mockResolvedValue([
+            '/repo/neko/generated/image/first.png',
+            '/repo/neko/generated/image/second.png',
+          ]),
+        assetIndex,
+        computeContentDigest: vi
+          .fn()
+          .mockResolvedValueOnce('sha256:first')
+          .mockResolvedValueOnce('sha256:second'),
+      }),
+    ).rejects.toThrow('index failed');
+
+    expect(assetIndex.remove).toHaveBeenCalledWith(firstId);
   });
 });
 

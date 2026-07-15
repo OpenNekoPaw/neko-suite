@@ -434,7 +434,6 @@ export async function handleTuiControlCommand(
           ...projectSkillResult(result.skillSemantic, context),
           continueExecution: result.continueExecution,
           agentPrompt: result.agentPrompt,
-          executionOverrides: result.executionOverrides,
           lifecycleActivation: result.lifecycleActivation,
         };
       }

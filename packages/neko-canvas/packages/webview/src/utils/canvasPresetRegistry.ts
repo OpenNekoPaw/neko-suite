@@ -14,6 +14,7 @@ import type {
   NodePreviewDescriptor,
   PortDefinition,
 } from '@neko/shared';
+import { resolveResourceRefDisplayName } from './resourceDisplayName';
 
 type WithoutNodeId<T extends CanvasNode> = T extends CanvasNode ? Omit<T, 'id'> : never;
 
@@ -1012,6 +1013,9 @@ const BUILT_IN_CONTENT_PRESETS: CanvasNodePreset[] = [
     createPreview: (node) => {
       const data = node.type === 'media' ? node.data : undefined;
       const persistentPath = data?.assetPath || data?.documentResourceRef?.entryPath;
+      const resourceTitle = data?.resourceRef
+        ? resolveResourceRefDisplayName(data.resourceRef)
+        : undefined;
       const resourceMetadata =
         data?.documentResourceRef || data?.resourceRef
           ? {
@@ -1022,7 +1026,8 @@ const BUILT_IN_CONTENT_PRESETS: CanvasNodePreset[] = [
             }
           : undefined;
       return {
-        title: extractBasename(persistentPath || data?.runtimeAssetPath) || 'Media',
+        title:
+          resourceTitle ?? extractBasename(persistentPath || data?.runtimeAssetPath) ?? 'Media',
         subtitle: data?.mediaType,
         role: getMediaPreviewRole(node),
         thumbnailVariantId: data?.thumbnailPath,

@@ -19,8 +19,15 @@ describe('neko-suite plugin transfer host adapters', () => {
     };
     const plan = buildNekoSuitePluginTransferPlan({
       target: 'cut',
-      assetPath: '/workspace/generated/shot.mp4',
-      mediaType: 'video',
+      payload: {
+        kind: 'singleAsset',
+        asset: { path: '/workspace/generated/shot.mp4', mediaType: 'video' },
+        target: {
+          kind: 'file',
+          documentUri: 'file:///workspace/timeline.nkv',
+          expectedProjectRevision: 'revision-1',
+        },
+      },
     });
 
     await expect(
@@ -41,6 +48,8 @@ describe('neko-suite plugin transfer host adapters', () => {
     expect(executeCommand).toHaveBeenCalledWith('neko.cut.authoring.importGeneratedClip', {
       assetPath: '/workspace/generated/shot.mp4',
       mediaType: 'video',
+      target: { kind: 'file', documentUri: 'file:///workspace/timeline.nkv' },
+      expectedProjectRevision: 'revision-1',
     });
   });
 
@@ -109,8 +118,7 @@ describe('neko-suite plugin transfer host adapters', () => {
       unsupported: [
         {
           target: 'sketch',
-          reason:
-            'missing-authoring-target: Sketch image import authoring requires documentUri.',
+          reason: 'missing-authoring-target: Sketch image import authoring requires documentUri.',
         },
       ],
     });

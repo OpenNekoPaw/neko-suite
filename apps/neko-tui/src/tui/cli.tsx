@@ -19,6 +19,7 @@ import {
   validateConfig,
   listProviders,
   getProviderModels,
+  loadDirectMediaCommandConfig,
 } from './core/config';
 import type { CLIConfig } from './core/types';
 import { CliWorkDirError, resolveCliWorkDir } from './core/cli-workdir';
@@ -53,8 +54,18 @@ import {
   presentConfigLoadDiagnostic,
   presentConfigValidation,
 } from './presentation/cli-process-presentation';
+import {
+  DirectMediaCommandError,
+  executeDirectMediaCommand,
+  type DirectMediaKind,
+} from './core/direct-media-command';
+import { createDirectMediaRuntime } from './core/direct-media-runtime';
+import {
+  presentDirectMediaCommandError,
+  presentDirectMediaCommandResult,
+} from './presentation/direct-media-command-presentation';
 
-export type CliCommandRuntimeClass = 'interactive-tui' | 'utility';
+export type CliCommandRuntimeClass = 'interactive-tui' | 'direct-media' | 'utility';
 
 export function classifyCliCommandRuntime(commandName: string | undefined): CliCommandRuntimeClass {
   switch (commandName) {
@@ -62,6 +73,10 @@ export function classifyCliCommandRuntime(commandName: string | undefined): CliC
     case 'interactive':
     case 'resume':
       return 'interactive-tui';
+    case 'image':
+    case 'video':
+    case 'audio':
+      return 'direct-media';
     case 'completion':
     case 'config':
     case 'debug':
@@ -115,7 +130,14 @@ function withGlobalOptions(
   };
 }
 
-export function createCliProgram(terminal: AgentTerminalInvocationContext): Command {
+export interface CliProgramDependencies {
+  readonly createDirectMediaRuntime?: typeof createDirectMediaRuntime;
+}
+
+export function createCliProgram(
+  terminal: AgentTerminalInvocationContext,
+  dependencies: CliProgramDependencies = {},
+): Command {
   const { t } = terminal.presentation;
   const program = configureLocalizedCommander(
     new LocalizedCliCommand(terminal.presentation),
@@ -177,6 +199,10 @@ export function createCliProgram(terminal: AgentTerminalInvocationContext): Comm
       );
     },
   );
+
+  for (const kind of ['image', 'video', 'audio'] as const) {
+    registerDirectMediaCommand(program, kind, terminal, dependencies);
+  }
 
   addLocaleOptions(
     addInteractiveOptions(
@@ -247,11 +273,68 @@ function failCli(error: unknown, terminal: AgentTerminalInvocationContext): neve
       ? presentCliWorkDirDiagnostic(error.diagnostic, terminal.presentation)
       : error instanceof TuiConversationIdError
         ? presentTuiConversationIdDiagnostic(error.diagnostic, terminal.presentation)
-        : error instanceof Error
-          ? error.message
-          : String(error);
+        : error instanceof DirectMediaCommandError
+          ? presentDirectMediaCommandError(error, terminal.presentation)
+          : error instanceof Error
+            ? error.message
+            : String(error);
   console.error(chalk.red(message));
   process.exit(1);
+}
+
+function registerDirectMediaCommand(
+  program: Command,
+  kind: DirectMediaKind,
+  terminal: AgentTerminalInvocationContext,
+  dependencies: CliProgramDependencies,
+): void {
+  addLocaleOptions(
+    addWorkDirOptions(
+      program
+        .command(kind)
+        .description(terminal.presentation.t(`agent.terminal.commander.command.${kind}`))
+        .argument(
+          '<prompt...>',
+          terminal.presentation.t('agent.terminal.commander.argument.mediaPrompt'),
+        )
+        .option(
+          '-m, --model <model>',
+          terminal.presentation.t('agent.terminal.commander.option.mediaModel'),
+        )
+        .option('--json', terminal.presentation.t('agent.terminal.commander.option.json')),
+      terminal,
+    ),
+    terminal,
+  ).action(async (promptParts: string[], opts: Record<string, unknown>) => {
+    await runCliAction(async () => {
+      const workDir = resolveCliWorkDir(withGlobalOptions(program, opts));
+      const directConfig = loadDirectMediaCommandConfig(workDir);
+      const binding = await (dependencies.createDirectMediaRuntime ?? createDirectMediaRuntime)({
+        workDir,
+      });
+      try {
+        const result = await executeDirectMediaCommand(
+          {
+            kind,
+            prompt: joinPromptParts(promptParts) ?? '',
+            config: directConfig.config,
+            modelOptions: directConfig.modelOptions,
+            ...(typeof opts['model'] === 'string' ? { model: opts['model'] } : {}),
+          },
+          binding.runtime,
+        );
+        console.log(
+          presentDirectMediaCommandResult(
+            result,
+            opts['json'] === true ? 'json' : 'text',
+            terminal.presentation,
+          ),
+        );
+      } finally {
+        await binding.dispose();
+      }
+    }, terminal);
+  });
 }
 
 function registerConfigCommands(program: Command, terminal: AgentTerminalInvocationContext): void {
@@ -675,7 +758,16 @@ function generateCompletionScript(shell: CompletionShell): string {
   }
 }
 
-const COMPLETION_COMMANDS = ['interactive', 'run', 'resume', 'completion', 'config', 'help'];
+const COMPLETION_COMMANDS = [
+  'interactive',
+  'resume',
+  'image',
+  'video',
+  'audio',
+  'completion',
+  'config',
+  'help',
+];
 
 const COMPLETION_OPTIONS = [
   '-C',

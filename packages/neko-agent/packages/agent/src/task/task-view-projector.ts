@@ -6,9 +6,9 @@
  */
 
 import {
-  isGeneratedDraftRef,
   validateChildRunScope,
   isPublicGeneratedAssetResultUri,
+  stripRenderableGeneratedAssetPath,
   type Task,
   type TaskStatus,
   type TaskRunScope,
@@ -233,7 +233,6 @@ function projectTaskResult(resultData: unknown): AgentBackgroundTask['result'] |
   const height = getNumberValue(resultData, 'height');
   const duration = getNumberValue(resultData, 'duration');
   const assets = getRenderableGeneratedAssets(resultData, 'assets');
-  const drafts = getRenderableGeneratedDrafts(resultData, 'drafts');
 
   return sanitizeBackgroundTaskResult({
     urls: outputUrls,
@@ -242,7 +241,6 @@ function projectTaskResult(resultData: unknown): AgentBackgroundTask['result'] |
     ...(height !== undefined ? { height } : {}),
     ...(duration !== undefined ? { duration } : {}),
     ...(assets !== undefined ? { assets } : {}),
-    ...(drafts !== undefined ? { drafts } : {}),
   });
 }
 
@@ -289,17 +287,6 @@ function getRenderableGeneratedAssets(
   return assets.length > 0 ? assets : undefined;
 }
 
-function getRenderableGeneratedDrafts(
-  record: Record<string, unknown>,
-  key: string,
-): NonNullable<AgentBackgroundTask['result']>['drafts'] | undefined {
-  const value = record[key];
-  if (!Array.isArray(value)) return undefined;
-
-  const drafts = value.filter(isRenderableGeneratedDraft).map(stripRenderableDraftPath);
-  return drafts.length > 0 ? drafts : undefined;
-}
-
 function isRenderableGeneratedAsset(
   value: unknown,
 ): value is NonNullable<NonNullable<AgentBackgroundTask['result']>['assets']>[number] {
@@ -313,16 +300,6 @@ function isRenderableGeneratedAsset(
   );
 }
 
-function isRenderableGeneratedDraft(
-  value: unknown,
-): value is NonNullable<NonNullable<AgentBackgroundTask['result']>['drafts']>[number] {
-  if (!isRecord(value)) {
-    return false;
-  }
-  const draftRef = value['draftRef'];
-  return isRenderableGeneratedAsset(value) && isGeneratedDraftRef(draftRef);
-}
-
 function sanitizeBackgroundTaskResult(
   result: AgentBackgroundTask['result'] | undefined,
 ): AgentBackgroundTask['result'] | undefined {
@@ -334,14 +311,7 @@ function sanitizeBackgroundTaskResult(
       ? result.thumbnailUrl
       : undefined;
   const assets = result.assets?.map(stripRenderableAssetPath) ?? [];
-  const drafts = result.drafts?.map(stripRenderableDraftPath) ?? [];
-  if (
-    urls.length === 0 &&
-    !thumbnailUrl &&
-    assets.length === 0 &&
-    drafts.length === 0 &&
-    !result.creativeEntity
-  ) {
+  if (urls.length === 0 && !thumbnailUrl && assets.length === 0) {
     return undefined;
   }
 
@@ -352,48 +322,13 @@ function sanitizeBackgroundTaskResult(
     ...(result.height !== undefined ? { height: result.height } : {}),
     ...(result.duration !== undefined ? { duration: result.duration } : {}),
     ...(assets.length > 0 ? { assets } : {}),
-    ...(drafts.length > 0 ? { drafts } : {}),
-    ...(result.creativeEntity ? { creativeEntity: result.creativeEntity } : {}),
   };
 }
 
 function stripRenderableAssetPath(
   asset: NonNullable<NonNullable<AgentBackgroundTask['result']>['assets']>[number],
 ): NonNullable<NonNullable<AgentBackgroundTask['result']>['assets']>[number] {
-  if (!('path' in asset)) return stripNestedRenderableAssetPaths(asset);
-  const { path: _path, ...assetWithoutPath } = asset as typeof asset & {
-    readonly path?: unknown;
-  };
-  return stripNestedRenderableAssetPaths(assetWithoutPath);
-}
-
-function stripRenderableDraftPath(
-  draft: NonNullable<NonNullable<AgentBackgroundTask['result']>['drafts']>[number],
-): NonNullable<NonNullable<AgentBackgroundTask['result']>['drafts']>[number] {
-  if (!('path' in draft)) return draft;
-  const { path: _path, ...draftWithoutPath } = draft as typeof draft & {
-    readonly path?: unknown;
-  };
-  return draftWithoutPath;
-}
-
-function stripNestedRenderableAssetPaths<
-  T extends NonNullable<NonNullable<AgentBackgroundTask['result']>['assets']>[number],
->(asset: T): T {
-  if (asset.type !== 'generated-storyboard') return asset;
-  return {
-    ...asset,
-    scenes: asset.scenes.map((scene) => ({
-      ...scene,
-      shots: scene.shots.map((shot) => {
-        if (!('path' in shot)) return shot;
-        const { path: _path, ...shotWithoutPath } = shot as typeof shot & {
-          readonly path?: unknown;
-        };
-        return shotWithoutPath;
-      }),
-    })),
-  };
+  return stripRenderableGeneratedAssetPath(asset);
 }
 
 function isStableTaskResultUrl(value: string): boolean {

@@ -100,6 +100,11 @@ export {
   type CanvasHeadlessAuthoringPlannerContext,
 } from './canvasHeadlessAuthoring';
 export {
+  CANVAS_WORKSPACE_INBOX_NODE_ID,
+  planCanvasWorkspaceBoardProjection,
+  type CanvasWorkspaceBoardProjectionPlan,
+} from './canvasWorkspaceBoardProjection';
+export {
   createCanvasStoryboardExecutionSummary,
   type CreateCanvasStoryboardExecutionSummaryInput,
 } from './storyboardExecutionSummary';

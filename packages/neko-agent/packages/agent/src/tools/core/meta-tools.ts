@@ -160,13 +160,13 @@ export type SkillProviderMaybePromise<T> = T | Promise<T>;
 export class GetContextTool extends BuiltinTool {
   readonly name = 'GetContext';
   readonly description =
-    'Get current context: active skill lifecycle records, registered skills, and available tool categories.';
+    'Get current context: active Skill lifecycle, registered Skills, registered Tool-group inventory, and the current callable Tool list. Registered groups do not by themselves prove that a Tool or operation is callable or supported.';
   readonly parameters: ToolParameters = {
     type: 'object',
     properties: {
       includeTools: {
         type: 'boolean',
-        description: 'Include full list of available tools grouped by category',
+        description: 'Include the current callable Tool names grouped by runtime category',
       },
     },
   };
@@ -176,12 +176,18 @@ export class GetContextTool extends BuiltinTool {
 
   private categoryRegistry: IToolCategoryRegistry;
   private skillRegistry?: IToolGroupRegistry;
+  private injectionManager?: IToolInjectionManager;
   private _skillProvider?: ISkillProvider;
 
-  constructor(categoryRegistry: IToolCategoryRegistry, skillRegistry?: IToolGroupRegistry) {
+  constructor(
+    categoryRegistry: IToolCategoryRegistry,
+    skillRegistry?: IToolGroupRegistry,
+    injectionManager?: IToolInjectionManager,
+  ) {
     super();
     this.categoryRegistry = categoryRegistry;
     this.skillRegistry = skillRegistry;
+    this.injectionManager = injectionManager;
   }
 
   setSkillProvider(provider: ISkillProvider): void {
@@ -206,23 +212,63 @@ export class GetContextTool extends BuiltinTool {
       result.registeredSkills = await this._skillProvider.listSkills();
     }
 
-    // Tool categories (semantic groupings)
+    const categories = this.categoryRegistry.listCategories();
+    const categorizedToolNames = new Set(
+      categories.flatMap((category) =>
+        this.categoryRegistry.getToolsByCategory(category.id).map((tool) => tool.name),
+      ),
+    );
+    const callableToolNames = new Set(
+      this.injectionManager?.getToolsForTurn('') ?? categorizedToolNames,
+    );
+
+    // Tool groups are registration inventory, not current execution support.
     if (this.skillRegistry) {
       const allGroups = this.skillRegistry.list();
       result.toolCategories = allGroups
         .filter((g) => g.enabled)
-        .map((g) => ({ name: g.name, description: g.description, toolCount: g.tools.length }));
+        .map((g) => {
+          const callableToolCount = g.tools.filter((toolName) =>
+            callableToolNames.has(toolName),
+          ).length;
+          return {
+            name: g.name,
+            description: g.description,
+            registeredToolCount: g.tools.length,
+            callableToolCount,
+            callableExposure:
+              callableToolCount === 0
+                ? 'none'
+                : callableToolCount === g.tools.length
+                  ? 'all'
+                  : 'partial',
+          };
+        });
+      result.toolCategoryScope = 'registered-inventory-with-current-callable-overlap';
     }
 
-    // Full tool list by category
+    // Full current callable Tool list by runtime category.
     if (includeTools) {
-      const categories = this.categoryRegistry.listCategories();
-      result.tools = categories.map((cat) => ({
+      const categorizedTools = categories.map((cat) => ({
         category: cat.displayName,
-        tools: this.categoryRegistry.getToolsByCategory(cat.id).map((t) => t.name),
+        tools: this.categoryRegistry
+          .getToolsByCategory(cat.id)
+          .map((tool) => tool.name)
+          .filter((toolName) => callableToolNames.has(toolName)),
       }));
+      const dynamicallyInjectedTools = [...callableToolNames]
+        .filter((toolName) => !categorizedToolNames.has(toolName))
+        .sort();
+      result.tools = [
+        ...categorizedTools,
+        ...(dynamicallyInjectedTools.length > 0
+          ? [{ category: 'Dynamically injected', tools: dynamicallyInjectedTools }]
+          : []),
+      ];
+      result.toolListScope = 'current-callable';
       result.toolDiscoveryNotes = [
-        'The tools list contains currently categorized callable tools only.',
+        'Only names in tools are currently callable. toolCategories is registered inventory and must not be treated as executable support.',
+        'registeredToolCount never proves callability. callableToolCount only reports overlap with the current Tool list and does not prove that a specific input, Provider, model, or control is supported.',
         'Provider capability catalogs and lifecycle descriptors are separate from callable tool availability.',
         'If a needed provider tool is absent, inspect registered skills and activate the relevant supplemental skill in referenceSkill when it should not replace the domain skill.',
       ];
@@ -330,7 +376,7 @@ export class CreateSkillTool extends BuiltinTool {
                     id: { type: 'string' },
                     kind: {
                       type: 'string',
-                      enum: ['artifact', 'creation', 'provider-expression'],
+                      enum: ['artifact', 'provider-expression'],
                     },
                     relationship: {
                       type: 'string',
@@ -433,7 +479,7 @@ export class CreateSkillTool extends BuiltinTool {
 export class ActivateSkillTool extends BuiltinTool {
   readonly name = 'ActivateSkill';
   readonly description =
-    'Activate a currently registered skill after ordinary Agent understanding confirms it is needed. Before calling, inspect GetContext in the current conversation and copy an exact registeredSkills.name; never construct or guess a skill name from the source modality, workflow stage, or task wording. Briefly state the activation reason before calling this tool. Use slot=domainSkill for the main task domain, and slot=referenceSkill for supplemental capability guidance such as Canvas authoring so the current domain skill stays active.';
+    'Activate a currently registered skill after ordinary Agent understanding confirms it is needed. Before calling, inspect GetContext in the current conversation and copy an exact registeredSkills.name; never construct or guess a skill name from the source modality, workflow stage, or task wording. Briefly state the activation reason and choose the lifecycle slot explicitly. Use slot=domainSkill only for the main task domain or a deliberate domain replacement; use slot=referenceSkill for supplemental capability guidance so the current domain skill stays active.';
   get parameters(): ToolParameters {
     return {
       type: 'object',
@@ -454,10 +500,10 @@ export class ActivateSkillTool extends BuiltinTool {
           type: 'string',
           enum: ['domainSkill', 'referenceSkill', 'promptChainSkill', 'ephemeralSkill'],
           description:
-            'Optional lifecycle slot. Defaults to domainSkill. Use referenceSkill for supplemental guidance that must coexist with the active domain skill.',
+            'Required lifecycle slot. Use domainSkill only for the main task domain or a deliberate replacement; use referenceSkill for supplemental guidance that must coexist with the active domain skill.',
         },
       },
-      required: ['skillName', 'reason'],
+      required: ['skillName', 'reason', 'slot'],
     };
   }
   readonly category: ToolCategory = 'system';
@@ -490,7 +536,7 @@ export class ActivateSkillTool extends BuiltinTool {
       return this.error(presentSkillToolInputFailure('activation-reason-required', locale));
     }
     const slot = readOptionalSkillLifecycleSlot(args.slot);
-    if (args.slot !== undefined && slot === undefined) {
+    if (slot === undefined) {
       return this.error(
         presentSkillToolInputFailure('invalid-lifecycle-slot', locale, String(args.slot)),
       );
@@ -499,7 +545,7 @@ export class ActivateSkillTool extends BuiltinTool {
     const result = await this._skillProvider.activateSkill({
       name: skillName,
       reason,
-      ...(slot ? { slot } : {}),
+      slot,
     });
 
     if (!result.success) {
@@ -512,7 +558,7 @@ export class ActivateSkillTool extends BuiltinTool {
       skillName: activatedSkillName,
       ...(result.requestedSkillName ? { requestedSkillName: result.requestedSkillName } : {}),
       reason,
-      ...(slot ? { slot } : {}),
+      slot,
       ...(result.allowedTools ? { allowedTools: result.allowedTools } : {}),
       ...(result.lifecycleRecordId ? { lifecycleRecordId: result.lifecycleRecordId } : {}),
       ...(result.diagnostics
@@ -661,11 +707,11 @@ export class SetExecutionModeTool extends BuiltinTool {
  */
 export function createCoreMetaTools(
   categoryRegistry: IToolCategoryRegistry,
-  _injectionManager: IToolInjectionManager,
+  injectionManager: IToolInjectionManager,
   skillRegistry?: IToolGroupRegistry,
 ): Tool[] {
   return [
-    new GetContextTool(categoryRegistry, skillRegistry),
+    new GetContextTool(categoryRegistry, skillRegistry, injectionManager),
     new CreateSkillTool(),
     new ActivateSkillTool(),
     new DeactivateSkillTool(),

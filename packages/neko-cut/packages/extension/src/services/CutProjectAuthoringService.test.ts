@@ -8,6 +8,7 @@ import type {
 } from '@neko/shared';
 import { scanNekoProjectAuthoringCoreDependencies } from '@neko/shared';
 import { CutProjectAuthoringService } from './CutProjectAuthoringService';
+import { createNkvProjectRef } from './CutProjectQualityFacade';
 import { ProjectSessionService } from './ProjectSessionService';
 
 describe('CutProjectAuthoringService', () => {
@@ -129,6 +130,132 @@ describe('CutProjectAuthoringService', () => {
     );
     expect(fileOps.readText('/project/edit.nkv')).toContain('"src": "media/generated.mp4"');
     expect(fileOps.readText('/project/edit.nkv')).toContain('"startTime": 12');
+  });
+
+  it('rejects stale asynchronous imports before source ingest or project write', async () => {
+    const fileOps = createMemoryFileOps({
+      '/project/edit.nkv': JSON.stringify(createProject('Current')),
+    });
+    const ingestSource = vi.fn(async () =>
+      createSourceResult({ durablePath: 'media/generated.mp4', requestId: 'stale-request' }),
+    );
+    const service = new CutProjectAuthoringService(new ProjectSessionService(fileOps), {
+      ingestSource,
+    });
+
+    const result = await service.importGeneratedClip({
+      target: { kind: 'file', documentUri: 'file:///project/edit.nkv' },
+      expectedProjectRevision: 'nkv:stale',
+      sourcePath: '/project/media/generated.mp4',
+      requestId: 'stale-request',
+    });
+
+    expect(result).toMatchObject({
+      ok: false,
+      documentUri: 'file:///project/edit.nkv',
+      diagnostics: [{ code: 'stale-project-revision' }],
+    });
+    expect(ingestSource).not.toHaveBeenCalled();
+    expect(fileOps.writeFile).not.toHaveBeenCalled();
+  });
+
+  it('isolates concurrent authoring sessions by explicit document identity', async () => {
+    const projectA = createProject('A');
+    const projectB = createProject('B');
+    const fileOps = createMemoryFileOps({
+      '/project/a.nkv': JSON.stringify(projectA),
+      '/project/b.nkv': JSON.stringify(projectB),
+    });
+    let signalAStarted: (() => void) | undefined;
+    let releaseA: (() => void) | undefined;
+    const aStarted = new Promise<void>((resolve) => {
+      signalAStarted = resolve;
+    });
+    const aMayFinish = new Promise<void>((resolve) => {
+      releaseA = resolve;
+    });
+    const ingestSource = vi.fn(async (documentUri: string, request) => {
+      if (documentUri.endsWith('/a.nkv')) {
+        signalAStarted?.();
+        await aMayFinish;
+      }
+      return createSourceResult({
+        durablePath: documentUri.endsWith('/a.nkv') ? 'media/a.mp4' : 'media/b.mp4',
+        requestId: request.requestId,
+      });
+    });
+    const service = new CutProjectAuthoringService(new ProjectSessionService(fileOps), {
+      createProjectSession: () => new ProjectSessionService(fileOps),
+      ingestSource,
+      createId: createSequentialIdFactory(),
+    });
+
+    const importA = service.importGeneratedClip({
+      target: { kind: 'file', documentUri: 'file:///project/a.nkv' },
+      expectedProjectRevision: createNkvProjectRef('file:///project/a.nkv', projectA)
+        .projectRevision,
+      sourcePath: '/generated/a.mp4',
+      requestId: 'request-a',
+    });
+    await aStarted;
+    const importB = service.importGeneratedClip({
+      target: { kind: 'file', documentUri: 'file:///project/b.nkv' },
+      expectedProjectRevision: createNkvProjectRef('file:///project/b.nkv', projectB)
+        .projectRevision,
+      sourcePath: '/generated/b.mp4',
+      requestId: 'request-b',
+    });
+
+    await expect(importB).resolves.toMatchObject({
+      ok: true,
+      documentUri: 'file:///project/b.nkv',
+    });
+    releaseA?.();
+    await expect(importA).resolves.toMatchObject({
+      ok: true,
+      documentUri: 'file:///project/a.nkv',
+    });
+    expect(fileOps.readText('/project/a.nkv')).toContain('media/a.mp4');
+    expect(fileOps.readText('/project/a.nkv')).not.toContain('media/b.mp4');
+    expect(fileOps.readText('/project/b.nkv')).toContain('media/b.mp4');
+    expect(fileOps.readText('/project/b.nkv')).not.toContain('media/a.mp4');
+  });
+
+  it('revalidates the frozen revision after asynchronous source ingest', async () => {
+    const original = createProject('Original');
+    const externallyEdited = createProject('Externally edited');
+    const fileOps = createMemoryFileOps({
+      '/project/edit.nkv': JSON.stringify(original),
+    });
+    const ingestSource = vi.fn(async (_documentUri: string, request) => {
+      await fileOps.writeFile(
+        '/project/edit.nkv',
+        new TextEncoder().encode(JSON.stringify(externallyEdited)),
+      );
+      return createSourceResult({
+        durablePath: 'media/generated.mp4',
+        requestId: request.requestId,
+      });
+    });
+    const service = new CutProjectAuthoringService(new ProjectSessionService(fileOps), {
+      createProjectSession: () => new ProjectSessionService(fileOps),
+      ingestSource,
+    });
+
+    const result = await service.importGeneratedClip({
+      target: { kind: 'file', documentUri: 'file:///project/edit.nkv' },
+      expectedProjectRevision: createNkvProjectRef('file:///project/edit.nkv', original)
+        .projectRevision,
+      sourcePath: '/generated/generated.mp4',
+      requestId: 'request-revalidate',
+    });
+
+    expect(result).toMatchObject({
+      ok: false,
+      diagnostics: [{ code: 'stale-project-revision' }],
+    });
+    expect(fileOps.readText('/project/edit.nkv')).toContain('Externally edited');
+    expect(fileOps.readText('/project/edit.nkv')).not.toContain('media/generated.mp4');
   });
 
   it('creates a new NKV file before importing generated image bytes', async () => {

@@ -21,12 +21,7 @@ import type {
 } from './agent-session-factory';
 import type { ProviderExpressionTargetConfig } from '../turn/message-runtime';
 import type { SubAgentRuntimeCoordinator } from '../subagent-runtime';
-import type {
-  ICapabilityRuntime,
-  ICreationGuidanceRuntime,
-  IValidationLoop,
-  IWorkspaceRuntimeStore,
-} from '../types';
+import type { ICapabilityRuntime, IValidationLoop, IWorkspaceRuntimeStore } from '../types';
 import type { ModelTierResolver, SpecializedAgentPreset } from '../../subagent';
 import type { WorkspaceFileIgnoreRules } from '../../input/workspace-ignore';
 import type { SupportedLocale } from '@neko/shared/i18n';
@@ -68,7 +63,6 @@ export interface AgentRuntimeSessionAssemblyInput extends AgentRuntimeHostBindin
   readonly promptLocale: SupportedLocale;
   readonly providerExpressionTargets?: readonly ProviderExpressionTargetConfig[];
   readonly toolCategoryRegistry?: IToolCategoryRegistry;
-  readonly creationGuidance?: ICreationGuidanceRuntime;
   readonly workspaceStore?: IWorkspaceRuntimeStore;
   readonly validationLoop?: IValidationLoop;
   readonly projectMemoryFilePath?: string;
@@ -169,7 +163,6 @@ export function buildAgentRuntimeSessionFactoryConfig(
     capabilityRuntime: input.capabilityRuntime,
     capabilityPromptFragments,
     toolCategoryRegistry: input.toolCategoryRegistry,
-    creationGuidance: input.creationGuidance,
     workspaceStore: input.workspaceStore,
     validationLoop: input.validationLoop,
     projectMemoryFilePath: input.projectMemoryFilePath,

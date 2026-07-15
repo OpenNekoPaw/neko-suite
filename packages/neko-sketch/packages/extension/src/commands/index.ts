@@ -5,6 +5,7 @@ import * as vscode from 'vscode';
 import type {
   NekoProjectAuthoringResult,
   NekoProjectAuthoringTarget,
+  NekoCutAPI,
   SketchImportContext,
 } from '@neko/shared';
 import {
@@ -233,12 +234,15 @@ export function registerCommands(
         return;
       }
       try {
+        const cutTarget = await selectExistingCutProjectTarget();
         await vscode.commands.executeCommand('neko.cut.authoring.importGeneratedClip', {
           data: base64,
           type: 'image',
           name: 'sketch-export',
           duration: 3,
           source: 'sketch',
+          target: cutTarget.target,
+          expectedProjectRevision: cutTarget.expectedProjectRevision,
         });
       } catch (error) {
         void handleError(error instanceof Error ? error : new Error(String(error)), {
@@ -320,6 +324,31 @@ export function registerCommands(
       },
     ),
   );
+}
+
+async function selectExistingCutProjectTarget(): Promise<{
+  readonly target: { readonly kind: 'file'; readonly documentUri: string };
+  readonly expectedProjectRevision: string;
+}> {
+  const selected = await vscode.window.showOpenDialog({
+    canSelectFiles: true,
+    canSelectFolders: false,
+    canSelectMany: false,
+    filters: { 'Neko Cut Project': ['nkv'] },
+    openLabel: 'Select Cut Project',
+  });
+  const documentUri = selected?.[0]?.toString();
+  if (!documentUri) {
+    throw new Error('Cut authoring was cancelled before an explicit .nkv target was selected.');
+  }
+  const cutExtension = vscode.extensions.getExtension<NekoCutAPI>('neko.neko-cut');
+  if (!cutExtension) throw new Error('Neko Cut is unavailable for explicit project authoring.');
+  const cutApi = cutExtension.isActive ? cutExtension.exports : await cutExtension.activate();
+  const info = await cutApi.timeline.getInfo({ documentUri });
+  return {
+    target: { kind: 'file', documentUri },
+    expectedProjectRevision: info.projectRevision,
+  };
 }
 
 interface SketchAuthoringImportPayload {
@@ -500,7 +529,9 @@ async function executeAuthoringImport(
   if (isPsdPath(name ?? payload.path ?? '')) {
     const bytes =
       payload.bytes ??
-      (payload.path ? await vscode.workspace.fs.readFile(vscode.Uri.file(payload.path)) : undefined);
+      (payload.path
+        ? await vscode.workspace.fs.readFile(vscode.Uri.file(payload.path))
+        : undefined);
     if (!bytes) {
       return createNekoProjectAuthoringResult({
         ok: false,
@@ -594,7 +625,10 @@ function inferDataUrlMimeType(value: string): string | undefined {
 }
 
 function formatAuthoringDiagnostics(result: NekoProjectAuthoringResult): string {
-  return result.diagnostics.map((diagnostic) => diagnostic.message).join('; ') || 'Sketch authoring failed.';
+  return (
+    result.diagnostics.map((diagnostic) => diagnostic.message).join('; ') ||
+    'Sketch authoring failed.'
+  );
 }
 
 function basenamePath(value: string | undefined): string | undefined {

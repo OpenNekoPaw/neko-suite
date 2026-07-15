@@ -29,6 +29,7 @@ import type {
   CutProjectAuthoringImportedStoryboard,
   ICutProjectAuthoringService,
 } from '../services/CutProjectAuthoringService';
+import { createNkvProjectRef } from '../services/CutProjectQualityFacade';
 
 /**
  * Register timeline-related VSCode commands
@@ -48,7 +49,18 @@ export function registerTimelineCommands(
     toolName: string,
     params: Record<string, unknown>,
   ): Promise<TimelineToolResult<T>> {
-    const result = await executor.execute(toolName, params);
+    const documentUri = _videoEditorProvider.getActiveDocumentVsCodeUri()?.toString();
+    if (!documentUri) {
+      return { success: false, error: 'No Cut editor invocation target is available.' };
+    }
+    const project = _videoEditorProvider.getProjectDataForDocument(documentUri);
+    const expectedProjectRevision = project
+      ? createNkvProjectRef(documentUri, project).projectRevision
+      : undefined;
+    const result = await executor.execute(toolName, params, {
+      documentUri,
+      ...(expectedProjectRevision ? { expectedProjectRevision } : {}),
+    });
     return {
       success: result.success,
       data: result.data as T | undefined,
@@ -451,6 +463,7 @@ export function registerTimelineCommands(
       async (params: {
         target?: NekoProjectAuthoringTarget;
         documentUri?: string;
+        expectedProjectRevision?: string;
         reveal?: boolean;
         projectName: string;
         shots: Array<{
@@ -467,21 +480,26 @@ export function registerTimelineCommands(
           label: string;
         }>;
       }) => {
-        const target = await resolveTimelineAuthoringTarget(
-          {
-            target: params.target,
-            documentUri: params.documentUri,
-            reveal: params.reveal,
-            title: params.projectName,
-          },
-          _videoEditorProvider,
-        );
+        const target = resolveTimelineAuthoringTarget({
+          target: params.target,
+          documentUri: params.documentUri,
+          reveal: params.reveal,
+          title: params.projectName,
+        });
         if (!target.ok) return reportStoryboardAuthoringResult(target.result);
+        const revisionFailure = requireFileTargetRevision(
+          target.target,
+          params.expectedProjectRevision,
+        );
+        if (revisionFailure) return reportStoryboardAuthoringResult(revisionFailure);
 
         const serviceResult = cutProjectAuthoringService
           ? await cutProjectAuthoringService.importStoryboard({
               target: target.target,
               payload: params,
+              ...(params.expectedProjectRevision
+                ? { expectedProjectRevision: params.expectedProjectRevision }
+                : {}),
             })
           : createMissingCutAuthoringServiceResult();
         const result = await revealStoryboardAuthoringResult(
@@ -509,23 +527,28 @@ export function registerTimelineCommands(
               payload: CanvasCutDraftPayload;
               target?: NekoProjectAuthoringTarget;
               documentUri?: string;
+              expectedProjectRevision?: string;
               reveal?: boolean;
             },
       ) => {
         const payload = readCanvasDraftPayload(input);
-        const target = await resolveTimelineAuthoringTarget(
-          {
-            ...readCanvasDraftTarget(input),
-            title: readCanvasDraftRouteTitle(payload),
-          },
-          _videoEditorProvider,
-        );
+        const target = resolveTimelineAuthoringTarget({
+          ...readCanvasDraftTarget(input),
+          title: readCanvasDraftRouteTitle(payload),
+        });
         if (!target.ok) return storyboardAuthoringResultToCanvasDraftResult(target.result);
+        const expectedProjectRevision =
+          'expectedProjectRevision' in input ? input.expectedProjectRevision : undefined;
+        const revisionFailure = requireFileTargetRevision(target.target, expectedProjectRevision);
+        if (revisionFailure) {
+          return storyboardAuthoringResultToCanvasDraftResult(revisionFailure);
+        }
 
         const serviceResult = cutProjectAuthoringService
           ? await cutProjectAuthoringService.importCanvasDraft({
               target: target.target,
               payload,
+              ...(expectedProjectRevision ? { expectedProjectRevision } : {}),
             })
           : createMissingCutAuthoringServiceResult();
         const result = await revealStoryboardAuthoringResult(
@@ -553,18 +576,14 @@ function readCanvasDraftRouteTitle(payload: CanvasCutDraftPayload): string {
 
 type StoryboardAuthoringResult = NekoProjectAuthoringResult<CutProjectAuthoringImportedStoryboard>;
 
-async function resolveTimelineAuthoringTarget(
-  input: {
-    readonly target?: NekoProjectAuthoringTarget;
-    readonly documentUri?: string;
-    readonly reveal?: boolean;
-    readonly title?: string;
-  },
-  editorProvider: VideoEditorProvider,
-): Promise<
+function resolveTimelineAuthoringTarget(input: {
+  readonly target?: NekoProjectAuthoringTarget;
+  readonly documentUri?: string;
+  readonly reveal?: boolean;
+  readonly title?: string;
+}):
   | { readonly ok: true; readonly target: NekoProjectAuthoringTarget }
-  | { readonly ok: false; readonly result: StoryboardAuthoringResult }
-> {
+  | { readonly ok: false; readonly result: StoryboardAuthoringResult } {
   const reveal = input.reveal ?? input.target?.reveal ?? false;
   if (input.target?.documentUri) {
     return { ok: true, target: { ...input.target, reveal } };
@@ -573,73 +592,18 @@ async function resolveTimelineAuthoringTarget(
     return { ok: true, target: { kind: 'file', documentUri: input.documentUri, reveal } };
   }
 
-  const activeDocumentUri = readActiveDocumentUri(editorProvider);
-  if (activeDocumentUri) {
-    return { ok: true, target: { kind: 'active', documentUri: activeDocumentUri, reveal } };
-  }
-
-  const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
-  if (!workspaceFolder) {
-    return {
-      ok: false,
-      result: createNekoProjectAuthoringResult<CutProjectAuthoringImportedStoryboard>({
-        ok: false,
-        diagnostics: [
-          createNekoProjectAuthoringDiagnostic({
-            code: 'workspace-required',
-            message:
-              'Cut storyboard authoring needs documentUri, active Cut project, or workspace for create-new.',
-          }),
-        ],
-      }),
-    };
-  }
-
-  const title = sanitizeTimelineFileName(input.title ?? 'Storyboard Timeline');
-  const fileUri = await createAvailableTimelineFileUri(workspaceFolder.uri, title);
   return {
-    ok: true,
-    target: {
-      kind: 'new',
-      documentUri: fileUri.toString(),
-      title,
-      reveal,
-    },
+    ok: false,
+    result: createNekoProjectAuthoringResult<CutProjectAuthoringImportedStoryboard>({
+      ok: false,
+      diagnostics: [
+        createNekoProjectAuthoringDiagnostic({
+          code: 'missing-authoring-target',
+          message: 'Cut storyboard authoring requires an explicit file or new .nkv target.',
+        }),
+      ],
+    }),
   };
-}
-
-function readActiveDocumentUri(editorProvider: VideoEditorProvider): string | undefined {
-  const provider = editorProvider as Partial<{
-    getActiveDocumentVsCodeUri: () => vscode.Uri | undefined;
-    getActiveDocumentUri: () => string | null | undefined;
-  }>;
-  const activeVsCodeUri = provider.getActiveDocumentVsCodeUri?.();
-  return activeVsCodeUri?.toString() ?? provider.getActiveDocumentUri?.() ?? undefined;
-}
-
-async function createAvailableTimelineFileUri(
-  folderUri: vscode.Uri,
-  name: string,
-): Promise<vscode.Uri> {
-  const baseName = sanitizeTimelineFileName(name) || 'Storyboard Timeline';
-  for (let index = 0; index < 100; index += 1) {
-    const suffix = index === 0 ? '' : ` ${index + 1}`;
-    const candidate = vscode.Uri.joinPath(folderUri, `${baseName}${suffix}.nkv`);
-    try {
-      await vscode.workspace.fs.stat(candidate);
-    } catch {
-      return candidate;
-    }
-  }
-  return vscode.Uri.joinPath(folderUri, `${baseName}-${Date.now()}.nkv`);
-}
-
-function sanitizeTimelineFileName(value: string): string {
-  return path
-    .basename(value)
-    .replace(/[\\/:*?"<>|]/g, '-')
-    .replace(/\s+/g, ' ')
-    .trim();
 }
 
 async function revealStoryboardAuthoringResult(
@@ -680,6 +644,22 @@ function createMissingCutAuthoringServiceResult(): StoryboardAuthoringResult {
       createNekoProjectAuthoringDiagnostic({
         code: 'authoring-capability-unavailable',
         message: 'Cut storyboard authoring service is not registered.',
+      }),
+    ],
+  });
+}
+
+function requireFileTargetRevision(
+  target: NekoProjectAuthoringTarget,
+  expectedProjectRevision: string | undefined,
+): StoryboardAuthoringResult | undefined {
+  if (target.kind !== 'file' || expectedProjectRevision) return undefined;
+  return createNekoProjectAuthoringResult<CutProjectAuthoringImportedStoryboard>({
+    ok: false,
+    diagnostics: [
+      createNekoProjectAuthoringDiagnostic({
+        code: 'missing-project-revision',
+        message: 'Cut file authoring requires expectedProjectRevision.',
       }),
     ],
   });

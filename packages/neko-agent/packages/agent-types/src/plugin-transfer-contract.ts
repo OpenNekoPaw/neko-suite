@@ -24,6 +24,7 @@ export type PluginTransferTargetMode = 'insert' | 'append' | 'replace' | 'apply'
 
 export interface PluginTransferTargetRef extends CanvasAgentTargetRef, NekoProjectAuthoringTarget {
   readonly plugin?: PluginTransferTarget;
+  readonly expectedProjectRevision?: string;
 }
 
 export interface PluginTransferProvenance {
@@ -109,12 +110,12 @@ export interface PluginTransferCanvasImportAssetPayload {
 
 export interface PluginTransferAuthoringPayloadBase {
   readonly target?: NekoProjectAuthoringTarget;
+  readonly expectedProjectRevision?: string;
   readonly reveal?: boolean;
   readonly provenance?: PluginTransferProvenance;
 }
 
-export interface PluginTransferCutImportGeneratedClipPayload
-  extends PluginTransferAuthoringPayloadBase {
+export interface PluginTransferCutImportGeneratedClipPayload extends PluginTransferAuthoringPayloadBase {
   readonly assetPath: string;
   readonly mediaType?: PluginTransferMediaType;
   readonly name?: string;
@@ -128,8 +129,7 @@ export interface PluginTransferPathImportAssetPayload extends PluginTransferAuth
 }
 
 export interface PluginTransferCutStoryboardAuthoringPayload
-  extends PluginTransferCutStoryboardPayload,
-    PluginTransferAuthoringPayloadBase {}
+  extends PluginTransferCutStoryboardPayload, PluginTransferAuthoringPayloadBase {}
 
 export interface PluginTransferCommandPlanMap {
   readonly 'neko.canvas.importAsset': PluginTransferCanvasImportAssetPayload;

@@ -185,6 +185,7 @@ function renderAssetPreviewBlock(context: BlockRendererContext): React.ReactNode
       source={source}
       delegateActions={delegateActions}
       surfaceKind={context.previewSurfaceKind ?? 'inline'}
+      chrome={context.contentChrome ?? 'contained'}
     />
   );
 }
@@ -614,7 +615,9 @@ function projectMarkdownReviewTable(
   return { columns, rows };
 }
 
-function normalizeMarkdownReviewColumns(value: unknown): readonly MarkdownReviewColumn[] | undefined {
+function normalizeMarkdownReviewColumns(
+  value: unknown,
+): readonly MarkdownReviewColumn[] | undefined {
   if (!Array.isArray(value)) {
     return undefined;
   }

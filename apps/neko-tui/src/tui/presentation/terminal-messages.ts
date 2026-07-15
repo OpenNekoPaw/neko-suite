@@ -13,6 +13,9 @@ export const CLI_TERMINAL_MESSAGES_EN = {
   'agent.terminal.commander.versionOption': 'Output the version number',
   'agent.terminal.commander.program.description': 'Neko AI Agent — Professional Terminal UI',
   'agent.terminal.commander.command.interactive': 'Start interactive TUI mode',
+  'agent.terminal.commander.command.image': 'Generate an image directly without Agent execution',
+  'agent.terminal.commander.command.video': 'Generate a video directly without Agent execution',
+  'agent.terminal.commander.command.audio': 'Generate audio directly without Agent execution',
   'agent.terminal.commander.command.resume': 'Resume a previous interactive session',
   'agent.terminal.commander.command.completion': 'Generate shell completion scripts',
   'agent.terminal.commander.command.config': 'Manage configuration',
@@ -30,12 +33,15 @@ export const CLI_TERMINAL_MESSAGES_EN = {
     'Conversation id to resume; omit to continue the most recent',
   'agent.terminal.commander.argument.resumePrompt': 'Optional prompt to submit after resume',
   'agent.terminal.commander.argument.shell': 'Shell type (bash, zsh, fish)',
+  'agent.terminal.commander.argument.mediaPrompt': 'Media generation prompt',
   'agent.terminal.commander.option.workDir':
     'Working directory for workspace config and file tools',
   'agent.terminal.commander.option.workspaceConfigWorkDir':
     'Working directory for workspace config',
   'agent.terminal.commander.option.provider': 'AI provider (anthropic, openai, deepseek)',
   'agent.terminal.commander.option.model': 'Model ID',
+  'agent.terminal.commander.option.mediaModel': 'Media model ID or provider:model identity',
+  'agent.terminal.commander.option.json': 'Print structured JSON output',
   'agent.terminal.commander.option.apiKey': 'API key',
   'agent.terminal.commander.option.verbose': 'Enable verbose output',
   'agent.terminal.commander.option.uiLocale': 'Terminal language (auto, en, zh-cn)',
@@ -56,6 +62,19 @@ export const CLI_TERMINAL_MESSAGES_EN = {
   'agent.terminal.commander.diagnostic.excessArguments':
     'error: too many arguments for {command}. Expected {expected} but got {received}.',
   'agent.terminal.commander.diagnostic.unknownCommand': "error: unknown command '{command}'",
+  'agent.terminal.directMedia.completed': '{kind} generation completed: {taskScope} ({model})',
+  'agent.terminal.directMedia.diagnostic.direct-media-empty-prompt':
+    'Direct media generation requires a non-empty prompt. {detail}',
+  'agent.terminal.directMedia.diagnostic.direct-media-model-unavailable':
+    'Direct media model is unavailable. {detail}',
+  'agent.terminal.directMedia.diagnostic.direct-media-model-kind-mismatch':
+    'Direct media model category does not match the command. {detail}',
+  'agent.terminal.directMedia.diagnostic.direct-media-task-failed':
+    'Direct media task failed ({taskScope}). {detail}',
+  'agent.terminal.directMedia.diagnostic.direct-media-task-cancelled':
+    'Direct media task was cancelled ({taskScope}). {detail}',
+  'agent.terminal.directMedia.diagnostic.direct-media-result-unavailable':
+    'Direct media task completed without a stable result ({taskScope}). {detail}',
   'agent.terminal.cli.configLoad.missingDefaultProvider':
     'No default provider is configured in ~/.neko/config.toml.',
   'agent.terminal.cli.configLoad.providerNotConfigured':
@@ -864,6 +883,9 @@ const CLI_TERMINAL_MESSAGES_ZH_CN = {
   'agent.terminal.commander.versionOption': '输出版本号',
   'agent.terminal.commander.program.description': 'Neko AI Agent — 专业终端界面',
   'agent.terminal.commander.command.interactive': '启动交互式 TUI 模式',
+  'agent.terminal.commander.command.image': '不经过 Agent 直接生成图像',
+  'agent.terminal.commander.command.video': '不经过 Agent 直接生成视频',
+  'agent.terminal.commander.command.audio': '不经过 Agent 直接生成音频',
   'agent.terminal.commander.command.resume': '恢复之前的交互会话',
   'agent.terminal.commander.command.completion': '生成 shell 补全脚本',
   'agent.terminal.commander.command.config': '管理配置',
@@ -878,10 +900,13 @@ const CLI_TERMINAL_MESSAGES_ZH_CN = {
   'agent.terminal.commander.argument.resumeId': '要恢复的对话 ID；省略则继续最近的对话',
   'agent.terminal.commander.argument.resumePrompt': '恢复后可选提交的提示词',
   'agent.terminal.commander.argument.shell': 'Shell 类型（bash、zsh、fish）',
+  'agent.terminal.commander.argument.mediaPrompt': '媒体生成提示词',
   'agent.terminal.commander.option.workDir': '工作区配置和文件工具使用的工作目录',
   'agent.terminal.commander.option.workspaceConfigWorkDir': '工作区配置使用的工作目录',
   'agent.terminal.commander.option.provider': 'AI 提供者（anthropic、openai、deepseek）',
   'agent.terminal.commander.option.model': '模型 ID',
+  'agent.terminal.commander.option.mediaModel': '媒体模型 ID 或 provider:model 身份',
+  'agent.terminal.commander.option.json': '输出结构化 JSON',
   'agent.terminal.commander.option.apiKey': 'API 密钥',
   'agent.terminal.commander.option.verbose': '启用详细输出',
   'agent.terminal.commander.option.uiLocale': '终端语言（auto、en、zh-cn）',
@@ -897,6 +922,19 @@ const CLI_TERMINAL_MESSAGES_ZH_CN = {
   'agent.terminal.commander.diagnostic.excessArguments':
     '错误：命令 {command} 的参数过多。预期 {expected} 个，实际 {received} 个。',
   'agent.terminal.commander.diagnostic.unknownCommand': '错误：未知命令“{command}”',
+  'agent.terminal.directMedia.completed': '{kind} 生成已完成：{taskScope}（{model}）',
+  'agent.terminal.directMedia.diagnostic.direct-media-empty-prompt':
+    '直接媒体生成需要非空提示词。{detail}',
+  'agent.terminal.directMedia.diagnostic.direct-media-model-unavailable':
+    '直接媒体模型不可用。{detail}',
+  'agent.terminal.directMedia.diagnostic.direct-media-model-kind-mismatch':
+    '直接媒体模型类别与命令不匹配。{detail}',
+  'agent.terminal.directMedia.diagnostic.direct-media-task-failed':
+    '直接媒体任务失败（{taskScope}）。{detail}',
+  'agent.terminal.directMedia.diagnostic.direct-media-task-cancelled':
+    '直接媒体任务已取消（{taskScope}）。{detail}',
+  'agent.terminal.directMedia.diagnostic.direct-media-result-unavailable':
+    '直接媒体任务完成但没有稳定结果（{taskScope}）。{detail}',
   'agent.terminal.cli.configLoad.missingDefaultProvider':
     '未在 ~/.neko/config.toml 中配置默认提供方。',
   'agent.terminal.cli.configLoad.providerNotConfigured':

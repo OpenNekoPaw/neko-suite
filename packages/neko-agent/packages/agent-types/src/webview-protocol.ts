@@ -2720,6 +2720,11 @@ function parseOptionalPluginTransferTargetRef(
   const slotId = optionalStringStrict(value.slotId);
   const fieldPath = optionalStringStrict(value.fieldPath);
   const mode = optionalStringStrict(value.mode);
+  const kind = optionalStringStrict(value.kind);
+  const documentUri = optionalStringStrict(value.documentUri);
+  const title = optionalStringStrict(value.title);
+  const expectedProjectRevision = optionalStringStrict(value.expectedProjectRevision);
+  const reveal = value.reveal;
   const insertionPoint = parseOptionalTransferInsertionPoint(value.insertionPoint);
   if (
     plugin === null ||
@@ -2729,12 +2734,18 @@ function parseOptionalPluginTransferTargetRef(
     slotId === null ||
     fieldPath === null ||
     mode === null ||
+    kind === null ||
+    documentUri === null ||
+    title === null ||
+    expectedProjectRevision === null ||
+    (reveal !== undefined && typeof reveal !== 'boolean') ||
     insertionPoint === null
   ) {
     return null;
   }
   if (plugin !== undefined && !isPluginTransferTarget(plugin)) return null;
   if (mode !== undefined && !isPluginTransferTargetMode(mode)) return null;
+  if (kind !== undefined && kind !== 'active' && kind !== 'file' && kind !== 'new') return null;
   const parsedFieldPath = parseOptionalJsonPointerPath(fieldPath);
   if (parsedFieldPath === null) return null;
   const parsedPlugin = plugin as NonNullable<PluginTransferTargetRef['plugin']> | undefined;
@@ -2748,6 +2759,11 @@ function parseOptionalPluginTransferTargetRef(
     ...(parsedFieldPath !== undefined ? { fieldPath: parsedFieldPath } : {}),
     ...(insertionPoint !== undefined ? { insertionPoint } : {}),
     ...(parsedMode !== undefined ? { mode: parsedMode } : {}),
+    ...(kind !== undefined ? { kind } : {}),
+    ...(documentUri !== undefined ? { documentUri } : {}),
+    ...(title !== undefined ? { title } : {}),
+    ...(expectedProjectRevision !== undefined ? { expectedProjectRevision } : {}),
+    ...(typeof reveal === 'boolean' ? { reveal } : {}),
   };
 }
 

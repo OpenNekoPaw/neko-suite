@@ -84,6 +84,7 @@ export async function bootstrapCoreServices(
   services.set(IProjectSessionService, projectSessionService);
 
   const cutProjectAuthoringService = new CutProjectAuthoringService(projectSessionService, {
+    createProjectSession: () => new ProjectSessionService(),
     ingestSource: (documentUri, request) =>
       addCutProjectSource(vscode.Uri.parse(documentUri), request),
   });

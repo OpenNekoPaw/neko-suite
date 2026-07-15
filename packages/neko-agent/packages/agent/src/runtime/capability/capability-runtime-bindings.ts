@@ -1,6 +1,5 @@
 import type {
   IArtifactProfileRegistry,
-  ICreationProfileRegistry,
   IOperationToolAdapterRegistry,
   IProviderCardRegistry,
   IProviderExpressionProfileRegistry,
@@ -21,7 +20,6 @@ const CAPABILITY_RUNTIME_BINDING_KEYS = [
   'skillLifecycleRuntime',
   'providerCardRegistry',
   'artifactProfileRegistry',
-  'creationProfileRegistry',
   'providerExpressionProfileRegistry',
   'operationToolAdapterRegistry',
   'externalProcessorRuntime',
@@ -36,7 +34,6 @@ export interface CapabilityRuntimeBindings {
   skillLifecycleRuntime?: SkillLifecycleRuntime;
   providerCardRegistry?: IProviderCardRegistry;
   artifactProfileRegistry?: IArtifactProfileRegistry;
-  creationProfileRegistry?: ICreationProfileRegistry;
   providerExpressionProfileRegistry?: IProviderExpressionProfileRegistry;
   operationToolAdapterRegistry?: IOperationToolAdapterRegistry;
   externalProcessorRuntime?: AgentExternalProcessorRuntime;

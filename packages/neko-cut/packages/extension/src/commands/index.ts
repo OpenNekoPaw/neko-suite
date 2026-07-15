@@ -20,6 +20,7 @@ import type {
   CutProjectAuthoringImportedClip,
   ICutProjectAuthoringService,
 } from '../services/CutProjectAuthoringService';
+import { createNkvProjectRef } from '../services/CutProjectQualityFacade';
 
 const logger = getLogger('Commands');
 import { registerTimelineCommands } from './timeline-commands';
@@ -39,6 +40,7 @@ interface ImportGeneratedClipCommandParams {
   readonly startTime?: number;
   readonly trackId?: string;
   readonly trackIndex?: number;
+  readonly expectedProjectRevision?: string;
   readonly reveal?: boolean;
 }
 
@@ -180,8 +182,22 @@ export function registerCommands(
           );
         }
 
-        const target = await resolveGeneratedClipAuthoringTarget(params, videoEditorProvider);
+        const target = resolveGeneratedClipAuthoringTarget(params);
         if (!target.ok) return reportGeneratedClipResult(target.result);
+        if (target.target.kind === 'file' && !params.expectedProjectRevision) {
+          return reportGeneratedClipResult(
+            createNekoProjectAuthoringResult({
+              ok: false,
+              diagnostics: [
+                createNekoProjectAuthoringDiagnostic({
+                  code: 'missing-project-revision',
+                  message:
+                    'Cut generated clip import requires expectedProjectRevision for a file target.',
+                }),
+              ],
+            }),
+          );
+        }
 
         const mediaType = inferGeneratedClipMediaType(
           params.assetPath ?? params.name ?? 'generated-clip',
@@ -199,6 +215,9 @@ export function registerCommands(
           ...(params.startTime !== undefined ? { startTime: params.startTime } : {}),
           ...(params.trackId ? { trackId: params.trackId } : {}),
           ...(params.trackIndex !== undefined ? { trackIndex: params.trackIndex } : {}),
+          ...(params.expectedProjectRevision
+            ? { expectedProjectRevision: params.expectedProjectRevision }
+            : {}),
         });
         const revealedResult = await revealCutAuthoringResult(
           result,
@@ -220,31 +239,11 @@ export function registerCommands(
   registerTimelineCommands(context, videoEditorProvider, cutProjectAuthoringService);
 }
 
-function createGeneratedClipProjectName(params: {
-  readonly assetPath?: string;
-  readonly name?: string;
-  readonly mediaType?: string;
-  readonly type?: string;
-}): string {
-  const sourceName =
-    params.name?.trim() || (params.assetPath ? path.parse(params.assetPath).name : '');
-  const mediaType = params.mediaType ?? params.type;
-  const generatedName =
-    mediaType === 'audio'
-      ? 'Agent Audio Timeline'
-      : mediaType === 'image'
-        ? 'Agent Image Timeline'
-        : 'Agent Timeline';
-  return sanitizeTimelineFileName(sourceName).slice(0, 80) || generatedName;
-}
-
-async function resolveGeneratedClipAuthoringTarget(
+function resolveGeneratedClipAuthoringTarget(
   params: ImportGeneratedClipCommandParams,
-  editorProvider: VideoEditorProvider,
-): Promise<
+):
   | { readonly ok: true; readonly target: NekoProjectAuthoringTarget }
-  | { readonly ok: false; readonly result: ImportGeneratedClipResult }
-> {
+  | { readonly ok: false; readonly result: ImportGeneratedClipResult } {
   const reveal = params.reveal ?? params.target?.reveal ?? false;
   if (params.target?.documentUri) {
     return {
@@ -259,41 +258,17 @@ async function resolveGeneratedClipAuthoringTarget(
     };
   }
 
-  const activeDocumentUri = editorProvider.getActiveDocumentVsCodeUri();
-  if (activeDocumentUri) {
-    return {
-      ok: true,
-      target: { kind: 'active', documentUri: activeDocumentUri.toString(), reveal },
-    };
-  }
-
-  const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
-  if (!workspaceFolder) {
-    return {
-      ok: false,
-      result: createNekoProjectAuthoringResult<CutProjectAuthoringImportedClip>({
-        ok: false,
-        diagnostics: [
-          createNekoProjectAuthoringDiagnostic({
-            code: 'workspace-required',
-            message:
-              'Cut generated clip import needs documentUri, active Cut project, or workspace for create-new.',
-          }),
-        ],
-      }),
-    };
-  }
-
-  const title = createGeneratedClipProjectName(params);
-  const fileUri = await createAvailableTimelineFileUri(workspaceFolder.uri, title);
   return {
-    ok: true,
-    target: {
-      kind: 'new',
-      documentUri: fileUri.toString(),
-      title,
-      reveal,
-    },
+    ok: false,
+    result: createNekoProjectAuthoringResult<CutProjectAuthoringImportedClip>({
+      ok: false,
+      diagnostics: [
+        createNekoProjectAuthoringDiagnostic({
+          code: 'missing-authoring-target',
+          message: 'Cut generated clip import requires an explicit file or new .nkv target.',
+        }),
+      ],
+    }),
   };
 }
 
@@ -338,32 +313,8 @@ function reportGeneratedClipResult(result: ImportGeneratedClipResult): ImportGen
   return result;
 }
 
-async function createAvailableTimelineFileUri(
-  folderUri: vscode.Uri,
-  name: string,
-): Promise<vscode.Uri> {
-  const baseName = sanitizeTimelineFileName(name) || 'Agent Timeline';
-  for (let index = 0; index < 100; index += 1) {
-    const suffix = index === 0 ? '' : ` ${index + 1}`;
-    const candidate = vscode.Uri.joinPath(folderUri, `${baseName}${suffix}.nkv`);
-    try {
-      await vscode.workspace.fs.stat(candidate);
-    } catch {
-      return candidate;
-    }
-  }
-  return vscode.Uri.joinPath(folderUri, `${baseName}-${Date.now()}.nkv`);
-}
-
-function sanitizeTimelineFileName(value: string): string {
-  return value
-    .replace(/[\\/:*?"<>|]/g, '-')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
 /**
- * Add a media file to the current timeline
+ * Add a media file to the explicitly captured editor timeline.
  */
 async function addToTimeline(
   fileUri: vscode.Uri,
@@ -387,17 +338,33 @@ async function addToTimeline(
     return;
   }
 
-  const target = await resolveGeneratedClipAuthoringTarget(
-    {
-      assetPath: fileUri.fsPath,
-      name: path.basename(fileUri.fsPath),
-      mediaType,
-      reveal: false,
-    },
-    editorProvider,
-  );
+  const documentUri = editorProvider.getActiveDocumentVsCodeUri()?.toString();
+  const project = documentUri ? editorProvider.getProjectDataForDocument(documentUri) : null;
+  const expectedProjectRevision =
+    documentUri && project ? createNkvProjectRef(documentUri, project).projectRevision : undefined;
+  const target = resolveGeneratedClipAuthoringTarget({
+    assetPath: fileUri.fsPath,
+    name: path.basename(fileUri.fsPath),
+    mediaType,
+    reveal: false,
+    ...(documentUri ? { documentUri } : {}),
+  });
   if (!target.ok) {
     reportGeneratedClipResult(target.result);
+    return;
+  }
+  if (!expectedProjectRevision) {
+    reportGeneratedClipResult(
+      createNekoProjectAuthoringResult({
+        ok: false,
+        diagnostics: [
+          createNekoProjectAuthoringDiagnostic({
+            code: 'missing-project-revision',
+            message: 'The invoking Cut editor could not provide a project revision.',
+          }),
+        ],
+      }),
+    );
     return;
   }
 
@@ -406,6 +373,7 @@ async function addToTimeline(
     sourcePath: fileUri.fsPath,
     name: path.basename(fileUri.fsPath),
     mediaType,
+    ...(expectedProjectRevision ? { expectedProjectRevision } : {}),
   });
   if (!result.ok) {
     reportGeneratedClipResult(result);

@@ -21,6 +21,7 @@ export interface PreviewRendererProps {
   delegateActions?: DelegateAction[];
   surfaceKind?: PlaybackSurfaceKind;
   playbackControl?: PreviewPlaybackControl;
+  chrome?: 'contained' | 'full-bleed';
 }
 
 export type PreviewRenderer = (props: PreviewRendererProps) => React.ReactNode;
@@ -559,16 +560,21 @@ function handoffRequestKey(request: {
 function renderVisualPreview({
   source,
   surfaceKind = 'inline',
+  chrome = 'contained',
 }: PreviewRendererProps): React.ReactNode {
   const variant = useResolvedVariant(source);
   const url = variant?.runtimeUrl ?? getStableSafeUrl(source);
 
   if (!url) {
-    return renderFallbackPreview({ source });
+    return renderFallbackPreview({ source, chrome });
   }
 
   return (
-    <div className={getVisualPreviewFrameClassName(surfaceKind)}>
+    <div
+      className={getVisualPreviewFrameClassName(surfaceKind, chrome)}
+      data-preview-surface="visual"
+      data-preview-chrome={chrome}
+    >
       <img
         src={url}
         alt={source.title ?? source.id}
@@ -578,7 +584,13 @@ function renderVisualPreview({
   );
 }
 
-function getVisualPreviewFrameClassName(surfaceKind: PlaybackSurfaceKind): string {
+function getVisualPreviewFrameClassName(
+  surfaceKind: PlaybackSurfaceKind,
+  chrome: NonNullable<PreviewRendererProps['chrome']>,
+): string {
+  if (chrome === 'full-bleed') {
+    return 'relative flex h-full min-h-0 w-full items-center justify-center overflow-hidden bg-black/20';
+  }
   const base =
     'relative flex min-h-[80px] items-center justify-center overflow-hidden rounded border border-[var(--node-border)] bg-black/20';
   if (surfaceKind === 'overlay') {
@@ -598,6 +610,7 @@ function renderVideoPreview({
   source,
   surfaceKind = 'inline',
   playbackControl,
+  chrome = 'contained',
 }: PreviewRendererProps): React.ReactNode {
   const variant = useResolvedVariant(source, 'video-poster');
   const thumbnailUrl =
@@ -670,7 +683,11 @@ function renderVideoPreview({
 
   if (stream) {
     return (
-      <div className="relative min-h-[90px] overflow-hidden rounded-[var(--radius-sm)] border border-[var(--control-border)] bg-black">
+      <div
+        className={getMediaPreviewFrameClassName(chrome, 'bg-black')}
+        data-preview-surface="video"
+        data-preview-chrome={chrome}
+      >
         <InlineVideoPlayer
           videoStreamUrl={stream.videoStreamUrl}
           audioStreamUrl={stream.audioStreamUrl}
@@ -694,7 +711,11 @@ function renderVideoPreview({
   }
 
   return (
-    <div className="relative min-h-[90px] overflow-hidden rounded-[var(--radius-sm)] border border-[var(--control-border)] bg-black/30">
+    <div
+      className={getMediaPreviewFrameClassName(chrome, 'bg-black/30')}
+      data-preview-surface="video"
+      data-preview-chrome={chrome}
+    >
       {posterUrl ? (
         <img
           src={posterUrl}
@@ -727,6 +748,7 @@ function renderAudioPreview({
   delegateActions,
   surfaceKind = 'inline',
   playbackControl,
+  chrome = 'contained',
 }: PreviewRendererProps): React.ReactNode {
   const assetPath = source.asset?.path;
   const resourceRef = readPreviewSourceResourceRef(source);
@@ -793,7 +815,11 @@ function renderAudioPreview({
 
   if (stream && stream.audioStreamUrl) {
     return (
-      <div className="rounded-[var(--radius-sm)] border border-[var(--control-border)] bg-black/20">
+      <div
+        className={getAudioPreviewFrameClassName(chrome)}
+        data-preview-surface="audio"
+        data-preview-chrome={chrome}
+      >
         <InlineAudioPlayer
           audioStreamUrl={stream.audioStreamUrl}
           duration={stream.duration}
@@ -813,7 +839,11 @@ function renderAudioPreview({
   }
 
   return (
-    <div className="rounded-[var(--radius-sm)] border border-[var(--control-border)] bg-black/20 p-2">
+    <div
+      className={getAudioPreviewFrameClassName(chrome)}
+      data-preview-surface="audio"
+      data-preview-chrome={chrome}
+    >
       <div className="mb-2 flex h-8 items-end gap-0.5">
         {Array.from({ length: 24 }).map((_, index) => (
           <div
@@ -855,6 +885,25 @@ function renderAudioPreview({
       </div>
     </div>
   );
+}
+
+function getMediaPreviewFrameClassName(
+  chrome: NonNullable<PreviewRendererProps['chrome']>,
+  backgroundClass: string,
+): string {
+  const frame =
+    chrome === 'full-bleed'
+      ? 'relative h-full min-h-0 w-full overflow-hidden'
+      : 'relative min-h-[90px] overflow-hidden rounded-[var(--radius-sm)] border border-[var(--control-border)]';
+  return `${frame} ${backgroundClass}`;
+}
+
+function getAudioPreviewFrameClassName(
+  chrome: NonNullable<PreviewRendererProps['chrome']>,
+): string {
+  return chrome === 'full-bleed'
+    ? 'h-full min-h-0 w-full bg-black/20 p-2'
+    : 'rounded-[var(--radius-sm)] border border-[var(--control-border)] bg-black/20 p-2';
 }
 
 function readPreviewSourceResourceRef(source: PreviewSourceDescriptor): ResourceRef | undefined {
@@ -974,9 +1023,21 @@ function getStableSafeUrl(source: PreviewSourceDescriptor): string | undefined {
   return isSafeWebviewUrl(url) ? url : undefined;
 }
 
-function renderFallbackPreview({ source, delegateActions }: PreviewRendererProps): React.ReactNode {
+function renderFallbackPreview({
+  source,
+  delegateActions,
+  chrome = 'contained',
+}: PreviewRendererProps): React.ReactNode {
   return (
-    <div className="flex min-h-[72px] items-center justify-between gap-2 rounded border border-dashed border-[var(--node-border)] bg-black/20 px-2 text-xs text-[var(--node-fg-secondary)]">
+    <div
+      className={
+        chrome === 'full-bleed'
+          ? 'flex h-full min-h-0 w-full items-center justify-between gap-2 bg-black/20 px-2 text-xs text-[var(--node-fg-secondary)]'
+          : 'flex min-h-[72px] items-center justify-between gap-2 rounded border border-dashed border-[var(--node-border)] bg-black/20 px-2 text-xs text-[var(--node-fg-secondary)]'
+      }
+      data-preview-surface="fallback"
+      data-preview-chrome={chrome}
+    >
       <span className="min-w-0 truncate">{source.title ?? source.asset?.path ?? source.id}</span>
       {delegateActions && delegateActions.length > 0 && (
         <button

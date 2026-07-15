@@ -252,11 +252,16 @@ describe('timeline command registration (NKC-010)', () => {
 
     const handler = cmdState.commands.get('neko.cut.authoring.importCanvasDraft');
     expect(handler).toBeDefined();
-    const result = await handler!(draft);
+    const result = await handler!({
+      payload: draft,
+      target: { kind: 'file', documentUri: 'file:///workspace/cut.nkv' },
+      expectedProjectRevision: 'revision-1',
+    });
 
     expect(authoringService.importCanvasDraft).toHaveBeenCalledWith({
-      target: { kind: 'active', documentUri: 'file:///workspace/cut.nkv', reveal: false },
+      target: { kind: 'file', documentUri: 'file:///workspace/cut.nkv', reveal: false },
       payload: draft,
+      expectedProjectRevision: 'revision-1',
     });
     expect(result).toMatchObject({
       accepted: true,
@@ -269,7 +274,7 @@ describe('timeline command registration (NKC-010)', () => {
     });
   });
 
-  it('returns unavailable when Canvas draft import has no target or workspace', async () => {
+  it('rejects Canvas draft import when no explicit target is supplied', async () => {
     const mockContext = { subscriptions: [], extensionUri: { fsPath: '/test' } };
     const mockProvider = {
       getActiveDocumentUri: vi.fn(() => null),
@@ -283,7 +288,7 @@ describe('timeline command registration (NKC-010)', () => {
     expect(handler).toBeDefined();
     await expect(handler!({ route: { title: 'Route' } } as any)).resolves.toMatchObject({
       accepted: false,
-      status: 'unavailable',
+      status: 'rejected',
     });
   });
 

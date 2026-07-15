@@ -8,11 +8,9 @@
 
 import * as vscode from 'vscode';
 import * as path from 'node:path';
-import * as os from 'node:os';
 import type { Platform } from '@neko/platform';
 import {
-  resolveGeneratedAssetMediaKind,
-  resolveStorageLayout,
+  resolveWorkspaceGeneratedAssetRelativeDirectory,
   type GeneratedAsset,
   type TaskRunScope,
 } from '@neko/shared';
@@ -41,7 +39,7 @@ import {
   createMediaTaskView,
   toMediaBackgroundTaskType,
 } from '@neko/platform/media/media-task-view';
-import { GeneratedAssetIndex, generateAssetId } from '@neko/platform/media/generated-asset-index';
+import { GeneratedAssetIndex } from '@neko/platform/media/generated-asset-index';
 import { getLogger } from '../base';
 import type { AgentLocalResourceAccess } from './localResourceAccess';
 
@@ -56,6 +54,7 @@ export interface MediaTaskDeliveryHostDeps {
     mediaType: 'audio' | 'video',
   ) => Promise<boolean>;
   localResourceAccess?: AgentLocalResourceAccess;
+  computeContentDigest?: (filePath: string) => Promise<string>;
 }
 
 export class MediaTaskDeliveryHost {
@@ -150,14 +149,14 @@ export class MediaTaskDeliveryHost {
     );
     const runtimeConfiguredOutputDir =
       workspaceFolder && defaultOutputDir
-        ? resolveRuntimeConfiguredOutputDir(
+        ? resolveConfiguredGeneratedOutputDir(
             workspaceFolder.uri.fsPath,
             defaultOutputDir,
             configuredOutputDir,
           )
         : undefined;
     if (configuredOutputDir && !runtimeConfiguredOutputDir) {
-      logger.warn('Rejected generated output directory outside the generated runtime cache', {
+      logger.warn('Rejected generated output directory outside the workspace generated root', {
         configuredOutputDir,
         requiredRoot: defaultOutputDir,
       });
@@ -180,7 +179,7 @@ export class MediaTaskDeliveryHost {
         this.deps.platform?.media?.saveOutputs(scope, dir, options) ?? Promise.resolve([]),
       transcodeFile: this.deps.transcodeFile,
       assetIndex: this.assetIndex,
-      generateAssetId,
+      computeContentDigest: this.deps.computeContentDigest,
       logger,
       workspaceRoot: settingsPlan.workspaceRoot,
       showSaveNotification: settingsPlan.showSaveNotification,
@@ -208,7 +207,7 @@ export class MediaTaskDeliveryHost {
   }
 }
 
-function resolveRuntimeConfiguredOutputDir(
+function resolveConfiguredGeneratedOutputDir(
   workspaceRoot: string,
   canonicalRoot: string,
   configuredOutputDir: string,
@@ -226,7 +225,5 @@ function resolveGeneratedOutputDir(
   workspaceRoot: string,
   mediaKind: GeneratedMediaTaskType | 'file',
 ): string {
-  const runtimeGeneratedRoot = resolveStorageLayout(workspaceRoot, os.homedir()).project.local.cache
-    .generated;
-  return path.join(runtimeGeneratedRoot, resolveGeneratedAssetMediaKind({ mediaKind }));
+  return path.join(workspaceRoot, resolveWorkspaceGeneratedAssetRelativeDirectory({ mediaKind }));
 }

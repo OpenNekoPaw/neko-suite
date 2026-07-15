@@ -14,6 +14,118 @@ use ffmpeg_next::ChannelLayout;
 
 use std::path::Path;
 
+const MAX_CONSECUTIVE_CORRUPT_PACKETS: u32 = 64;
+
+/// Controls whether a decoder may treat a proven corrupt packet tail as EOF.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum CorruptTailPolicy {
+    /// Preserve terminal FFmpeg errors after skipped invalid packets.
+    #[default]
+    Reject,
+    /// Recover only after valid decoded output followed by contiguous corruption.
+    RecoverAfterValidOutput,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CorruptPacketDecision {
+    Continue,
+    Skip,
+    RecoverTail,
+    Reject,
+}
+
+#[derive(Debug, Default)]
+struct CorruptPacketRecoveryState {
+    policy: CorruptTailPolicy,
+    has_decoded_output: bool,
+    consecutive_corrupt_packets: u32,
+    recovered_corrupt_tail: bool,
+}
+
+impl CorruptPacketRecoveryState {
+    fn new(policy: CorruptTailPolicy) -> Self {
+        Self {
+            policy,
+            ..Self::default()
+        }
+    }
+
+    fn set_policy(&mut self, policy: CorruptTailPolicy) {
+        self.policy = policy;
+        self.reset_runtime();
+    }
+
+    fn reset_runtime(&mut self) {
+        self.has_decoded_output = false;
+        self.consecutive_corrupt_packets = 0;
+        self.recovered_corrupt_tail = false;
+    }
+
+    fn on_decoded_output(&mut self) {
+        self.has_decoded_output = true;
+        self.consecutive_corrupt_packets = 0;
+    }
+
+    fn on_packet_accepted(&mut self) {
+        self.consecutive_corrupt_packets = 0;
+    }
+
+    fn on_packet_error(&mut self, error: ffmpeg::Error) -> CorruptPacketDecision {
+        match error {
+            ffmpeg::Error::InvalidData => {
+                self.consecutive_corrupt_packets =
+                    self.consecutive_corrupt_packets.saturating_add(1);
+
+                if self.policy != CorruptTailPolicy::RecoverAfterValidOutput
+                    || self.consecutive_corrupt_packets < MAX_CONSECUTIVE_CORRUPT_PACKETS
+                {
+                    return CorruptPacketDecision::Skip;
+                }
+
+                if self.has_decoded_output {
+                    self.recovered_corrupt_tail = true;
+                    CorruptPacketDecision::RecoverTail
+                } else {
+                    CorruptPacketDecision::Reject
+                }
+            }
+            ffmpeg::Error::Other { errno }
+                if errno == ffmpeg::error::EPERM
+                    && self.policy == CorruptTailPolicy::RecoverAfterValidOutput
+                    && self.has_decoded_output
+                    && self.consecutive_corrupt_packets > 0 =>
+            {
+                self.recovered_corrupt_tail = true;
+                CorruptPacketDecision::RecoverTail
+            }
+            _ => CorruptPacketDecision::Reject,
+        }
+    }
+
+    fn on_packet_stream_end(&mut self) -> CorruptPacketDecision {
+        if self.policy != CorruptTailPolicy::RecoverAfterValidOutput
+            || self.consecutive_corrupt_packets == 0
+        {
+            return CorruptPacketDecision::Continue;
+        }
+
+        if self.has_decoded_output {
+            self.recovered_corrupt_tail = true;
+            CorruptPacketDecision::RecoverTail
+        } else {
+            CorruptPacketDecision::Reject
+        }
+    }
+
+    fn consecutive_corrupt_packets(&self) -> u32 {
+        self.consecutive_corrupt_packets
+    }
+
+    fn recovered_corrupt_tail(&self) -> bool {
+        self.recovered_corrupt_tail
+    }
+}
+
 /// Open a media file using only `avformat_open_input`, skipping the expensive
 /// (and sometimes error-prone) `avformat_find_stream_info` call.
 ///
@@ -63,6 +175,7 @@ pub struct FfmpegAudioDecoder {
     output_format: SampleFormat,
     output_sample_rate: Option<u32>,
     output_channels: Option<u16>,
+    corrupt_packet_recovery: CorruptPacketRecoveryState,
 }
 
 impl FfmpegAudioDecoder {
@@ -79,6 +192,7 @@ impl FfmpegAudioDecoder {
             output_format: SampleFormat::F32,
             output_sample_rate: None,
             output_channels: None,
+            corrupt_packet_recovery: CorruptPacketRecoveryState::new(CorruptTailPolicy::default()),
         }
     }
 
@@ -98,6 +212,17 @@ impl FfmpegAudioDecoder {
     pub fn with_output_channels(mut self, channels: u16) -> Self {
         self.output_channels = Some(channels);
         self
+    }
+
+    /// Set corrupt-tail handling for sequential decode operations.
+    pub fn with_corrupt_tail_policy(mut self, policy: CorruptTailPolicy) -> Self {
+        self.corrupt_packet_recovery.set_policy(policy);
+        self
+    }
+
+    /// Whether the current decode terminated through corrupt-tail recovery.
+    pub fn recovered_corrupt_tail(&self) -> bool {
+        self.corrupt_packet_recovery.recovered_corrupt_tail()
     }
 
     /// Convert SampleFormat to FFmpeg Sample format
@@ -244,6 +369,26 @@ impl FfmpegAudioDecoder {
             format: self.output_format,
         }))
     }
+
+    fn convert_decoded_frame(
+        &mut self,
+        decoded_frame: AudioFrame,
+    ) -> Result<Option<DecodedAudioFrame>> {
+        let output = self.convert_frame(decoded_frame)?;
+        if output.is_some() {
+            self.corrupt_packet_recovery.on_decoded_output();
+        }
+        Ok(output)
+    }
+
+    fn log_corrupt_tail_recovery(&self) {
+        tracing::warn!(
+            event = "audio_corrupt_tail_recovered",
+            position_seconds = self.current_position,
+            corrupt_packets = self.corrupt_packet_recovery.consecutive_corrupt_packets(),
+            "Recovered decoded audio prefix after a corrupt packet tail"
+        );
+    }
 }
 
 impl Default for FfmpegAudioDecoder {
@@ -377,6 +522,7 @@ impl AudioDecoder for FfmpegAudioDecoder {
         self.stream_index = stream_index;
         self.audio_info = Some(audio_info.clone());
         self.current_position = 0.0;
+        self.corrupt_packet_recovery.reset_runtime();
 
         tracing::info!(
             "Audio decoder opened: {} Hz, {} channels, codec: {}",
@@ -409,6 +555,7 @@ impl AudioDecoder for FfmpegAudioDecoder {
         decoder.flush();
 
         self.current_position = time_seconds;
+        self.corrupt_packet_recovery.reset_runtime();
 
         Ok(())
     }
@@ -416,6 +563,10 @@ impl AudioDecoder for FfmpegAudioDecoder {
     fn decode_next(&mut self) -> Result<Option<DecodedAudioFrame>> {
         if self.decoder.is_none() || self.input_ctx.is_none() {
             return Err(Error::DecoderNotInitialized);
+        }
+
+        if self.corrupt_packet_recovery.recovered_corrupt_tail() {
+            return Ok(None);
         }
 
         let stream_index = self.stream_index;
@@ -427,7 +578,7 @@ impl AudioDecoder for FfmpegAudioDecoder {
 
             match decoder.receive_frame(&mut decoded_frame) {
                 Ok(_) => {
-                    return self.convert_frame(decoded_frame);
+                    return self.convert_decoded_frame(decoded_frame);
                 }
                 Err(ffmpeg::Error::Other { errno }) if errno == ffmpeg::error::EAGAIN => {
                     // Need more packets
@@ -464,21 +615,54 @@ impl AudioDecoder for FfmpegAudioDecoder {
                     // 2.7 is not allocated").  Skip the packet rather than
                     // propagating the error — the rest of the stream is fine.
                     match decoder.send_packet(&packet) {
-                        Ok(()) => {}
-                        Err(ffmpeg::Error::InvalidData) => {
-                            tracing::warn!(
-                                "Skipping corrupt audio packet at {:.3}s (AVERROR_INVALIDDATA)",
-                                self.current_position
-                            );
-                            continue;
+                        Ok(()) => {
+                            self.corrupt_packet_recovery.on_packet_accepted();
                         }
-                        Err(e) => return Err(Error::from(e)),
+                        Err(ffmpeg::Error::InvalidData) => {
+                            let decision = self
+                                .corrupt_packet_recovery
+                                .on_packet_error(ffmpeg::Error::InvalidData);
+                            if self.corrupt_packet_recovery.consecutive_corrupt_packets() == 1 {
+                                tracing::warn!(
+                                    "Skipping corrupt audio packet at {:.3}s (AVERROR_INVALIDDATA)",
+                                    self.current_position
+                                );
+                            }
+                            match decision {
+                                CorruptPacketDecision::Skip => continue,
+                                CorruptPacketDecision::RecoverTail => {
+                                    self.log_corrupt_tail_recovery();
+                                    return Ok(None);
+                                }
+                                CorruptPacketDecision::Reject => {
+                                    return Err(Error::DecodeFailed(format!(
+                                        "{} consecutive corrupt audio packets before any decodable output",
+                                        self.corrupt_packet_recovery
+                                            .consecutive_corrupt_packets()
+                                    )));
+                                }
+                                CorruptPacketDecision::Continue => {
+                                    unreachable!(
+                                        "packet errors cannot continue without a disposition"
+                                    )
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            if self.corrupt_packet_recovery.on_packet_error(e)
+                                == CorruptPacketDecision::RecoverTail
+                            {
+                                self.log_corrupt_tail_recovery();
+                                return Ok(None);
+                            }
+                            return Err(Error::from(e));
+                        }
                     }
 
                     let mut decoded_frame = AudioFrame::empty();
                     match decoder.receive_frame(&mut decoded_frame) {
                         Ok(_) => {
-                            return self.convert_frame(decoded_frame);
+                            return self.convert_decoded_frame(decoded_frame);
                         }
                         Err(ffmpeg::Error::Other { errno }) if errno == ffmpeg::error::EAGAIN => {
                             continue;
@@ -492,6 +676,23 @@ impl AudioDecoder for FfmpegAudioDecoder {
                     }
                 }
                 None => {
+                    match self.corrupt_packet_recovery.on_packet_stream_end() {
+                        CorruptPacketDecision::RecoverTail => {
+                            self.log_corrupt_tail_recovery();
+                            return Ok(None);
+                        }
+                        CorruptPacketDecision::Reject => {
+                            return Err(Error::DecodeFailed(format!(
+                                "{} corrupt audio packets and no decodable output",
+                                self.corrupt_packet_recovery.consecutive_corrupt_packets()
+                            )));
+                        }
+                        CorruptPacketDecision::Continue => {}
+                        CorruptPacketDecision::Skip => {
+                            unreachable!("packet stream end cannot skip a packet")
+                        }
+                    }
+
                     // No more packets, send EOF and drain
                     let decoder = self.decoder.as_mut().unwrap();
                     decoder.send_eof()?;
@@ -499,7 +700,7 @@ impl AudioDecoder for FfmpegAudioDecoder {
                     let mut decoded_frame = AudioFrame::empty();
                     match decoder.receive_frame(&mut decoded_frame) {
                         Ok(_) => {
-                            return self.convert_frame(decoded_frame);
+                            return self.convert_decoded_frame(decoded_frame);
                         }
                         _ => {
                             return Ok(None);
@@ -524,6 +725,7 @@ impl AudioDecoder for FfmpegAudioDecoder {
         self.resampler = None;
         self.audio_info = None;
         self.current_position = 0.0;
+        self.corrupt_packet_recovery.reset_runtime();
     }
 }
 
@@ -544,5 +746,143 @@ mod tests {
         assert_eq!(SampleFormat::S32.bytes_per_sample(), 4);
         assert_eq!(SampleFormat::F32.bytes_per_sample(), 4);
         assert_eq!(SampleFormat::F64.bytes_per_sample(), 8);
+    }
+
+    #[test]
+    fn corrupt_tail_policy_recovers_only_after_valid_output() {
+        let mut state = CorruptPacketRecoveryState::new(CorruptTailPolicy::RecoverAfterValidOutput);
+        state.on_decoded_output();
+
+        for _ in 1..MAX_CONSECUTIVE_CORRUPT_PACKETS {
+            assert_eq!(
+                state.on_packet_error(ffmpeg::Error::InvalidData),
+                CorruptPacketDecision::Skip
+            );
+        }
+
+        assert_eq!(
+            state.on_packet_error(ffmpeg::Error::InvalidData),
+            CorruptPacketDecision::RecoverTail
+        );
+        assert!(state.recovered_corrupt_tail());
+    }
+
+    #[test]
+    fn corrupt_tail_policy_rejects_budget_exhaustion_before_output() {
+        let mut state = CorruptPacketRecoveryState::new(CorruptTailPolicy::RecoverAfterValidOutput);
+
+        for _ in 1..MAX_CONSECUTIVE_CORRUPT_PACKETS {
+            assert_eq!(
+                state.on_packet_error(ffmpeg::Error::InvalidData),
+                CorruptPacketDecision::Skip
+            );
+        }
+
+        assert_eq!(
+            state.on_packet_error(ffmpeg::Error::InvalidData),
+            CorruptPacketDecision::Reject
+        );
+        assert!(!state.recovered_corrupt_tail());
+    }
+
+    #[test]
+    fn accepted_packet_resets_isolated_corruption() {
+        let mut state = CorruptPacketRecoveryState::new(CorruptTailPolicy::RecoverAfterValidOutput);
+        state.on_decoded_output();
+
+        assert_eq!(
+            state.on_packet_error(ffmpeg::Error::InvalidData),
+            CorruptPacketDecision::Skip
+        );
+        assert_eq!(state.consecutive_corrupt_packets(), 1);
+
+        state.on_packet_accepted();
+
+        assert_eq!(state.consecutive_corrupt_packets(), 0);
+        assert_eq!(
+            state.on_packet_error(ffmpeg::Error::Other {
+                errno: ffmpeg::error::EPERM,
+            }),
+            CorruptPacketDecision::Reject
+        );
+    }
+
+    #[test]
+    fn corrupt_tail_policy_recovers_from_eperm_after_corrupt_streak() {
+        let mut state = CorruptPacketRecoveryState::new(CorruptTailPolicy::RecoverAfterValidOutput);
+        state.on_decoded_output();
+        assert_eq!(
+            state.on_packet_error(ffmpeg::Error::InvalidData),
+            CorruptPacketDecision::Skip
+        );
+
+        assert_eq!(
+            state.on_packet_error(ffmpeg::Error::Other {
+                errno: ffmpeg::error::EPERM,
+            }),
+            CorruptPacketDecision::RecoverTail
+        );
+        assert!(state.recovered_corrupt_tail());
+    }
+
+    #[test]
+    fn corrupt_tail_policy_rejects_unrelated_eperm() {
+        let mut state = CorruptPacketRecoveryState::new(CorruptTailPolicy::RecoverAfterValidOutput);
+        state.on_decoded_output();
+
+        assert_eq!(
+            state.on_packet_error(ffmpeg::Error::Other {
+                errno: ffmpeg::error::EPERM,
+            }),
+            CorruptPacketDecision::Reject
+        );
+        assert!(!state.recovered_corrupt_tail());
+    }
+
+    #[test]
+    fn default_policy_never_recovers_terminal_packet_errors() {
+        let mut state = CorruptPacketRecoveryState::new(CorruptTailPolicy::Reject);
+        state.on_decoded_output();
+
+        for _ in 0..MAX_CONSECUTIVE_CORRUPT_PACKETS {
+            assert_eq!(
+                state.on_packet_error(ffmpeg::Error::InvalidData),
+                CorruptPacketDecision::Skip
+            );
+        }
+
+        assert_eq!(
+            state.on_packet_error(ffmpeg::Error::Other {
+                errno: ffmpeg::error::EPERM,
+            }),
+            CorruptPacketDecision::Reject
+        );
+        assert!(!state.recovered_corrupt_tail());
+    }
+
+    #[test]
+    fn corrupt_packet_stream_end_requires_valid_output() {
+        let mut without_output =
+            CorruptPacketRecoveryState::new(CorruptTailPolicy::RecoverAfterValidOutput);
+        assert_eq!(
+            without_output.on_packet_error(ffmpeg::Error::InvalidData),
+            CorruptPacketDecision::Skip
+        );
+        assert_eq!(
+            without_output.on_packet_stream_end(),
+            CorruptPacketDecision::Reject
+        );
+
+        let mut after_output =
+            CorruptPacketRecoveryState::new(CorruptTailPolicy::RecoverAfterValidOutput);
+        after_output.on_decoded_output();
+        assert_eq!(
+            after_output.on_packet_error(ffmpeg::Error::InvalidData),
+            CorruptPacketDecision::Skip
+        );
+        assert_eq!(
+            after_output.on_packet_stream_end(),
+            CorruptPacketDecision::RecoverTail
+        );
     }
 }

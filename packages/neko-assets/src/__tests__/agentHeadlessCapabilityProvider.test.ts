@@ -130,9 +130,6 @@ function createApi(
   return {
     getAllEntities: vi.fn(async () => [...(overrides.entities ?? [])]),
     importFile: overrides.importFile ?? vi.fn(async () => undefined),
-    promoteGeneratedCandidates: vi.fn(async () => {
-      throw new Error('Not implemented by this test API.');
-    }),
     getThumbnailPath: vi.fn(async () => undefined),
     getMediaLibraryRoots: vi.fn(async () => []),
     resolveEntityUri: vi.fn(async () => undefined),

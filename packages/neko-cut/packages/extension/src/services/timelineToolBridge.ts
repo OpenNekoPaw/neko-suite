@@ -1,5 +1,6 @@
 import type {
   NekoCutTimelineElement,
+  CutTimelineDocumentTarget,
   TimelineElementConfig,
   TimelineElementUpdate,
   TimelineInfo,
@@ -13,7 +14,11 @@ type InternalToolCall = {
 };
 
 export interface TimelineToolRunner {
-  execute(toolName: string, params: Record<string, unknown>): Promise<ToolResult>;
+  execute(
+    toolName: string,
+    params: Record<string, unknown>,
+    target: CutTimelineDocumentTarget,
+  ): Promise<ToolResult>;
 }
 
 function normalizeElementType(type: TimelineElementConfig['type']): string {
@@ -150,27 +155,37 @@ function buildPublicUpdateCalls(
 }
 
 export class TimelineToolBridge {
-  constructor(private readonly runner: TimelineToolRunner) {}
+  constructor(
+    private readonly runner: TimelineToolRunner,
+    private readonly defaultTarget?: CutTimelineDocumentTarget,
+  ) {}
 
-  async getInfo(): Promise<TimelineInfo> {
-    const result = await this.executeOrThrow<TimelineInfo>('GetTimelineInfo', {});
+  async getInfo(target: CutTimelineDocumentTarget): Promise<TimelineInfo> {
+    const result = await this.executeOrThrow<TimelineInfo>('GetTimelineInfo', {}, target);
     return result.data as TimelineInfo;
   }
 
-  async listElements(): Promise<NekoCutTimelineElement[]> {
-    const result = await this.executeOrThrow('ListElements', {});
+  async listElements(target: CutTimelineDocumentTarget): Promise<NekoCutTimelineElement[]> {
+    const result = await this.executeOrThrow('ListElements', {}, target);
     return normalizeListElementsData(result.data);
   }
 
-  async addElement(config: TimelineElementConfig): Promise<string> {
-    const result = await this.executeOrThrow<{ elementId?: string }>('AddElement', {
-      trackId: config.trackId,
-      type: normalizeElementType(config.type),
-      startTime: config.startTime,
-      duration: config.duration,
-      ...(typeof config.source === 'string' && { src: config.source }),
-      ...(typeof config.content === 'string' && { content: config.content }),
-    });
+  async addElement(
+    target: CutTimelineDocumentTarget,
+    config: TimelineElementConfig,
+  ): Promise<string> {
+    const result = await this.executeOrThrow<{ elementId?: string }>(
+      'AddElement',
+      {
+        trackId: config.trackId,
+        type: normalizeElementType(config.type),
+        startTime: config.startTime,
+        duration: config.duration,
+        ...(typeof config.source === 'string' && { src: config.source }),
+        ...(typeof config.content === 'string' && { content: config.content }),
+      },
+      target,
+    );
 
     const elementId = asRecord(result.data)?.elementId;
     if (typeof elementId !== 'string') {
@@ -179,22 +194,40 @@ export class TimelineToolBridge {
     return elementId;
   }
 
-  async updateElement(id: string, updates: TimelineElementUpdate): Promise<void> {
+  async updateElement(
+    target: CutTimelineDocumentTarget,
+    id: string,
+    updates: TimelineElementUpdate,
+  ): Promise<void> {
     const calls = buildPublicUpdateCalls(id, updates);
     if (calls.length === 0) {
       return;
     }
 
     for (const call of calls) {
-      await this.executeOrThrow(call.toolName, call.params);
+      await this.executeOrThrow(call.toolName, call.params, target);
     }
   }
 
-  async deleteElement(id: string): Promise<void> {
-    await this.executeOrThrow('DeleteElement', { elementId: id });
+  async deleteElement(target: CutTimelineDocumentTarget, id: string): Promise<void> {
+    await this.executeOrThrow('DeleteElement', { elementId: id }, target);
   }
 
   async executeAgentTool(toolName: string, args: Record<string, unknown>): Promise<ToolResult> {
+    const target = readTimelineTarget(args);
+    if (!target) {
+      return {
+        success: false,
+        error: 'Timeline tools require an explicit file .nkv documentUri.',
+      };
+    }
+    return new TimelineToolBridge(this.runner, target).executeAgentToolForTarget(toolName, args);
+  }
+
+  private async executeAgentToolForTarget(
+    toolName: string,
+    args: Record<string, unknown>,
+  ): Promise<ToolResult> {
     try {
       switch (toolName) {
         case TOOL_NAMES_TIMELINE.GET_TIMELINE_INFO:
@@ -356,8 +389,12 @@ export class TimelineToolBridge {
   private async executeInternal<T = unknown>(
     toolName: string,
     params: Record<string, unknown>,
+    target = this.defaultTarget,
   ): Promise<ToolResult & { data?: T }> {
-    const result = await this.runner.execute(toolName, params);
+    if (!target) {
+      return { success: false, error: 'Timeline operation has no explicit Cut target.' };
+    }
+    const result = await this.runner.execute(toolName, params, target);
     if (!result.success) {
       return {
         success: false,
@@ -376,11 +413,24 @@ export class TimelineToolBridge {
   private async executeOrThrow<T = unknown>(
     toolName: string,
     params: Record<string, unknown>,
+    target: CutTimelineDocumentTarget,
   ): Promise<ToolResult & { data?: T }> {
-    const result = await this.executeInternal<T>(toolName, params);
+    const result = await this.executeInternal<T>(toolName, params, target);
     if (!result.success) {
       throw new Error(result.error ?? `Failed to execute ${toolName}`);
     }
     return result;
   }
+}
+
+function readTimelineTarget(args: Record<string, unknown>): CutTimelineDocumentTarget | undefined {
+  const documentUri = args['documentUri'];
+  if (typeof documentUri !== 'string' || !documentUri.trim()) return undefined;
+  const expectedProjectRevision = args['expectedProjectRevision'];
+  return {
+    documentUri,
+    ...(typeof expectedProjectRevision === 'string' && expectedProjectRevision.trim()
+      ? { expectedProjectRevision }
+      : {}),
+  };
 }

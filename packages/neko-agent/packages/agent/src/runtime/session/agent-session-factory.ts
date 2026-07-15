@@ -34,7 +34,6 @@ import { createNodeWorkspaceRuntimeStore } from './node-workspace-runtime-store'
 import type {
   AgentRuntimeConfig,
   ICapabilityRuntime,
-  ICreationGuidanceRuntime,
   IWorkspaceRuntimeStore,
   IValidationLoop,
 } from '../types';
@@ -84,7 +83,6 @@ export interface AgentRuntimeSessionFactoryConfig {
   readonly capabilityRuntime?: ICapabilityRuntime;
   readonly capabilityPromptFragments?: readonly PromptFragment[];
   readonly toolCategoryRegistry?: IToolCategoryRegistry;
-  readonly creationGuidance?: ICreationGuidanceRuntime;
   readonly workspaceStore?: IWorkspaceRuntimeStore;
   readonly validationLoop?: IValidationLoop;
   readonly projectMemoryFilePath?: string;
@@ -480,9 +478,6 @@ function buildAgentRuntimeConfig(
   validationLoop: IValidationLoop | undefined,
 ): AgentRuntimeConfig {
   return {
-    creationGuidance: {
-      ...(config.creationGuidance ?? {}),
-    },
     capabilityRuntime: {
       ...(config.capabilityRuntime?.skillService
         ? { skillService: config.capabilityRuntime.skillService }
@@ -503,9 +498,6 @@ function buildAgentRuntimeConfig(
         : {}),
       ...(config.capabilityRuntime?.artifactProfileRegistry
         ? { artifactProfileRegistry: config.capabilityRuntime.artifactProfileRegistry }
-        : {}),
-      ...(config.capabilityRuntime?.creationProfileRegistry
-        ? { creationProfileRegistry: config.capabilityRuntime.creationProfileRegistry }
         : {}),
       ...(config.capabilityRuntime?.providerExpressionProfileRegistry
         ? {

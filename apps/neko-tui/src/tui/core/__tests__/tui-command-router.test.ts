@@ -882,7 +882,6 @@ describe('handleTuiControlCommand', () => {
     expect(zh.lifecycleActivation).toEqual(en.lifecycleActivation);
     expect(en.agentPrompt).toBe('fix bug');
     expect(zh.agentPrompt).toBe('fix bug');
-    expect(en.executionOverrides).toEqual(zh.executionOverrides);
   });
 
   it('routes marketplace help through the localized canonical presenter', async () => {

@@ -278,7 +278,7 @@ describe('KeywordSkillMatcher', () => {
       makeSkill({
         name: 'storyboard',
         description:
-          'Create canonical storyboards from prompts, scripts, documents, comics, or image sequences. Use only for storyboard or shot breakdown requests, not content-only analysis.',
+          'Create canonical storyboards from prompts, scripts, documents, comics, or image sequences. 用于生成分镜表和镜头拆解。',
         mediaWorkflow: {
           acceptedModalities: ['text', 'document', 'comic', 'image-sequence'],
           producedArtifacts: ['CreativeTable'],
@@ -288,7 +288,7 @@ describe('KeywordSkillMatcher', () => {
       makeSkill({
         name: 'media-production',
         description:
-          'Coordinate explicit source-to-video and source-to-animation production, not content-only document or comic analysis.',
+          'Coordinate explicit source-to-video and source-to-animation production. 用于转动画、生成视频和媒体制作。',
         mediaWorkflow: {
           acceptedModalities: ['text', 'document', 'comic', 'image-sequence'],
           producedArtifacts: [
@@ -304,11 +304,11 @@ describe('KeywordSkillMatcher', () => {
     ];
   }
 
-  it('matches Chinese storyboard-table requests through produced artifacts', () => {
+  it('matches localized requests from registered catalog descriptions', () => {
     const matcher = new KeywordSkillMatcher();
     const storyboardSkill = makeSkill({
       name: 'storyboard',
-      description: 'Convert manga/comic pages into reviewable CreativeTable storyboards.',
+      description: 'Convert manga/comic pages into reviewable storyboards；用于生成分镜表。',
       mediaWorkflow: {
         producedArtifacts: ['CreativeTable'],
         tags: ['comic', 'manga', 'storyboard'],
@@ -320,17 +320,17 @@ describe('KeywordSkillMatcher', () => {
     expect(matches[0]).toEqual(
       expect.objectContaining({
         skill: storyboardSkill,
-        relevance: 0.95,
-        reason: expect.stringContaining("Candidate artifact 'CreativeTable'"),
+        relevance: expect.any(Number),
+        reason: expect.stringContaining('Matched registered catalog terms'),
       }),
     );
   });
 
-  it('prioritizes focused storyboard producers over broad media orchestrators', () => {
+  it('ranks candidates only from registered identity and catalog text', () => {
     const matcher = new KeywordSkillMatcher();
     const broadSkill = makeSkill({
       name: 'media-production',
-      description: 'Coordinate source-to-video production workflows.',
+      description: 'Coordinate source-to-video production.',
       mediaWorkflow: {
         producedArtifacts: ['StoryboardTable', 'storyboard-plan-overlay', 'cut-storyboard-payload'],
         tags: ['orchestration', 'storyboard', 'video'],
@@ -338,7 +338,7 @@ describe('KeywordSkillMatcher', () => {
     });
     const focusedSkill = makeSkill({
       name: 'storyboard',
-      description: 'Convert manga/comic pages into reviewable CreativeTable storyboards.',
+      description: 'Convert manga/comic pages into reviewable storyboards；用于生成分镜表。',
       mediaWorkflow: {
         producedArtifacts: ['CreativeTable'],
         tags: ['comic', 'manga', 'storyboard'],
@@ -347,7 +347,7 @@ describe('KeywordSkillMatcher', () => {
 
     const matches = matcher.match('生成分镜表', [broadSkill, focusedSkill]);
 
-    expect(matches.map((match) => match.skill.name)).toEqual(['storyboard', 'media-production']);
+    expect(matches.map((match) => match.skill.name)).toEqual(['storyboard']);
   });
 
   it('does not auto-match production/storyboard skills for content-only EPUB analysis', () => {
@@ -366,7 +366,7 @@ describe('KeywordSkillMatcher', () => {
     expect(matches.map((match) => match.skill.name)).toEqual([]);
   });
 
-  it('does not auto-match production/storyboard skills for conceptual planning questions', () => {
+  it('may return candidates for conceptual questions without activating them', () => {
     const matcher = new KeywordSkillMatcher();
 
     const matches = matcher.match('为什么不直接生成 AnimationPlan？是否应该用分镜表代替？', [
@@ -383,7 +383,7 @@ describe('KeywordSkillMatcher', () => {
       }),
     ]);
 
-    expect(matches.map((match) => match.skill.name)).toEqual([]);
+    expect(matches.length).toBeGreaterThan(0);
   });
 
   it('routes explicit EPUB storyboard requests to storyboard', () => {
@@ -392,7 +392,7 @@ describe('KeywordSkillMatcher', () => {
     const matches = matcher.match('把这个 EPUB 前10页生成分镜表', makeMediaWorkflowSkills());
 
     expect(matches[0]?.skill.name).toBe('storyboard');
-    expect(matches[0]?.reason).toContain("Candidate artifact 'CreativeTable'");
+    expect(matches[0]?.reason).toContain('Matched registered catalog terms');
   });
 
   it('routes explicit EPUB animation requests to media-production', () => {
@@ -403,7 +403,7 @@ describe('KeywordSkillMatcher', () => {
     expect(matches.map((match) => match.skill.name)).toContain('media-production');
   });
 
-  it('routes explicit EPUB animation requests from workflow metadata without concrete skill names', () => {
+  it('does not use mediaWorkflow metadata as a hidden domain router', () => {
     const matcher = new KeywordSkillMatcher();
     const broadCoordinator = makeSkill({
       name: 'broad-production-coordinator',
@@ -432,9 +432,6 @@ describe('KeywordSkillMatcher', () => {
       focusedComicProducer,
     ]);
 
-    expect(matches.map((match) => match.skill.name).slice(0, 2)).toEqual([
-      'focused-source-animation',
-      'broad-production-coordinator',
-    ]);
+    expect(matches).toEqual([]);
   });
 });

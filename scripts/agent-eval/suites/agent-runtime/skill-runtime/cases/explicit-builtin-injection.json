@@ -21,7 +21,7 @@
   ],
   "assertions": [
     { "id": "runtime", "kind": "runtime-errors-empty", "evidenceRef": "skill-facts" },
-    { "id": "skill", "kind": "skill", "identity": { "name": "storyboard", "source": "builtin", "provenance": "builtin", "rootId": "builtin-skills", "relativePath": "storyboard", "fingerprint": "sha256:9a064b9e1c1b7e5fd6dd7802487916be7577252317adb1040f99344391a26286" }, "status": "injected", "evidenceRef": "skill-facts" },
+    { "id": "skill", "kind": "skill", "identity": { "name": "storyboard", "source": "builtin", "provenance": "builtin", "rootId": "builtin-skills", "relativePath": "storyboard", "fingerprint": "sha256:ab73de988b98b22a9b2598de923c56999abb70ef1cf4bb97c580fabd3b54d719" }, "status": "injected", "evidenceRef": "skill-facts" },
     { "id": "fallback", "kind": "no-fallback", "forbiddenRefs": ["comic-to-storyboard"], "evidenceRef": "skill-facts" }
   ],
   "artifactChecks": [],

@@ -14,16 +14,7 @@ import type {
   JsonBlockValidationResult,
   ValidationResultWithBlocks,
 } from './types';
-import {
-  projectNekoMarkdownExtensions,
-  type NekoMarkdownCreativeTableProjection,
-} from '@neko/markdown';
-import {
-  classifyCreativeTableHeaders,
-  normalizeCreativeTableHeader,
-  resolveCreativeTableField,
-  STORYBOARD_CREATIVE_TABLE_PROFILE,
-} from '@neko/shared';
+import type { AgentOutputValidationAdapter, AgentOutputValidationDiagnostic } from '@neko/shared';
 import { DEFAULT_OUTPUT_CONSTRAINTS } from './types';
 
 // Import specialized components
@@ -34,32 +25,6 @@ import { JsonExtractor } from './json-validator';
 import { JsonSchemaValidator } from './json-validator';
 import { LengthValidator } from './length-validator';
 
-interface ArtifactValidatorResult {
-  readonly errors: readonly ValidationError[];
-  readonly warnings: readonly ValidationWarning[];
-}
-
-type ArtifactValidator = (content: string) => ArtifactValidatorResult;
-type ArtifactValidatorApplicability = (content: string) => boolean;
-
-interface ArtifactValidatorDefinition {
-  readonly id: string;
-  readonly aliases?: readonly string[];
-  readonly shouldValidate?: ArtifactValidatorApplicability;
-  readonly validate: ArtifactValidator;
-}
-
-const ARTIFACT_VALIDATOR_DEFINITIONS: readonly ArtifactValidatorDefinition[] = [
-  {
-    id: 'creative-table.storyboard',
-    aliases: ['CreativeTable', 'StoryboardTable', 'storyboard', 'storyboard.creative-table'],
-    shouldValidate: shouldValidateStoryboardCreativeTableOutput,
-    validate: validateStoryboardCreativeTableOutput,
-  },
-] as const;
-
-const ARTIFACT_VALIDATOR_REGISTRY = createArtifactValidatorRegistry(ARTIFACT_VALIDATOR_DEFINITIONS);
-
 /**
  * OutputValidator - Orchestrates LLM output validation
  *
@@ -67,6 +32,7 @@ const ARTIFACT_VALIDATOR_REGISTRY = createArtifactValidatorRegistry(ARTIFACT_VAL
  */
 export class OutputValidator {
   readonly constraints: OutputConstraints;
+  private readonly artifactValidatorRegistry: ReadonlyMap<string, AgentOutputValidationAdapter>;
 
   // Specialized components
   private readonly mermaidExtractor = new MermaidExtractor();
@@ -76,11 +42,15 @@ export class OutputValidator {
   private readonly lengthValidator = new LengthValidator();
   private readonly mermaidBlockChecker = new MermaidBlockChecker();
 
-  constructor(constraints: Partial<OutputConstraints> = {}) {
+  constructor(
+    constraints: Partial<OutputConstraints> = {},
+    artifactValidators: readonly AgentOutputValidationAdapter[] = [],
+  ) {
     this.constraints = {
       ...DEFAULT_OUTPUT_CONSTRAINTS,
       ...constraints,
     };
+    this.artifactValidatorRegistry = createArtifactValidatorRegistry(artifactValidators);
   }
 
   /**
@@ -134,19 +104,45 @@ export class OutputValidator {
     const warnings: ValidationWarning[] = [];
 
     const normalizedValidators = new Set((validators ?? []).map(normalizeValidatorId));
-    for (const [validatorId, validator] of ARTIFACT_VALIDATOR_REGISTRY) {
-      if (!normalizedValidators.has(validatorId)) continue;
+    const visited = new Set<string>();
+    for (const validatorId of normalizedValidators) {
+      const validator = this.artifactValidatorRegistry.get(validatorId);
+      if (!validator || visited.has(validator.id)) continue;
+      visited.add(validator.id);
 
       if (validator.shouldValidate && !validator.shouldValidate(content)) {
         continue;
       }
 
       const result = validator.validate(content);
-      errors.push(...result.errors);
-      warnings.push(...result.warnings);
+      errors.push(...result.errors.map(toOutputValidationError));
+      warnings.push(...result.warnings.map(toOutputValidationWarning));
     }
 
     return { errors, warnings };
+  }
+
+  buildArtifactRetryInstruction(
+    validators: readonly string[] | undefined,
+    errors: readonly ValidationError[],
+    locale?: string,
+  ): string | undefined {
+    const selected = new Set((validators ?? []).map(normalizeValidatorId));
+    const visited = new Set<string>();
+    const diagnostics: AgentOutputValidationDiagnostic[] = errors.map((error) => ({
+      code: error.code,
+      message: error.message,
+      ...(error.details ? { details: error.details } : {}),
+    }));
+    const instructions: string[] = [];
+    for (const validatorId of selected) {
+      const validator = this.artifactValidatorRegistry.get(validatorId);
+      if (!validator || visited.has(validator.id)) continue;
+      visited.add(validator.id);
+      const instruction = validator.buildRetryInstruction?.(diagnostics, locale);
+      if (instruction) instructions.push(instruction);
+    }
+    return instructions.length > 0 ? instructions.join('\n\n') : undefined;
   }
 
   /**
@@ -349,8 +345,11 @@ export class OutputValidator {
 /**
  * Factory function to create OutputValidator
  */
-export function createOutputValidator(constraints?: Partial<OutputConstraints>): OutputValidator {
-  return new OutputValidator(constraints);
+export function createOutputValidator(
+  constraints?: Partial<OutputConstraints>,
+  artifactValidators?: readonly AgentOutputValidationAdapter[],
+): OutputValidator {
+  return new OutputValidator(constraints, artifactValidators);
 }
 
 function normalizeValidatorId(value: string): string {
@@ -361,9 +360,9 @@ function normalizeValidatorId(value: string): string {
 }
 
 function createArtifactValidatorRegistry(
-  definitions: readonly ArtifactValidatorDefinition[],
-): ReadonlyMap<string, ArtifactValidatorDefinition> {
-  const registry = new Map<string, ArtifactValidatorDefinition>();
+  definitions: readonly AgentOutputValidationAdapter[],
+): ReadonlyMap<string, AgentOutputValidationAdapter> {
+  const registry = new Map<string, AgentOutputValidationAdapter>();
   for (const definition of definitions) {
     registry.set(normalizeValidatorId(definition.id), definition);
     for (const alias of definition.aliases ?? []) {
@@ -371,6 +370,23 @@ function createArtifactValidatorRegistry(
     }
   }
   return registry;
+}
+
+function toOutputValidationError(diagnostic: AgentOutputValidationDiagnostic): ValidationError {
+  return {
+    type: 'output',
+    code: diagnostic.code,
+    message: diagnostic.message,
+    ...(diagnostic.details ? { details: { ...diagnostic.details } } : {}),
+  };
+}
+
+function toOutputValidationWarning(diagnostic: AgentOutputValidationDiagnostic): ValidationWarning {
+  return {
+    type: 'output',
+    code: diagnostic.code,
+    message: diagnostic.message,
+  };
 }
 
 function mergeArtifactValidators(
@@ -381,140 +397,4 @@ function mergeArtifactValidators(
     return undefined;
   }
   return [...new Set([...(configured ?? []), ...(runtime ?? [])])];
-}
-
-function shouldValidateStoryboardCreativeTableOutput(content: string): boolean {
-  return (
-    hasForbiddenStoryboardDocumentMetadata(content) ||
-    projectNekoMarkdownExtensions(content).creativeTables.length > 0
-  );
-}
-
-function validateStoryboardCreativeTableOutput(content: string): ArtifactValidatorResult {
-  const errors: ValidationError[] = [];
-  const tables = projectStoryboardCreativeTables(content);
-
-  if (hasForbiddenStoryboardDocumentMetadata(content)) {
-    errors.push({
-      type: 'output',
-      code: 'storyboard-table-document-metadata-forbidden',
-      message:
-        'Storyboard creative table output must not include YAML frontmatter or creation-document metadata.',
-    });
-  }
-
-  if (tables.length === 0) {
-    return { errors, warnings: [] };
-  }
-
-  if (tables.length > 1) {
-    errors.push({
-      type: 'output',
-      code: 'storyboard-table-single-table-required',
-      message: 'Storyboard output must contain exactly one Markdown creative table.',
-      details: { tableCount: tables.length },
-    });
-  }
-
-  const [table] = tables;
-  if (!table) {
-    return { errors, warnings: [] };
-  }
-
-  const classification = classifyCreativeTableHeaders(
-    STORYBOARD_CREATIVE_TABLE_PROFILE,
-    table.headers,
-  );
-  const knownFieldIds = new Set(classification.knownFields.map((field) => field.id));
-  const missingRecommendedHeaders = STORYBOARD_CREATIVE_TABLE_PROFILE.recommendedHeaders.filter(
-    (fieldId) => !knownFieldIds.has(fieldId),
-  );
-
-  if (table.rows.length === 0) {
-    errors.push({
-      type: 'output',
-      code: 'storyboard-table-empty',
-      message: 'Storyboard creative table must include at least one data row.',
-    });
-  }
-
-  if (missingRecommendedHeaders.length > 0 || !classification.matchedProfile) {
-    errors.push({
-      type: 'output',
-      code: 'storyboard-table-required-fields-missing',
-      message:
-        'Storyboard creative table must use the prompt-first canonical headers: scene, shot, source, imagePrompt, videoPrompt, duration, dialogue.',
-      details: {
-        missingRecommendedHeaders,
-        missingMinimumGroups: classification.missingMinimumGroups,
-        headers: table.headers,
-      },
-    });
-  }
-
-  const nonCanonicalKnownHeaders = table.headers.flatMap((header) => {
-    const field = resolveCreativeTableField(STORYBOARD_CREATIVE_TABLE_PROFILE, header);
-    if (!field) return [];
-    return header.trim() === field.id ? [] : [{ header, canonical: field.id }];
-  });
-  if (nonCanonicalKnownHeaders.length > 0) {
-    errors.push({
-      type: 'output',
-      code: 'storyboard-table-noncanonical-header',
-      message:
-        'Storyboard creative table known fields must use canonical field ids; localization is applied by the renderer.',
-      details: { headers: nonCanonicalKnownHeaders },
-    });
-  }
-
-  const forbiddenHeaders = table.headers.filter(isForbiddenStoryboardAnalysisHeader);
-  if (forbiddenHeaders.length > 0) {
-    errors.push({
-      type: 'output',
-      code: 'storyboard-table-forbidden-header',
-      message:
-        'Storyboard creative table must not be a page-analysis table with visual-analysis headers.',
-      details: { headers: forbiddenHeaders },
-    });
-  }
-
-  return { errors, warnings: [] };
-}
-
-function projectStoryboardCreativeTables(
-  content: string,
-): readonly NekoMarkdownCreativeTableProjection[] {
-  return projectNekoMarkdownExtensions(content, {
-    creativeTableKnownColumns: STORYBOARD_CREATIVE_TABLE_PROFILE.fields.map((field) => field.id),
-  }).creativeTables;
-}
-
-function hasForbiddenStoryboardDocumentMetadata(content: string): boolean {
-  const trimmed = content.trimStart();
-  if (!trimmed.startsWith('---')) return false;
-  return /(^|\n)(id|kind|status|domain|referenceChain):\s*/i.test(trimmed);
-}
-
-function isForbiddenStoryboardAnalysisHeader(header: string): boolean {
-  const normalized = normalizeCreativeTableHeader(header);
-  return [
-    '页码',
-    '页码图像',
-    '页面',
-    '来源页',
-    'page',
-    'pagenumber',
-    'image reference',
-    'imagereference',
-    '类型',
-    '构图景别',
-    '景别构图',
-    '动画镜头建议',
-    '镜头建议',
-    '动作叙事功能',
-    '氛围',
-    '节奏情绪',
-    'analysis',
-    'suggestion',
-  ].includes(normalized);
 }

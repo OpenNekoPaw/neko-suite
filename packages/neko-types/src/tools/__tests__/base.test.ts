@@ -224,6 +224,19 @@ describe('buildTool', () => {
     expect(tool.traits).toEqual(traits);
   });
 
+  it('should preserve runtime requirements when provided', () => {
+    const tool = createTool({
+      name: 'GenerateImage',
+      description: 'generate image',
+      parameters: dummyParams,
+      category: 'generation',
+      requirements: { mediaService: true, contentAccess: true },
+      execute: dummyExecute,
+    });
+
+    expect(tool.requirements).toEqual({ mediaService: true, contentAccess: true });
+  });
+
   it('should preserve extended planning metadata', () => {
     const tool = buildTool({
       name: 'UpdateNode',

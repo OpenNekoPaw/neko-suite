@@ -746,9 +746,7 @@ function isSkillLifecycleSlot(
 function isSkillLifecycleOwner(
   value: unknown,
 ): value is ActiveSkillLifecycleRecordProjection['owner'] {
-  return (
-    value === 'user' || value === 'agent' || value === 'creation-profile' || value === 'runtime'
-  );
+  return value === 'user' || value === 'agent' || value === 'runtime';
 }
 
 function isSkillLifecycleRecordStatus(
@@ -768,7 +766,6 @@ function isCapabilityContributionKind(
     value === 'promptFragment' ||
     value === 'providerCard' ||
     value === 'artifactProfile' ||
-    value === 'creationProfile' ||
     value === 'providerExpressionProfile' ||
     value === 'referenceContributor'
   );

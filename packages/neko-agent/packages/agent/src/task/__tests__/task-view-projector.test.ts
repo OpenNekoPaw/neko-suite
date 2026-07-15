@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createGeneratedAssetRevisionRef, type Task } from '@neko/shared';
+import type { Task } from '@neko/shared';
 import {
   buildBackgroundTaskFailureUpdateView,
   createBackgroundTaskViewFromToolResultData,
@@ -152,52 +152,6 @@ describe('task view projector', () => {
 
     expect(getTaskResultUrl(task)).toBeUndefined();
     expect(toBackgroundTaskView(task).result).toBeUndefined();
-  });
-
-  it('projects generated drafts without durable urls or host paths', () => {
-    const task = createTask({
-      output: {
-        data: {
-          urls: ['/workspace/.neko/.cache/generated/a.png'],
-          drafts: [
-            {
-              id: 'draft-asset-1',
-              type: 'generated-image',
-              path: '/workspace/.neko/.cache/resources/generated-drafts/a.png',
-              draftRef: {
-                kind: 'generated-draft',
-                draftId: 'draft-1',
-                mediaKind: 'image',
-                mimeType: 'image/png',
-                lifecycle: createGeneratedAssetRevisionRef({
-                  assetId: 'draft-1',
-                  contentDigest: 'sha256:draft',
-                  mediaKind: 'image',
-                  mimeType: 'image/png',
-                  generation: { taskId: 'task-1' },
-                }),
-              },
-              renderUri: 'webview-resource://draft-1',
-              mimeType: 'image/png',
-              generatedAt: '2026-01-01T00:00:00.000Z',
-              width: 1024,
-              height: 1024,
-              ratio: '1:1',
-              promoted: false,
-            },
-          ],
-        },
-      },
-    });
-
-    expect(toBackgroundTaskView(task).result).toEqual({
-      urls: [],
-      drafts: [
-        expect.not.objectContaining({
-          path: expect.any(String),
-        }),
-      ],
-    });
   });
 
   it('extracts the primary result url from task output data', () => {

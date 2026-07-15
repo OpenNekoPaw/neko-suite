@@ -10,6 +10,7 @@ import { getGlobalVSCodeApi } from '../../utils/vscode';
 import { t } from '../../i18n';
 import { resolveCanvasStatusLabel } from '../../i18n/canvasValueLabels';
 import { ContainerActionBar, readDocumentResourceRef, readResourceRef } from './node-card';
+import { resolveResourceRefDisplayName } from '../../utils/resourceDisplayName';
 
 export interface NodeShellProps {
   section: ContainerSection;
@@ -25,6 +26,10 @@ export function NodeShell({ section, context, isCollapsed, onToggleCollapse }: N
   const { node } = context;
   const descriptor = context.nodeTypeDescriptors?.[node.type] ?? descriptors[node.type];
   const presentation = descriptor?.presentation ?? 'structured';
+  const contentChrome =
+    presentation === 'foundational' && context.layout.surface === 'canvas'
+      ? 'full-bleed'
+      : 'contained';
   const preview = node.preview;
 
   const tagLabel = descriptor?.tagLabel ?? node.type.toUpperCase();
@@ -64,6 +69,7 @@ export function NodeShell({ section, context, isCollapsed, onToggleCollapse }: N
       data-node-density={context.layout.density}
       data-node-overflow={context.layout.overflow}
       data-node-shell-presentation={presentation}
+      data-node-content-chrome={contentChrome}
     >
       <NodeHeader
         tagLabel={tagLabel}
@@ -74,7 +80,7 @@ export function NodeShell({ section, context, isCollapsed, onToggleCollapse }: N
         isCollapsed={isCollapsed}
         onToggleCollapse={onToggleCollapse}
         onOpenPreview={assetInfo ? handleOpenPreview : undefined}
-        onExpand={() => openContentOverlay(node.id)}
+        onExpand={presentation === 'foundational' ? undefined : () => openContentOverlay(node.id)}
         presentation={presentation}
       />
       {!isCollapsed && (
@@ -93,7 +99,7 @@ export function NodeShell({ section, context, isCollapsed, onToggleCollapse }: N
                 <ContainerRenderer
                   key={s.id}
                   section={s}
-                  context={{ ...context, depth: context.depth + 1 }}
+                  context={{ ...context, contentChrome, depth: context.depth + 1 }}
                 />
               ))}
             </div>
@@ -103,7 +109,7 @@ export function NodeShell({ section, context, isCollapsed, onToggleCollapse }: N
               ...section,
               sections: contentSections.length > 0 ? contentSections : undefined,
             }}
-            context={context}
+            context={{ ...context, contentChrome }}
           />
         </div>
       )}
@@ -198,6 +204,10 @@ function resolveNodeTitle(
   node: NodeShellProps['context']['node'],
   previewTitle: string | undefined,
 ): string {
+  const resourceRef = readResourceRef(node);
+  if (resourceRef) {
+    return resolveResourceRefDisplayName(resourceRef);
+  }
   if (previewTitle) {
     return extractFilename(previewTitle);
   }

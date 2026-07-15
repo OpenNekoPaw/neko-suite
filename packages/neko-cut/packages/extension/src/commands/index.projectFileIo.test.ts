@@ -30,6 +30,8 @@ describe('neko-cut command project-file I/O guardrails', () => {
     expect(commandSource).toContain('cutProjectAuthoringService.importGeneratedClip(');
     expect(commandSource).not.toContain(removedGeneratedClipEditorExecutor);
     expect(commandSource).not.toContain(removedGeneratedClipEditorTimeout);
+    expect(commandSource).not.toContain("target: { kind: 'active'");
+    expect(commandSource).not.toContain('createAvailableTimelineFileUri');
   });
 
   it('routes manual add-to-timeline media adds through Cut authoring', () => {
@@ -51,6 +53,8 @@ describe('neko-cut command project-file I/O guardrails', () => {
     expect(timelineCommandsSource).not.toContain(removedImportCanvasDraftCommand);
     expect(timelineCommandsSource).not.toContain(removedImportStoryboardMessage);
     expect(timelineCommandsSource).not.toContain(removedImportCanvasDraftMessage);
+    expect(timelineCommandsSource).not.toContain("target: { kind: 'active'");
+    expect(timelineCommandsSource).not.toContain('createAvailableTimelineFileUri');
   });
 
   it('does not keep the legacy addMediaToTimeline webview message path alive', () => {
@@ -64,5 +68,4 @@ describe('neko-cut command project-file I/O guardrails', () => {
     expect(timelineToolExecutorSource).not.toContain('model!.updateProjectData(');
     expect(timelineToolExecutorSource).toContain('projectSession.updateProjectData(');
   });
-
 });

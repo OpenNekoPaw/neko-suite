@@ -10,7 +10,8 @@
  *      §4.2 (declarative vs imperative split)
  *
  * Default posture:
- *   - creator-review: always user-driven and bound to current content.
+ *   - creator-review: always user-driven; callers may provide current content
+ *     identity in generic request context for presentation and audit.
  *   - permission (read-only probing before mutation — typically
  *     read-only probing): allowed if non-destructive; ask user otherwise.
  *   - quality-gate: never auto-decides here; caller routes to the

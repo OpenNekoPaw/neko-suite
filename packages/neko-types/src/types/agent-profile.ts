@@ -1,8 +1,4 @@
-export const AGENT_PROFILE_KINDS = [
-  'artifact',
-  'creation',
-  'provider-expression',
-] as const;
+export const AGENT_PROFILE_KINDS = ['artifact', 'provider-expression'] as const;
 
 export const AGENT_PROFILE_SOURCES = [
   'builtin',
@@ -21,18 +17,9 @@ export const PERSISTABLE_AGENT_PROFILE_SOURCES = [
   'personal',
 ] as const;
 
-export const AGENT_PROFILE_RELATIONSHIPS = [
-  'consumes',
-  'produces',
-  'requires',
-  'prefers',
-] as const;
+export const AGENT_PROFILE_RELATIONSHIPS = ['consumes', 'produces', 'requires', 'prefers'] as const;
 
-export const AGENT_PROFILE_DIAGNOSTIC_SEVERITIES = [
-  'error',
-  'warning',
-  'info',
-] as const;
+export const AGENT_PROFILE_DIAGNOSTIC_SEVERITIES = ['error', 'warning', 'info'] as const;
 
 export type AgentProfileKind = (typeof AGENT_PROFILE_KINDS)[number];
 
@@ -42,8 +29,7 @@ export type PersistableAgentProfileSource = (typeof PERSISTABLE_AGENT_PROFILE_SO
 
 export type AgentProfileRelationship = (typeof AGENT_PROFILE_RELATIONSHIPS)[number];
 
-export type AgentProfileDiagnosticSeverity =
-  (typeof AGENT_PROFILE_DIAGNOSTIC_SEVERITIES)[number];
+export type AgentProfileDiagnosticSeverity = (typeof AGENT_PROFILE_DIAGNOSTIC_SEVERITIES)[number];
 
 export type AgentProfileVersion = string | number;
 
@@ -126,11 +112,7 @@ export interface IAgentProfileRegistry<
   TProfile extends AgentProfileIdentity = AgentProfileIdentity,
 > {
   register(profile: TProfile): AgentProfileRegistrationResult;
-  unregister(
-    profileId: string,
-    source?: AgentProfileSource,
-    version?: TProfile['version'],
-  ): void;
+  unregister(profileId: string, source?: AgentProfileSource, version?: TProfile['version']): void;
   get(profileId: string, version?: TProfile['version']): TProfile | undefined;
   list(filter?: AgentProfileFilter<TProfile['kind'], TProfile['version']>): readonly TProfile[];
   getDiagnostics?(): readonly AgentProfileDiagnostic[];
@@ -173,8 +155,7 @@ export interface AgentProfileIdentityValidationOptions {
   readonly path?: readonly AgentProfilePathSegment[];
 }
 
-export interface AgentProfileSetValidationOptions
-  extends AgentProfileIdentityValidationOptions {
+export interface AgentProfileSetValidationOptions extends AgentProfileIdentityValidationOptions {
   readonly allowDuplicateProfileIds?: boolean;
 }
 
@@ -187,17 +168,11 @@ export function createAgentProfileDiagnostic(
 }
 
 export function isAgentProfileKind(value: unknown): value is AgentProfileKind {
-  return (
-    typeof value === 'string' &&
-    AGENT_PROFILE_KINDS.includes(value as AgentProfileKind)
-  );
+  return typeof value === 'string' && AGENT_PROFILE_KINDS.includes(value as AgentProfileKind);
 }
 
 export function isAgentProfileSource(value: unknown): value is AgentProfileSource {
-  return (
-    typeof value === 'string' &&
-    AGENT_PROFILE_SOURCES.includes(value as AgentProfileSource)
-  );
+  return typeof value === 'string' && AGENT_PROFILE_SOURCES.includes(value as AgentProfileSource);
 }
 
 export function isAgentProfileRelationship(value: unknown): value is AgentProfileRelationship {
@@ -427,7 +402,11 @@ function toAgentProfileCatalogPackageProfile(
   const profileId = value['profileId'];
   const kind = value['kind'];
   const version = value['version'];
-  if (!isValidAgentProfileId(profileId) || !isAgentProfileKind(kind) || !isProfileVersion(version)) {
+  if (
+    !isValidAgentProfileId(profileId) ||
+    !isAgentProfileKind(kind) ||
+    !isProfileVersion(version)
+  ) {
     return undefined;
   }
   return {

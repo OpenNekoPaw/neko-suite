@@ -192,7 +192,7 @@ describe('agentCapabilityProvider storyboard export contracts', () => {
   it('syncs shot timeline import metadata after neko-cut import', () => {
     expect(providerSource).toContain('applyCanvasTimelineSyncToCanvas');
     expect(providerSource).toContain(
-      "await vscode.commands.executeCommand('neko.cut.importStoryboard'",
+      "await vscode.commands.executeCommand('neko.cut.authoring.importStoryboard'",
     );
     expect(providerSource).toContain('buildStoryboardImportTimelineSyncPayload(');
   });
@@ -1822,7 +1822,7 @@ describe('agentCapabilityProvider storyboard export contracts', () => {
     expect(providerSource).toContain('api.playback.createCutDraftFromRoute');
     expect(providerSource).toContain('api.playback.reorderUnits');
     expect(providerSource).toContain('await vscode.commands.executeCommand');
-    expect(providerSource).toContain("'neko.cut.importCanvasDraft'");
+    expect(providerSource).toContain("'neko.cut.authoring.importCanvasDraft'");
     expect(providerSource).toContain("approvalContext === 'agent-inferred'");
     expect(providerSource).toContain(
       'Agent-inferred Canvas playback reorder requires confirmation',
@@ -1832,7 +1832,7 @@ describe('agentCapabilityProvider storyboard export contracts', () => {
 
   it('executes playback tools through Canvas/Cut owning APIs with approval policy', async () => {
     vscodeCommandState.executeCommand.mockImplementation(async (command: string) =>
-      command === 'neko.cut.importCanvasDraft'
+      command === 'neko.cut.authoring.importCanvasDraft'
         ? ({
             accepted: true,
             status: 'imported',
@@ -1926,7 +1926,12 @@ describe('agentCapabilityProvider storyboard export contracts', () => {
     });
 
     await expect(
-      createDraftTool!.execute({ routeId: 'route-main', sendToCut: true }),
+      createDraftTool!.execute({
+        routeId: 'route-main',
+        sendToCut: true,
+        cutProjectUri: 'file:///cut.nkv',
+        cutProjectRevision: 'revision-1',
+      }),
     ).resolves.toMatchObject({
       success: true,
       data: {
@@ -1944,8 +1949,12 @@ describe('agentCapabilityProvider storyboard export contracts', () => {
       projectName: undefined,
     });
     expect(vscodeCommandState.executeCommand).toHaveBeenCalledWith(
-      'neko.cut.importCanvasDraft',
-      expect.objectContaining({ kind: 'canvas-cut-draft', routeId: 'route-main' }),
+      'neko.cut.authoring.importCanvasDraft',
+      expect.objectContaining({
+        payload: expect.objectContaining({ kind: 'canvas-cut-draft', routeId: 'route-main' }),
+        target: { kind: 'file', documentUri: 'file:///cut.nkv' },
+        expectedProjectRevision: 'revision-1',
+      }),
     );
   });
 

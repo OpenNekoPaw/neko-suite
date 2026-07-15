@@ -53,4 +53,3 @@ pub struct SceneRuntimeProfileDescriptor {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub diagnostics: Vec<SceneRuntimeProfileDiagnostic>,
 }
-

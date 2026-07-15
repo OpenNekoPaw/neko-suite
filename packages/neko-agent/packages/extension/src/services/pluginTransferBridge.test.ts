@@ -6,7 +6,7 @@ import { sendGeneratedAssetToPlugin, type PluginTransferBridgeDeps } from './plu
 vi.mock('vscode', async () => await import('../__mocks__/vscode'));
 
 describe('PluginTransferBridge', () => {
-  it('promotes legacy assetPath Canvas transfers into stable single-asset payloads', async () => {
+  it('materializes legacy assetPath Canvas transfers as stable generated outputs', async () => {
     const executeCommand = vi.fn().mockResolvedValue(undefined);
 
     await sendGeneratedAssetToPlugin(
@@ -38,7 +38,7 @@ describe('PluginTransferBridge', () => {
     );
   });
 
-  it('promotes Agent generated images before sending them to Canvas', async () => {
+  it('materializes Agent generated images before sending them to Canvas', async () => {
     const ingestCalls: ContentIngestRequest[] = [];
     const executeCommand = vi.fn().mockResolvedValue({ ok: true });
 
@@ -53,6 +53,7 @@ describe('PluginTransferBridge', () => {
           mediaType: 'image',
           name: 'shot.png',
         },
+        target: { kind: 'file', documentUri: 'file:///workspace/edit.nkv' },
       },
       createDeps({
         ingest: async (request) => {
@@ -94,7 +95,7 @@ describe('PluginTransferBridge', () => {
     );
   });
 
-  it('fails closed when Canvas transfer cannot promote a generated draft', async () => {
+  it('fails closed when Canvas transfer cannot persist a generated output', async () => {
     const executeCommand = vi.fn().mockResolvedValue(undefined);
 
     const result = await sendGeneratedAssetToPlugin(
@@ -108,13 +109,18 @@ describe('PluginTransferBridge', () => {
           mediaType: 'image',
           name: 'shot.png',
         },
+        target: {
+          kind: 'file',
+          documentUri: 'file:///workspace/edit.nkv',
+          expectedProjectRevision: 'revision-1',
+        },
       },
       createDeps({
         ingest: async (request) => ({
           status: 'unsupported-destination',
           request,
           providerId: 'generated-output-content-ingest',
-          error: 'Generated asset output path must be contracted before promotion.',
+          error: 'Generated output path must be contracted before persistence.',
         }),
         executeCommand,
       }),
@@ -123,14 +129,14 @@ describe('PluginTransferBridge', () => {
     expect(result).toMatchObject({
       success: false,
       executed: 0,
-      error: expect.stringContaining('generated-draft-requires-promotion'),
+      error: expect.stringContaining('generated-output-persistence-failed'),
     });
     expect(executeCommand).not.toHaveBeenCalled();
   });
 
-  it('promotes every selected asset in a Canvas batch transfer independently', async () => {
+  it('materializes every selected output in a Canvas batch transfer independently', async () => {
     const executeCommand = vi.fn().mockResolvedValue(undefined);
-    const promotedPaths: string[] = [];
+    const materializedPaths: string[] = [];
 
     await sendGeneratedAssetToPlugin(
       'canvas',
@@ -146,7 +152,7 @@ describe('PluginTransferBridge', () => {
       createDeps({
         ingest: async (request) => {
           const outputPath = `/workspace/neko/generated/image/${request.fileName}`;
-          promotedPaths.push(outputPath);
+          materializedPaths.push(outputPath);
           return createGeneratedIngestResult(request, {
             outputPath,
             contractedPath: `\${WORKSPACE}/neko/generated/image/${request.fileName}`,
@@ -156,7 +162,7 @@ describe('PluginTransferBridge', () => {
       }),
     );
 
-    expect(promotedPaths).toEqual([
+    expect(materializedPaths).toEqual([
       '/workspace/neko/generated/image/shot-1.png',
       '/workspace/neko/generated/image/shot-2.png',
     ]);
@@ -187,7 +193,7 @@ describe('PluginTransferBridge', () => {
     );
   });
 
-  it('keeps existing stable refs without re-promoting', async () => {
+  it('keeps existing stable refs without rematerializing', async () => {
     const ingest = vi.fn();
     const executeCommand = vi.fn().mockResolvedValue(undefined);
     const existingResourceRef = {
@@ -231,7 +237,7 @@ describe('PluginTransferBridge', () => {
     );
   });
 
-  it('does not treat cache-backed generated resource refs as promoted Canvas inputs', async () => {
+  it('does not treat cache-backed generated resource refs as durable Canvas inputs', async () => {
     const ingest = vi.fn(async (request: ContentIngestRequest) =>
       createGeneratedIngestResult(request, {
         outputPath: '/workspace/neko/generated/image/existing.png',
@@ -284,7 +290,7 @@ describe('PluginTransferBridge', () => {
     );
   });
 
-  it('sends generated clips to the Cut authoring command without requiring Canvas promotion', async () => {
+  it('sends generated clips to the Cut authoring command without Canvas materialization', async () => {
     const ingest = vi.fn();
     const executeCommand = vi.fn().mockResolvedValue(undefined);
 
@@ -299,6 +305,11 @@ describe('PluginTransferBridge', () => {
           mediaType: 'image',
           name: 'shot.png',
         },
+        target: {
+          kind: 'file',
+          documentUri: 'file:///workspace/edit.nkv',
+          expectedProjectRevision: 'revision-1',
+        },
       },
       createDeps({ ingest, executeCommand }),
     );
@@ -309,6 +320,8 @@ describe('PluginTransferBridge', () => {
       assetPath: '/tmp/agent-private/shot.png',
       mediaType: 'image',
       name: 'shot.png',
+      target: { kind: 'file', documentUri: 'file:///workspace/edit.nkv' },
+      expectedProjectRevision: 'revision-1',
     });
   });
 
@@ -444,8 +457,7 @@ describe('PluginTransferBridge', () => {
       unsupported: [
         {
           target: 'sketch',
-          reason:
-            'missing-authoring-target: Sketch image import authoring requires documentUri.',
+          reason: 'missing-authoring-target: Sketch image import authoring requires documentUri.',
         },
       ],
     });

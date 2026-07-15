@@ -4,6 +4,7 @@ import {
   HOME_BRIDGE_GLOBAL,
   assertHomeBridgeChannel,
   type HomeAgentRuntimeMessageRequest,
+  type HomeSessionOperationRequest,
   type NekoHomeBridge,
 } from '../shared/contracts';
 import type { NekoApplicationHandoffRequest } from '@neko/host/application';
@@ -16,6 +17,10 @@ const bridge: NekoHomeBridge = Object.freeze({
   sendAgentRuntimeMessage(request: HomeAgentRuntimeMessageRequest) {
     assertHomeBridgeChannel(HOME_BRIDGE_CHANNELS.sendAgentRuntimeMessage);
     return ipcRenderer.invoke(HOME_BRIDGE_CHANNELS.sendAgentRuntimeMessage, request);
+  },
+  manageSession(request: HomeSessionOperationRequest) {
+    assertHomeBridgeChannel(HOME_BRIDGE_CHANNELS.manageSession);
+    return ipcRenderer.invoke(HOME_BRIDGE_CHANNELS.manageSession, request);
   },
   handoff(request: NekoApplicationHandoffRequest) {
     assertHomeBridgeChannel(HOME_BRIDGE_CHANNELS.handoff);

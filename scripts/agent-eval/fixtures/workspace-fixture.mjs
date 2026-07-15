@@ -5,6 +5,7 @@ import { dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const AGENT_EVAL_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const DEFAULT_WORKSPACE_ROOT = resolve(AGENT_EVAL_ROOT, '../../reports/agent-eval/.workspaces');
 
 export async function prepareWorkspaceFixture(fixture, options = {}) {
   const sourceRoot = resolve(options.agentEvalRoot ?? AGENT_EVAL_ROOT, fixture.root);
@@ -15,9 +16,10 @@ export async function prepareWorkspaceFixture(fixture, options = {}) {
       `fixture ${fixture.id} digest mismatch: declared ${fixture.digest}, observed ${digest}`,
     );
   }
-  const workspace = await fs.mkdtemp(
-    join(options.temporaryRoot ?? os.tmpdir(), `neko-agent-eval-${fixture.id}-`),
-  );
+  const temporaryRoot =
+    options.temporaryRoot ?? (options.agentEvalRoot ? os.tmpdir() : DEFAULT_WORKSPACE_ROOT);
+  await fs.mkdir(temporaryRoot, { recursive: true });
+  const workspace = await fs.mkdtemp(join(temporaryRoot, `neko-agent-eval-${fixture.id}-`));
   try {
     await copyFixtureTree(sourceRoot, workspace);
   } catch (error) {

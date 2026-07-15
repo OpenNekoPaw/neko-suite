@@ -77,6 +77,10 @@ describe('Canvas creative workbench layout boundary', () => {
     expect(baseNodeSource).not.toMatch(/right: -4/);
   });
 
+  it('keeps foundational node chrome borderless', () => {
+    expect(cssSource).toMatch(/\.node-card--foundational\s*\{[^}]*border:\s*0;/s);
+  });
+
   it('keeps viewport writes in runtime state and webview snapshots', () => {
     expect(canvasStoreSource).not.toMatch(/^\s{2}setViewport: /m);
     expect(canvasStoreSource).not.toMatch(/^\s{2}panCanvas: /m);

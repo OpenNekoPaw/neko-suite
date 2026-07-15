@@ -8,9 +8,7 @@ import type {
   AgentCapabilityRuntimeRequirements,
   AgentReferenceContributor,
   ArtifactProfileDescriptor,
-  CreationProfileDescriptor,
   IArtifactProfileRegistry,
-  ICreationProfileRegistry,
   IProviderCardRegistry,
   IProviderExpressionProfileRegistry,
   ISkillRegistry,
@@ -37,7 +35,6 @@ type RuntimeRequirementsContribution =
   | ToolGroup
   | ProviderCard
   | ArtifactProfileDescriptor
-  | CreationProfileDescriptor
   | ProviderExpressionProfileDescriptor;
 
 interface ContributionWithRuntimeRequirements {
@@ -55,7 +52,6 @@ export interface TuiCapabilityLoaderOptions {
   readonly toolGroupRegistry?: ToolGroupRegistryLike;
   readonly providerCardRegistry?: Pick<IProviderCardRegistry, 'register' | 'unregister'>;
   readonly artifactProfileRegistry?: Pick<IArtifactProfileRegistry, 'register' | 'unregister'>;
-  readonly creationProfileRegistry?: Pick<ICreationProfileRegistry, 'register' | 'unregister'>;
   readonly providerExpressionProfileRegistry?: Pick<
     IProviderExpressionProfileRegistry,
     'register' | 'unregister'
@@ -102,9 +98,6 @@ class DefaultTuiCapabilityLoader implements TuiCapabilityLoader {
         : {}),
       ...(options.artifactProfileRegistry
         ? { artifactProfileRegistry: options.artifactProfileRegistry }
-        : {}),
-      ...(options.creationProfileRegistry
-        ? { creationProfileRegistry: options.creationProfileRegistry }
         : {}),
       ...(options.providerExpressionProfileRegistry
         ? { providerExpressionProfileRegistry: options.providerExpressionProfileRegistry }
@@ -182,14 +175,6 @@ class DefaultTuiCapabilityLoader implements TuiCapabilityLoader {
       skipped,
       diagnostics: this.diagnostics,
     });
-    const safeCreationProfiles = filterContributions({
-      providerId: provider.id,
-      kind: 'creationProfile',
-      contributions: provider.getCreationProfiles?.(context) ?? [],
-      getName: formatProfileName,
-      skipped,
-      diagnostics: this.diagnostics,
-    });
     const safeProviderExpressionProfiles = filterContributions({
       providerId: provider.id,
       kind: 'providerExpressionProfile',
@@ -220,7 +205,6 @@ class DefaultTuiCapabilityLoader implements TuiCapabilityLoader {
       ...(provider.getToolGroups ? { getToolGroups: () => safeToolGroups } : {}),
       ...(provider.getProviderCards ? { getProviderCards: () => safeProviderCards } : {}),
       ...(provider.getArtifactProfiles ? { getArtifactProfiles: () => safeArtifactProfiles } : {}),
-      ...(provider.getCreationProfiles ? { getCreationProfiles: () => safeCreationProfiles } : {}),
       ...(provider.getProviderExpressionProfiles
         ? { getProviderExpressionProfiles: () => safeProviderExpressionProfiles }
         : {}),
@@ -245,10 +229,6 @@ class DefaultTuiCapabilityLoader implements TuiCapabilityLoader {
         })),
         ...safeArtifactProfiles.map((profile) => ({
           kind: 'artifactProfile' as const,
-          name: formatProfileName(profile),
-        })),
-        ...safeCreationProfiles.map((profile) => ({
-          kind: 'creationProfile' as const,
           name: formatProfileName(profile),
         })),
         ...safeProviderExpressionProfiles.map((profile) => ({
@@ -456,7 +436,7 @@ function formatProviderCardName(card: ProviderCard): string {
 
 function formatProfileName(
   profile: Pick<
-    ArtifactProfileDescriptor | CreationProfileDescriptor | ProviderExpressionProfileDescriptor,
+    ArtifactProfileDescriptor | ProviderExpressionProfileDescriptor,
     'profileId' | 'version'
   >,
 ): string {

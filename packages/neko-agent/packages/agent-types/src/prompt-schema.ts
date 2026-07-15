@@ -1,6 +1,5 @@
 import type {
   ArtifactProfileDescriptor,
-  CreationProfileDescriptor,
   ProviderExpressionProfileDescriptor,
   SkillProfileReference,
   ToolDefinition,
@@ -22,7 +21,6 @@ export interface PromptGenerationProviderCapabilities {
 export interface PromptGenerationProfileContext {
   readonly skillProfileReferences?: readonly SkillProfileReference[];
   readonly artifactProfiles?: readonly ArtifactProfileDescriptor[];
-  readonly creationProfile?: CreationProfileDescriptor;
   readonly providerExpressionProfiles?: readonly ProviderExpressionProfileDescriptor[];
 }
 

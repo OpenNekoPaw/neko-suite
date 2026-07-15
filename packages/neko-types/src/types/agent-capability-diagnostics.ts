@@ -10,7 +10,6 @@ export type AgentCapabilityContributionKind =
   | 'promptFragment'
   | 'providerCard'
   | 'artifactProfile'
-  | 'creationProfile'
   | 'providerExpressionProfile'
   | 'referenceContributor';
 

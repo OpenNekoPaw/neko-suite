@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@neko-agent/types": "workspace:*",
+    "@neko/markdown": "workspace:*",
     "@neko/shared": "workspace:*"
   },
   "devDependencies": {

@@ -80,8 +80,6 @@ import {
   resolveStorageLayout,
   validateCanvasStoryboardActionIntent,
   validateCanvasBoardRef,
-  validateCanvasGeneratedDraftGroupProjection,
-  isCanvasGeneratedDraftPromotionRequest,
   isCanvasCreativeAiActionId,
   createCreativeAiDiagnostic,
 } from '@neko/shared';
@@ -95,6 +93,7 @@ import type {
   CanvasPlaybackCreateCutDraftRequest,
   CanvasPlaybackReorderUnitsRequest,
   CanvasPlaybackReorderUnitsResult,
+  NekoCutAPI,
   CanvasCreateCompositeRequest,
   CanvasCreateCompositeResult,
   CanvasCreateConnectionRequest,
@@ -129,9 +128,6 @@ import type {
   CanvasImportAssetRequest,
   CanvasImportAssetResult,
   CanvasHostAppliedDocumentMessage,
-  CanvasGeneratedDraftGroupProjection,
-  CanvasGeneratedDraftPromotionRequest,
-  CanvasGeneratedDraftPromotionResult,
   DocumentResourceStatusReason,
   DocumentArchiveResourceRef,
   ProjectionAdapter,
@@ -214,18 +210,6 @@ const CANVAS_EDITOR_LEVEL_KEYBOARD_ACTIONS = new Set([
 type CanvasHeadlessAssetImporter = (
   asset: CanvasImportAssetRequest,
 ) => Promise<CanvasImportAssetResult>;
-
-interface CanvasGeneratedDraftProjectionProvider {
-  readonly listForBoardPath: (targetPath: string) => readonly CanvasGeneratedDraftGroupProjection[];
-}
-
-type CanvasGeneratedDraftPromotionHandler = (
-  request: CanvasGeneratedDraftPromotionRequest,
-) => Promise<CanvasGeneratedDraftPromotionResult>;
-type CanvasGeneratedDraftDiscardHandler = (
-  projectionId: string,
-  discardUnsaved: boolean,
-) => Promise<void>;
 
 type CanvasPlaybackPreviewSourceKind =
   'generated-image' | 'generated-media' | 'reference-image' | 'source-media' | 'media-asset';
@@ -747,9 +731,6 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
   private readonly canvasRevisionsByDocumentUri = new Map<string, number>();
   private readonly canvasPreviewFingerprintsByDocumentUri = new Map<string, string>();
   private readonly canvasDataReadyDocumentUris = new Set<string>();
-  private generatedDraftProjectionProvider: CanvasGeneratedDraftProjectionProvider | undefined;
-  private generatedDraftPromotionHandler: CanvasGeneratedDraftPromotionHandler | undefined;
-  private generatedDraftDiscardHandler: CanvasGeneratedDraftDiscardHandler | undefined;
   private pendingEntityBackfills: CanvasEntityPendingBackfill[] = [];
   private readonly narrativePreviewBridge: NarrativePreviewBridge;
 
@@ -1073,81 +1054,6 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
     this.headlessAssetImporter = importer;
   }
 
-  setGeneratedDraftProjectionProvider(provider: CanvasGeneratedDraftProjectionProvider): void {
-    this.generatedDraftProjectionProvider = provider;
-  }
-
-  setGeneratedDraftPromotionHandler(handler: CanvasGeneratedDraftPromotionHandler): void {
-    this.generatedDraftPromotionHandler = handler;
-  }
-
-  setGeneratedDraftDiscardHandler(handler: CanvasGeneratedDraftDiscardHandler): void {
-    this.generatedDraftDiscardHandler = handler;
-  }
-
-  async publishGeneratedDraftProjection(
-    projection: CanvasGeneratedDraftGroupProjection,
-  ): Promise<boolean> {
-    const diagnostics = validateCanvasGeneratedDraftGroupProjection(projection);
-    if (diagnostics.length > 0) {
-      throw new Error(
-        `Invalid generated draft projection: ${diagnostics.map((diagnostic) => diagnostic.code).join(', ')}`,
-      );
-    }
-    const panel = this.getPanelForWorkspacePath(projection.target.documentRef.path);
-    if (!panel) return false;
-
-    const candidates = await Promise.all(
-      projection.candidates.map(async (candidate) => {
-        if (!this.resourceCache) {
-          return candidate.state === 'saved-to-assets' || candidate.state === 'added-to-board'
-            ? candidate
-            : {
-                ...candidate,
-                state: 'unavailable' as const,
-                diagnostic: 'Canvas ResourceCache is unavailable for generated review.',
-              };
-        }
-        const projected = await this.resourceCache.project(
-          panel.webview,
-          candidate.resourceRef,
-          { role: 'source', mimeType: candidate.mimeType },
-          { materializeIfMissing: true },
-        );
-        if (projected.status === 'ready' && projected.uri) {
-          return { ...candidate, renderUri: projected.uri };
-        }
-        return candidate.state === 'saved-to-assets' || candidate.state === 'added-to-board'
-          ? candidate
-          : {
-              ...candidate,
-              state: 'unavailable' as const,
-              diagnostic: projected.error ?? 'Generated candidate preview is unavailable.',
-            };
-      }),
-    );
-    const projected: CanvasGeneratedDraftGroupProjection = { ...projection, candidates };
-    const projectedDiagnostics = validateCanvasGeneratedDraftGroupProjection(projected);
-    if (projectedDiagnostics.length > 0) {
-      throw new Error(
-        `Invalid projected generated draft Group: ${projectedDiagnostics.map((diagnostic) => diagnostic.code).join(', ')}`,
-      );
-    }
-    return panel.webview.postMessage({
-      type: 'canvas.generatedDraftGroup',
-      projection: projected,
-    });
-  }
-
-  async removeGeneratedDraftProjection(projectionId: string, targetPath: string): Promise<boolean> {
-    const panel = this.getPanelForWorkspacePath(targetPath);
-    if (!panel) return false;
-    return panel.webview.postMessage({
-      type: 'canvas.generatedDraftGroupRemoved',
-      projectionId,
-    });
-  }
-
   private getPanelForWorkspacePath(targetPath: string): vscode.WebviewPanel | undefined {
     const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
     if (!workspaceFolder) return undefined;
@@ -1155,14 +1061,6 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
       path.join(workspaceFolder.uri.fsPath, targetPath),
     ).toString();
     return this.webviewPanelsByDocumentUri.get(documentUri);
-  }
-
-  private getWorkspaceRelativeDocumentPath(documentUri: vscode.Uri): string | undefined {
-    const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
-    if (!workspaceFolder) return undefined;
-    const relativePath = path.relative(workspaceFolder.uri.fsPath, documentUri.fsPath);
-    if (relativePath.startsWith('..') || path.isAbsolute(relativePath)) return undefined;
-    return relativePath.replace(/\\/g, '/');
   }
 
   private setActiveCanvasEditor(
@@ -2418,9 +2316,6 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
           status,
           dataUrl,
         });
-        if (status === 'done' && dataUrl) {
-          void this.pushGeneratedToCut(nodeId, dataUrl);
-        }
       },
     });
   }
@@ -2709,42 +2604,6 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
     });
   }
 
-  /**
-   * Save a base64 data URL to workspace generated cache and return a GeneratedImage.
-   * ADR-4: writes binary to disk, returns JSON reference only.
-   */
-  private saveGeneratedImage(
-    workspaceDir: string,
-    nodeId: string,
-    dataUrl: string,
-  ): { filePath: string; assetId: string } {
-    const base64 = dataUrl.replace(/^data:image\/\w+;base64,/, '');
-    const ext = dataUrl.startsWith('data:image/png') ? 'png' : 'jpg';
-    const generatedCacheDir = resolveStorageLayout(workspaceDir, os.homedir() || workspaceDir)
-      .project.local.cache.generated;
-    const dir = path.join(generatedCacheDir, 'image');
-    fs.mkdirSync(dir, { recursive: true });
-    const assetId = crypto.randomUUID();
-    const filePath = path.join(dir, `${assetId}.${ext}`);
-    fs.writeFileSync(filePath, Buffer.from(base64, 'base64'));
-    return { filePath, assetId };
-  }
-
-  /** If neko-cut is active, import the generated asset into the cut timeline. */
-  private async pushGeneratedToCut(nodeId: string, dataUrl: string): Promise<void> {
-    const workspaceDir = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-    if (!workspaceDir) return;
-    const cutExt = vscode.extensions.getExtension('neko.neko-cut');
-    if (!cutExt?.isActive) return;
-    try {
-      const { filePath } = this.saveGeneratedImage(workspaceDir, nodeId, dataUrl);
-      await vscode.commands.executeCommand('neko.cut.importGeneratedClip', { assetPath: filePath });
-      logger.info('Auto-pushed generated image to neko-cut', { nodeId, assetPath: filePath });
-    } catch (err) {
-      logger.warn('Failed to push generated image to neko-cut', { nodeId, err });
-    }
-  }
-
   private reportCanvasReady(documentUri: vscode.Uri, data: Record<string, unknown> | null): void {
     const nodeIds = Array.isArray(data?.['nodes'])
       ? (data['nodes'] as unknown[])
@@ -2958,51 +2817,6 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
         if (webviewPanel.active) {
           this.setActiveCanvasEditor(webviewPanel, document);
         }
-        const boardPath = this.getWorkspaceRelativeDocumentPath(document.uri);
-        if (boardPath && this.generatedDraftProjectionProvider) {
-          for (const projection of this.generatedDraftProjectionProvider.listForBoardPath(
-            boardPath,
-          )) {
-            await this.publishGeneratedDraftProjection(projection);
-          }
-        }
-        break;
-      }
-      case 'canvas.generatedDraft.saveToAssets': {
-        if (!isCanvasGeneratedDraftPromotionRequest(message.request)) {
-          throw new Error('Invalid canvas.generatedDraft.saveToAssets request.');
-        }
-        if (!this.generatedDraftPromotionHandler) {
-          throw new Error('Canvas generated draft promotion handler is unavailable.');
-        }
-        try {
-          const result = await this.generatedDraftPromotionHandler(message.request);
-          await webviewPanel.webview.postMessage({
-            type: 'canvas.generatedDraft.promotionResult',
-            requestId: message.request.requestId,
-            result,
-          });
-        } catch (error) {
-          await webviewPanel.webview.postMessage({
-            type: 'canvas.generatedDraft.promotionFailed',
-            requestId: message.request.requestId,
-            projectionId: message.request.projectionId,
-            diagnostic: error instanceof Error ? error.message : String(error),
-          });
-        }
-        break;
-      }
-      case 'canvas.generatedDraft.discard': {
-        if (
-          typeof message.projectionId !== 'string' ||
-          typeof message.discardUnsaved !== 'boolean'
-        ) {
-          throw new Error('Invalid canvas.generatedDraft.discard request.');
-        }
-        if (!this.generatedDraftDiscardHandler) {
-          throw new Error('Canvas generated draft discard handler is unavailable.');
-        }
-        await this.generatedDraftDiscardHandler(message.projectionId, message.discardUnsaved);
         break;
       }
       case 'webviewKeyboardFocus': {
@@ -3109,12 +2923,19 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
             sourceCanvasUri: documentUri,
             ...(routeId ? { routeId } : {}),
           });
+          const cutTarget = await selectExistingCutProjectTarget();
           const importResult = await vscode.commands.executeCommand<CutCanvasDraftImportResult>(
-            'neko.cut.importCanvasDraft',
-            draft,
+            'neko.cut.authoring.importCanvasDraft',
+            {
+              payload: draft,
+              target: cutTarget.target,
+              expectedProjectRevision: cutTarget.expectedProjectRevision,
+            },
           );
           if (!importResult) {
-            throw new Error('neko.cut.importCanvasDraft did not return an import result.');
+            throw new Error(
+              'neko.cut.authoring.importCanvasDraft did not return an import result.',
+            );
           }
           if (requestId !== undefined) {
             await webviewPanel.webview.postMessage({
@@ -3935,7 +3756,10 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
           shots: unknown[];
         };
         try {
-          await vscode.commands.executeCommand('neko.cut.importStoryboard', {
+          const cutTarget = await selectExistingCutProjectTarget();
+          await vscode.commands.executeCommand('neko.cut.authoring.importStoryboard', {
+            target: cutTarget.target,
+            expectedProjectRevision: cutTarget.expectedProjectRevision,
             projectName,
             shots,
           });
@@ -6651,6 +6475,34 @@ function readCanvasProjectSourceAddFileName(request: ProjectSourceAddRequest): s
   const normalized = withoutQuery.replace(/\\/g, '/');
   const fileName = normalized.split('/').pop();
   return fileName && fileName.length > 0 ? decodeURIComponentSafe(fileName) : 'source';
+}
+
+async function selectExistingCutProjectTarget(): Promise<{
+  readonly target: { readonly kind: 'file'; readonly documentUri: string };
+  readonly expectedProjectRevision: string;
+}> {
+  const selected = await vscode.window.showOpenDialog({
+    canSelectFiles: true,
+    canSelectFolders: false,
+    canSelectMany: false,
+    filters: { 'Neko Cut Project': ['nkv'] },
+    openLabel: 'Select Cut Project',
+  });
+  const documentUri = selected?.[0];
+  if (!documentUri) {
+    throw new Error('Cut authoring was cancelled before an explicit .nkv target was selected.');
+  }
+  const cutExtension = vscode.extensions.getExtension<NekoCutAPI>('neko.neko-cut');
+  if (!cutExtension) {
+    throw new Error('Neko Cut is unavailable for explicit project authoring.');
+  }
+  const cutApi = cutExtension.isActive ? cutExtension.exports : await cutExtension.activate();
+  const targetUri = documentUri.toString();
+  const info = await cutApi.timeline.getInfo({ documentUri: targetUri });
+  return {
+    target: { kind: 'file', documentUri: targetUri },
+    expectedProjectRevision: info.projectRevision,
+  };
 }
 
 function decodeURIComponentSafe(value: string): string {

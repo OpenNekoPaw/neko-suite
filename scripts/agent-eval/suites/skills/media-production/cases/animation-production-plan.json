@@ -20,7 +20,7 @@
     { "id": "idle", "kind": "wait-for-idle", "timeoutMs": 180000 }
   ],
   "assertions": [
-    { "id": "skill", "kind": "skill", "identity": { "name": "media-production", "source": "builtin", "provenance": "builtin", "rootId": "builtin-skills", "relativePath": "media-production", "fingerprint": "sha256:1c92f1e586afefea575ec405543c6a84dbba207ddb1758f02a50e6a2f99d20e7" }, "status": "injected", "evidenceRef": "production-facts" },
+    { "id": "skill", "kind": "skill", "identity": { "name": "media-production", "source": "builtin", "provenance": "builtin", "rootId": "builtin-skills", "relativePath": "media-production", "fingerprint": "sha256:48049d177c8262a3f5526d15342c0696137be8516509a41c5c8f37ea02e45592" }, "status": "injected", "evidenceRef": "production-facts" },
     { "id": "model", "kind": "model", "profileId": "configured-default", "noFallback": true, "evidenceRef": "production-facts" },
     { "id": "output", "kind": "structured-output", "format": "markdown", "requiredFields": ["Mara", "23:47", "红伞", "来源事实", "创作者决策", "工作单元", "触发", "验收", "失败恢复", "审批"], "locale": "zh-cn", "evidenceRef": "production-facts" },
     { "id": "no-image", "kind": "tool-call", "name": "GenerateImage", "status": "absent", "evidenceRef": "production-facts" },

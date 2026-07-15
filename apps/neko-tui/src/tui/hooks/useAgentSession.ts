@@ -93,12 +93,15 @@ import type { ExecutionMode, Message as TuiMessage } from '../types/state';
 import {
   type AgentCapabilityProvider,
   type ChatMessage,
+  type CanvasWorkspaceProjectionResult,
   type GeneratedAsset,
+  type GeneratedAssetRevisionRef,
   type IService,
   type PerceptionCard,
   type PerceptualAssetRef,
   type Task,
   type TaskStatus,
+  type ToolResultAttachment,
   type ToolResultBackfillPayload,
   type ResourceCacheManifestStore,
   type SearchDocumentRecord,
@@ -308,6 +311,10 @@ export interface AgentSessionHandle {
   readonly getConversationPersistenceSnapshot: () => TuiConversationPersistenceSnapshot | null;
   /** Secret-free prompt composition facts from the canonical AgentSession composer. */
   readonly getPromptCompositionProjection: () => readonly PromptCompositionFragmentProjection[];
+  /** Secret-free Workspace Board projection outcomes for debug automation. */
+  readonly getWorkspaceBoardProjections: () => readonly CanvasWorkspaceProjectionResult[];
+  /** Stable generated-output lifecycle facts retained without Host paths. */
+  readonly getGeneratedOutputLifecycles: () => readonly GeneratedAssetRevisionRef[];
   /** Flush the current TUI runtime projection into shared workspace state. */
   readonly syncRuntimeState: () => void;
   /** Slash command catalog for TUI autocomplete */
@@ -388,6 +395,8 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
   );
   const taskResultObservationRuntimeRef = useRef<AgentTaskResultObservationRuntime | null>(null);
   const mediaDeliveryHostRef = useRef<NodeMediaTaskDeliveryHost | null>(null);
+  const workspaceBoardProjectionsRef = useRef<readonly CanvasWorkspaceProjectionResult[]>([]);
+  const generatedOutputLifecyclesRef = useRef<readonly GeneratedAssetRevisionRef[]>([]);
   const generatedAssetIndexRef = useRef<GeneratedAssetIndex | null>(null);
   const taskTerminalUnsubscribeRef = useRef<(() => void) | null>(null);
   const capabilityLoadResultRef = useRef<TuiCapabilityLoaderResult | null>(null);
@@ -637,6 +646,8 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
     const init = async () => {
       try {
         isReadyRef.current = false;
+        workspaceBoardProjectionsRef.current = [];
+        generatedOutputLifecyclesRef.current = [];
         setIsReady(false);
         setCapabilityRevision((revision) => revision + 1);
         stores.agent.getState().setExecutionMode(config.executionMode);
@@ -764,7 +775,6 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
           toolGroupRegistry,
           providerCardRegistry,
           artifactProfileRegistry: profileRegistries.artifactProfileRegistry,
-          creationProfileRegistry: profileRegistries.creationProfileRegistry,
           providerExpressionProfileRegistry: profileRegistries.providerExpressionProfileRegistry,
           locale: promptDomainLocale,
         });
@@ -843,7 +853,6 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
           toolGroupRegistry,
           providerCardRegistry,
           artifactProfileRegistry: profileRegistries.artifactProfileRegistry,
-          creationProfileRegistry: profileRegistries.creationProfileRegistry,
           providerExpressionProfileRegistry: profileRegistries.providerExpressionProfileRegistry,
           promptFragments: capabilityLoadResult.promptFragments,
         });
@@ -874,7 +883,6 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
           conversationId: conversationIdRef.current,
           capabilityRuntime: runtimeConfig.capabilityRuntime,
           getCapabilityPromptFragments: () => capabilityLoadResult.promptFragments,
-          creationGuidance: runtimeConfig.creationGuidance,
           workspaceStore: runtimeConfig.workspaceStore,
           validationLoop: runtimeConfig.validationLoop,
           ...(perceptionPipeline ? { getPerceptionPipeline: () => perceptionPipeline } : {}),
@@ -913,6 +921,24 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
           ...(platformRef.current ? { platform: platformRef.current } : {}),
           workspaceRoot: config.workDir,
           assetIndex: generatedAssetIndex,
+          onWorkspaceBoardProjection: (results) => {
+            workspaceBoardProjectionsRef.current = [
+              ...workspaceBoardProjectionsRef.current,
+              ...results,
+            ].slice(-128);
+          },
+          onGeneratedOutputDelivery: (lifecycles) => {
+            const indexed = new Map(
+              generatedOutputLifecyclesRef.current.map((lifecycle) => [
+                `${lifecycle.assetId}:${lifecycle.revision}`,
+                lifecycle,
+              ]),
+            );
+            for (const lifecycle of lifecycles) {
+              indexed.set(`${lifecycle.assetId}:${lifecycle.revision}`, lifecycle);
+            }
+            generatedOutputLifecyclesRef.current = [...indexed.values()].slice(-512);
+          },
         });
         mediaDeliveryHostRef.current = mediaDeliveryHost;
         taskResultObservationRuntimeRef.current?.dispose();
@@ -1869,6 +1895,8 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
     getConversationPersistenceSnapshot: () => conversationPersistenceSnapshotRef.current,
     getPromptCompositionProjection: () =>
       sessionRef.current?.getPromptCompositionProjection() ?? [],
+    getWorkspaceBoardProjections: () => workspaceBoardProjectionsRef.current,
+    getGeneratedOutputLifecycles: () => generatedOutputLifecyclesRef.current,
     syncRuntimeState: () => syncWorkspaceRuntimeState(),
     slashCommands,
     isReady,
@@ -2008,11 +2036,13 @@ function createGeneratedMediaToolResultBackfill(input: {
   readonly timestamp: number;
   readonly deliveryPlan?: MediaTaskProgressDeliveryPlan;
 }): ToolResultBackfillPayload {
-  const resultAssetRefs = input.deliveryPlan?.generatedAssets
-    .map((asset) => asset.assetRef)
-    .filter((ref): ref is PerceptualAssetRef => ref !== undefined);
-  const primaryAsset = input.deliveryPlan?.generatedAssets.find((asset) => asset.assetRef);
-  const primaryAssetRef = primaryAsset?.assetRef;
+  const generatedAssets = input.deliveryPlan?.generatedAssets ?? [];
+  const resultAssetRefs = generatedAssets.map(createGeneratedOutputPerceptualRef);
+  const attachments = generatedAssets.map((asset, index) =>
+    createGeneratedOutputAttachment(asset, resultAssetRefs[index]),
+  );
+  const primaryAsset = generatedAssets[0];
+  const primaryAssetRef = resultAssetRefs[0];
 
   return {
     toolCallId: input.toolCallId,
@@ -2024,6 +2054,7 @@ function createGeneratedMediaToolResultBackfill(input: {
       ...(resultAssetRefs && resultAssetRefs.length > 0 ? { resultAssetRefs } : {}),
       ...(primaryAssetRef ? { thumbnailAssetRef: primaryAssetRef } : {}),
     },
+    ...(attachments.length > 0 ? { attachments } : {}),
     ...(primaryAsset && primaryAssetRef
       ? {
           perceptionCards: [
@@ -2037,6 +2068,39 @@ function createGeneratedMediaToolResultBackfill(input: {
         }
       : {}),
   };
+}
+
+function createGeneratedOutputPerceptualRef(asset: GeneratedAsset): PerceptualAssetRef {
+  if (!asset.assetRef || !asset.lifecycle) {
+    throw new Error(`Generated output ${asset.id} has no durable perceptual resource reference.`);
+  }
+  return { ...asset.assetRef, resourceRef: asset.lifecycle.resourceRef };
+}
+
+function createGeneratedOutputAttachment(
+  asset: GeneratedAsset,
+  ref: PerceptualAssetRef | undefined,
+): ToolResultAttachment {
+  if (!ref) {
+    throw new Error(`Generated output ${asset.id} has no durable attachment reference.`);
+  }
+  return {
+    type: toToolResultAttachmentType(asset),
+    path: ref.uri,
+    mimeType: asset.mimeType,
+    assetRef: ref,
+  };
+}
+
+function toToolResultAttachmentType(asset: GeneratedAsset): ToolResultAttachment['type'] {
+  switch (asset.type) {
+    case 'generated-image':
+      return 'image';
+    case 'generated-video':
+      return 'video';
+    case 'generated-audio':
+      return 'audio';
+  }
 }
 
 function createGeneratedMediaPerceptionCard(input: {

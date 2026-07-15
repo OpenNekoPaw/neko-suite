@@ -6,7 +6,7 @@ import { MEDIA_TASK_OUTPUT_DIR_SETTING_KEY, type MediaTask } from '@neko/platfor
 vi.mock('vscode', async () => await import('../__mocks__/vscode'));
 
 describe('MediaTaskDeliveryHost', () => {
-  it('keeps generated task outputs in the media-specific runtime cache by default', async () => {
+  it('keeps generated task outputs in the media-specific workspace directory by default', async () => {
     vscode.workspace.workspaceFolders = [
       { uri: vscode.Uri.file('/workspace/demo'), name: 'demo', index: 0 },
     ];
@@ -17,7 +17,7 @@ describe('MediaTaskDeliveryHost', () => {
     } as never);
     const saveOutputs = vi
       .fn()
-      .mockResolvedValue(['/workspace/demo/.neko/.cache/generated/video/video.mp4']);
+      .mockResolvedValue(['/workspace/demo/neko/generated/video/video.mp4']);
     const host = new MediaTaskDeliveryHost({
       platform: {
         media: {
@@ -31,19 +31,21 @@ describe('MediaTaskDeliveryHost', () => {
           renderUri: `webview:generated:${asset.id}`,
         })),
       } as never,
+      assetIndex: createAssetIndex(),
+      computeContentDigest: vi.fn().mockResolvedValue('sha256:video'),
     });
 
     await host.createProgressViewDelivery(createWebview(), createCompletedVideoTask(), 'video');
 
     expect(saveOutputs).toHaveBeenCalledWith(
       taskScope('task-1'),
-      '/workspace/demo/.neko/.cache/generated/video',
+      '/workspace/demo/neko/generated/video',
       expect.any(Object),
     );
-    expect(JSON.stringify(saveOutputs.mock.calls)).not.toContain('/neko/generated/');
+    expect(JSON.stringify(saveOutputs.mock.calls)).not.toContain('/.neko/.cache/');
   });
 
-  it('keeps completed image tasks under the generated runtime cache', async () => {
+  it('keeps completed image tasks under the workspace generated directory', async () => {
     vscode.workspace.workspaceFolders = [
       { uri: vscode.Uri.file('/workspace/demo'), name: 'demo', index: 0 },
     ];
@@ -54,7 +56,7 @@ describe('MediaTaskDeliveryHost', () => {
     } as never);
     const saveOutputs = vi
       .fn()
-      .mockResolvedValue(['/workspace/demo/.neko/.cache/generated/image/task-1_0.png']);
+      .mockResolvedValue(['/workspace/demo/neko/generated/image/task-1_0.png']);
     const host = new MediaTaskDeliveryHost({
       platform: {
         media: {
@@ -68,24 +70,26 @@ describe('MediaTaskDeliveryHost', () => {
           renderUri: `webview:generated:${asset.id}`,
         })),
       } as never,
+      assetIndex: createAssetIndex(),
+      computeContentDigest: vi.fn().mockResolvedValue('sha256:image'),
     });
 
     await host.createProgressViewDelivery(createWebview(), createCompletedImageTask(), 'image');
 
     expect(saveOutputs).toHaveBeenCalledWith(
       taskScope('task-1'),
-      '/workspace/demo/.neko/.cache/generated/image',
+      '/workspace/demo/neko/generated/image',
       expect.any(Object),
     );
   });
 
-  it('rejects legacy root, cache, and Board-local configured output directories', async () => {
+  it('rejects root, cache, and Board-local configured output directories', async () => {
     vscode.workspace.workspaceFolders = [
       { uri: vscode.Uri.file('/workspace/demo'), name: 'demo', index: 0 },
     ];
     const saveOutputs = vi
       .fn()
-      .mockResolvedValue(['/workspace/demo/.neko/.cache/generated/image/task-1_0.png']);
+      .mockResolvedValue(['/workspace/demo/neko/generated/image/task-1_0.png']);
     const host = new MediaTaskDeliveryHost({
       platform: { media: { saveOutputs } } as never,
       localResourceAccess: {
@@ -95,11 +99,13 @@ describe('MediaTaskDeliveryHost', () => {
           renderUri: `webview:generated:${asset.id}`,
         })),
       } as never,
+      assetIndex: createAssetIndex(),
+      computeContentDigest: vi.fn().mockResolvedValue('sha256:image'),
     });
 
     for (const configured of [
       '/workspace/demo/generated',
-      '/workspace/demo/neko/generated',
+      '/workspace/demo/neko/generated-other',
       '/workspace/demo/.neko/generated',
       '/workspace/demo/neko/boards/story-media',
     ]) {
@@ -116,7 +122,7 @@ describe('MediaTaskDeliveryHost', () => {
 
     expect(saveOutputs).toHaveBeenCalledTimes(4);
     for (const call of saveOutputs.mock.calls) {
-      expect(call[1]).toBe('/workspace/demo/.neko/.cache/generated/image');
+      expect(call[1]).toBe('/workspace/demo/neko/generated/image');
     }
   });
 });
@@ -125,6 +131,10 @@ function createWebview(): vscode.Webview {
   return {
     asWebviewUri: vi.fn((uri: { toString(): string }) => ({ toString: () => uri.toString() })),
   } as unknown as vscode.Webview;
+}
+
+function createAssetIndex() {
+  return { add: vi.fn(), remove: vi.fn() } as never;
 }
 
 function createCompletedVideoTask(): MediaTask {

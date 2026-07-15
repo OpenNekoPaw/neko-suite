@@ -26,10 +26,9 @@ use neko_engine_scene_renderer::{
 };
 use neko_engine_types::easing::EasingType;
 use neko_engine_types::{
-    FrameFormat, GpuFrameLease, GpuOutputHandle, GpuRenderPath, NkmSceneProfileId,
-    PipelineOutput, RenderFrameDiagnostics, SceneRuntimeProfileDescriptor,
-    SceneRuntimeProfileDiagnostic, SceneRuntimeProfileDiagnosticCode,
-    SceneRuntimeProfileStatus, VideoGpuFrame, VideoOutput,
+    FrameFormat, GpuFrameLease, GpuOutputHandle, GpuRenderPath, NkmSceneProfileId, PipelineOutput,
+    RenderFrameDiagnostics, SceneRuntimeProfileDescriptor, SceneRuntimeProfileDiagnostic,
+    SceneRuntimeProfileDiagnosticCode, SceneRuntimeProfileStatus, VideoGpuFrame, VideoOutput,
 };
 use neko_runtime_media::encode_rgba_to_jpeg;
 use neko_runtime_scene::access::{

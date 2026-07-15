@@ -41,12 +41,28 @@ export function buildNekoSuitePluginTransferPlan(
   if (payload.kind === 'cutStoryboard') {
     if (input.target === 'cut') {
       const target = readAuthoringTarget(payload.target);
+      if (!isExplicitCutTarget(target)) {
+        return {
+          status: 'unsupported',
+          target: input.target,
+          reason: 'explicit-cut-target-required',
+        };
+      }
+      const expectedProjectRevision = readExpectedProjectRevision(payload.target);
+      if (target.kind === 'file' && !expectedProjectRevision) {
+        return {
+          status: 'unsupported',
+          target: input.target,
+          reason: 'cut-project-revision-required',
+        };
+      }
       return {
         status: 'execute-command',
         command: 'neko.cut.authoring.importStoryboard',
         payload: {
           ...payload.storyboard,
           ...(target ? { target } : {}),
+          ...(expectedProjectRevision ? { expectedProjectRevision } : {}),
           ...(target?.reveal !== undefined ? { reveal: target.reveal } : {}),
           ...(payload.provenance ? { provenance: payload.provenance } : {}),
         },
@@ -90,6 +106,21 @@ export function buildNekoSuitePluginTransferPlan(
   }
 
   if (input.target === 'cut') {
+    if (!isExplicitCutTarget(authoringTarget)) {
+      return {
+        status: 'unsupported',
+        target: input.target,
+        reason: 'explicit-cut-target-required',
+      };
+    }
+    const expectedProjectRevision = readExpectedProjectRevision(transferTarget);
+    if (authoringTarget.kind === 'file' && !expectedProjectRevision) {
+      return {
+        status: 'unsupported',
+        target: input.target,
+        reason: 'cut-project-revision-required',
+      };
+    }
     return {
       status: 'execute-command',
       command: 'neko.cut.authoring.importGeneratedClip',
@@ -98,6 +129,7 @@ export function buildNekoSuitePluginTransferPlan(
         ...(payload.asset.mediaType ? { mediaType: payload.asset.mediaType } : {}),
         ...(payload.asset.name ? { name: payload.asset.name } : {}),
         ...(authoringTarget ? { target: authoringTarget } : {}),
+        ...(expectedProjectRevision ? { expectedProjectRevision } : {}),
         ...(authoringTarget?.reveal !== undefined ? { reveal: authoringTarget.reveal } : {}),
         ...(provenance ? { provenance } : {}),
       },
@@ -142,6 +174,19 @@ export function buildNekoSuitePluginTransferPlan(
   return { status: 'unsupported', target: input.target };
 }
 
+function isExplicitCutTarget(
+  target: NekoProjectAuthoringTarget | undefined,
+): target is NekoProjectAuthoringTarget & {
+  readonly kind: 'file' | 'new';
+  readonly documentUri: string;
+} {
+  return (
+    (target?.kind === 'file' || target?.kind === 'new') &&
+    typeof target.documentUri === 'string' &&
+    target.documentUri.trim().length > 0
+  );
+}
+
 function assertSingleTransferPayload(
   payload: NekoSuitePluginTransferBuildPayload,
 ): asserts payload is Extract<PluginTransferPayload, { kind: 'singleAsset' }> {
@@ -181,6 +226,13 @@ function readAuthoringTarget(
     ...(target.title ? { title: target.title } : {}),
     ...(reveal !== undefined ? { reveal } : {}),
   };
+}
+
+function readExpectedProjectRevision(
+  target: PluginTransferTargetRef | undefined,
+): string | undefined {
+  const revision = target?.expectedProjectRevision;
+  return typeof revision === 'string' && revision.trim().length > 0 ? revision : undefined;
 }
 
 function readAuthoringTargetKind(value: unknown): NekoProjectAuthoringTarget['kind'] | undefined {

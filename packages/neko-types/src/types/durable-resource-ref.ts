@@ -18,7 +18,7 @@ export interface DurableResourceRefValidationResult {
 const RUNTIME_RESOURCE_PATTERNS = [
   /^vscode-(?:webview-resource|resource):/i,
   /^vscode-webview:\/\//i,
-  /(?:^|[\\/])\.neko[\\/]cache(?:[\\/]|$)/i,
+  /(?:^|[\\/])\.neko[\\/]\.?cache(?:[\\/]|$)/i,
   /(?:^|[\\/])cache(?:[\\/]|$)/i,
   /^(?:render|preview|engine-session|provider-task):\/\//i,
   /^blob:/i,

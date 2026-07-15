@@ -2065,7 +2065,7 @@ export class AgentSession implements IAgentSession {
               before: result.originalTokens,
               after: result.compressedTokens,
             },
-            strategy: this._config.creativeCompression ? 'creative-priority' : 'basic',
+            strategy: 'basic',
           },
         });
       }

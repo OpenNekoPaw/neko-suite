@@ -4,10 +4,7 @@ import {
   buildRuntimePluginsAvailableMessage,
   expandRuntimePluginTransferInputs,
 } from '@neko/agent/runtime';
-import {
-  buildNekoSuitePluginTransferPlan,
-  executeNekoSuitePluginTransferPlan,
-} from '@neko/skills';
+import { buildNekoSuitePluginTransferPlan, executeNekoSuitePluginTransferPlan } from '@neko/skills';
 import type { PluginTransferAssetRef, PluginTransferPayload } from '@neko-agent/types';
 import {
   PathResolver,
@@ -70,12 +67,12 @@ export async function sendGeneratedAssetToPlugin(
             },
           }
         : undefined);
-    const promotedPayload = await prepareTransferPayload(target, initialPayload, deps);
+    const materializedPayload = await prepareTransferPayload(target, initialPayload, deps);
     const inputs = expandRuntimePluginTransferInputs({
       target,
       assetPath: initialPayload ? undefined : assetPath,
       mediaType,
-      payload: promotedPayload,
+      payload: materializedPayload,
     });
     const executeCommand = deps.executeCommand ?? vscode.commands.executeCommand;
 
@@ -138,25 +135,25 @@ async function prepareTransferPayload(
   if (target !== CANVAS_TARGET || !payload) return payload;
 
   if (payload.kind === 'singleAsset') {
-    const promoted = await promoteCanvasAsset(payload.asset, deps);
-    if (!promoted && requiresCanvasAssetPromotion(payload.asset, deps)) {
+    const materialized = await materializeCanvasGeneratedOutput(payload.asset, deps);
+    if (!materialized && requiresCanvasOutputMaterialization(payload.asset, deps)) {
       throw new Error(
-        'generated-draft-requires-promotion: Save or Create Asset before sending this generated draft to Canvas.',
+        'generated-output-persistence-failed: Canvas handoff requires a stable generated-output reference.',
       );
     }
-    return promoted ? { ...payload, asset: promoted } : payload;
+    return materialized ? { ...payload, asset: materialized } : payload;
   }
 
   if (payload.kind === 'assetBatch') {
     const assets = await Promise.all(
       payload.assets.map(async (asset) => {
-        const promoted = await promoteCanvasAsset(asset, deps);
-        if (!promoted && requiresCanvasAssetPromotion(asset, deps)) {
+        const materialized = await materializeCanvasGeneratedOutput(asset, deps);
+        if (!materialized && requiresCanvasOutputMaterialization(asset, deps)) {
           throw new Error(
-            'generated-draft-requires-promotion: Save or Create Asset before sending this generated draft to Canvas.',
+            'generated-output-persistence-failed: Canvas handoff requires a stable generated-output reference.',
           );
         }
-        return promoted ?? asset;
+        return materialized ?? asset;
       }),
     );
     return { ...payload, assets };
@@ -165,7 +162,7 @@ async function prepareTransferPayload(
   return payload;
 }
 
-async function promoteCanvasAsset(
+async function materializeCanvasGeneratedOutput(
   asset: PluginTransferAssetRef,
   deps: PluginTransferBridgeDeps,
 ): Promise<PluginTransferAssetRef | undefined> {
@@ -179,7 +176,7 @@ async function promoteCanvasAsset(
 
   const workspaceRoot = deps.workspaceRoot ?? vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
   if (!workspaceRoot) {
-    logger.warn('Unable to promote generated asset before Canvas transfer: workspace missing');
+    logger.warn('Unable to materialize generated output before Canvas transfer: workspace missing');
     return undefined;
   }
 
@@ -206,7 +203,7 @@ async function promoteCanvasAsset(
   });
 
   if (result.status !== 'ready' || !result.outputPath) {
-    logger.warn('Unable to promote generated asset before Canvas transfer', {
+    logger.warn('Unable to materialize generated output before Canvas transfer', {
       status: result.status,
       error: result.error,
     });
@@ -216,11 +213,11 @@ async function promoteCanvasAsset(
   return {
     ...asset,
     path: result.outputPath,
-    resourceRef: createPromotedGeneratedResourceRef(asset, result),
+    resourceRef: createMaterializedGeneratedResourceRef(asset, result),
   };
 }
 
-function requiresCanvasAssetPromotion(
+function requiresCanvasOutputMaterialization(
   asset: PluginTransferAssetRef,
   deps: PluginTransferBridgeDeps,
 ): boolean {
@@ -278,7 +275,7 @@ function createWorkspacePathResolver(workspaceRoot: string): PathResolver {
   );
 }
 
-function createPromotedGeneratedResourceRef(
+function createMaterializedGeneratedResourceRef(
   asset: PluginTransferAssetRef,
   result: ContentIngestResult,
 ): ResourceRef {

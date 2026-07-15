@@ -121,14 +121,7 @@ describe('useSlashCommands Skill lifecycle commands', () => {
     await handleCommand('/commit fix bug');
 
     expect(activateSkill).toHaveBeenCalledWith('commit-skill', 'fix bug');
-    expect(submit).toHaveBeenCalledWith(
-      'fix bug',
-      expect.objectContaining({
-        metadata: expect.objectContaining({
-          agentCreation: expect.objectContaining({ entrySignal: 'prompt-chain-skill' }),
-        }),
-      }),
-    );
+    expect(submit).toHaveBeenCalledWith('fix bug');
   });
 
   it('activates lifecycle records for dollar Skill invocations before submit', async () => {
@@ -144,14 +137,7 @@ describe('useSlashCommands Skill lifecycle commands', () => {
     await handleCommand('$review changed files');
 
     expect(activateSkill).toHaveBeenCalledWith('review', 'changed files');
-    expect(submit).toHaveBeenCalledWith(
-      'changed files',
-      expect.objectContaining({
-        metadata: expect.objectContaining({
-          agentCreation: expect.objectContaining({ entrySignal: 'prompt-chain-skill' }),
-        }),
-      }),
-    );
+    expect(submit).toHaveBeenCalledWith('changed files');
   });
 
   it('rejects non-queueable commands while running before side effects', async () => {
@@ -306,10 +292,7 @@ function renderHarness(actions: {
     readonly slot?: import('@neko/shared').SkillLifecycleSlot;
     readonly skillName?: string;
   }) => boolean;
-  readonly submit?: (
-    prompt: string,
-    executionOverrides?: { metadata?: Record<string, unknown> },
-  ) => Promise<void> | void;
+  readonly submit?: (prompt: string) => Promise<void> | void;
   readonly getMessageQueueSnapshot?: NonNullable<
     import('../useAgentSession').AgentSessionHandle['getMessageQueueSnapshot']
   >;
@@ -322,8 +305,8 @@ function renderHarness(actions: {
     ({ handleCommand } = useSlashCommands({
       clearHistory: vi.fn(),
       submit: actions.submit
-        ? async (prompt, executionOverrides) => {
-            await actions.submit?.(prompt, executionOverrides);
+        ? async (prompt) => {
+            await actions.submit?.(prompt);
           }
         : undefined,
       activateSkill: actions.activateSkill,

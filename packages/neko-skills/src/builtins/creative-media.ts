@@ -19,12 +19,6 @@ export interface CreativeMediaProfileDescriptor {
   readonly kind: 'source' | 'operation';
 }
 
-export interface CreativeMediaWorkflowStageDescriptor {
-  readonly id: string;
-  readonly ownerSkill: 'media-production' | 'video-editing' | 'media-quality-review';
-  readonly artifactKind: string;
-}
-
 export const CREATIVE_MEDIA_PROFILES: readonly CreativeMediaProfileDescriptor[] = [
   ...STORYBOARD_SOURCE_PROFILE_IDS.map((profile) => ({
     id: `storyboard/${profile}`,
@@ -46,31 +40,6 @@ export const CREATIVE_MEDIA_PROFILES: readonly CreativeMediaProfileDescriptor[] 
     ownerSkill: 'video' as const,
     kind: 'operation' as const,
   })),
-];
-
-export const CREATIVE_MEDIA_WORKFLOW_STAGES: readonly CreativeMediaWorkflowStageDescriptor[] = [
-  {
-    id: 'storyboard-normalization',
-    ownerSkill: 'media-production',
-    artifactKind: 'storyboard-table',
-  },
-  { id: 'animation-planning', ownerSkill: 'media-production', artifactKind: 'animation-plan' },
-  { id: 'cut-authoring', ownerSkill: 'video-editing', artifactKind: 'cut-project-revision' },
-  {
-    id: 'generated-shot-assembly',
-    ownerSkill: 'video-editing',
-    artifactKind: 'cut-project-revision',
-  },
-  {
-    id: 'preflight-export',
-    ownerSkill: 'media-quality-review',
-    artifactKind: 'quality-gate-result',
-  },
-  {
-    id: 'deliverable-verification',
-    ownerSkill: 'media-quality-review',
-    artifactKind: 'quality-gate-result',
-  },
 ];
 
 const storyboardContent = `# Storyboard
@@ -405,7 +374,7 @@ export const videoSkill: Skill = {
 export const mediaProductionSkill: Skill = {
   name: 'media-production',
   description:
-    'Coordinate the complete recoverable workflow from source normalization and Storyboard through generation, quality Gates, project authoring, export, and deliverable verification.',
+    'Guide adaptive source-to-deliverable production by selecting current owning capabilities and reassessing each actual result.',
   content: mediaProductionContent,
   icon: '🎥',
   source: 'builtin',
@@ -428,9 +397,7 @@ export const mediaProductionSkill: Skill = {
       'exported-deliverable',
     ],
     artifactProfiles: [MEDIA_PRODUCTION_FROM_COMIC_PROFILE_ID],
-    referencedCapabilities: ['media.production-orchestration'],
     validationRequirements: ['asset-quality-gate', 'pre-export-gate', 'post-export-gate'],
-    operations: CREATIVE_MEDIA_WORKFLOW_STAGES.map((stage) => stage.id),
     tags: ['production', 'orchestration', 'export'],
     riskLevel: 'high',
     costLevel: 'high',

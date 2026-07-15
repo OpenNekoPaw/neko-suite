@@ -304,7 +304,7 @@ describe('canvasHeadlessAuthoring planner', () => {
     ).toThrow(/runtime-only-resource-identity/);
   });
 
-  it('rejects runtime projection ids and unpromoted generated refs from durable nodes', () => {
+  it('rejects runtime projection ids while accepting canonical generated output refs', () => {
     const generatedRef = createResourceRef({
       scope: 'project',
       provider: 'generated-output',
@@ -320,13 +320,9 @@ describe('canvasHeadlessAuthoring planner', () => {
         candidateId: 'runtime:canvas-generated-candidate:output:1',
         resourceRef: generatedRef,
       }).map(({ code }) => code),
-    ).toEqual([
-      'runtime-only-resource-identity',
-      'runtime-only-resource-identity',
-      'unpromoted-generated-resource-identity',
-    ]);
+    ).toEqual(['runtime-only-resource-identity', 'runtime-only-resource-identity']);
 
-    expect(() =>
+    expect(
       planCanvasNodeCreation(
         { canvasData: emptyCanvas(), generateId: ids() },
         {
@@ -336,8 +332,8 @@ describe('canvasHeadlessAuthoring planner', () => {
             resourceRef: generatedRef,
           },
         },
-      ),
-    ).toThrow(/unpromoted-generated-resource-identity/);
+      ).result.node.data,
+    ).toMatchObject({ resourceRef: generatedRef });
   });
 
   it('accepts stable Asset refs and portable legacy generated-source file refs', () => {

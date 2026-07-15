@@ -19,13 +19,25 @@ describe('neko-suite plugin transfer planner', () => {
     expect(
       buildNekoSuitePluginTransferPlan({
         target: 'cut',
-        assetPath: '/tmp/sound.wav',
-        mediaType: 'audio',
+        payload: {
+          kind: 'singleAsset',
+          asset: { path: '/tmp/sound.wav', mediaType: 'audio' },
+          target: {
+            kind: 'file',
+            documentUri: 'file:///project/edit.nkv',
+            expectedProjectRevision: 'revision-1',
+          },
+        },
       }),
     ).toEqual({
       status: 'execute-command',
       command: 'neko.cut.authoring.importGeneratedClip',
-      payload: { assetPath: '/tmp/sound.wav', mediaType: 'audio' },
+      payload: {
+        assetPath: '/tmp/sound.wav',
+        mediaType: 'audio',
+        target: { kind: 'file', documentUri: 'file:///project/edit.nkv' },
+        expectedProjectRevision: 'revision-1',
+      },
     });
 
     expect(
@@ -85,12 +97,19 @@ describe('neko-suite plugin transfer planner', () => {
     expect(
       buildNekoSuitePluginTransferPlan({
         target: 'cut',
-        payload: { kind: 'cutStoryboard', storyboard },
+        payload: {
+          kind: 'cutStoryboard',
+          storyboard,
+          target: { kind: 'new', documentUri: 'file:///project/opening.nkv' },
+        },
       }),
     ).toEqual({
       status: 'execute-command',
       command: 'neko.cut.authoring.importStoryboard',
-      payload: storyboard,
+      payload: {
+        ...storyboard,
+        target: { kind: 'new', documentUri: 'file:///project/opening.nkv' },
+      },
     });
 
     expect(
@@ -102,6 +121,35 @@ describe('neko-suite plugin transfer planner', () => {
       status: 'unsupported',
       target: 'canvas',
       reason: 'unsupported-structured-target',
+    });
+  });
+
+  it('fails closed when a Cut transfer omits an explicit file or new target', () => {
+    expect(
+      buildNekoSuitePluginTransferPlan({
+        target: 'cut',
+        assetPath: '/tmp/shot.mp4',
+        mediaType: 'video',
+      }),
+    ).toEqual({
+      status: 'unsupported',
+      target: 'cut',
+      reason: 'explicit-cut-target-required',
+    });
+
+    expect(
+      buildNekoSuitePluginTransferPlan({
+        target: 'cut',
+        payload: {
+          kind: 'singleAsset',
+          asset: { path: '/tmp/shot.mp4', mediaType: 'video' },
+          target: { kind: 'file', documentUri: 'file:///project/edit.nkv' },
+        },
+      }),
+    ).toEqual({
+      status: 'unsupported',
+      target: 'cut',
+      reason: 'cut-project-revision-required',
     });
   });
 
@@ -188,8 +236,15 @@ describe('neko-suite plugin transfer planner', () => {
     const plans = [
       buildNekoSuitePluginTransferPlan({
         target: 'cut',
-        assetPath: '/tmp/shot.mp4',
-        mediaType: 'video',
+        payload: {
+          kind: 'singleAsset',
+          asset: { path: '/tmp/shot.mp4', mediaType: 'video' },
+          target: {
+            kind: 'file',
+            documentUri: 'file:///project/edit.nkv',
+            expectedProjectRevision: 'revision-1',
+          },
+        },
       }),
       buildNekoSuitePluginTransferPlan({
         target: 'sketch',
@@ -212,7 +267,9 @@ describe('neko-suite plugin transfer planner', () => {
       expect.objectContaining({ command: 'neko.sketch.authoring.importImageSource' }),
       expect.objectContaining({ command: 'neko.model.authoring.importAsset' }),
     ]);
-    expect(plans.map((plan) => (plan.status === 'execute-command' ? plan.command : ''))).not.toEqual(
+    expect(
+      plans.map((plan) => (plan.status === 'execute-command' ? plan.command : '')),
+    ).not.toEqual(
       expect.arrayContaining([
         'neko.cut.importGeneratedClip',
         'neko.sketch.importAsset',

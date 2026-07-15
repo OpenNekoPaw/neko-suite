@@ -58,6 +58,7 @@ function createBridge(
   return {
     getSnapshot: vi.fn(),
     sendAgentRuntimeMessage: vi.fn(async () => result),
+    manageSession: vi.fn(),
     handoff: vi.fn(),
   };
 }

@@ -75,7 +75,7 @@ describe('AssetManifest v4 contract', () => {
       typeMetadata: {
         type: 'profile',
         data: {
-          profileKinds: ['artifact', 'creation'],
+          profileKinds: ['artifact', 'provider-expression'],
           trustLevel: 'community',
           hostRequirements: [{ host: 'vscode' }, { host: 'tui', optional: true }],
           profiles: [
@@ -86,8 +86,8 @@ describe('AssetManifest v4 contract', () => {
               descriptorPath: 'profiles/storyboard.profile.json',
             },
             {
-              profileId: 'studio.review.lifecycle',
-              kind: 'creation',
+              profileId: 'provider-expression:studio',
+              kind: 'provider-expression',
               version: '1.0.0',
             },
           ],
@@ -109,8 +109,8 @@ describe('AssetManifest v4 contract', () => {
             profileKinds: ['artifact'],
             profiles: [
               {
-                profileId: 'studio.creation',
-                kind: 'creation',
+                profileId: 'studio.invalid',
+                kind: 'workflow' as never,
                 version: '',
                 descriptorPath: '../escape.json',
               },
@@ -126,7 +126,7 @@ describe('AssetManifest v4 contract', () => {
       expect.arrayContaining([
         {
           field: 'typeMetadata.data.profiles.0.kind',
-          message: 'must be declared in profileKinds',
+          message: 'must be a known profile package kind',
         },
         {
           field: 'typeMetadata.data.profiles.0.version',

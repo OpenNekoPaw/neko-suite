@@ -16,7 +16,6 @@ import type {
   IToolCategoryRegistry,
   IProviderCardRegistry,
   IArtifactProfileRegistry,
-  ICreationProfileRegistry,
   IProviderExpressionProfileRegistry,
   IOperationToolAdapterRegistry,
   PromptFragment,
@@ -168,15 +167,6 @@ export interface AgentSessionConfig {
     reservedTokens?: number;
   };
 
-  /**
-   * Enable creative-domain context compression.
-   * When true (or a config object), older turns are compressed using
-   * priority-based classification (user messages preserved verbatim,
-   * creative decisions / version anchors / iteration chains summarised
-   * with per-category token budgets).
-   */
-  creativeCompression?: boolean | import('@neko/shared').CreativeCompressionConfig;
-
   /** Tool confirmation callback (required for 'ask' mode) */
   onConfirmTool?: (
     request: import('../permission/types').ToolConfirmationRequest,
@@ -187,6 +177,9 @@ export interface AgentSessionConfig {
 
   /** Validation error callback */
   onValidationError?: (error: import('../validation/types').ValidationError) => void;
+
+  /** Domain output validators contributed by owning capability packages. */
+  outputValidationAdapters?: readonly import('@neko/shared').AgentOutputValidationAdapter[];
 
   /** Host-visible activation progress for Skill/IDC/mode lifecycle changes. */
   onActivationProgress?: (
@@ -199,7 +192,6 @@ export interface AgentSessionConfig {
   toolCategoryRegistry?: IToolCategoryRegistry;
   providerCardRegistry?: IProviderCardRegistry;
   artifactProfileRegistry?: IArtifactProfileRegistry;
-  creationProfileRegistry?: ICreationProfileRegistry;
   providerExpressionProfileRegistry?: IProviderExpressionProfileRegistry;
 
   /**
@@ -491,7 +483,7 @@ export interface AgentEvent {
       before: number;
       after: number;
     };
-    strategy: 'basic' | 'creative-priority';
+    strategy: 'basic';
   };
 
   /** Compaction failure event */

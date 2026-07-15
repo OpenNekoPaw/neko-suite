@@ -23,6 +23,8 @@ describe('skill system prompt', () => {
     expect(prompt).toContain('Do not activate skills by keyword matching');
     expect(prompt).toContain('Use ordinary Agent capabilities first');
     expect(prompt).toContain('briefly state the activation reason');
+    expect(prompt).toContain('registered description and current capability context');
+    expect(prompt).not.toContain('storyboard, animation, video');
   });
 
   it('keeps Chinese skill catalogs in Chinese when a skill lacks localized description', () => {

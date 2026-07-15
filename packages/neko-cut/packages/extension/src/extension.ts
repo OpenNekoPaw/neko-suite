@@ -36,11 +36,16 @@ import {
 import { TimelineToolExecutor } from './services/TimelineToolExecutor';
 import { TimelineToolBridge } from './services/timelineToolBridge';
 import { NekoCutDashboardTaskSource } from './services/dashboardTaskSource';
-import { CutProjectQualityFacade } from './services/CutProjectQualityFacade';
+import { createNkvProjectRef, CutProjectQualityFacade } from './services/CutProjectQualityFacade';
 import { registerMarketInstallTargets } from './market/registerMarketInstallTargets';
-import type { CanvasCutDraftPayload, CutCanvasDraftImportResult } from '@neko/shared';
+import type { CutCanvasDraftImportResult } from '@neko/shared';
 
-type GenerateVideoForClipOptions = Parameters<NekoCutAPI['ai']['generateVideoForClip']>[0];
+interface CutAiCommandOptions {
+  readonly prompt?: string;
+  readonly filePath?: string;
+  readonly documentUri?: string;
+  readonly expectedProjectRevision?: string;
+}
 
 /**
  * Activate the extension
@@ -186,44 +191,39 @@ export async function activate(
         bootstrapResult.cutProjectAuthoringService.importGeneratedClip(request),
     },
     timeline: {
-      getInfo: () => timelineBridge.getInfo(),
-      addElement: (config) => timelineBridge.addElement(config),
-      updateElement: (id, updates) => timelineBridge.updateElement(id, updates),
-      deleteElement: (id) => timelineBridge.deleteElement(id),
-      listElements: () => timelineBridge.listElements(),
-      reveal: async () => videoEditorProvider.focusActiveEditor(),
-      importCanvasDraft: async (payload: CanvasCutDraftPayload) => {
+      getInfo: (target) => timelineBridge.getInfo(target),
+      addElement: (target, config) => timelineBridge.addElement(target, config),
+      updateElement: (target, id, updates) => timelineBridge.updateElement(target, id, updates),
+      deleteElement: (target, id) => timelineBridge.deleteElement(target, id),
+      listElements: (target) => timelineBridge.listElements(target),
+      reveal: async (request) => {
+        await vscode.commands.executeCommand(
+          'vscode.openWith',
+          vscode.Uri.parse(request.projectUri),
+          'neko.videoEditor',
+        );
+        return true;
+      },
+      importCanvasDraft: async (request) => {
         const result = await vscode.commands.executeCommand<CutCanvasDraftImportResult>(
           'neko.cut.authoring.importCanvasDraft',
-          payload,
+          {
+            payload: request.payload,
+            target: { kind: 'file', documentUri: request.documentUri },
+            ...(request.expectedProjectRevision
+              ? { expectedProjectRevision: request.expectedProjectRevision }
+              : {}),
+          },
         );
         if (result) {
           return result;
         }
-        const projectUri = videoEditorProvider.getActiveDocumentUri();
         return {
           accepted: false,
           status: 'post-failed',
-          ...(projectUri ? { projectUri } : {}),
+          projectUri: request.documentUri,
           error: 'neko.cut.authoring.importCanvasDraft did not return an import result.',
         };
-      },
-    },
-
-    ai: {
-      /**
-       * Generate a video clip via neko-agent and add it to the timeline.
-       * Delegates the heavy lifting to the `neko.agent.generateForNode`-like command.
-       */
-      generateVideoForClip: async (options) => {
-        const result = await vscode.commands.executeCommand<{ elementId: string } | undefined>(
-          'neko.cut.ai.generateVideoForClip',
-          options,
-        );
-        if (!result?.elementId) {
-          throw new Error('Video generation failed or neko-agent is not installed');
-        }
-        return result.elementId;
       },
     },
 
@@ -275,35 +275,19 @@ export async function activate(
   context.subscriptions.push(
     vscode.commands.registerCommand(
       'neko.cut.ai.generateVideoForClip',
-      async (options?: GenerateVideoForClipOptions | unknown) => {
+      async (options?: CutAiCommandOptions | unknown) => {
+        const target = resolveInteractiveCutTarget(options, videoEditorProvider);
+        if (!target) {
+          vscode.window.showWarningMessage('Open a Cut project before requesting timeline media.');
+          return undefined;
+        }
         const providedPrompt = readStringProperty(options, 'prompt');
         const prompt = providedPrompt ?? (await promptForGenerateVideoClip());
         if (!prompt) return undefined;
 
-        const referenceImageBase64 = readStringProperty(options, 'referenceImageBase64');
-
-        if (providedPrompt) {
-          try {
-            const result = await vscode.commands.executeCommand<unknown>(
-              'neko.agent.generateForNode',
-              {
-                nodeId: `cut-${Date.now()}`,
-                prompt,
-                ...(referenceImageBase64 ? { referenceRefs: [referenceImageBase64] } : {}),
-              },
-            );
-            const elementId = readGeneratedElementId(result);
-            if (elementId) return { elementId };
-          } catch (error) {
-            getRootLogger().warn('neko.cut.ai.generateVideoForClip direct generation failed', {
-              error,
-            });
-          }
-        }
-
         await sendCutSkillIntentToAgent(
           'video',
-          `Generate a video clip for the active NekoCut timeline from this prompt: ${prompt}`,
+          `Generate a video clip from this prompt: ${prompt}. Add it only to Cut project ${target.documentUri} with expected project revision ${target.expectedProjectRevision}.`,
         );
         return undefined;
       },
@@ -312,12 +296,17 @@ export async function activate(
 
   context.subscriptions.push(
     vscode.commands.registerCommand('neko.cut.ai.transcribeToSubtitles', async (args?: unknown) => {
+      const target = resolveInteractiveCutTarget(args, videoEditorProvider);
+      if (!target) {
+        vscode.window.showWarningMessage('Open a Cut project before requesting subtitles.');
+        return;
+      }
       const filePath = readStringProperty(args, 'filePath') ?? (await promptForMediaFilePath());
       if (!filePath) return;
 
       await sendCutSkillIntentToAgent(
         'subtitle',
-        `Transcribe this audio/video file and add word-timed subtitles to the active NekoCut timeline: ${filePath}`,
+        `Transcribe this audio/video file and add word-timed subtitles only to Cut project ${target.documentUri} with expected project revision ${target.expectedProjectRevision}: ${filePath}`,
       );
     }),
   );
@@ -374,15 +363,32 @@ async function sendCutSkillIntentToAgent(
   }
 }
 
-function readGeneratedElementId(value: unknown): string | undefined {
-  if (typeof value === 'string') return value;
-  return readStringProperty(value, 'elementId');
-}
-
 function readStringProperty(value: unknown, key: string): string | undefined {
   if (!isRecord(value)) return undefined;
   const candidate = value[key];
   return typeof candidate === 'string' && candidate.trim().length > 0 ? candidate : undefined;
+}
+
+function resolveInteractiveCutTarget(
+  value: unknown,
+  videoEditorProvider: VideoEditorProvider,
+): { readonly documentUri: string; readonly expectedProjectRevision: string } | undefined {
+  const requestedDocumentUri = readStringProperty(value, 'documentUri');
+  const requestedRevision = readStringProperty(value, 'expectedProjectRevision');
+  if (requestedDocumentUri || requestedRevision) {
+    return requestedDocumentUri && requestedRevision
+      ? { documentUri: requestedDocumentUri, expectedProjectRevision: requestedRevision }
+      : undefined;
+  }
+
+  const documentUri = videoEditorProvider.getActiveDocumentVsCodeUri()?.toString();
+  if (!documentUri) return undefined;
+  const project = videoEditorProvider.getProjectDataForDocument(documentUri);
+  if (!project) return undefined;
+  return {
+    documentUri,
+    expectedProjectRevision: createNkvProjectRef(documentUri, project).projectRevision,
+  };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

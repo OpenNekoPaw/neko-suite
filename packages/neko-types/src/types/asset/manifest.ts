@@ -263,12 +263,11 @@ export interface ProviderMetadata {
 /** Backward-compatible name for provider marketplace metadata. */
 export type ProviderCardMarketMetadata = ProviderMetadata;
 
-export type ProfilePackageKind = 'artifact' | 'creation' | 'provider-expression';
+export type ProfilePackageKind = 'artifact' | 'provider-expression';
 export type ProfilePackageHost = 'vscode' | 'cli' | 'tui';
 
 export const PROFILE_PACKAGE_KINDS: readonly ProfilePackageKind[] = [
   'artifact',
-  'creation',
   'provider-expression',
 ] as const;
 
@@ -351,10 +350,7 @@ export const PLUGIN_PERMISSIONS: readonly PluginPermission[] = [
 ] as const;
 
 export type PluginHighSensitivePermission =
-  | 'fs-write:project'
-  | 'network:any'
-  | 'process-spawn'
-  | 'system-info';
+  'fs-write:project' | 'network:any' | 'process-spawn' | 'system-info';
 
 export const PLUGIN_HIGH_SENSITIVE_PERMISSIONS: readonly PluginHighSensitivePermission[] = [
   'fs-write:project',
@@ -429,11 +425,7 @@ export interface PresetMetadata {
 
 export type BundleInstallPolicy = 'all' | 'pick';
 export type BundleType =
-  | 'style-pack'
-  | 'workflow-pack'
-  | 'character-pack'
-  | 'motion-pack'
-  | 'mixed';
+  'style-pack' | 'workflow-pack' | 'character-pack' | 'motion-pack' | 'mixed';
 
 export const BUNDLE_TYPES: readonly BundleType[] = [
   'style-pack',
@@ -1346,9 +1338,7 @@ function validateProfilePackageMetadata(
   requireNonEmptyArray(data, 'typeMetadata.data.profiles', issues, 'profiles');
   if (Array.isArray(data['profiles'])) {
     const declaredKinds = new Set(
-      Array.isArray(data['profileKinds'])
-        ? data['profileKinds'].filter(isProfilePackageKind)
-        : [],
+      Array.isArray(data['profileKinds']) ? data['profileKinds'].filter(isProfilePackageKind) : [],
     );
 
     data['profiles'].forEach((profile, index) => {

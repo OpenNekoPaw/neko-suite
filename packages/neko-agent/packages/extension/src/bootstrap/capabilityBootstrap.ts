@@ -15,7 +15,6 @@ import type {
   ICapabilityMediaService,
   ICapabilityConfigManager,
   IArtifactProfileRegistry,
-  ICreationProfileRegistry,
   IProviderCardRegistry,
   IProviderExpressionProfileRegistry,
 } from '@neko/shared';
@@ -47,10 +46,7 @@ const runtimeBindingStore = createCapabilityRuntimeBindingStore(logger);
 
 export interface CapabilityBootstrapOptions extends Omit<
   CapabilityDiscoveryDeps,
-  | 'providerCardRegistry'
-  | 'artifactProfileRegistry'
-  | 'creationProfileRegistry'
-  | 'providerExpressionProfileRegistry'
+  'providerCardRegistry' | 'artifactProfileRegistry' | 'providerExpressionProfileRegistry'
 > {
   /** Media generation service from Platform */
   mediaService?: ICapabilityMediaService;
@@ -62,8 +58,6 @@ export interface CapabilityBootstrapOptions extends Omit<
   providerCardRegistry?: IProviderCardRegistry;
   /** Shared Artifact Profile registry used by runtime prompt/schema composition. */
   artifactProfileRegistry?: IArtifactProfileRegistry;
-  /** Shared Creation Profile registry used by runtime prompt/schema composition. */
-  creationProfileRegistry?: ICreationProfileRegistry;
   /** Shared Provider/model Expression Profile registry used by runtime prompt composition. */
   providerExpressionProfileRegistry?: IProviderExpressionProfileRegistry;
   /** Workspace root used to load project-level .neko/providers/*.card.md overrides. */
@@ -94,7 +88,6 @@ export function bootstrapCapabilities(
     toolCategoryRegistry,
     providerCardRegistry,
     artifactProfileRegistry: options.artifactProfileRegistry,
-    creationProfileRegistry: options.creationProfileRegistry,
     providerExpressionProfileRegistry: options.providerExpressionProfileRegistry,
   });
 
@@ -112,7 +105,6 @@ export function bootstrapCapabilities(
     toolCategoryRegistry,
     providerCardRegistry,
     artifactProfileRegistry: options.artifactProfileRegistry,
-    creationProfileRegistry: options.creationProfileRegistry,
     providerExpressionProfileRegistry: options.providerExpressionProfileRegistry,
   });
   _instance.activate(context, {

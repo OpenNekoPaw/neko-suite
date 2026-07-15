@@ -13,6 +13,7 @@ export function getMediaTaskPrimaryOutputUrl(
 
 export interface GeneratedAssetSink {
   add(asset: GeneratedAsset): void | Promise<void>;
+  remove(id: string): boolean | Promise<boolean>;
 }
 
 export interface FinalizeCompletedMediaTaskOutputsInput {
@@ -26,7 +27,6 @@ export interface FinalizeCompletedMediaTaskOutputsInput {
   ) => Promise<string[]>;
   transcodeFile?: DownloadMediaOptions['transcodeFile'];
   assetIndex?: GeneratedAssetSink;
-  generateAssetId: () => string;
   computeContentDigest?: (filePath: string) => Promise<string>;
   logger?: {
     info?(message: string, details?: unknown): void;
@@ -52,21 +52,23 @@ export async function finalizeCompletedMediaTaskOutputs(
     generatedAssets: [],
   };
 
-  if (
-    input.task.status !== 'completed' ||
-    outputs.length === 0 ||
-    !input.outputDir ||
-    !input.saveOutputs
-  ) {
+  if (input.task.status !== 'completed' || outputs.length === 0) {
     return remoteOnlyResult;
   }
 
+  if (!input.outputDir || !input.saveOutputs || !input.assetIndex) {
+    throw new Error(
+      'Creator-visible media completion requires workspace output persistence and index ownership.',
+    );
+  }
+
+  const indexedAssetIds: string[] = [];
   try {
     const hostOutputPaths = await input.saveOutputs(input.task.scope, input.outputDir, {
       transcodeFile: input.transcodeFile,
     });
     if (hostOutputPaths.length === 0) {
-      return remoteOnlyResult;
+      throw new Error('Generated output materialization returned no workspace files.');
     }
 
     const computeContentDigest = input.computeContentDigest ?? computeFileContentDigest;
@@ -81,15 +83,13 @@ export async function finalizeCompletedMediaTaskOutputs(
       prompt: input.task.request?.prompt,
       model: input.task.modelId,
       request: input.task.request,
-      generateAssetId: input.generateAssetId,
     });
 
-    if (input.assetIndex && generatedAssets.length > 0) {
-      for (const asset of generatedAssets) {
-        await input.assetIndex.add(asset);
-      }
-      input.logger?.info?.(`Registered ${generatedAssets.length} generated asset(s) in index`);
+    for (const asset of generatedAssets) {
+      await input.assetIndex.add(asset);
+      indexedAssetIds.push(asset.id);
     }
+    input.logger?.info?.(`Registered ${generatedAssets.length} generated asset(s) in index`);
 
     return {
       resultUrls: generatedAssets
@@ -100,8 +100,11 @@ export async function finalizeCompletedMediaTaskOutputs(
       generatedAssets,
     };
   } catch (error) {
-    input.logger?.warn?.('Failed to save generated media outputs', error);
-    return remoteOnlyResult;
+    for (const assetId of indexedAssetIds.reverse()) {
+      await Promise.resolve(input.assetIndex.remove(assetId)).catch(() => false);
+    }
+    input.logger?.warn?.('Failed to persist generated media outputs', error);
+    throw error;
   }
 }
 

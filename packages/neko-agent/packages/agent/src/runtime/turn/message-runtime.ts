@@ -36,7 +36,6 @@ import type {
 import { isDocumentFile } from '@neko/shared';
 import type { AgentPendingMessageSource } from '../runner/agent-runner-port';
 import type { AgentEvent } from '../../session/types';
-import { mergeCreationExecutionMetadata } from '../../session/creation-execution-metadata';
 import { DEFAULT_MENTION_EXCLUDE_GLOB } from '../../input/mention-excludes';
 import {
   extractFileReferencePaths,
@@ -1803,7 +1802,7 @@ export function buildAgentTurnExecutionMetadata(
   mediaModels?: RuntimeMediaModelSelections,
   understandingModels?: MediaUnderstandingModelSelections,
 ): Record<string, unknown> | undefined {
-  const merged = mergeCreationExecutionMetadata(undefined, overrides);
+  const merged = overrides;
   const hasMediaModels = mediaModels !== undefined && Object.keys(mediaModels).length > 0;
   const hasUnderstandingModels =
     understandingModels !== undefined && Object.keys(understandingModels).length > 0;

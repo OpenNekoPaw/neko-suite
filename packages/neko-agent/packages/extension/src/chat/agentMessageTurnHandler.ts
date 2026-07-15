@@ -58,6 +58,7 @@ import {
 } from '../services/engineClientProvider';
 import { MediaTaskDeliveryHost } from '../services/mediaTaskDeliveryHost';
 import { MediaTurnBridge } from '../services/mediaTurnBridge';
+import { WorkspaceBoardProjectionHost } from '../services/workspaceBoardProjectionHost';
 import type { TaskResultObservationCoordinator } from '../services/taskResultObservationCoordinator';
 import type { AgentDashboardWorkItemSource } from '../services/dashboardWorkItemSource';
 import type { AgentLocalResourceAccess } from '../services/localResourceAccess';
@@ -73,8 +74,6 @@ import {
   resolveAgentLlmConfigForTurn,
 } from './agentLlmConfigResolver';
 import { getCapabilityRuntimeBindings } from '../bootstrap/capabilityBootstrap';
-import type { AgentCanvasBoardCoordinator } from '../services/agentCanvasBoardCoordinator';
-import { AgentCanvasBoardWorkRuntime } from '../services/agentCanvasBoardWorkRuntime';
 
 const logger = getLogger('AgentMessageTurnHandler');
 
@@ -82,7 +81,6 @@ export interface AgentMessageTurnHandlerOptions {
   readonly accountAiCatalog?: AccountAiCatalogCache;
   readonly generatedAssetIndex?: GeneratedAssetIndex;
   readonly taskResultObservationCoordinator?: TaskResultObservationCoordinator;
-  readonly canvasBoards?: AgentCanvasBoardCoordinator;
 }
 
 export class AgentMessageTurnHandler {
@@ -100,8 +98,8 @@ export class AgentMessageTurnHandler {
   private readonly _streamProcessor: AgentStreamProcessor;
   private readonly _mediaDeliveryHost: MediaTaskDeliveryHost;
   private readonly _mediaTurnBridge: MediaTurnBridge;
+  private readonly _workspaceBoardProjection = new WorkspaceBoardProjectionHost();
   private readonly _agentTurnBridge: AgentTurnBridge;
-  private readonly _canvasBoardWork: AgentCanvasBoardWorkRuntime | undefined;
   private readonly _subAgentEventSubscriptions = new Map<string, vscode.Disposable>();
   private readonly _disposables: vscode.Disposable[] = [];
   private _lastTextEditorUri: vscode.Uri | undefined = vscode.window.activeTextEditor?.document.uri;
@@ -127,9 +125,6 @@ export class AgentMessageTurnHandler {
     private readonly _localResourceAccess?: AgentLocalResourceAccess,
     private readonly _options: AgentMessageTurnHandlerOptions = {},
   ) {
-    this._canvasBoardWork = this._options.canvasBoards
-      ? new AgentCanvasBoardWorkRuntime({ coordinator: this._options.canvasBoards })
-      : undefined;
     this._attachmentProcessor = new AttachmentProcessor({
       contentAccessRuntime: getCapabilityRuntimeBindings().contentAccessRuntime,
     });
@@ -147,12 +142,12 @@ export class AgentMessageTurnHandler {
       dashboardWorkItems: this._dashboardWorkItems,
       localResourceAccess: this._localResourceAccess,
       conversations: this._conversations,
+      workspaceBoardProjection: this._workspaceBoardProjection,
       ...(this._options.taskResultObservationCoordinator
         ? { taskResultObservations: this._options.taskResultObservationCoordinator }
         : {}),
       generateMessageId: () => createAgentMessageId(),
       now: () => Date.now(),
-      canvasBoardWork: this._canvasBoardWork,
     });
 
     const agentManager = this._agentManager;
@@ -162,6 +157,7 @@ export class AgentMessageTurnHandler {
       transcodeFile: (inputPath, outputPath, mediaType) =>
         this._engineClientProvider.transcodeFile(inputPath, outputPath, mediaType),
       mediaDeliveryHost: this._mediaDeliveryHost,
+      workspaceBoardProjection: this._workspaceBoardProjection,
       dashboardWorkItems: this._dashboardWorkItems,
       localResourceAccess: this._localResourceAccess,
       contentAccessRuntime: getCapabilityRuntimeBindings().contentAccessRuntime,
@@ -202,7 +198,6 @@ export class AgentMessageTurnHandler {
       ensureSubAgentEventSubscription: (webview, conversationId, agentRunner) =>
         this._ensureSubAgentEventSubscription(webview, conversationId, agentRunner),
       generateMessageId: () => createAgentMessageId(),
-      canvasBoardWork: this._canvasBoardWork,
     });
     this._disposables.push(
       vscode.window.onDidChangeActiveTextEditor((editor) => {

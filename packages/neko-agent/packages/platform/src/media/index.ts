@@ -35,6 +35,23 @@ export type {
 
 export { MediaGenerationService } from './media-generation-service';
 export {
+  adoptWorkspaceGeneratedOutputs,
+  retainLegacyGeneratedOutput,
+  type GeneratedOutputAdoptionDiagnostic,
+  type GeneratedOutputAdoptionIndex,
+  type GeneratedOutputAdoptionReport,
+  type LegacyGeneratedOutputRetentionDiagnostic,
+  type LegacyGeneratedOutputRetentionIndex,
+  type LegacyGeneratedOutputRetentionResult,
+} from './generated-output-adoption';
+export {
+  GeneratedOutputLifecycleService,
+  type GeneratedOutputLifecycleIndex,
+  type GeneratedOutputLifecycleResult,
+  type GeneratedOutputReferenceInspector,
+} from './generated-output-lifecycle';
+
+export {
   observeMediaTaskProgress,
   runMediaTurn,
   submitMediaTurn,
@@ -63,7 +80,6 @@ export {
   type GeneratedMediaTaskType,
 } from './media-generated-asset';
 export {
-  createMediaTaskActionCandidate,
   createMediaTaskView,
   createMediaTaskProgressView,
   getMediaTaskConversationId,
@@ -72,7 +88,6 @@ export {
   toMediaBackgroundTaskType,
   type MediaBackgroundTaskStatus,
   type MediaBackgroundTaskType,
-  type MediaTaskActionCandidate,
   type MediaTaskOutputView,
   type MediaTaskProgressView,
   type MediaTaskProgressViewInput,
@@ -80,14 +95,6 @@ export {
   type MediaTaskView,
   type MediaTaskViewOptions,
 } from './media-task-view';
-export {
-  buildMediaTaskCreativeEntityContext,
-  type BuildMediaTaskCreativeEntityContextInput,
-  type MediaTaskCreativeEntityAction,
-  type MediaTaskCreativeEntityActionKind,
-  type MediaTaskCreativeEntityBindingCandidate,
-  type MediaTaskCreativeEntityContext,
-} from './media-task-creative-entity';
 export {
   finalizeCompletedMediaTaskOutputs,
   getMediaTaskPrimaryOutputUrl,

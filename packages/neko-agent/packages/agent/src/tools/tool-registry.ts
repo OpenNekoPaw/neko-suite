@@ -560,17 +560,19 @@ const ZH_TOOL_DEFINITION_LOCALIZATIONS: Readonly<Record<string, ToolDefinitionLo
     },
   },
   GetContext: {
-    description: '获取当前 Agent 上下文：已激活技能、已注册技能和可用工具分类。',
+    description:
+      '获取当前 Agent 上下文：已激活/已注册 Skill、注册的工具组目录，以及当前实际可调用 Tool 列表。注册目录不等于当前可调用或受支持。',
     parameters: {
-      includeTools: '是否包含按分类分组的完整工具列表。',
+      includeTools: '是否包含按运行时分类分组的当前可调用 Tool 名称。',
     },
   },
   ActivateSkill: {
     description:
-      '在普通 Agent 理解并确认当前任务需要领域技能后激活技能。不要只靠关键词匹配；调用前先简要说明激活原因。',
+      '在普通 Agent 理解并确认当前任务需要领域 Skill 后激活。不要只靠关键词匹配；调用前先简要说明原因并显式选择 lifecycle slot。主任务或明确替换使用 domainSkill，补充指导使用 referenceSkill。',
     parameters: {
       skillName: '要激活的技能名称。',
       reason: '基于当前对话和已收集上下文的简短原因，说明为什么现在需要该技能。',
+      slot: '必填 lifecycle slot；主任务或明确替换使用 domainSkill，补充指导使用 referenceSkill。',
     },
   },
   DeactivateSkill: {
@@ -582,25 +584,29 @@ const ZH_TOOL_DEFINITION_LOCALIZATIONS: Readonly<Record<string, ToolDefinitionLo
     },
   },
   GenerateImage: {
-    description: '根据提示词生成或编辑图片，并返回生成资源信息。',
+    description:
+      '提交生成式异步图片 Task，只产出 generated 草稿；等待稳定结果并观察实际图片和 Quality 证据后再接受或修复，不代表项目或交付完成。',
     parameters: {
       prompt: '图片生成提示词。',
-      image: '用于编辑或参考的输入图片。',
-      model: '图片模型 ID。',
+      referenceImageUri: '可选宿主已解析的参考图片。',
+      providerId: '可选当前媒体 Provider ID。',
+      modelId: '可选当前图片模型 ID；必须与 Provider 成对提供。',
       size: '输出图片尺寸。',
     },
   },
   GenerateVideo: {
-    description: '根据提示词、参考图或关键帧生成/编辑视频片段。',
+    description:
+      '提交生成式异步单片段视频 Task；仅在当前 Provider/model 支持所需控制且该技术适合镜头时使用，结果不是时间线、成片或交付证明。',
     parameters: {
       prompt: '视频生成提示词。',
-      referenceImage: '可选参考图或首帧。',
-      firstFrame: '首帧图片引用。',
-      lastFrame: '尾帧图片引用。',
+      referenceImageUri: '可选宿主已解析的参考图或首帧。',
+      startFrameRef: '稳定首帧 ResourceRef。',
+      endFrameRef: '稳定尾帧 ResourceRef。',
       duration: '视频时长，单位秒。',
       fps: '帧率。',
       aspectRatio: '画幅比例。',
-      model: '视频模型 ID。',
+      providerId: '可选当前媒体 Provider ID。',
+      modelId: '可选当前视频模型 ID；必须与 Provider 成对提供。',
     },
   },
   GenerateMusic: {

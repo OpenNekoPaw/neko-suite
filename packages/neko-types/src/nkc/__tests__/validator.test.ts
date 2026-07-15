@@ -79,7 +79,7 @@ describe('NKC validator v2.1', () => {
     );
   });
 
-  it('rejects runtime projections, cache paths, and unpromoted generated refs in node data', () => {
+  it('rejects runtime projections and cache paths in node data', () => {
     const generatedRef = createResourceRef({
       scope: 'project',
       provider: 'generated-output',
@@ -108,12 +108,19 @@ describe('NKC validator v2.1', () => {
       expect.arrayContaining([
         expect.objectContaining({ message: expect.stringContaining('runtime handles') }),
         expect.objectContaining({ message: expect.stringContaining('runtime-only') }),
-        expect.objectContaining({ message: expect.stringContaining('promoted Asset identity') }),
       ]),
     );
   });
 
-  it('accepts stable Asset refs and existing legacy generated-source file refs', () => {
+  it('accepts stable generated-output, Asset, and existing generated-source file refs', () => {
+    const generatedRef = createResourceRef({
+      scope: 'project',
+      provider: 'generated-output',
+      kind: 'generated',
+      source: { kind: 'generated-asset', generatedAssetId: 'generated-output:1' },
+      locator: { kind: 'generated-asset', assetId: 'generated-output:1' },
+      fingerprint: createResourceFingerprint({ strategy: 'hash', value: 'sha256:generated' }),
+    });
     const assetRef = createResourceRef({
       scope: 'project',
       provider: 'media-library',
@@ -140,7 +147,8 @@ describe('NKC validator v2.1', () => {
     const result = validateNkc(
       createValidCanvas({
         nodes: [
-          { ...createCompleteNode('media'), data: { resourceRef: assetRef } },
+          { ...createCompleteNode('media'), data: { resourceRef: generatedRef } },
+          { ...createCompleteNode('media'), id: 'media-asset', data: { resourceRef: assetRef } },
           { ...createCompleteNode('media'), id: 'media-legacy', data: { resourceRef: legacyRef } },
         ],
       }),

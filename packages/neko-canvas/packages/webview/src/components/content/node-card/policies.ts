@@ -29,6 +29,7 @@ import {
 import { isImagePreviewUrl } from '../../../preview';
 import { t } from '../../../i18n';
 import { resolveCanvasStatusLabel } from '../../../i18n/canvasValueLabels';
+import { resolveResourceRefDisplayName } from '../../../utils/resourceDisplayName';
 
 const REMOVE_ACTION: CardActionDescriptor = {
   id: 'remove',
@@ -360,6 +361,10 @@ function findSelectedGenerationCandidate(
 }
 
 function resolveMediaTitle(node: CanvasNode): string {
+  const resourceRef = readResourceRef(node);
+  if (resourceRef) {
+    return resolveResourceRefDisplayName(resourceRef);
+  }
   if (node.preview?.title) {
     return extractFileBasename(node.preview.title);
   }

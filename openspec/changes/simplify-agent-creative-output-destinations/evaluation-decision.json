@@ -1,0 +1,60 @@
+{
+  "schema": "neko.agent-eval.authoring-decision.v2",
+  "behaviorId": "task-recovery",
+  "decision": "update",
+  "suiteId": "agent-runtime.creative-media-workflow",
+  "target": {
+    "kind": "workflow",
+    "id": "creative-media-feedback-iteration",
+    "contractHash": "sha256:41055e9860200150038a7ef1bb52b5bdd04635217248602b29b4a6f9506523d5"
+  },
+  "userBehavior": "Generate creative media through the normal TUI workflow and observe the durable output both as a stable generated resource and as an ordinary node on the canonical Workspace Board.",
+  "evidenceContract": {
+    "userBehavior": "Generate creative media through the normal TUI workflow and observe the durable output both as a stable generated resource and as an ordinary node on the canonical Workspace Board.",
+    "canonicalPath": [
+      "TUI App session owner",
+      "media generation task",
+      "neko/generated workspace persistence",
+      "stable generated-output ResourceRef",
+      "Node Workspace Board projection",
+      "neko/boards/workspace.nkc"
+    ],
+    "forbiddenFallback": [
+      "AssetLibrary identity or import",
+      "multi-Board resolver or active Board selection",
+      "runtime generated-draft projection",
+      "direct Agent turn runner"
+    ],
+    "observables": [
+      {
+        "ref": "workflow-facts",
+        "kind": "runtime-fact",
+        "description": "Task, stable generated resource, Workspace Board projection, forbidden-path, and terminal idle facts from the canonical TUI owner.",
+        "required": true
+      },
+      {
+        "ref": "generated-file-facts",
+        "kind": "post-check",
+        "description": "Contained fixture post-check for a regular file under the canonical generated media directory.",
+        "required": true
+      }
+    ],
+    "expectedResult": "A generated file is retained under neko/generated, the stable generated resource validates, and the Workspace Board receives ordinary nodes without Asset or multi-Board identity.",
+    "expectedFailure": "Missing file/resource/Board evidence, incomplete facts, Asset participation, multi-Board routing, runtime-draft routing, or non-terminal delivery fails visibly."
+  },
+  "coverageDelta": {
+    "schema": "neko.agent-eval.coverage-delta.v2",
+    "behaviorId": "task-recovery",
+    "groups": [
+      { "group": "canonical", "disposition": "not-applicable", "reason": "The changed behavior is an asynchronous creative workflow and is covered by the focused workflow case." },
+      { "group": "paraphrase", "disposition": "not-applicable", "reason": "No Prompt or Skill trigger semantics change in this contract simplification." },
+      { "group": "boundary", "disposition": "not-applicable", "reason": "Wrong-target and legacy-routing rejection are deterministic contract tests plus a forbidden-path hard gate in the real workflow." },
+      { "group": "failure", "disposition": "not-applicable", "reason": "Provider and media-task failure recovery behavior is unchanged." },
+      { "group": "workflow", "disposition": "required" },
+      { "group": "artifact", "disposition": "not-applicable", "reason": "No new artifact format is authored; the workflow case combines a contained file post-check with stable resource and Board revision evidence." },
+      { "group": "quality", "disposition": "not-applicable", "reason": "The change concerns destination ownership and identity rather than subjective media quality." },
+      { "group": "regression", "disposition": "not-applicable", "reason": "Legacy resolver, runtime draft, target, and replay regressions are covered by deterministic path-poison and domain tests." },
+      { "group": "holdout", "disposition": "not-applicable", "reason": "No Prompt or Skill optimization candidate is being tuned." }
+    ]
+  }
+}

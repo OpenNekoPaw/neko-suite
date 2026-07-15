@@ -12,7 +12,7 @@ export const SUPPORTED_RUNTIME_VALIDATOR_IDS = Object.freeze([
 
 export function assertSupportedArtifactValidators(checks) {
   for (const check of checks) {
-    if (check.kind === 'file-absent') continue;
+    if (check.kind === 'file-absent' || check.kind === 'directory-files') continue;
     const supported =
       check.kind === 'file' ? SUPPORTED_FILE_VALIDATOR_IDS : SUPPORTED_RUNTIME_VALIDATOR_IDS;
     if (!supported.includes(check.validatorId)) {

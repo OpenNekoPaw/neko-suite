@@ -109,7 +109,6 @@ class ApprovalEngine implements IApprovalEngine {
   }
 
   async evaluate(request: ApprovalRequest): Promise<ApprovalResponse> {
-    assertApprovalRequestBinding(request);
     const startedAt = Date.now();
     const trace = deriveAgentTraceContext(request.trace, {
       phase: 'approval',
@@ -255,27 +254,4 @@ class ApprovalEngine implements IApprovalEngine {
 
 export function createApprovalEngine(config?: ApprovalEngineConfig): IApprovalEngine {
   return new ApprovalEngine(config);
-}
-
-function assertApprovalRequestBinding(request: ApprovalRequest): void {
-  if (request.channel !== 'creator-review') return;
-  const binding = request.binding;
-  if (!binding) throw new Error('Creator review approval requires a binding.');
-  assertNonEmptyApprovalValue(binding.contentDigest, 'content digest');
-  assertNonEmptyApprovalValue(binding.target, 'target');
-  assertNonEmptyApprovalValues(binding.criticalInputIds, 'critical input identities');
-  assertNonEmptyApprovalValues(binding.creativeScope, 'creative scope');
-  assertNonEmptyApprovalValue(binding.costRiskCeiling, 'cost/risk ceiling');
-  assertNonEmptyApprovalValues(binding.mutationScope, 'mutation scope');
-  assertNonEmptyApprovalValue(binding.deliveryBoundary, 'delivery boundary');
-}
-
-function assertNonEmptyApprovalValue(value: string, label: string): void {
-  if (!value.trim()) throw new Error(`Creator review approval requires a non-empty ${label}.`);
-}
-
-function assertNonEmptyApprovalValues(values: readonly string[], label: string): void {
-  if (values.length === 0 || values.some((value) => !value.trim())) {
-    throw new Error(`Creator review approval requires non-empty ${label}.`);
-  }
 }

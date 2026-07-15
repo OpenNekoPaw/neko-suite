@@ -72,9 +72,11 @@ Prefer existing owner directories before adding runtime files:
 
 ## Runtime Planes Are Bootstrap Projection
 
-`AgentRuntimeConfig` planes (`creationGuidance`, `artifactStore`,
-`capabilityRuntime`, `validationLoop`) are session bootstrap projection helpers.
+`AgentRuntimeConfig` planes (`workspaceStore`, `capabilityRuntime`,
+`validationLoop`) are session bootstrap projection helpers.
 They thread stable ports into `AgentSessionConfig`; they do not own governance.
+Generic recovery such as autoheal belongs to `validationLoop`; there is no
+creation-specific runtime plane.
 
 Ownership remains specific:
 

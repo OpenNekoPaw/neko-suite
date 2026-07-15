@@ -85,17 +85,17 @@ const ZH_SKILL_PROMPT_INTRO =
 
 const EN_SKILL_PROMPT_RULES = [
   '\nDo not activate skills by keyword matching, catalog hints, or skill descriptions alone.',
-  'Use ordinary Agent capabilities first: understand the user request, inspect available conversation context, and gather required document/image evidence before deciding whether a skill is needed.',
+  'Use ordinary Agent capabilities first: understand the user request, inspect available conversation context, and gather the evidence required by the current request before deciding whether a skill is needed.',
   'When a non-command request truly needs a domain skill, briefly state the activation reason to the user. Use `ActivateSkill` with the same reason only after that decision.',
-  'Do not activate creative production skills for content analysis alone; use read/analysis tools directly unless the user explicitly asks for a storyboard, animation, video, Canvas/Cut handoff, export, or another production artifact.',
+  'Activate a domain skill only when its registered description and current capability context match the requested outcome; use directly available capabilities when no specialized method is needed.',
   'Use `GetContext` to see all registered skills and current state.',
 ];
 
 const ZH_SKILL_PROMPT_RULES = [
   '\n不要通过关键词匹配、目录提示或技能描述本身激活技能。',
-  '先使用普通 Agent 能力理解用户请求、检查对话上下文，并在需要时收集文档/图片证据，再判断是否需要技能。',
+  '先使用普通 Agent 能力理解用户请求、检查对话上下文，并收集当前请求所需的证据，再判断是否需要技能。',
   '非命令请求确实需要领域技能时，先向用户简要说明激活原因，再用同一个原因调用 `ActivateSkill`。',
-  '不要为了内容分析而激活创作生产类技能；除非用户明确要求分镜、动画、视频、Canvas/Cut 交接、导出或其他生产产物，否则直接使用读取/分析工具。',
+  '仅当已注册技能描述和当前能力上下文符合目标产物时激活领域技能；不需要专项方法时直接使用当前可用能力。',
   '使用 `GetContext` 查看已注册技能和当前状态。',
 ];
 

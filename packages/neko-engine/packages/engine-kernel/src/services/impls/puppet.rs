@@ -21,11 +21,10 @@ use neko_engine_puppet_renderer::{
 use neko_engine_types::easing::EasingType;
 use neko_engine_types::{
     create_nkp_puppet_runtime_adapter_descriptor, GpuFrameLease, GpuOutputHandle,
-    NkpPuppetRuntimeAdapterDescriptor, NkpPuppetRuntimeAdapterId,
-    NkpPuppetRuntimeAdapterStatus, NkpPuppetRuntimeDiagnostic,
-    NkpPuppetRuntimeDiagnosticCode, PipelineOutput, PuppetCommand, PuppetCommandAck,
-    PuppetCommandAckStatus, PuppetCommandEnvelope, PuppetCommandError, VideoGpuFrame,
-    VideoOutput,
+    NkpPuppetRuntimeAdapterDescriptor, NkpPuppetRuntimeAdapterId, NkpPuppetRuntimeAdapterStatus,
+    NkpPuppetRuntimeDiagnostic, NkpPuppetRuntimeDiagnosticCode, PipelineOutput, PuppetCommand,
+    PuppetCommandAck, PuppetCommandAckStatus, PuppetCommandEnvelope, PuppetCommandError,
+    VideoGpuFrame, VideoOutput,
 };
 use neko_runtime_puppet::animation::{AnimationClipInfo, ParameterCurveInfo};
 use neko_runtime_puppet::animation_blend::BlendLayerInfo;
@@ -1055,19 +1054,17 @@ mod tests {
             adapter.id == NkpPuppetRuntimeAdapterId::Live2dMoc3Compat
                 && adapter.owner == "neko-puppet"
                 && adapter.status == NkpPuppetRuntimeAdapterStatus::Compatibility
-                && adapter
-                    .diagnostics
-                    .iter()
-                    .any(|diagnostic| diagnostic.code == NkpPuppetRuntimeDiagnosticCode::LegacyMoc3Compatibility)
+                && adapter.diagnostics.iter().any(|diagnostic| {
+                    diagnostic.code == NkpPuppetRuntimeDiagnosticCode::LegacyMoc3Compatibility
+                })
         }));
         assert!(adapters.iter().any(|adapter| {
             adapter.id == NkpPuppetRuntimeAdapterId::Live2dCubism
                 && adapter.owner == "neko-puppet"
                 && adapter.status == NkpPuppetRuntimeAdapterStatus::Unavailable
-                && adapter
-                    .diagnostics
-                    .iter()
-                    .any(|diagnostic| diagnostic.code == NkpPuppetRuntimeDiagnosticCode::CubismAdapterUnavailable)
+                && adapter.diagnostics.iter().any(|diagnostic| {
+                    diagnostic.code == NkpPuppetRuntimeDiagnosticCode::CubismAdapterUnavailable
+                })
         }));
     }
 

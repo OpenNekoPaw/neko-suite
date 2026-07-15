@@ -7,7 +7,6 @@ import {
   builtinSkillLocales,
   builtinToolGroups,
   CREATIVE_MEDIA_PROFILES,
-  CREATIVE_MEDIA_WORKFLOW_STAGES,
   getBuiltinSkills,
   getCanonicalCreativeMediaSkills,
   imageSkill,
@@ -125,14 +124,8 @@ describe('@neko/skills builtins', () => {
         'video/generate-from-keyframes',
       ]),
     );
-    expect(CREATIVE_MEDIA_WORKFLOW_STAGES.map((stage) => stage.id)).toEqual(
-      expect.arrayContaining(['animation-planning', 'generated-shot-assembly', 'preflight-export']),
-    );
     for (const profile of CREATIVE_MEDIA_PROFILES) {
       expect(registeredNames).not.toContain(profile.id);
-    }
-    for (const stage of CREATIVE_MEDIA_WORKFLOW_STAGES) {
-      expect(registeredNames).not.toContain(stage.id);
     }
     for (const skill of registeredSkills) {
       expect(skill.command).toBeUndefined();
@@ -189,6 +182,12 @@ describe('@neko/skills builtins', () => {
     expect(zhCnSkills.find((skill) => skill.name === 'storyboard')?.description).toContain(
       'canonical Storyboard',
     );
+    expect(zhCnSkills.find((skill) => skill.name === 'media-production')?.description).toContain(
+      '当前证据',
+    );
+    expect(
+      zhCnSkills.find((skill) => skill.name === 'media-production')?.description,
+    ).not.toContain('完整流程');
     expect(zhCnSkills.find((skill) => skill.name === 'video-editing')?.description).not.toContain(
       'Video editing assistant',
     );

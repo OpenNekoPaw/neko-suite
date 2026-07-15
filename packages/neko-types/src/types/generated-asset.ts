@@ -6,7 +6,6 @@
 // =============================================================================
 
 import type { ShotScale, CameraMovement } from './canvas';
-import { isResourceRef } from './resource-cache';
 
 /**
  * Discriminator for generated asset types.
@@ -211,57 +210,15 @@ export type RenderableGeneratedAsset<T extends BaseGeneratedAsset = GeneratedAss
     renderUri: string;
   };
 
-export interface GeneratedDraftRef {
-  readonly kind: 'generated-draft';
-  readonly draftId: string;
-  readonly sessionId?: string;
-  readonly mediaKind: GeneratedAssetMediaKind;
-  readonly mimeType?: string;
-  readonly createdAt?: string;
-  /** Stable draft identity; render/cache locations are not lifecycle identity. */
-  readonly lifecycle: import('./generated-asset-lifecycle').GeneratedAssetRevisionRef;
-}
-
-export type RenderableGeneratedDraft<T extends BaseGeneratedAsset = GeneratedAsset> =
-  GeneratedAssetWithoutPath<T> & {
-    readonly draftRef: GeneratedDraftRef;
-    readonly renderUri: string;
-    readonly promoted: false;
+/** Removes host paths before a generated asset crosses into a render projection. */
+export function stripRenderableGeneratedAssetPath(
+  asset: (GeneratedAsset & { readonly renderUri: string }) | RenderableGeneratedAsset,
+): RenderableGeneratedAsset {
+  if (!('path' in asset)) return asset;
+  return {
+    ...stripGeneratedAssetPath(asset),
+    renderUri: asset.renderUri,
   };
-
-export function isGeneratedDraftRef(value: unknown): value is GeneratedDraftRef {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
-  const record = value as Record<string, unknown>;
-  return (
-    record['kind'] === 'generated-draft' &&
-    typeof record['draftId'] === 'string' &&
-    typeof record['mediaKind'] === 'string' &&
-    isGeneratedAssetMediaKind(record['mediaKind']) &&
-    isGeneratedAssetRevisionRef(record['lifecycle'], record['draftId'], record['mediaKind'])
-  );
-}
-
-function isGeneratedAssetRevisionRef(
-  value: unknown,
-  assetId: unknown,
-  mediaKind: unknown,
-): boolean {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
-  const record = value as Record<string, unknown>;
-  return (
-    record['version'] === 1 &&
-    record['assetId'] === assetId &&
-    record['mediaKind'] === mediaKind &&
-    typeof record['revision'] === 'string' &&
-    record['revision'].length > 0 &&
-    typeof record['contentDigest'] === 'string' &&
-    record['contentDigest'].length > 0 &&
-    isResourceRef(record['resourceRef']) &&
-    typeof record['generation'] === 'object' &&
-    record['generation'] !== null &&
-    typeof (record['generation'] as Record<string, unknown>)['taskId'] === 'string' &&
-    ((record['generation'] as Record<string, unknown>)['taskId'] as string).length > 0
-  );
 }
 
 export function stripGeneratedAssetPath(asset: GeneratedImage): GeneratedImageWithoutPath;

@@ -5,6 +5,7 @@ import { readFileSync } from 'node:fs';
 import {
   CANVAS_STORYBOARD_PROMPT_DOCUMENT_VERSION,
   CANVAS_STORYBOARD_PROMPT_STATE_VERSION,
+  createResourceRef,
   type AnnotationCanvasNode,
   type CanvasNode,
   type CanvasStoryboardActionIntentId,
@@ -79,6 +80,56 @@ afterEach(() => {
 });
 
 describe('NodeContentDispatcher', () => {
+  it('renders foundational media as a full-bleed resource without inline fullscreen chrome', () => {
+    const resourceRef = createResourceRef({
+      id: 'resource-cover',
+      scope: 'project',
+      provider: 'workspace',
+      kind: 'media',
+      source: {
+        kind: 'file',
+        projectRelativePath: 'assets/covers/BLAME-01.png',
+      },
+      locator: { kind: 'file', path: 'assets/covers/BLAME-01.png' },
+      fingerprint: { strategy: 'identity', value: 'cover-v1' },
+    });
+    const node: CanvasNode = {
+      id: 'media-foundational',
+      type: 'media',
+      preset: 'media.basic',
+      position: { x: 0, y: 0 },
+      size: { width: 280, height: 420 },
+      zIndex: 1,
+      data: {
+        mediaType: 'image',
+        runtimeAssetPath: 'data:image/png;base64,cover',
+        resourceRef,
+      },
+      preview: {
+        title: 'Media',
+        role: 'image',
+      },
+    } as CanvasNode;
+
+    const markup = renderToStaticMarkup(
+      React.createElement(NodeContentDispatcher, {
+        context: createContext(node),
+        renderDefaultNode: () => React.createElement('div', null, 'Default path'),
+      }),
+    );
+
+    expect(markup).toContain('BLAME-01.png');
+    expect(readClassName(markup, 'data-container-section-id', 'media-root')).not.toContain('p-2');
+    expect(readClassName(markup, 'data-container-section-id', 'media-preview')).not.toContain(
+      'p-2',
+    );
+    expect(readClassName(markup, 'data-content-block-id', 'media-asset-preview')).toContain(
+      'flex-1',
+    );
+    expect(readClassName(markup, 'data-preview-surface', 'visual')).not.toContain('border');
+    expect(markup.match(/<button/g)).toHaveLength(3);
+  });
+
   it('uses the default renderer when node has no content and no preset', () => {
     const node: CanvasNode = {
       id: 'storyboard-1',
@@ -2201,6 +2252,12 @@ describe('NodeContentDispatcher', () => {
     expect(markup).toContain('Default path');
   });
 });
+
+function readClassName(markup: string, attribute: string, value: string): string {
+  const openingTag = markup.match(new RegExp(`<[^>]*${attribute}="${value}"[^>]*>`));
+  expect(openingTag, `Expected ${attribute}="${value}" in rendered markup`).not.toBeNull();
+  return openingTag?.[0].match(/class="([^"]*)"/)?.[1] ?? '';
+}
 
 function createOverlayRenderContext(node: CanvasNode): NodeContentRenderContext {
   return {

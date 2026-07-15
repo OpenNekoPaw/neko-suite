@@ -1,6 +1,11 @@
 import { realpath, rm } from 'node:fs/promises';
 import { isAbsolute, relative, resolve } from 'node:path';
-import { CdpSession, waitForCdpTarget } from './cdp-session.mjs';
+import {
+  CdpSession,
+  listCdpTargets,
+  selectCdpTarget,
+  waitForCdpTarget,
+} from './cdp-session.mjs';
 import { waitForHostController } from './host-controller-client.mjs';
 
 export const DEFAULT_VSCODE_DEBUG_PORT = 9222;
@@ -96,6 +101,10 @@ export class VSCodeFunctionalHost {
         extensionIds: this.options.scenario.extensions.map((extension) => extension.id),
         extensions: extensionIdentity.extensions,
       };
+      this.baselineWebviewTargetIds = collectMatchingTargetIds(
+        await listCdpTargets(debugPort),
+        createWebviewTargetMatcher(this.options.scenario),
+      );
       return this;
     } catch (error) {
       await this.stop();
@@ -126,11 +135,10 @@ export class VSCodeFunctionalHost {
   }
 
   async connectWebview(options = {}) {
-    const targetMatcher = {
-      ...this.options.scenario.target,
-      excludeTargetIds: options.excludeTargetIds ?? [],
-    };
-    delete targetMatcher.viewType;
+    const targetMatcher = createWebviewTargetMatcher(this.options.scenario, [
+      ...(this.baselineWebviewTargetIds ?? []),
+      ...(options.excludeTargetIds ?? []),
+    ]);
     const target = await waitForCdpTarget(
       this.debugPort,
       targetMatcher,
@@ -180,6 +188,7 @@ export class VSCodeFunctionalHost {
         { excludePid: previousControllerPid },
       );
       await this.controller.execute('configure-fixture-root', { path: this.options.fixtureRoot });
+      this.baselineWebviewTargetIds = [];
       const pageTarget = await waitForCdpTarget(
         this.debugPort,
         { type: 'page', titleIncludes: 'neko-test' },
@@ -223,6 +232,27 @@ export class VSCodeFunctionalHost {
     if (!this.controller) return;
     this.hostObservations.push(...await this.controller.readObservations());
   }
+}
+
+export function collectMatchingTargetIds(targets, matcher) {
+  const matchingIds = [];
+  const remainingTargets = [...targets];
+  while (remainingTargets.length > 0) {
+    const target = selectCdpTarget(remainingTargets, matcher);
+    if (!target) break;
+    matchingIds.push(target.id);
+    remainingTargets.splice(remainingTargets.indexOf(target), 1);
+  }
+  return matchingIds;
+}
+
+function createWebviewTargetMatcher(scenario, excludeTargetIds = []) {
+  const matcher = {
+    ...scenario.target,
+    excludeTargetIds: [...new Set(excludeTargetIds)],
+  };
+  delete matcher.viewType;
+  return matcher;
 }
 
 function assertScenarioTargetIdentity(scenario, extensions) {

@@ -3114,10 +3114,18 @@ class NekoCanvasCapabilityProviderImpl implements AgentCapabilityProvider {
             sourceCanvasUri: { type: 'string', description: 'Optional Canvas document URI.' },
             routeId: { type: 'string', description: 'Playback route id to project.' },
             projectName: { type: 'string', description: 'Optional target Cut project name.' },
+            cutProjectUri: {
+              type: 'string',
+              description: 'Explicit existing .nkv file URI used when sendToCut is true.',
+            },
+            cutProjectRevision: {
+              type: 'string',
+              description: 'Expected Cut project revision captured before authoring.',
+            },
             sendToCut: {
               type: 'boolean',
               description:
-                'When true, dispatch the created draft to the active Cut timeline after confirmation.',
+                'When true, dispatch the created draft to the explicitly identified Cut project after confirmation.',
             },
           },
         } satisfies ToolParameters,
@@ -3130,9 +3138,21 @@ class NekoCanvasCapabilityProviderImpl implements AgentCapabilityProvider {
             });
             let cutImportResult: unknown;
             if (args.sendToCut === true) {
+              const cutProjectUri = readOptionalString(args.cutProjectUri);
+              const cutProjectRevision = readOptionalString(args.cutProjectRevision);
+              if (!cutProjectUri || !cutProjectRevision) {
+                return {
+                  success: false,
+                  error: 'sendToCut requires cutProjectUri and cutProjectRevision.',
+                };
+              }
               cutImportResult = await vscode.commands.executeCommand(
-                'neko.cut.importCanvasDraft',
-                draft,
+                'neko.cut.authoring.importCanvasDraft',
+                {
+                  payload: draft,
+                  target: { kind: 'file', documentUri: cutProjectUri },
+                  expectedProjectRevision: cutProjectRevision,
+                },
               );
             }
             return {
@@ -4269,7 +4289,7 @@ class NekoCanvasCapabilityProviderImpl implements AgentCapabilityProvider {
         description:
           'Export the storyboard as a ZIP image pack or import it into the neko-cut timeline. ' +
           'ZIP format: creates a .zip file with shot images + manifest.json at a user-chosen path. ' +
-          'neko-cut format: sends all shots to the active neko-cut timeline as MediaElement clips. ' +
+          'neko-cut format: sends all shots to an explicitly identified neko-cut project as MediaElement clips. ' +
           'Returns the saved file path (ZIP) or a confirmation (neko-cut).',
         category: 'project',
         parameters: {
@@ -4284,6 +4304,14 @@ class NekoCanvasCapabilityProviderImpl implements AgentCapabilityProvider {
             projectName: {
               type: 'string',
               description: 'Project name used for file naming and manifest (default: "storyboard")',
+            },
+            cutProjectUri: {
+              type: 'string',
+              description: 'Explicit existing .nkv file URI required for neko-cut export.',
+            },
+            cutProjectRevision: {
+              type: 'string',
+              description: 'Expected Cut project revision captured before authoring.',
             },
           },
           required: ['format'],
@@ -4361,6 +4389,15 @@ class NekoCanvasCapabilityProviderImpl implements AgentCapabilityProvider {
             });
 
             if (format === 'neko-cut') {
+              const cutProjectUri = readOptionalString(args.cutProjectUri);
+              const cutProjectRevision = readOptionalString(args.cutProjectRevision);
+              if (!cutProjectUri || !cutProjectRevision) {
+                return {
+                  success: false,
+                  error:
+                    'neko-cut storyboard export requires cutProjectUri and cutProjectRevision.',
+                };
+              }
               const shotDataById = new Map<string, Record<string, unknown>>(
                 allShots.map((node) => [node.id, node.data as Record<string, unknown>]),
               );
@@ -4387,7 +4424,9 @@ class NekoCanvasCapabilityProviderImpl implements AgentCapabilityProvider {
                 };
               });
 
-              await vscode.commands.executeCommand('neko.cut.importStoryboard', {
+              await vscode.commands.executeCommand('neko.cut.authoring.importStoryboard', {
+                target: { kind: 'file', documentUri: cutProjectUri },
+                expectedProjectRevision: cutProjectRevision,
                 projectName,
                 shots: timelineShots,
               });

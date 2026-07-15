@@ -349,9 +349,9 @@ describe('validateSkillManifest — explicit legacy compatibility pass', () => {
       referencedSkills: [{ id: 'audio-expert', relationship: 'collaborator' }],
       profileReferences: [
         {
-          profileId: 'studio.creation.review',
-          kind: 'creation',
-          relationship: 'requires',
+          profileId: 'provider-expression:studio',
+          kind: 'provider-expression',
+          relationship: 'prefers',
           versionRange: '^1.0.0',
         },
         {
@@ -527,12 +527,20 @@ describe('validateSkillManifest — explicit legacy compatibility pass', () => {
     expect(
       collectSkillProfileReferences({
         profileReferences: [
-          { profileId: 'studio.creation.review', kind: 'creation', relationship: 'requires' },
+          {
+            profileId: 'provider-expression:studio',
+            kind: 'provider-expression',
+            relationship: 'prefers',
+          },
         ],
         mediaWorkflow: { artifactProfiles: ['media-production.shot-image-prep'] },
       }),
     ).toEqual([
-      { profileId: 'studio.creation.review', kind: 'creation', relationship: 'requires' },
+      {
+        profileId: 'provider-expression:studio',
+        kind: 'provider-expression',
+        relationship: 'prefers',
+      },
       { profileId: 'media-production.shot-image-prep', kind: 'artifact', relationship: 'produces' },
     ]);
   });

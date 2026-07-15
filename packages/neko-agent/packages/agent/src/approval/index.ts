@@ -13,7 +13,6 @@ export {
 
 export type {
   ApprovalChannel,
-  ApprovalBinding,
   ApprovalParadigm,
   ApprovalRequest,
   ApprovalResolution,
@@ -27,8 +26,3 @@ export type {
 export { creationStrategyPack } from './strategies/creation-strategy-pack';
 export { executionStrategyPack } from './strategies/execution-strategy-pack';
 export { createPreferencesStrategyPacks } from './strategies/preferences-strategy-pack';
-export {
-  assessCreatorReplan,
-  type CreatorReplanAssessment,
-  type CreatorReplanKind,
-} from './creator-replan-policy';

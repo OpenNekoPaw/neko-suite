@@ -43,6 +43,8 @@ describe('Agent and Canvas functional pilot boundaries', () => {
 
     assert.match(executeBody, /vscode\.commands\.executeCommand/u);
     assert.match(executeBody, /editor\.document\.save\(\)/u);
+    assert.match(executeBody, /vscode\.window\.tabGroups\.close/u);
+    assert.doesNotMatch(executeBody, /closeActiveEditor|closeAllEditors/u);
     assert.doesNotMatch(executeBody, /workspace\.fs\.writeFile|writeFileSync|writeFile\(/u);
     assert.doesNotMatch(executeBody, /postMessage\(|getState\(|setState\(/u);
   });

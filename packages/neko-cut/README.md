@@ -45,7 +45,9 @@ Webview (React + Vite)
 
 ### Headless Authoring Boundary
 
-Host-originated durable `.nkv` writes use `CutProjectAuthoringService` and canonical commands such as `neko.cut.authoring.importGeneratedClip`, `neko.cut.authoring.addSourceToTimeline`, `neko.cut.authoring.importStoryboard`, and `neko.cut.authoring.importCanvasDraft`. These paths can create or edit a target project file without an open Webview, then optionally reveal/sync the editor after save. Timeline selection, playback, focused UI commands, export panel display, and custom-editor save snapshots remain interactive editor behavior.
+Host-originated durable `.nkv` writes use `CutProjectAuthoringService` and canonical commands such as `neko.cut.authoring.importGeneratedClip`, `neko.cut.authoring.addSourceToTimeline`, `neko.cut.authoring.importStoryboard`, and `neko.cut.authoring.importCanvasDraft`. Every edit targets an explicit `.nkv` document URI plus expected project revision; creating a project uses an explicit `new` target. The authoring path never infers an active/recent timeline and can edit a closed project through an isolated project session, then optionally reveal/sync that exact editor after save.
+
+Multiple `.nkv` projects are ordinary independent Cut documents. Interactive timeline selection, playback, focused UI commands, export panel display, and custom-editor save snapshots may use their owning editor instance, but the adapter must materialize that editor's document identity and revision before crossing into durable authoring. Generated-output completion and Workspace Board projection do not mutate Cut automatically. A generated output or Canvas route reaches Cut only through an explicit user/Agent authoring intent that names an existing `.nkv` target or a new project target.
 
 ### 包结构
 

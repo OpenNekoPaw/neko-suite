@@ -1,4 +1,5 @@
 import * as path from 'path';
+import { createHash } from 'node:crypto';
 import {
   createGeneratedAssetRevisionRef,
   type GeneratedAsset,
@@ -21,7 +22,6 @@ export interface BuildGeneratedMediaAssetsInput {
   prompt?: string;
   model?: string;
   request?: Pick<MediaGenerationRequestBase, 'metadata'> & { readonly operation?: string };
-  generateAssetId: () => string;
   now?: () => string;
 }
 
@@ -40,7 +40,7 @@ export function buildGeneratedMediaAssets(input: BuildGeneratedMediaAssetsInput)
     if (!contentDigest) {
       throw new Error(`Generated output ${i} is missing a content digest.`);
     }
-    const assetId = input.generateAssetId();
+    const assetId = createStableGeneratedOutputId(input.taskId, i, contentDigest);
     const mimeType = output?.mimeType ?? inferGeneratedMediaMimeType(hostOutputPath);
     const lifecycle = createGeneratedAssetRevisionRef({
       assetId,
@@ -109,6 +109,18 @@ export function buildGeneratedMediaAssets(input: BuildGeneratedMediaAssetsInput)
   }
 
   return assets;
+}
+
+export function createStableGeneratedOutputId(
+  taskId: string,
+  outputIndex: number,
+  contentDigest: string,
+): string {
+  const digest = createHash('sha256')
+    .update(`${taskId}\0${outputIndex}\0${contentDigest}`)
+    .digest('hex')
+    .slice(0, 24);
+  return `generated-${digest}`;
 }
 
 export function toStableGeneratedAssetUri(filePath: string, assetId?: string): string {

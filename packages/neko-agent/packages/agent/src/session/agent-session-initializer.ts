@@ -18,7 +18,7 @@ import type { ToolConfirmationRequest } from '../permission/types';
 
 import { AgentExecutor } from '../executor';
 import type { Tool } from '@neko/shared';
-import { ConversationCompressor, MessageClassifier, CreativeSummarizer } from '../context';
+import { ConversationCompressor, LLMSummarizer } from '../context';
 import { createExecutorHooks } from '../hooks';
 import { ToolGroupRegistry } from '../skill';
 import {
@@ -121,24 +121,12 @@ export function initializeSession(
   config: AgentSessionConfig,
   callbacks: SessionCallbacks,
 ): SessionComponents {
-  // Step 1: Conversation compressor
-  // When creative compression is enabled, inject MessageClassifier + CreativeSummarizer
-  // so older turns are compressed with priority-based classification instead of bulk summary.
-  const creativeOpt = config.creativeCompression;
-  const classifier = creativeOpt
-    ? new MessageClassifier(typeof creativeOpt === 'object' ? creativeOpt : undefined)
-    : undefined;
-  const creativeSummarizer = classifier
-    ? new CreativeSummarizer(classifier, {
-        service: config.service,
-        creativeConfig: typeof creativeOpt === 'object' ? creativeOpt : undefined,
-        locale: config.locale,
-        summarizerConfig: {
-          provider: config.providerId,
-          model: config.modelId,
-        },
-      })
-    : undefined;
+  // Step 1: domain-neutral conversation compression.
+  const summarizer = new LLMSummarizer(config.service, {
+    provider: config.providerId,
+    model: config.modelId,
+    locale: config.locale,
+  });
 
   const compressor = new ConversationCompressor(
     {
@@ -148,8 +136,7 @@ export function initializeSession(
         turnThreshold: 20,
       },
     },
-    creativeSummarizer ?? undefined,
-    classifier ?? undefined,
+    summarizer,
   );
 
   // Step 2: Tool group registry
@@ -386,6 +373,7 @@ export function createConfiguredExecutor(deps: CreateExecutorDeps): {
     customHooks: config.hooks,
     onValidationWarning: config.onValidationWarning,
     onValidationError: config.onValidationError,
+    outputValidationAdapters: config.outputValidationAdapters,
     traitsRegistry: config.traitsRegistry,
     readOnlyTools: collectRegisteredReadOnlyToolNames(toolRegistry),
   });

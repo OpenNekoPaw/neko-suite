@@ -22,7 +22,6 @@
  */
 export type {
   AgentRuntimeConfig,
-  ICreationGuidanceRuntime,
   IWorkspaceRuntimeStore,
   ICapabilityRuntime,
   IValidationLoop,

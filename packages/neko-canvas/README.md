@@ -12,7 +12,7 @@
 - **职责**：无限画布编辑、节点图编排、媒体资产预览、故事板管理
 - **入口**：`packages/extension/src/extension.ts`
 - **项目格式**：`.nkc`（JSON Visual Canvas）
-- **Board 约定**：`neko/boards/*.nkc` 是普通 Canvas 文档，仅作为 Agent 默认检索/创建目录；不存在 Draft 格式、Board profile 或升级转换
+- **Board 约定**：`neko/boards/workspace.nkc` 是工作区默认 Board；其他 `neko/boards/*.nkc` 仍是可显式打开和定向写入的普通 Canvas 文档，不存在会话 Board、Draft 格式或 profile 转换
 - **子包**：`extension/`（Host）、`webview/`（React UI）
 - **依赖**：`@neko/shared`
 - **激活依赖**：neko-engine、neko-tools、neko-preview
@@ -81,9 +81,11 @@ Webview 端通过 `canvasOperationStore` 作为运行时桥接层生成 `EditOpe
 
 外部 `neko.canvas.importAsset` / `NekoCanvasAPI.importAsset()` 不再要求 Canvas Webview 已打开；它通过 `CanvasProjectAuthoringService` 创建 media 节点，只持久化 `${VAR}/path`、workspace-relative path、`ResourceRef` 或 `DocumentArchiveResourceRef`。Webview URI、blob、cache path 和 temp path 不能作为 `.nkc` 身份写入。
 
-`NekoCanvasAPI.boards` 是 Agent 的公共 Board 路由边界：Canvas 拥有 `neko/boards/` 的安全索引、确定性解析和 revision-checked delivery。解析顺序为显式目标、有效会话绑定、唯一精确 scope 匹配、创建新 Board。Agent 不读取原始 `.nkc`，也不能退回活动/最近/专业目录 Canvas。Markdown 使用普通 Text/Markdown 内容；文件引用使用支持稳定 `ResourceRef` 的 DocumentNode；图片、音频和视频使用 MediaNode。所有重放按 provenance/artifact identity 幂等。
+`NekoCanvasAPI.boards.project()` 是唯一公共 Workspace Board 投影入口。未指定显式 `.nkc` 时，Canvas 确定性写入 `neko/boards/workspace.nkc`；显式目标只接受调用方给出的普通 `.nkc` identity。它不扫描目录选择“最近/匹配”画布，也不读取会话绑定或活动编辑器。Markdown 使用普通 Text/Markdown 内容；文件引用使用支持稳定 `ResourceRef` 的 DocumentNode；图片、音频和视频使用普通 MediaNode。所有重放按 provenance/artifact identity 幂等。
 
-未提升生成媒体不会直接写入 Board，而由 Canvas Extension 投影成 runtime review Group。Save to Assets 通过 AssetLibrary/AssetStore 提升后，使用稳定 Asset identity 向冻结 Board revision 写入普通 Group 和 Asset-backed children；`.nkc` 不保存 runtime Group ID、generated-output ref、cache/render URI。`neko/generated/<kind>/` 仅保留历史读取与显式导入。
+Creator-visible generated output 在投影前已由 owning service 持久化到 `neko/generated/<kind>/`。Canvas 将其稳定 generated-output `ResourceRef` 写成普通持久 Inbox Group/Media/Document 节点，不要求先加入 AssetLibrary，也不创建 runtime-only review Group。AssetLibrary promotion 是独立的显式整理动作；`.nkc` 不保存 cache path、render URI、Webview URI 或 runtime Group ID。
+
+`.nkc` 是节点、连接、Group、坐标、尺寸、标题、批注和用户空间调整的唯一权威。目录树只能发现普通 Canvas 文件，不能从 `neko/generated/`、对话或任务历史重建布局。重新投影同一 provenance 不重复创建节点，也不得覆盖用户移动和可编辑空间属性。
 
 ### 分镜系统（现状）
 

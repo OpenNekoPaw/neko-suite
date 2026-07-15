@@ -7,6 +7,8 @@ export type NodeContentSurface = 'canvas' | 'container-card' | 'overlay';
 
 export type NodeContentOverflow = 'clip' | 'scroll' | 'summary';
 
+export type NodeContentChrome = 'contained' | 'full-bleed';
+
 export interface NodeContentLayoutContext {
   width: number;
   height: number;
@@ -29,6 +31,7 @@ export interface NodeContentRenderContext {
   isExpanded?: boolean;
   layout: NodeContentLayoutContext;
   depth: number;
+  contentChrome?: NodeContentChrome;
   previewSurfaceKind?: 'inline' | 'overlay';
   interactionRenderMode?: 'full' | 'shell';
   onUpdateBinding?: (update: FieldBindingUpdate) => void;

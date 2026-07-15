@@ -441,6 +441,19 @@ describe('useAgentSession runtime assembly', () => {
             mimeType: 'image/png',
           }),
         }),
+        attachments: [
+          expect.objectContaining({
+            type: 'image',
+            path: expect.stringMatching(/^generated-assets\//),
+            mimeType: 'image/png',
+            assetRef: expect.objectContaining({
+              resourceRef: expect.objectContaining({
+                provider: 'generated-asset',
+                source: expect.objectContaining({ kind: 'generated-asset' }),
+              }),
+            }),
+          }),
+        ],
         perceptionCards: [
           expect.objectContaining({
             modality: 'image',

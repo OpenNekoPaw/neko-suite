@@ -37,9 +37,6 @@ describe('buildAgentSessionConfigWithRuntime', () => {
     const contentAccessRuntime = { resolve: vi.fn() } as never;
 
     const runtime: AgentRuntimeConfig = {
-      creationGuidance: {
-        autohealChainFactory,
-      },
       workspaceStore: {
         workspace: {
           root: '/workspace/demo',
@@ -64,6 +61,7 @@ describe('buildAgentSessionConfigWithRuntime', () => {
         contentAccessRuntime,
       },
       validationLoop: {
+        autohealChainFactory,
         projectMemoryManager,
         compactLogging: false,
         autoMemoryExtraction: false,

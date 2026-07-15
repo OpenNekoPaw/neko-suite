@@ -4,8 +4,11 @@ import type {
   AgentQueuedMessageDisplayKind,
   AgentTurnSource,
 } from '@neko-agent/types';
-import type { Task } from '@neko/shared';
-import type { ActiveSkillLifecycleRecordProjection } from '@neko/shared';
+import type {
+  ActiveSkillLifecycleRecordProjection,
+  CanvasWorkspaceProjectionResult,
+  Task,
+} from '@neko/shared';
 import type { Message } from '../../types/state';
 import type { TerminalArtifactFact } from '../../types/state';
 import type { TerminalMarkdownPathEvent } from '../../markdown/path-observer';
@@ -253,6 +256,14 @@ export interface TuiDebugAutomationMarkdownFacts {
   readonly droppedPathEventCount: number;
 }
 
+export interface TuiDebugAutomationWorkspaceBoardProjectionFact {
+  readonly status: CanvasWorkspaceProjectionResult['status'];
+  readonly targetKind?: NonNullable<CanvasWorkspaceProjectionResult['target']>['kind'];
+  readonly revision?: string;
+  readonly nodeIds: readonly string[];
+  readonly diagnosticCodes: readonly string[];
+}
+
 export interface TuiDebugAutomationConversationPersistenceFacts {
   readonly authority: 'journal' | 'memory';
   readonly catalog: 'sqlite' | 'memory';
@@ -281,6 +292,7 @@ export interface TuiDebugAutomationSessionFacts {
   readonly continuations: readonly TuiDebugAutomationContinuationFact[];
   readonly promptComposition: readonly PromptCompositionFragmentProjection[];
   readonly artifacts: readonly TerminalArtifactFact[];
+  readonly workspaceBoardProjections: readonly TuiDebugAutomationWorkspaceBoardProjectionFact[];
   readonly runtimeErrors: readonly string[];
   readonly canvas: TuiDebugAutomationCanvasFacts;
   readonly markdown: TuiDebugAutomationMarkdownFacts;
@@ -289,6 +301,7 @@ export interface TuiDebugAutomationSessionFacts {
     readonly inputTokens: number;
     readonly outputTokens: number;
     readonly totalTokens: number;
+    readonly contextTokens?: number;
   };
   readonly timing: {
     readonly capturedAt: number;
@@ -321,6 +334,7 @@ export interface TuiDebugAutomationEvidenceCompleteness {
   readonly continuations: TuiDebugAutomationCollectionCompleteness;
   readonly promptComposition: TuiDebugAutomationCollectionCompleteness;
   readonly artifacts: TuiDebugAutomationCollectionCompleteness;
+  readonly workspaceBoardProjections: TuiDebugAutomationCollectionCompleteness;
   readonly runtimeErrors: TuiDebugAutomationCollectionCompleteness;
   readonly canvasMessageSummaries: TuiDebugAutomationCollectionCompleteness;
   readonly canvasToolCallSummaries: TuiDebugAutomationCollectionCompleteness;

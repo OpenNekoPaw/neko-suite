@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import {
   validateCompositeArtifact,
   validateDurableResourceRef,
+  type GeneratedAssetRevisionRef,
   isResourceRef,
   type ResourceRef,
   type Task,
@@ -61,6 +62,32 @@ export function projectTaskOutputArtifactFacts(
         })),
       } satisfies TerminalArtifactFact];
     });
+  });
+}
+
+export function projectGeneratedOutputLifecycleArtifactFacts(
+  lifecycles: readonly GeneratedAssetRevisionRef[],
+): readonly TerminalArtifactFact[] {
+  return lifecycles.map((lifecycle) => {
+    const validation = validateDurableResourceRef(lifecycle.resourceRef);
+    return {
+      ref: lifecycle.resourceRef.id,
+      kind: 'generated-asset',
+      digest: lifecycle.contentDigest,
+      revision: lifecycle.revision,
+      provenance: {
+        source: lifecycle.resourceRef.source.kind,
+        taskId: lifecycle.generation.taskId,
+        providerId: lifecycle.resourceRef.provider,
+      },
+      deliveryStatus: 'delivered',
+      validator: { id: 'durable-resource-ref', status: validation.ok ? 'valid' : 'invalid' },
+      diagnostics: validation.diagnostics.map((item) => ({
+        code: item.code,
+        severity: item.severity,
+        message: item.message,
+      })),
+    };
   });
 }
 

@@ -2581,36 +2581,36 @@ impl Controller for ScenesController {
                 Ok(ActionResponse::ok(
                     "",
                     serde_json::json!({
-                    "profiles": profiles,
-                    "renderModes": [
-                        "pbr",
-                        "clay",
-                        "wireframe",
-                        "unlit",
-                        "normal",
-                        "depth",
-                        "lightComplexity",
-                        "shadowAtlas"
-                    ],
-                    "capabilityStates": {
-                        "renderModes": {
-                            "pbr": "supported",
+                        "profiles": profiles,
+                        "renderModes": [
+                            "pbr",
+                            "clay",
+                            "wireframe",
+                            "unlit",
+                            "normal",
+                            "depth",
+                            "lightComplexity",
+                            "shadowAtlas"
+                        ],
+                        "capabilityStates": {
+                            "renderModes": {
+                                "pbr": "supported",
+                                "clay": "supported",
+                                "wireframe": "supported",
+                                "unlit": "supported",
+                                "normal": "supported",
+                                "depth": "supported",
+                                "lightComplexity": "supported",
+                                "shadowAtlas": "supported"
+                            },
+                            "liveViewportSettings": "supported",
                             "clay": "supported",
-                            "wireframe": "supported",
-                            "unlit": "supported",
-                            "normal": "supported",
-                            "depth": "supported",
-                            "lightComplexity": "supported",
-                            "shadowAtlas": "supported"
-                        },
-                        "liveViewportSettings": "supported",
-                        "clay": "supported",
-                        "authoredLights": "unsupported",
-                        "environment": "unsupported",
-                        "typedPicking": "unsupported",
-                        "characterRegions": "unsupported"
-                    }
-                }),
+                            "authoredLights": "unsupported",
+                            "environment": "unsupported",
+                            "typedPicking": "unsupported",
+                            "characterRegions": "unsupported"
+                        }
+                    }),
                 ))
             }
 

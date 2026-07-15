@@ -8,6 +8,10 @@
 
 neko-cut 是 Neko Suite 的核心创作工具。以 VSCode CustomEditor 方式打开 `.nkv` 项目文件，Extension Host 负责文件 I/O 和引擎通信，Webview 承载完整的时间线编辑 UI。通过 EditOperation 管道实现可撤销的操作历史，所有媒体处理委托给 neko-engine。
 
+每个 `.nkv` 是独立的时间线事实和并发单元，用户可以同时维护多个项目。所有跨 Webview、Agent、Canvas、Sketch 或后台 Task 的 durable mutation 必须携带显式 `.nkv` document URI 和 expected project revision，或显式创建新项目；缺失、陈旧或后缀错误时 fail-visible。活动编辑器只拥有交互播放/选择状态，不能作为跨边界项目 target。
+
+`CutProjectAuthoringService` 是生成素材、Storyboard 和 Canvas draft 进入 Cut 的 canonical 写入口。它为每次 closed-document authoring 创建隔离 project session，并在异步 ingest 后重新校验 revision。普通生成完成或 Workspace Board 投影不会自动写入时间线；只有显式 authoring intent 才能创建或更新 `.nkv`。
+
 ---
 
 ## 子包结构

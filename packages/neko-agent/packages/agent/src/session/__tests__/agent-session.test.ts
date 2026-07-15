@@ -1819,6 +1819,7 @@ describe('AgentSession', () => {
             toolCallResponse('ActivateSkill', {
               skillName: 'image',
               reason: 'The current conversation needs image generation.',
+              slot: 'domainSkill',
             }),
           );
           return;
@@ -1917,6 +1918,7 @@ describe('AgentSession', () => {
             toolCallResponse('ActivateSkill', {
               skillName: 'storyboard',
               reason: 'The user requested a comic storyboard creative table.',
+              slot: 'domainSkill',
             }),
           );
           return;

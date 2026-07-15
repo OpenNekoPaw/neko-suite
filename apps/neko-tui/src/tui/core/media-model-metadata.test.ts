@@ -53,14 +53,14 @@ describe('TUI media model metadata', () => {
     expect(
       mergeTuiMediaModelMetadata(
         {
-          agentCreation: { entrySignal: 'prompt-chain-skill' },
+          requestContext: { source: 'explicit-user' },
           traceId: 'trace-1',
         },
         { image: 'openai:gpt-image-1' },
         'anthropic',
       ),
     ).toEqual({
-      agentCreation: { entrySignal: 'prompt-chain-skill' },
+      requestContext: { source: 'explicit-user' },
       traceId: 'trace-1',
       mediaModels: {
         image: { providerId: 'openai', modelId: 'gpt-image-1' },

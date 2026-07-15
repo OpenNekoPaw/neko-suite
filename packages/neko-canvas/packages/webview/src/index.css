@@ -1941,7 +1941,7 @@ select:focus {
 
 .node-card--foundational {
   background: transparent;
-  border-color: transparent;
+  border: 0;
   box-shadow: none;
   backdrop-filter: none;
   -webkit-backdrop-filter: none;

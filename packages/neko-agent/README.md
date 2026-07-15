@@ -209,13 +209,13 @@ Agent/plugin transfer 只选择能力和投影诊断，不直接调用领域 Web
 
 Transfer payload 必须携带结构化 `target`、`reveal`、stable source/ref 和 provenance。命令返回 `ok: false` 时，Agent/Extension/TUI/Electron adapter 展示 diagnostic，不允许 fallback 到旧 `neko.cut.importGeneratedClip`、`neko.sketch.importAsset`、`neko.model.importAsset`、打开隐藏 Webview 或声称发送成功。
 
-### Board Canvas 自动投递
+### Workspace Board 投影
 
-在 VS Code 宿主中，面向创作者的任务不要求先指定 Canvas。Agent 在异步工作开始前通过 `NekoCanvasAPI.boards` 按“显式目标 → 有效会话绑定 → 唯一精确 scope 匹配 → 新建”解析普通 `neko/boards/*.nkc`，并冻结 conversation/turn/task/run/document/canvas/revision 身份。普通问答不创建 Board；活动或最近打开的 Canvas 不参与默认解析。
+Agent core 不保存 Canvas destination、会话 Board binding、Board index/scope、delivery runtime 或 Cut target。它只观察普通 Tool/Task/result、diagnostic 与 Approval；VS Code Host 将已声明的 creator-visible typed result 交给 owning capability。
 
-运行时按 typed result 自动投递创作者可复用的 Markdown和用户选中的稳定文件引用。未提升的图片/音频/视频不会成为 `.nkc` 节点，而由 Canvas Extension 在冻结 Board 上投影 runtime review Group；用户显式 Save to Assets 后，AssetLibrary/AssetStore 返回稳定 Asset identity，Canvas 再以普通 Group 和 Asset-backed children 完成 revision-checked authoring。推理、日志、scratch、未选搜索结果、runtime/cache handle 和失败中间态不会成为节点；冲突只返回可见诊断，不改投其他 Canvas。
+Canvas projector 在没有显式目标时只写 `neko/boards/workspace.nkc`，显式目标则是调用方提供的普通 `.nkc`。它不读取活动/最近 Canvas、会话或文件名相似度。Markdown、稳定文件引用和已由 generated-output owner 保存到 `neko/generated/<kind>/` 的图片/音频/视频可成为普通持久 Inbox 节点；AssetLibrary promotion 是可选整理动作，不是 Board 持久化前置条件。
 
-当前 typed Markdown 不依赖通用 `Send to Canvas`；生成媒体需要明确 Save to Assets 才成为 durable Board fact。显式历史内容、外部资源和既有 `neko/generated/<kind>/` 来源仍可使用 Add/Import to Board Canvas 或显式 Asset import；专业结构化 Storyboard 仍要求明确的 professional authoring 意图和 Canvas validator。
+推理、日志、provider scratch、未选搜索结果、runtime/cache handle 和失败中间态不会成为节点。投影冲突单独返回 diagnostic，生成结果仍可恢复且不改投其他 Canvas。显式历史/外部内容仍可使用 owning Import/Add Source；专业 Storyboard 继续要求明确 authoring intent 和 Canvas validator。
 
 ### Canvas Creative Run
 

@@ -3,10 +3,6 @@ import {
   type RenderableGeneratedAsset,
   type TaskRunScope,
 } from '@neko/shared';
-import {
-  buildMediaTaskCreativeEntityContext,
-  type MediaTaskCreativeEntityContext,
-} from './media-task-creative-entity';
 import type { MediaGenerationType, MediaOutput, MediaTask, MediaTaskStatus } from './types';
 
 export type MediaBackgroundTaskType = 'image' | 'video' | 'audio';
@@ -51,37 +47,11 @@ export function matchesMediaTaskConversation(
   return getMediaTaskConversationId(task) === conversationId;
 }
 
-export interface MediaTaskActionCandidate {
-  scope: TaskRunScope;
-  id: string;
-  conversationId?: string;
-  resultUrl?: string;
-  creativeEntity?: MediaTaskCreativeEntityContext;
-}
-
-export function createMediaTaskActionCandidate(
-  task: MediaTask | null | undefined,
-): MediaTaskActionCandidate | null {
-  if (!task) return null;
-
-  const conversationId = getMediaTaskConversationId(task);
-  const resultUrl = task.outputs?.find((output) => isStableMediaTaskResultUrl(output.url))?.url;
-  const creativeEntity = buildMediaTaskCreativeEntityContext({ task });
-  return {
-    scope: task.scope,
-    id: task.id,
-    ...(conversationId ? { conversationId } : {}),
-    ...(resultUrl ? { resultUrl } : {}),
-    ...(creativeEntity ? { creativeEntity } : {}),
-  };
-}
-
 export interface MediaTaskProgressViewInput {
   task: MediaTask;
   urls?: readonly string[];
   thumbnailUrl?: string;
   assets?: readonly RenderableGeneratedAsset[];
-  creativeEntity?: MediaTaskCreativeEntityContext;
   now?: () => Date;
 }
 
@@ -95,7 +65,6 @@ export interface MediaTaskProgressView {
     urls: string[];
     thumbnailUrl?: string;
     assets?: RenderableGeneratedAsset[];
-    creativeEntity?: MediaTaskCreativeEntityContext;
   };
   error?: string;
   updatedAt: string;
@@ -113,14 +82,12 @@ export interface MediaTaskResultView {
   urls: string[];
   thumbnailUrl?: string;
   assets?: RenderableGeneratedAsset[];
-  creativeEntity?: MediaTaskCreativeEntityContext;
 }
 
 export interface MediaTaskViewOptions {
   urls?: readonly string[];
   thumbnailUrl?: string;
   assets?: readonly RenderableGeneratedAsset[];
-  creativeEntity?: MediaTaskCreativeEntityContext;
 }
 
 export interface MediaTaskView {
@@ -185,14 +152,8 @@ function createMediaTaskResultView(
 ): MediaTaskResultView | undefined {
   const urls = options.urls?.filter(isStableMediaTaskResultUrl) ?? [];
   const assets = stripRenderableAssetPaths(options.assets ?? []);
-  const creativeEntity =
-    options.creativeEntity ??
-    buildMediaTaskCreativeEntityContext({
-      task,
-      assets,
-    });
 
-  if (urls.length === 0 && assets.length === 0 && !creativeEntity) return undefined;
+  if (urls.length === 0 && assets.length === 0) return undefined;
 
   return {
     urls: [...urls],
@@ -200,7 +161,6 @@ function createMediaTaskResultView(
       ? { thumbnailUrl: options.thumbnailUrl }
       : {}),
     ...(assets.length > 0 ? { assets: [...assets] } : {}),
-    ...(creativeEntity ? { creativeEntity } : {}),
   };
 }
 
@@ -209,12 +169,6 @@ export function createMediaTaskProgressView(
 ): MediaTaskProgressView {
   const urls = input.urls?.filter(isStableMediaTaskResultUrl) ?? [];
   const assets = stripRenderableAssetPaths(input.assets ?? []);
-  const creativeEntity =
-    input.creativeEntity ??
-    buildMediaTaskCreativeEntityContext({
-      task: input.task,
-      assets,
-    });
 
   return {
     scope: input.task.scope,
@@ -223,14 +177,13 @@ export function createMediaTaskProgressView(
     status: toMediaBackgroundTaskStatus(input.task.status),
     progress: input.task.progress,
     result:
-      urls.length > 0 || assets.length > 0 || creativeEntity
+      urls.length > 0 || assets.length > 0
         ? {
             urls: [...urls],
             ...(input.thumbnailUrl && isStableMediaTaskResultUrl(input.thumbnailUrl)
               ? { thumbnailUrl: input.thumbnailUrl }
               : {}),
             ...(assets.length > 0 ? { assets: [...assets] } : {}),
-            ...(creativeEntity ? { creativeEntity } : {}),
           }
         : undefined,
     error: input.task.error?.message,

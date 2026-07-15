@@ -1,6 +1,6 @@
 # 角色创作领域架构
 
-更新日期：2026-06-17
+更新日期：2026-07-15
 
 角色创作领域以 `.nkp` 为参数驱动角色真值。`.nkp` 使用 `profile` 区分 `live2d`、`neko-puppet` 和未来 avatar profile；Scene/Live Stage 通过 actor 引用消费角色，不复制角色参数、motion、expression、physics 或 tracking 真值。
 
@@ -41,6 +41,10 @@ Runtime 上，`.nkp` 通过 `PuppetService` 和 SDK-neutral `PuppetRuntimeAdapte
 - Live 舞台通过 `.nkm profile: live` 引用 `.nkp` actor；Live 驱动参数可以进入 `.nkm` routing，但角色参数定义和默认映射归 `.nkp`。
 - Live2D/Cubism SDK 类型不得穿透到 `engine-types`、`neko-client` 或领域项目格式；需要接入时通过 adapter id/version、source refs 和可复建 import settings 表达。
 - Sketch/Image 输出可以作为角色源图或参考图，但 `.nks` 不直接成为 Puppet runtime 状态。
+- 多视图角色设定卡、转面、表情、服装、道具和动作参考首先是 Image/Sketch 生成或编辑的实际文件；当前 Provider 支持单张多视图时可以一次生成，但必须检查视图覆盖、全身裁切、跨视图身份、比例、服装/配色/道具一致性以及禁用文字。
+- 生成角色卡不会自动创建第二份角色状态。用户需要将其作为正式参考、跨镜头 revision 依赖或跨项目复用时，由 Entity/Asset/Character owner 审批并登记；Agent 只消费稳定引用和适用 revision。
+- `character-visual-reference` 仅是聚焦 Skill 候选。是否成为 builtin 由真实 Agent activation、质量、相邻负例和上下文成本 evaluation 决定；底层执行继续复用 Image capability，不增加角色卡 Workflow runtime。
+- 角色身份、外观/服装/配色/道具不变量和正式参考角色是模型无关领域事实；某个 Provider/model/version/profile 能否生成或遵守多视图、identity、costume 或 prop reference 属于 Image capability。模型变化不得改写角色事实，只能触发当前执行策略重新选择和结果复查。
 
 ## 基础模式与专业模式
 

@@ -35,8 +35,15 @@ function createApi(): NekoCutAPI {
         throw new Error('Not exercised by capability provider tests.');
       }),
     },
+    authoring: {
+      importGeneratedClip: vi.fn(async () => {
+        throw new Error('Not exercised by capability provider tests.');
+      }),
+    },
     timeline: {
       getInfo: vi.fn(async () => ({
+        documentUri: 'file:///workspace/edit.nkv',
+        projectRevision: 'revision-1',
         duration: 10,
         fps: 24,
         width: 1920,
@@ -53,9 +60,6 @@ function createApi(): NekoCutAPI {
         status: 'imported',
         projectUri: 'file:///cut.nkv',
       })),
-    },
-    ai: {
-      generateVideoForClip: vi.fn(async () => 'elem-1'),
     },
   };
 }
@@ -111,6 +115,8 @@ describe('createNekoCutCapabilityProvider', () => {
 
     const result = await importTool!.execute({
       draft: { kind: 'canvas-cut-draft', schemaVersion: 1 },
+      documentUri: 'file:///workspace/edit.nkv',
+      expectedProjectRevision: 'revision-1',
     });
     expect(result.success).toBe(true);
     expect(api.timeline.importCanvasDraft).toHaveBeenCalled();
@@ -131,10 +137,16 @@ describe('createNekoCutCapabilityProvider', () => {
 
     expect(addTrackTool).toBeDefined();
 
-    const result = await addTrackTool!.execute({ type: 'audio' });
+    const result = await addTrackTool!.execute({
+      type: 'audio',
+      documentUri: 'file:///workspace/edit.nkv',
+      expectedProjectRevision: 'revision-1',
+    });
     expect(result.success).toBe(true);
     expect(bridge.executeAgentTool).toHaveBeenCalledWith(TOOL_NAMES_TIMELINE.ADD_TRACK, {
       type: 'audio',
+      documentUri: 'file:///workspace/edit.nkv',
+      expectedProjectRevision: 'revision-1',
     });
   });
 

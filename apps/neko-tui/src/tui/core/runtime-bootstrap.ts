@@ -17,7 +17,6 @@ import {
 } from '@neko/skills';
 import type {
   IArtifactProfileRegistry,
-  ICreationProfileRegistry,
   IProjectMemoryManager,
   IProviderCardRegistry,
   IProviderExpressionProfileRegistry,
@@ -32,7 +31,6 @@ export interface CliAgentRuntimeConfig {
   readonly toolGroupRegistry?: ToolGroupRegistry;
   readonly providerCardRegistry?: IProviderCardRegistry;
   readonly artifactProfileRegistry?: IArtifactProfileRegistry;
-  readonly creationProfileRegistry?: ICreationProfileRegistry;
   readonly providerExpressionProfileRegistry?: IProviderExpressionProfileRegistry;
   readonly promptFragments?: readonly PromptFragment[];
   readonly projectMemoryManager?: IProjectMemoryManager;
@@ -50,22 +48,16 @@ export function createCliAgentRuntime(config: CliAgentRuntimeConfig): AgentRunti
   const skillLifecycleRuntime = config.skillLifecycleRuntime;
   const defaultCapabilityRegistries =
     config.artifactProfileRegistry &&
-    config.creationProfileRegistry &&
     config.providerExpressionProfileRegistry
       ? undefined
       : createAgentCapabilityRuntimeRegistries();
   const artifactProfileRegistry =
     config.artifactProfileRegistry ?? defaultCapabilityRegistries?.artifactProfileRegistry;
-  const creationProfileRegistry =
-    config.creationProfileRegistry ?? defaultCapabilityRegistries?.creationProfileRegistry;
   const providerExpressionProfileRegistry =
     config.providerExpressionProfileRegistry ??
     defaultCapabilityRegistries?.providerExpressionProfileRegistry;
 
   return {
-    creationGuidance: {
-      autohealChainFactory: createAutohealChain,
-    },
     capabilityRuntime: {
       ...(skillService
         ? {
@@ -77,12 +69,12 @@ export function createCliAgentRuntime(config: CliAgentRuntimeConfig): AgentRunti
       toolGroupRegistry,
       ...(config.providerCardRegistry ? { providerCardRegistry: config.providerCardRegistry } : {}),
       ...(artifactProfileRegistry ? { artifactProfileRegistry } : {}),
-      ...(creationProfileRegistry ? { creationProfileRegistry } : {}),
       ...(providerExpressionProfileRegistry ? { providerExpressionProfileRegistry } : {}),
       ...(config.promptFragments !== undefined ? { promptFragments: config.promptFragments } : {}),
     },
     workspaceStore: createNodeWorkspaceRuntimeStore({ workspaceRoot: config.workspaceRoot }),
     validationLoop: {
+      autohealChainFactory: createAutohealChain,
       ...(config.projectMemoryManager ? { projectMemoryManager: config.projectMemoryManager } : {}),
       validationCoordinatorFactory: createValidationCoordinatorFactory(),
       toolResultValidationAdapters: [createQualityReviewValidationAdapter()],

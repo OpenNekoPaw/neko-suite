@@ -21,6 +21,7 @@ import { ShotCanvasReviewSurface } from './ShotCanvasReviewSurface';
 import type {
   BlockRendererRegistry,
   ContainerRendererProps,
+  NodeContentRenderContext,
   NodeContentLayoutContext,
 } from './types';
 import {
@@ -145,7 +146,7 @@ export function ContainerRenderer({ section, context }: ContainerRendererProps) 
 
   return (
     <div
-      className={getSectionClassName(section.layout, sectionFillMode)}
+      className={getSectionClassName(section.layout, sectionFillMode, context.contentChrome)}
       data-container-section-id={section.id}
       data-container-section-fill={sectionFillMode}
     >
@@ -2551,14 +2552,21 @@ function renderContentBlock(
   }
 
   return (
-    <div key={block.id} data-content-block-id={block.id} className={getBlockFrameClassName(block)}>
+    <div
+      key={block.id}
+      data-content-block-id={block.id}
+      className={getBlockFrameClassName(block, context.contentChrome)}
+    >
       {renderCanvasBlock(registry, { ...context, block })}
     </div>
   );
 }
 
-function getBlockFrameClassName(block: CanvasBlock): string {
-  if (isStretchBlock(block)) {
+function getBlockFrameClassName(
+  block: CanvasBlock,
+  contentChrome: NodeContentRenderContext['contentChrome'],
+): string {
+  if (isStretchBlock(block) || (contentChrome === 'full-bleed' && block.kind === 'asset-preview')) {
     return 'flex min-h-0 min-w-0 flex-1 basis-0 flex-col';
   }
 
@@ -2584,6 +2592,9 @@ function resolveSectionFillMode(
   section: ContainerRendererProps['section'],
   context: ContainerRendererProps['context'],
 ): 'fill' | 'natural' {
+  if (context.contentChrome === 'full-bleed') {
+    return 'fill';
+  }
   if (context.layout.surface === 'overlay' && !shouldFillSection(section, context)) {
     return 'natural';
   }
@@ -2915,17 +2926,22 @@ function isSectionVisible(
   );
 }
 
-function getSectionClassName(layout: string | undefined, fillMode: 'fill' | 'natural'): string {
+function getSectionClassName(
+  layout: string | undefined,
+  fillMode: 'fill' | 'natural',
+  contentChrome: NodeContentRenderContext['contentChrome'],
+): string {
   const fillClass = fillMode === 'fill' ? ' flex-1 basis-0' : '';
+  const spacingClass = contentChrome === 'full-bleed' ? 'gap-0 p-0' : 'gap-2 p-2';
   switch (layout) {
     case 'row':
-      return 'flex min-w-0 flex-row gap-2 overflow-x-auto overflow-y-hidden p-2';
+      return `flex min-w-0 flex-row ${spacingClass} overflow-x-auto overflow-y-hidden`;
     case 'grid':
     case 'gallery':
-      return `grid min-h-0 min-w-0 grid-cols-2 gap-2 overflow-auto p-2${fillClass}`;
+      return `grid min-h-0 min-w-0 grid-cols-2 ${spacingClass} overflow-auto${fillClass}`;
     case 'table':
-      return `grid min-h-0 min-w-0 gap-1 overflow-auto p-2${fillClass}`;
+      return `grid min-h-0 min-w-0 ${contentChrome === 'full-bleed' ? 'gap-0 p-0' : 'gap-1 p-2'} overflow-auto${fillClass}`;
     default:
-      return `flex min-h-0 min-w-0 flex-col gap-2 p-2${fillClass}`;
+      return `flex min-h-0 min-w-0 flex-col ${spacingClass}${fillClass}`;
   }
 }

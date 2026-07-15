@@ -118,6 +118,7 @@ export * from './agent-capability-diagnostics';
 export * from './agent-capability-lifecycle';
 export * from './agent-feedback';
 export * from './agent-profile';
+export * from './agent-output-validation';
 export * from './reference-contributor';
 
 // Agent execution trace contracts
@@ -197,8 +198,7 @@ export * from './mediaEngine';
 // Canvas types (infinite canvas editor)
 export * from './canvas';
 export * from './canvas-creative-scope';
-export * from './canvas-board-routing';
-export * from './canvas-generated-draft-groups';
+export * from './canvas-workspace-board';
 export * from './canvas-playback';
 export * from './canvas-layered';
 export * from './canvas-serializable';
@@ -320,7 +320,6 @@ export * from './loading-tier';
 // Generated asset types (cross-plugin asset reference schema, ADR-4)
 export * from './generated-asset';
 export * from './generated-asset-lifecycle';
-export * from './media-production-workflow';
 
 // Character registry types (git-tracked project identity source)
 export * from './character-registry';
@@ -351,7 +350,6 @@ export * from './prompt-fragment';
 
 // Provider card expression context contracts
 export * from './provider-card';
-export * from './creation-profile';
 
 // Creative entity graph types (cross-modal relationship graph, ADR Phase 3)
 export * from './creative-entity-graph';

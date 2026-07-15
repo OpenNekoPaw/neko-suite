@@ -1,6 +1,5 @@
-import type { Skill, SkillApplicationResult } from '@neko/shared';
+import type { SkillApplicationResult } from '@neko/shared';
 import type { SupportedLocale } from '@neko/shared/i18n';
-import { createSkillExecutionCreationMetadata } from '../session/creation-execution-metadata';
 import {
   buildExtensionCommandConversationSummaries,
   buildExtensionCommandHostEffectPlan,
@@ -336,24 +335,10 @@ async function runExtensionSkillSlashCommand(
       conversationId: input.conversationId,
       messageText: nextPrompt,
       sessionMode: 'agent',
-      ...createSkillExecutionOverrides(result.skill),
     });
   }
 
   return { command, handled: true, source: 'command-artifact' };
-}
-
-function createSkillExecutionOverrides(
-  skill: Skill | undefined,
-): Pick<ExtensionSlashCommandExecutionDispatch, 'executionOverrides'> {
-  const metadata = createSkillExecutionCreationMetadata(skill);
-  if (!metadata) return {};
-
-  return {
-    executionOverrides: {
-      metadata,
-    },
-  };
 }
 
 function assertSynchronousStatusResult(

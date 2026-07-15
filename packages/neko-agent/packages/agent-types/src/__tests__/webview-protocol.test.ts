@@ -52,6 +52,32 @@ const cacheResourceRef = createResourceRef({
 });
 
 describe('webview protocol parser', () => {
+  it('preserves explicit Cut target identity and revision in plugin transfers', () => {
+    expect(
+      parseWebviewToExtensionMessage({
+        type: 'sendToPlugin',
+        target: 'cut',
+        payload: {
+          kind: 'singleAsset',
+          asset: { path: '/workspace/neko/generated/video/shot.mp4', mediaType: 'video' },
+          target: {
+            kind: 'file',
+            documentUri: 'file:///workspace/edit.nkv',
+            expectedProjectRevision: 'revision-1',
+          },
+        },
+      }),
+    ).toMatchObject({
+      payload: {
+        target: {
+          kind: 'file',
+          documentUri: 'file:///workspace/edit.nkv',
+          expectedProjectRevision: 'revision-1',
+        },
+      },
+    });
+  });
+
   it('accepts explicit projection endpoint discovery', () => {
     expect(
       parseWebviewToExtensionMessage({

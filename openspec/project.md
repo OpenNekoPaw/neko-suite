@@ -28,7 +28,7 @@ OpenSpec changes in this repository must preserve the product direction:
 - Extension host: VSCode Extension API, TypeScript, esbuild.
 - Engine: Rust, wgpu, FFmpeg, axum, tokio, bevy_ecs, napi-rs.
 - Streaming: H.264, PCM, fMP4, WebSocket, WebCodecs.
-- AI: Vercel AI SDK, MCP, provider adapters, Neko Agent IDC staged creation.
+- AI: Vercel AI SDK, MCP, provider adapters, Agent ReAct, Skills, Tool/capability lifecycle, Approval, Task continuation, and creator-reviewable Markdown planning.
 - Contracts: Protobuf for engine communication; JSON Schema/typed validators for
   durable `nk*` project files.
 - Build/test: pnpm 10, Turborepo 2, Vitest, cargo test, dependency-cruiser,
@@ -437,9 +437,12 @@ Common intents:
 - `package`: source-first, original file or container entry bytes.
 - `verify`: source-first, original bytes/token for hash/probe/validation.
 
-All content that becomes a durable project asset, generated result, package
-entry, or media-library item must go through ingest/import/promotion. Export
-outputs do not automatically replace project sources.
+All content that becomes a durable project asset, package entry, or
+media-library item must go through its owning ingest/import/promotion boundary.
+A generated result is already user-usable when it is written to the canonical
+generated-output/workspace boundary and returned as file/ResourceRef plus digest
+and lineage; it requires asset-library promotion only for explicit library or
+entity ownership. Export outputs do not automatically replace project sources.
 
 ### Unified Content Access, Transparent Cache, And Path Resolution
 
@@ -555,15 +558,19 @@ Shared UI constraints:
 
 ### Agent And AI Workflows
 
-Neko Agent uses IDC: Draft, Plan, Apply, with Control as a cross-cutting layer,
-not a fourth user stage.
+Neko Agent uses the ordinary session/turn ReAct loop as the single planning and
+execution path. `auto`, `ask`, and `plan` are execution modes rather than
+creative stages. Plan Mode is read-only and may analyze actual content and
+produce creator-reviewable Markdown, but it does not start IDC, create media
+tasks, mutate projects, or export deliverables. Fixed IDC Draft/Plan/Apply
+runs, stage personas, and stage-owned execution artifacts are retired paths.
 
 Agent boundaries:
 
 - Webview owns UI and projection only.
 - Extension owns VSCode commands, Webview messages, workspace/file/URI access,
   lifecycle, and host adapters.
-- Agent runtime owns turn assembly, workflow, skill/capability injection,
+- Agent runtime owns turn assembly, ReAct planning, skill/capability injection,
   prompt/schema generation, task/subagent orchestration, evaluation, and
   recovery policy.
 - Platform owns provider/tool/capability bindings and media/perception routing.
@@ -571,26 +578,34 @@ Agent boundaries:
 
 Capabilities use Registration and Injection as separate phases. Registration
 makes capabilities discoverable; injection decides when they enter model context.
-Trust levels, host requirements, permissions, tool allowlists, workflow node
+Trust levels, host requirements, permissions, tool allowlists, capability input
 requirements, and ablation/policy gates must be explicit.
 
 Skills are prompt-chain packages, not hidden workflow DAGs. Keep deterministic
-metadata for cataloging, permissions, trust, and allowed tools. Keep creative
-ordering and guidance in Markdown unless a separate runtime workflow contract is
-explicitly designed.
+metadata for cataloging, permissions, trust, and allowed tools. Creative method
+guidance may be skipped, reordered, repeated, or composed by the Agent; Skill
+observations do not execute Tools or prove that a file or project is complete.
 
-Generated binary outputs that are visible to the user must be classified before
-storage. Unsaved generated drafts may live in host-managed session/cache storage
-and be exposed only through runtime projections. Generated outputs that are sent
-to Canvas, bound to entities, added to an asset library, used by export/package,
-or otherwise retained by the user must be promoted into an AssetStore,
-workspace/media-library file, or generated asset store and passed as stable
-JSON refs/projections. Do not move base64 payloads or cache paths through chat,
-Webview messages, Canvas nodes, or package manifests as durable data.
+For complex or long-running creative work, `brief.md`, owning-domain review
+documents, and `plan.md` may capture source evidence, creator decisions, and
+actionable work units. They remain ordinary user-editable Markdown, not an
+executable plan, state machine, or project fact. TODO is only bounded
+conversation/task progress projection. After approval, the Agent re-reads the
+current files and uses the ordinary typed Tool lifecycle.
+
+Generated binary outputs intended for user use must be written to the existing
+generated-output/workspace boundary and returned as file/ResourceRef plus digest
+and lineage. They do not require a separate stable-artifact promotion step or a
+global current revision. Asset-library import/promotion is required only when
+the user requests formal library membership, entity binding, or another owning
+domain contract requires it. Mutable `.nk*` project operations continue to use
+the owning package revision and `baseRevision` or equivalent precondition. Do
+not move base64 payloads or cache paths through chat, Webview messages, Canvas
+nodes, or package manifests as durable data.
 
 Agent development validation must include TUI debug automation eval evidence
 whenever a change affects provider/model selection, AI SDK projection, prompt or
-Skill behavior, tool schemas, AgentSession workflow, validator/recovery policy,
+Skill behavior, tool schemas, AgentSession behavior, validator/recovery policy,
 or TUI/GUI projection of live Agent events. Default CI remains key-free, but
 local Agent validation for these surfaces must run a focused `scripts/agent-eval`
 scenario or record the attempted command, reason it could not run, and residual

@@ -79,15 +79,11 @@ describe('message runtime helpers', () => {
     });
   });
 
-  it('keeps execution overrides and media models without creating plan runtime metadata', () => {
+  it('keeps generic execution overrides and media models without creating plan runtime metadata', () => {
     expect(
       buildAgentTurnExecutionMetadata(
         'plan',
         {
-          agentCreation: {
-            taskShape: 'single-step',
-            custom: true,
-          },
           traceId: 'trace-1',
         },
         {
@@ -98,10 +94,6 @@ describe('message runtime helpers', () => {
         },
       ),
     ).toEqual({
-      agentCreation: {
-        taskShape: 'single-step',
-        custom: true,
-      },
       traceId: 'trace-1',
       mediaModels: {
         image: { providerId: 'flux', modelId: 'flux-pro-1.1', category: 'image' },

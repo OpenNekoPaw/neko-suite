@@ -50,11 +50,6 @@ import type { ProviderManager } from '../providerManager';
 import type { AgentStreamProcessor, StreamProcessingResult } from './agentStreamProcessor';
 import type { AccountAiCatalogCache } from '../../services/accountAiCatalogCache';
 import { loadWorkspaceFileIgnoreRules } from '../../services/workspaceIgnoreFilter';
-import type {
-  AgentCanvasBoardWorkRuntime,
-  AgentCanvasBoardWorkSession,
-} from '../../services/agentCanvasBoardWorkRuntime';
-import { createSelectedWorkspaceResourceRefs } from '../../services/selectedWorkspaceResourceRefs';
 
 export interface AgentTurnBridgeDeps {
   providers: ProviderManager;
@@ -80,7 +75,6 @@ export interface AgentTurnBridgeDeps {
     agentRunner: IAgentRunner,
   ) => void;
   generateMessageId: () => string;
-  canvasBoardWork?: AgentCanvasBoardWorkRuntime;
 }
 
 export type AgentTurnDurabilityOutcome =
@@ -133,24 +127,6 @@ export class AgentTurnBridge {
   async execute(input: ExecuteAgentTurnForWebviewInput): Promise<AgentTurnBridgeExecutionResult> {
     const turnSettings = input.settings;
     const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-    const boardRunId = `agent-board-run:${this.deps.generateMessageId()}`;
-    const boardWork = await this.deps.canvasBoardWork?.begin({
-      conversationId: input.conversationId,
-      turnId: boardRunId,
-      runId: boardRunId,
-      message: input.message,
-      ...(this.deps.getActiveSkillState?.(input.conversationId)?.skill.name
-        ? { activeSkillId: this.deps.getActiveSkillState(input.conversationId)?.skill.name }
-        : {}),
-      onDiagnostic: (diagnostic) => {
-        void postCanvasBoardDiagnostic(input.webview, diagnostic);
-      },
-    });
-    if (boardWork && workspaceRoot && input.selectedFileReferences?.length) {
-      await boardWork.deliverSelectedReferences(
-        createSelectedWorkspaceResourceRefs(workspaceRoot, input.selectedFileReferences),
-      );
-    }
     await this.refreshAccountCatalogForTurn(input.chatModel?.providerId);
     const workspaceIgnoreRules = workspaceRoot
       ? await loadWorkspaceFileIgnoreRules(workspaceRoot)
@@ -236,7 +212,6 @@ export class AgentTurnBridge {
               conversationId,
               events,
               { messageId, onPhaseChange },
-              boardWork,
             );
             streamResults.push(streamResult);
             return streamResult;
@@ -265,8 +240,6 @@ export class AgentTurnBridge {
         },
       };
     }
-
-    await deliverCreatorMarkdown(boardWork, streamResults);
 
     const conversationDurability = await this.deps.conversations.persistConversationTerminal(
       input.conversationId,
@@ -317,43 +290,6 @@ export class AgentTurnBridge {
       this.deps.accountAiCatalog.invalidateForAuthFailure(error);
     }
   }
-}
-
-async function deliverCreatorMarkdown(
-  boardWork: AgentCanvasBoardWorkSession | undefined,
-  streams: readonly StreamProcessingResult[],
-): Promise<void> {
-  if (!boardWork?.supports('markdown')) return;
-  for (const stream of streams) {
-    if (stream.terminalStatus !== 'completed' || !stream.accumulatedResponse.trim()) continue;
-    await boardWork.deliverMarkdown({
-      messageId: stream.messageId,
-      markdown: stream.accumulatedResponse,
-    });
-  }
-}
-
-async function postCanvasBoardDiagnostic(
-  webview: vscode.Webview,
-  diagnostic: {
-    readonly phase: 'resolution' | 'delivery';
-    readonly conversationId: string;
-    readonly message: string;
-  },
-): Promise<void> {
-  await postLifecycleDiagnostic(
-    webview,
-    buildAgentSessionDiagnosticMessage({
-      code:
-        diagnostic.phase === 'resolution'
-          ? 'canvas-board-routing-failed'
-          : 'canvas-board-delivery-failed',
-      severity: 'warning',
-      action: diagnostic.phase === 'resolution' ? 'resolveCanvasBoard' : 'retryCanvasBoardDelivery',
-      conversationId: diagnostic.conversationId,
-      message: diagnostic.message,
-    }),
-  );
 }
 
 function summarizeModelOutcome(

@@ -263,6 +263,7 @@ function createFakePort(): TuiDebugAutomationAppPort {
         configuration: {
           digest: `sha256:${'a'.repeat(64)}`,
           runtime: {
+            executionMode: 'auto',
             temperature: 0.7,
             maxTokens: 8192,
             thinkingBudget: 0,
@@ -279,6 +280,7 @@ function createFakePort(): TuiDebugAutomationAppPort {
         continuations: [],
         promptComposition: [],
         artifacts: [],
+        workspaceBoardProjections: [],
         runtimeErrors: [],
         canvas: { messageSummaries: [], toolCallSummaries: [] },
         markdown: mockState.renderedAppProps?.automation?.readMarkdownFacts() ?? {
@@ -304,6 +306,7 @@ function createFakePort(): TuiDebugAutomationAppPort {
           continuations: { limit: 512, droppedCount: 0 },
           promptComposition: { limit: 256, droppedCount: 0 },
           artifacts: { limit: 512, droppedCount: 0 },
+          workspaceBoardProjections: { limit: 128, droppedCount: 0 },
           runtimeErrors: { limit: 256, droppedCount: 0 },
           canvasMessageSummaries: { limit: 128, droppedCount: 0 },
           canvasToolCallSummaries: { limit: 128, droppedCount: 0 },

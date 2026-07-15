@@ -22,7 +22,7 @@ function createConfig(): CLIConfig {
 }
 
 describe('handleSlashCommand', () => {
-  it('returns agent execution overrides for command artifact slash commands with arguments', async () => {
+  it('returns lifecycle activation and a normal Agent prompt for command artifacts', async () => {
     const skill = {
       name: '剪辑: 快速 workflow',
       entryPointKind: 'command-artifact',
@@ -55,13 +55,6 @@ describe('handleSlashCommand', () => {
     expect(result.lifecycleActivation).toEqual({
       skillName: '剪辑: 快速 workflow',
       args: 'fix bug',
-    });
-    expect(result.executionOverrides?.metadata).toEqual({
-      agentCreation: {
-        entrySignal: 'prompt-chain-skill',
-        taskShape: 'multi-step',
-        creationKind: 'skill:%E5%89%AA%E8%BE%91%3A%20%E5%BF%AB%E9%80%9F%20workflow',
-      },
     });
   });
 
@@ -205,15 +198,6 @@ describe('handleSkillInvocation', () => {
           args: 'changed files',
         },
         agentPrompt: 'changed files',
-        executionOverrides: {
-          metadata: {
-            agentCreation: {
-              entrySignal: 'prompt-chain-skill',
-              taskShape: 'multi-step',
-              creationKind: 'skill:quality-review',
-            },
-          },
-        },
       }),
     );
   });

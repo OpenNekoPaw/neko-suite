@@ -431,13 +431,13 @@ Extension → Webview:
   conversations, activeConversation, settings, tabState
 ```
 
-### Board Canvas 自动投递与历史 Authoring Handoff
+### Workspace Board 投影与历史 Authoring Handoff
 
-VS Code Extension Host 为创作者任务建立 instance-scoped `AgentCanvasBoardWorkSession`。会话在模型或媒体任务启动前通过公共 `NekoCanvasAPI.boards` 解析 `neko/boards/*.nkc` 并冻结 document/canvas/revision 与 conversation/turn/task/run 身份；每个并发运行独立持有状态，UI active Canvas 只是展示选择，不能成为写入 owner。
+Agent core 和 session 不拥有 Canvas destination、Board work session、conversation binding、Board index/scope resolver、delivery runtime 或 Cut target state。核心只观察通用 Tool/Task/result、diagnostic 与 Approval。VS Code/TUI Host composition 可以把已声明的 creator-visible typed result 交给 owning Canvas projector，但目的地状态不能进入 Agent contract。
 
-typed runtime policy 自动投递 creator-useful Markdown 和已持久化的选中 `ResourceRef`。媒体 task completion/continuation 使用任务创建时的工作会话，但未提升 binary media 只创建 Canvas Extension-owned runtime review Group；它不是 `.nkc` fact。显式 Save to Assets 返回 Asset identity 后，Canvas 才能对冻结 target revision 应用普通 Group 与 Asset-backed children。目标缺失、权限失败或 revision conflict 时，结果继续保留在 conversation/media task 生命周期中，并投影 `canvas-board-*-failed` diagnostic；不得重新解析或写入其他 Canvas。
+没有显式 Canvas target 时，公共 `NekoCanvasAPI.boards.project()` 只写 `neko/boards/workspace.nkc`；显式 target 是普通 `.nkc` identity。它不解析活动/最近文档、会话、scope 或文件名。Generated Output owner 先将 creator-visible binary 保存到 `neko/generated/<kind>/` 并建立 revision/digest/lineage/`ResourceRef`，Canvas 再写普通持久 Inbox Group/Media 节点；AssetLibrary promotion 是独立可选动作。
 
-普通问答、reasoning、日志、scratch、未选搜索结果、runtime handle 和非 reviewable failure 不建立 Board 工作会话。Generated Output owner 只提供 revision/digest 绑定的未提升资源与 runtime bytes；新结果不得以 `neko/generated/<kind>/` 作为 Board retention。该目录仅保留 legacy 读取和显式导入，导入不会删除或移动原文件。
+普通问答、reasoning、日志、provider scratch、未选搜索结果、runtime handle 和 non-reviewable failure 不投影。目标缺失、权限失败或 revision conflict 只产生 projection diagnostic；生成文件继续由 generated-output owner 保留，不重新解析或改投其他 Canvas。
 
 下面的 handoff 仅服务未参与当前 typed delivery 的历史/外部内容和显式专业 authoring，不是新结果的默认保留流程。
 

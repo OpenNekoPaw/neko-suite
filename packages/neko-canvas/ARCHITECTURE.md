@@ -8,7 +8,9 @@
 
 neko-canvas 是 Neko Suite 的可视化编排工具。以 VSCode CustomEditor 方式打开 `.nkc` 画布文件，提供无限画布上的节点摆放、连接、媒体内联播放、分镜生成审阅、上下文引用组织等能力。它也是连接 neko-agent、neko-story、neko-sketch、neko-cut 的语义中枢。
 
-`neko/boards/*.nkc` 不构成新文档类型。Canvas Extension 拥有该目录的索引、解析、创建和 revision-checked authoring；Agent 只消费 `NekoCanvasAPI.boards` 的安全摘要与不可变写入目标。未指定目标时不允许退回活动/最近/专业目录 Canvas，也不允许 Agent 解析或直接写 `.nkc`。
+`neko/boards/*.nkc` 不构成新文档类型。未给出显式 Canvas target 时，Canvas-owned Workspace Board projector 只写 `neko/boards/workspace.nkc`；调用方也可以显式指定其他普通 `.nkc`。系统不通过目录索引、会话 binding、scope、活动或最近编辑器推断目标，Agent 也不解析或直接写 `.nkc`。
+
+Workspace Board 的 Inbox 使用普通持久 Group、Media、Document 和 Text 节点。生成结果先由 generated-output owner 保存到 `neko/generated/<kind>/` 并建立稳定 identity，再由 projector 按 provenance 幂等写入 `.nkc`。AssetLibrary membership 不是投影前置条件。`.nkc` 是布局权威；目录树、对话和生成记录不能重建节点坐标、分组、标题、批注或用户移动。
 
 Canvas 编辑与预览共享同一个 `neko.canvasEditor` Webview。播放预览不是第二个独立 Webview，而是 Canvas Editor Webview 内的 `PlaybackWorkspace`：上方可显示/隐藏画布区与预览播放区，下方可显示/隐藏 Canvas 预览路线条。该决策遵循系统级 ADR：[`../../docs/architecture/adr-canvas-cut-playback-route-and-timeline-boundary.md`](../../docs/architecture/adr-canvas-cut-playback-route-and-timeline-boundary.md)。
 

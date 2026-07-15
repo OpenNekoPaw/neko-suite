@@ -288,26 +288,16 @@ export {
 } from './media/media-file-downloader';
 export type { MediaRequestAssetMaterializer } from './media/media-request-assets';
 export {
-  createMediaTaskActionCandidate,
   createMediaTaskProgressView,
   createMediaTaskView,
   getMediaTaskConversationId,
   matchesMediaTaskConversation,
-  type MediaTaskActionCandidate,
   type MediaTaskProgressView,
   type MediaTaskProgressViewInput,
   type MediaTaskResultView,
   type MediaTaskView,
   type MediaTaskViewOptions,
 } from './media/media-task-view';
-export {
-  buildMediaTaskCreativeEntityContext,
-  type BuildMediaTaskCreativeEntityContextInput,
-  type MediaTaskCreativeEntityAction,
-  type MediaTaskCreativeEntityActionKind,
-  type MediaTaskCreativeEntityBindingCandidate,
-  type MediaTaskCreativeEntityContext,
-} from './media/media-task-creative-entity';
 export { isTerminalMediaTaskStatus } from './media/media-task-progress-plan';
 export {
   readMediaTaskResultDeliveryPolicy,

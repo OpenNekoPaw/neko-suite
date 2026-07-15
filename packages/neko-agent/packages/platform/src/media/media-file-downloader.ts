@@ -8,6 +8,8 @@
 
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
+import { randomUUID } from 'node:crypto';
+import { fileURLToPath } from 'node:url';
 import { getLogger } from '../utils/logger';
 
 const logger = getLogger('MediaFileDownloader');
@@ -94,60 +96,84 @@ export async function downloadMediaOutputs(
 ): Promise<string[]> {
   const savedPaths: string[] = [];
 
-  try {
-    await fs.mkdir(outputDir, { recursive: true });
+  await fs.mkdir(outputDir, { recursive: true });
 
-    for (let i = 0; i < outputs.length; i++) {
-      const output = outputs[i];
-      if (!output?.url) continue;
+  for (let i = 0; i < outputs.length; i++) {
+    const output = outputs[i];
+    if (!output?.url) {
+      throw new Error(`Generated output ${i} is missing a source URL.`);
+    }
 
-      // Already a local path — no download needed
-      if (output.url.startsWith('/') || output.url.startsWith('file://')) {
-        savedPaths.push(output.url.replace('file://', ''));
+    const sourcePath = toLocalPath(output.url);
+    let remoteBuffer: Buffer | undefined;
+    let remoteContentType = '';
+    if (!sourcePath) {
+      const response = await fetch(output.url);
+      if (!response.ok) {
+        throw new Error(`Generated output download failed with HTTP ${response.status}.`);
+      }
+      remoteContentType = response.headers.get('content-type') || '';
+      remoteBuffer = Buffer.from(await response.arrayBuffer());
+    }
+    const detectedExt = sourcePath
+      ? path.extname(sourcePath) || detectMediaExtension('', taskType, output.type)
+      : detectMediaExtension(remoteContentType, taskType, output.type);
+    const rawPath = path.join(outputDir, `${taskId}_${i}${detectedExt}`);
+    const rawTempPath = `${rawPath}.part-${randomUUID()}`;
+    const requiresTranscode = needsTranscode(detectedExt) && options.transcodeFile;
+    const mediaType = taskType.includes('video') ? 'video' : 'audio';
+    const compatExt = mediaType === 'video' ? '.mp4' : '.mp3';
+    const compatPath = path.join(outputDir, `${taskId}_${i}${compatExt}`);
+    const compatTempPath = `${compatPath}.part-${randomUUID()}`;
+
+    try {
+      const terminalPath = requiresTranscode ? compatPath : rawPath;
+      if (await pathExists(terminalPath)) {
+        savedPaths.push(terminalPath);
         continue;
       }
 
-      try {
-        const response = await fetch(output.url);
-        if (!response.ok) {
-          logger.error('Download failed', { status: response.status, url: output.url });
-          continue;
+      if (sourcePath) {
+        if (path.resolve(sourcePath) !== path.resolve(rawTempPath)) {
+          await fs.copyFile(sourcePath, rawTempPath);
         }
-
-        const contentType = response.headers.get('content-type') || '';
-        const detectedExt = detectMediaExtension(contentType, taskType, output.type);
-        const rawPath = path.join(outputDir, `${taskId}_${i}${detectedExt}`);
-
-        const buffer = Buffer.from(await response.arrayBuffer());
-        await fs.writeFile(rawPath, buffer);
-
-        // Transcode if the caller provided a handler and the format needs it
-        if (needsTranscode(detectedExt) && options.transcodeFile) {
-          const mediaType = taskType.includes('video') ? 'video' : 'audio';
-          const compatExt = mediaType === 'video' ? '.mp4' : '.mp3';
-          const compatPath = path.join(outputDir, `${taskId}_${i}${compatExt}`);
-          try {
-            const ok = await options.transcodeFile(rawPath, compatPath, mediaType);
-            if (ok) {
-              await fs.unlink(rawPath).catch(() => {});
-              savedPaths.push(compatPath);
-              continue;
-            }
-          } catch (transcodeErr) {
-            logger.warn('Transcode failed, keeping original', { transcodeErr });
-          }
-        }
-
-        savedPaths.push(rawPath);
-      } catch (downloadErr) {
-        logger.error('Failed to download output', { url: output.url, downloadErr });
-        // Fall back to remote URL so the caller can still reference it
-        savedPaths.push(output.url);
+      } else {
+        if (!remoteBuffer) throw new Error(`Generated output ${i} has no materialized bytes.`);
+        await fs.writeFile(rawTempPath, remoteBuffer, { flag: 'wx' });
       }
+
+      if (requiresTranscode) {
+        const ok = await options.transcodeFile!(rawTempPath, compatTempPath, mediaType);
+        if (!ok) throw new Error('Generated output transcode returned false.');
+        await fs.rename(compatTempPath, compatPath);
+        savedPaths.push(compatPath);
+        continue;
+      }
+
+      await fs.rename(rawTempPath, rawPath);
+      savedPaths.push(rawPath);
+    } catch (error) {
+      logger.error('Failed to materialize generated output', { outputIndex: i, error });
+      throw error;
+    } finally {
+      await fs.unlink(rawTempPath).catch(() => undefined);
+      await fs.unlink(compatTempPath).catch(() => undefined);
     }
-  } catch (err) {
-    logger.error('Failed to save media outputs', { err });
   }
 
   return savedPaths;
+}
+
+function toLocalPath(value: string): string | undefined {
+  if (value.startsWith('file://')) return fileURLToPath(value);
+  return path.isAbsolute(value) ? value : undefined;
+}
+
+async function pathExists(filePath: string): Promise<boolean> {
+  try {
+    await fs.access(filePath);
+    return true;
+  } catch {
+    return false;
+  }
 }

@@ -64,6 +64,7 @@ export function App(): ReactElement {
           </button>
         ))}
       </nav>
+      <HomeSessionNavigation snapshot={snapshot} onSnapshot={setSnapshot} />
       <main className="home-content">
         {view === 'overview' ? <Overview snapshot={snapshot} onOpenAgent={() => setView('agent')} /> : null}
         {view === 'agent' ? (
@@ -94,6 +95,64 @@ export function App(): ReactElement {
         ) : null}
       </main>
     </div>
+  );
+}
+
+function HomeSessionNavigation({
+  snapshot,
+  onSnapshot,
+}: {
+  readonly snapshot: HomeSnapshot;
+  readonly onSnapshot: (snapshot: HomeSnapshot) => void;
+}): ReactElement {
+  const { t } = useTranslation();
+  const [prompt, setPrompt] = useState('');
+  const [error, setError] = useState<string>();
+  const selected = snapshot.sessionProjection.sessions.find(
+    (session) => session.sessionId === snapshot.sessionProjection.selectedSessionId,
+  );
+  const run = async (request: Parameters<ReturnType<typeof getHomeBridge>['manageSession']>[0]) => {
+    setError(undefined);
+    try {
+      await getHomeBridge().manageSession(request);
+      onSnapshot(await getHomeBridge().getSnapshot());
+    } catch (value: unknown) {
+      setError(value instanceof Error ? value.message : String(value));
+    }
+  };
+  return (
+    <aside className="home-session-navigation" aria-label={t('sessions.label')}>
+      <button type="button" onClick={() => void run({ type: 'create' })}>{t('sessions.new')}</button>
+      {snapshot.sessionProjection.sessions.map((session) => (
+        <button
+          type="button"
+          key={session.sessionId}
+          aria-current={selected?.sessionId === session.sessionId ? 'true' : undefined}
+          onClick={() => void run({ type: 'select', sessionId: session.sessionId })}
+        >
+          {session.sessionId} · {session.status}
+        </button>
+      ))}
+      {selected ? (
+        <div>
+          <input
+            aria-label={t('sessions.queuePrompt')}
+            value={prompt}
+            onChange={(event) => setPrompt(event.currentTarget.value)}
+          />
+          <button
+            type="button"
+            onClick={() => void run({ type: 'queue', sessionId: selected.sessionId, runtimeId: selected.runtimeId, prompt })}
+          >{t('sessions.queue')}</button>
+          {selected.status === 'cancelled' ? (
+            <button type="button" onClick={() => void run({ type: 'resume', sessionId: selected.sessionId, runtimeId: selected.runtimeId })}>{t('sessions.resume')}</button>
+          ) : (
+            <button type="button" onClick={() => void run({ type: 'cancel', sessionId: selected.sessionId, runtimeId: selected.runtimeId })}>{t('sessions.cancel')}</button>
+          )}
+        </div>
+      ) : null}
+      {error ? <p role="alert">{error}</p> : null}
+    </aside>
   );
 }
 
@@ -153,6 +212,7 @@ function Overview({ snapshot, onOpenAgent }: { readonly snapshot: HomeSnapshot; 
         <div><dt>{t('summary.resources')}</dt><dd>{totalResources}</dd></div>
         <div><dt>{t('summary.providers')}</dt><dd>{snapshot.resourceProviders.length}</dd></div>
         <div><dt>{t('summary.engine')}</dt><dd>{snapshot.engine.availability}</dd></div>
+        <div><dt>{t('summary.sessions')}</dt><dd>{snapshot.sessionProjection.sessions.length}</dd></div>
       </dl>
       <p className="engine-diagnostic">{snapshot.engine.diagnostic}</p>
     </section>

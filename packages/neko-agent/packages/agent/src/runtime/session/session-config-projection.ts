@@ -2,12 +2,7 @@ import { emitDiagnostic } from '@neko/shared';
 import { createAgentSession, type AgentSession } from '../../session/agent-session';
 import type { AgentSessionConfig } from '../../session/types';
 import { getLogger } from '../../utils/logger';
-import type {
-  AgentRuntimeConfig,
-  ICapabilityRuntime,
-  ICreationGuidanceRuntime,
-  IWorkspaceRuntimeStore,
-} from '../types';
+import type { AgentRuntimeConfig, ICapabilityRuntime, IWorkspaceRuntimeStore } from '../types';
 
 const logger = getLogger('AgentSessionRuntimeBootstrap');
 
@@ -24,7 +19,6 @@ export function buildAgentSessionConfigWithRuntime(
   config: AgentSessionRuntimeBootstrapConfig,
 ): AgentSessionConfig {
   const { runtime, ...base } = config;
-  const creationGuidance = runtime?.creationGuidance;
   const workspaceStore = runtime?.workspaceStore;
   const capability = runtime?.capabilityRuntime;
   const validation = runtime?.validationLoop;
@@ -36,8 +30,6 @@ export function buildAgentSessionConfigWithRuntime(
   const providerCardRegistry = base.providerCardRegistry ?? capability?.providerCardRegistry;
   const artifactProfileRegistry =
     base.artifactProfileRegistry ?? capability?.artifactProfileRegistry;
-  const creationProfileRegistry =
-    base.creationProfileRegistry ?? capability?.creationProfileRegistry;
   const providerExpressionProfileRegistry =
     base.providerExpressionProfileRegistry ?? capability?.providerExpressionProfileRegistry;
   const projectMemoryManager = base.projectMemoryManager ?? validation?.projectMemoryManager;
@@ -46,7 +38,9 @@ export function buildAgentSessionConfigWithRuntime(
     base.validationCoordinatorFactory ?? validation?.validationCoordinatorFactory;
   const toolResultValidationAdapters =
     base.toolResultValidationAdapters ?? validation?.toolResultValidationAdapters;
-  const autohealChainFactory = base.autohealChainFactory ?? creationGuidance?.autohealChainFactory;
+  const outputValidationAdapters =
+    base.outputValidationAdapters ?? validation?.outputValidationAdapters;
+  const autohealChainFactory = base.autohealChainFactory ?? validation?.autohealChainFactory;
   const externalProcessorRuntime =
     base.externalProcessorRuntime ?? capability?.externalProcessorRuntime;
   const contentAccessRuntime = base.contentAccessRuntime ?? capability?.contentAccessRuntime;
@@ -62,12 +56,12 @@ export function buildAgentSessionConfigWithRuntime(
     ...(toolCategoryRegistry ? { toolCategoryRegistry } : {}),
     ...(providerCardRegistry ? { providerCardRegistry } : {}),
     ...(artifactProfileRegistry ? { artifactProfileRegistry } : {}),
-    ...(creationProfileRegistry ? { creationProfileRegistry } : {}),
     ...(providerExpressionProfileRegistry ? { providerExpressionProfileRegistry } : {}),
     ...(projectMemoryManager ? { projectMemoryManager } : {}),
     ...(validationCoordinator ? { validationCoordinator } : {}),
     ...(validationCoordinatorFactory ? { validationCoordinatorFactory } : {}),
     ...(toolResultValidationAdapters ? { toolResultValidationAdapters } : {}),
+    ...(outputValidationAdapters ? { outputValidationAdapters } : {}),
     ...(autohealChainFactory ? { autohealChainFactory } : {}),
     ...(externalProcessorRuntime ? { externalProcessorRuntime } : {}),
     ...(contentAccessRuntime ? { contentAccessRuntime } : {}),

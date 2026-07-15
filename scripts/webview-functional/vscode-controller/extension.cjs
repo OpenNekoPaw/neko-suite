@@ -140,7 +140,7 @@ async function execute(action, payload) {
     }
     case 'close-reopen': {
       const path = requireFixturePath(fixtureRoot, payload.path);
-      await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
+      await closeFixtureTabs({ exactPath: path, requireMatch: true });
       if (payload.viewType) {
         await vscode.commands.executeCommand(
           'vscode.openWith',
@@ -159,11 +159,71 @@ async function execute(action, payload) {
       await vscode.commands.executeCommand('workbench.action.reloadWindow');
       return { reloading: true };
     case 'cleanup-session':
-      await vscode.commands.executeCommand('workbench.action.closeAllEditors');
-      return { closedEditors: true };
+      return { closedEditors: await closeFixtureTabs() };
     default:
       throw new Error(`Unknown controller action: ${action}`);
   }
+}
+
+async function closeFixtureTabs(options = {}) {
+  const root = requireFixtureRoot();
+  let matchingTabs = findFixtureTabs(root, options.exactPath);
+  for (let attempt = 0; options.requireMatch && matchingTabs.length === 0 && attempt < 20; attempt += 1) {
+    await new Promise((resolvePromise) => setTimeout(resolvePromise, 50));
+    matchingTabs = findFixtureTabs(root, options.exactPath);
+  }
+  if (options.requireMatch && matchingTabs.length === 0) {
+    throw new Error(
+      `Functional fixture editor is not open: ${options.exactPath}. ` +
+      `Open functional tabs: ${JSON.stringify(listOpenFunctionalTabPaths())}`,
+    );
+  }
+  for (const tab of matchingTabs) {
+    const closed = await vscode.window.tabGroups.close(tab, true);
+    if (!closed) {
+      throw new Error(`VS Code did not close functional fixture editor: ${readTabUri(tab)}`);
+    }
+  }
+  return matchingTabs.length;
+}
+
+function listOpenFunctionalTabPaths() {
+  const functionalRoot = resolve(requireWorkspaceRoot(), '.neko', '.functional');
+  return vscode.window.tabGroups.all
+    .flatMap((group) => group.tabs)
+    .map(readTabUri)
+    .filter((uri) => uri?.scheme === 'file' && isPathInsideOrEqual(resolve(uri.fsPath), functionalRoot))
+    .map((uri) => relative(functionalRoot, resolve(uri.fsPath)));
+}
+
+function findFixtureTabs(root, exactPath) {
+  return vscode.window.tabGroups.all
+    .flatMap((group) => group.tabs)
+    .filter((tab) => {
+      const uri = readTabUri(tab);
+      if (!uri || uri.scheme !== 'file') return false;
+      const tabPath = resolve(uri.fsPath);
+      return exactPath
+        ? tabPath === resolve(exactPath)
+        : isPathInsideOrEqual(tabPath, root);
+    });
+}
+
+function readTabUri(tab) {
+  const input = tab?.input;
+  const uri = input && typeof input === 'object' ? input.uri : undefined;
+  return uri &&
+    typeof uri === 'object' &&
+    typeof uri.scheme === 'string' &&
+    typeof uri.fsPath === 'string' &&
+    typeof uri.toString === 'function'
+    ? uri
+    : undefined;
+}
+
+function requireFixtureRoot() {
+  if (!fixtureRoot) throw new Error('Functional fixture root is not configured');
+  return fixtureRoot;
 }
 
 function projectDiagnostic(diagnostic) {

@@ -815,7 +815,7 @@ describe('agent-capability-injection-runtime', () => {
         identity: {
           id: 'skill:cli-only',
           source: 'market',
-          sourceId: '@neko/cli-only',
+          sourceId: 'neko-tui-only',
           trustLevel: 'community',
         },
         hostRequirements: [{ host: 'cli' }],

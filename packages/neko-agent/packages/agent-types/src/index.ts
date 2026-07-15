@@ -117,24 +117,6 @@ export {
   createAgentHostRouteCoverageDiagnostics,
 } from './agent-host-runtime-adapter';
 export type { EnabledStateRecord } from './enabled-state';
-export type {
-  AgentPromptChainCheckpointObservation,
-  AgentPromptChainCompletedObservation,
-  AgentPromptChainObservation,
-  AgentPromptChainObservationBase,
-  AgentPromptChainObservationKind,
-  AgentPromptChainReorderedObservation,
-  AgentPromptChainSkippedObservation,
-  AgentPromptChainStartedObservation,
-} from './prompt-chain-observation';
-export {
-  buildAgentPromptChainCheckpointObservation,
-  buildAgentPromptChainCompletedObservation,
-  buildAgentPromptChainReorderedObservation,
-  buildAgentPromptChainSkippedObservation,
-  buildAgentPromptChainStartedObservation,
-  isAgentPromptChainObservation,
-} from './prompt-chain-observation';
 
 export type {
   AgentCommandCatalogEntry,
@@ -206,9 +188,6 @@ export type {
 } from './context-state-contract';
 export type {
   AgentBackgroundTask,
-  AgentMediaTaskCreativeEntityAction,
-  AgentMediaTaskCreativeEntityBindingCandidate,
-  AgentMediaTaskCreativeEntityContext,
   AgentMediaTaskError,
   AgentMediaTaskOutput,
   AgentMediaTaskView,

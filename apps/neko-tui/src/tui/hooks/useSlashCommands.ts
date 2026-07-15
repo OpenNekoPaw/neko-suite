@@ -62,10 +62,7 @@ interface SlashCommandHandlers {
 
 interface SlashCommandSessionActions {
   clearHistory: () => void;
-  submit?: (
-    prompt: string,
-    executionOverrides?: { metadata?: Record<string, unknown> },
-  ) => Promise<void>;
+  submit?: (prompt: string) => Promise<void>;
   updateModel?: (model: string | TuiModelIdentity) => void;
   updateMode?: (mode: 'plan' | 'ask' | 'auto') => void;
   validateLlmConfig?: AgentSessionHandleParameterValidator;
@@ -247,7 +244,7 @@ async function handleSkillInvocationCommand(
     }
 
     if (result.agentPrompt && sessionActions.submit) {
-      await sessionActions.submit(result.agentPrompt, result.executionOverrides);
+      await sessionActions.submit(result.agentPrompt);
     }
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
@@ -563,7 +560,7 @@ async function projectCommandResult(
   }
 
   if (result.agentPrompt && sessionActions.submit) {
-    await sessionActions.submit(result.agentPrompt, result.executionOverrides);
+    await sessionActions.submit(result.agentPrompt);
   }
 }
 

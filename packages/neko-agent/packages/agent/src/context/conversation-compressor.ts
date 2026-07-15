@@ -12,7 +12,6 @@ import type {
   TurnInfo,
   ISummarizer,
   IConversationCompressor,
-  IMessageClassifier,
 } from '@neko/shared';
 import { DEFAULT_COMPRESSOR_CONFIG } from '@neko/shared';
 import { getLogger } from '../utils/logger';
@@ -60,19 +59,11 @@ export class ConversationCompressor implements IConversationCompressor {
   /** Optional summarizer for generating summaries */
   private summarizer?: ISummarizer;
 
-  /** Optional message classifier for priority-based compression */
-  private classifier?: IMessageClassifier;
-
-  constructor(
-    config?: ConversationCompressorRuntimeConfig,
-    summarizer?: ISummarizer,
-    classifier?: IMessageClassifier,
-  ) {
+  constructor(config?: ConversationCompressorRuntimeConfig, summarizer?: ISummarizer) {
     const { locale, ...compressorConfig } = config ?? {};
     this.config = { ...DEFAULT_COMPRESSOR_CONFIG, ...compressorConfig };
     this.locale = normalizeCompressorPromptLocale(locale);
     this.summarizer = summarizer;
-    this.classifier = classifier;
   }
 
   /**
@@ -98,14 +89,6 @@ export class ConversationCompressor implements IConversationCompressor {
    */
   setSummarizer(summarizer: ISummarizer): void {
     this.summarizer = summarizer;
-  }
-
-  /**
-   * Set message classifier for creative-domain priority-based compression.
-   * When set, older turns are compressed by category instead of a single bulk summary.
-   */
-  setClassifier(classifier: IMessageClassifier): void {
-    this.classifier = classifier;
   }
 
   /**
@@ -188,53 +171,7 @@ export class ConversationCompressor implements IConversationCompressor {
     if (olderTurns.length > 0) {
       const olderMessages = olderTurns.flatMap((t) => t.messages);
 
-      if (this.classifier && this.config.conversationWindow.olderTurnsStrategy === 'summary') {
-        // Creative-domain classified compression:
-        // 1. Classify all older messages
-        // 2. Preserve user messages verbatim (P1)
-        // 3. Delegate P2–P7 to the summariser (which handles per-category budgets)
-        const classified = this.classifier.classify(olderMessages);
-
-        // P1: keep user messages verbatim
-        const userMsgs = classified.filter((c) => c.infoType === 'user_message');
-        for (const item of userMsgs) {
-          compressedMessages.push({
-            message: item.message,
-            sourceIndexes: getMessageSourceIndexes([item.message], messageIndexMap),
-            isSummary: false,
-            compressedTokens: estimateMessageTokens(item.message),
-          });
-        }
-
-        // P2–P7: summarise the rest (classifier-aware summariser handles per-category budgets)
-        const nonUserMessages = classified
-          .filter((c) => c.infoType !== 'user_message')
-          .map((c) => c.message);
-
-        if (nonUserMessages.length > 0) {
-          const summary = await this.summarizeMessages(
-            nonUserMessages,
-            this.config.conversationWindow.olderTurnsSummaryMaxTokens,
-          );
-          if (summary) {
-            compressedMessages.push({
-              message: {
-                role: 'system',
-                content: `${formatSummaryWrapper('creative', olderTurns.length, this.locale)}\n${summary}`,
-              },
-              sourceIndexes: getMessageSourceIndexes(nonUserMessages, messageIndexMap),
-              isSummary: true,
-              originalCount: nonUserMessages.length,
-              originalTokens: nonUserMessages.reduce((sum, m) => sum + estimateMessageTokens(m), 0),
-              compressedTokens: estimateTokens(summary),
-              turnRange: `turns 1-${olderTurns.length}`,
-            });
-            summariesCreated++;
-          }
-        }
-        messagesRemoved += nonUserMessages.length;
-      } else if (this.config.conversationWindow.olderTurnsStrategy === 'summary') {
-        // Default bulk summary (no classifier)
+      if (this.config.conversationWindow.olderTurnsStrategy === 'summary') {
         const summary = await this.summarizeMessages(
           olderMessages,
           this.config.conversationWindow.olderTurnsSummaryMaxTokens,
@@ -244,7 +181,7 @@ export class ConversationCompressor implements IConversationCompressor {
           compressedMessages.push({
             message: {
               role: 'system',
-              content: `${formatSummaryWrapper('bulk', olderTurns.length, this.locale)}\n${summary}`,
+              content: `${formatSummaryWrapper(olderTurns.length, this.locale)}\n${summary}`,
             },
             sourceIndexes: getMessageSourceIndexes(olderMessages, messageIndexMap),
             isSummary: true,
@@ -490,18 +427,11 @@ function normalizeCompressorPromptLocale(locale?: string): CompressorPromptLocal
   return locale?.trim().toLowerCase().startsWith('zh') ? 'zh' : 'en';
 }
 
-function formatSummaryWrapper(
-  kind: 'bulk' | 'creative',
-  endTurn: number,
-  locale: CompressorPromptLocale,
-): string {
+function formatSummaryWrapper(endTurn: number, locale: CompressorPromptLocale): string {
   if (locale === 'zh') {
-    return kind === 'creative' ? `[第 1-${endTurn} 轮创作摘要]` : `[第 1-${endTurn} 轮摘要]`;
+    return `[第 1-${endTurn} 轮摘要]`;
   }
-
-  return kind === 'creative'
-    ? `[Creative summary of turns 1-${endTurn}]`
-    : `[Summary of turns 1-${endTurn}]`;
+  return `[Summary of turns 1-${endTurn}]`;
 }
 
 function getCompressorPromptLabels(locale: CompressorPromptLocale): {
@@ -532,7 +462,6 @@ function getCompressorPromptLabels(locale: CompressorPromptLocale): {
 export function createConversationCompressor(
   config?: ConversationCompressorRuntimeConfig,
   summarizer?: ISummarizer,
-  classifier?: IMessageClassifier,
 ): IConversationCompressor {
-  return new ConversationCompressor(config, summarizer, classifier);
+  return new ConversationCompressor(config, summarizer);
 }

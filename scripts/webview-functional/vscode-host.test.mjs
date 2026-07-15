@@ -7,6 +7,7 @@ import {
   DEFAULT_CONTROLLER_CONNECTION_FILE,
   DEFAULT_VSCODE_DEBUG_PORT,
   VSCodeFunctionalHost,
+  collectMatchingTargetIds,
   validateDebugHostWorkspace,
 } from './vscode-host.mjs';
 
@@ -102,5 +103,36 @@ describe('VS Code functional host attachment', () => {
     await host.execute('close-reopen', { path: 'fixture.nkc', viewType: 'neko.canvasEditor' });
 
     assert.deepEqual(reconnects, [{ excludeTargetIds: ['disposed-target'] }]);
+  });
+
+  it('isolates scenario Webviews from matching targets that predate fixture activation', () => {
+    const targets = [
+      {
+        id: 'user-canvas',
+        type: 'iframe',
+        title: 'Canvas',
+        url: 'vscode-webview://host/?extensionId=neko.neko-canvas',
+      },
+      {
+        id: 'agent-view',
+        type: 'iframe',
+        title: 'Agent',
+        url: 'vscode-webview://host/?extensionId=neko.neko-agent',
+      },
+      {
+        id: 'second-user-canvas',
+        type: 'iframe',
+        title: 'Canvas',
+        url: 'vscode-webview://host/?extensionId=neko.neko-canvas',
+      },
+    ];
+
+    assert.deepEqual(
+      collectMatchingTargetIds(targets, {
+        type: 'iframe',
+        extensionId: 'neko.neko-canvas',
+      }),
+      ['user-canvas', 'second-user-canvas'],
+    );
   });
 });

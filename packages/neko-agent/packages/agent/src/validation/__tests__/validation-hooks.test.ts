@@ -385,48 +385,57 @@ describe('ValidationHooks', () => {
     });
   });
 
-  describe('afterThink - artifact profile validators', () => {
-    it('rejects page-analysis tables when storyboard CreativeTable validation is active', async () => {
+  describe('afterThink - contributed artifact validators', () => {
+    it('reports diagnostics from the selected contributed validator', async () => {
       const hooks = new ValidationHooks({
         outputConstraints: {
           mermaidPreValidate: false,
           onValidationFail: 'error',
         },
+        outputValidationAdapters: [
+          {
+            id: 'document.structure',
+            validate: () => ({
+              errors: [{ code: 'document-structure-invalid', message: 'Invalid structure' }],
+              warnings: [],
+            }),
+          },
+        ],
       });
-      const step = createTestStep(
-        ['| 镜头 | 画面 |', '| --- | --- |', '| 1 | 角色进入森林 |'].join('\n'),
-      );
+      const step = createTestStep('invalid document');
       const context = createTestContextWithMetadata({
-        artifactValidationRequirements: ['creative-table.storyboard'],
+        artifactValidationRequirements: ['document.structure'],
       });
 
       await expect(hooks.afterThink(step, context)).rejects.toMatchObject({
-        code: 'storyboard-table-required-fields-missing',
+        code: 'document-structure-invalid',
       });
     });
 
-    it('queues storyboard repair requests from Agent retry mode', async () => {
+    it('queues retry guidance supplied by the selected contributed validator', async () => {
       const hooks = new ValidationHooks({
         outputConstraints: {
           mermaidPreValidate: false,
           onValidationFail: 'retry',
         },
+        outputValidationAdapters: [
+          {
+            id: 'document.structure',
+            validate: () => ({
+              errors: [{ code: 'document-structure-invalid', message: 'Invalid structure' }],
+              warnings: [],
+            }),
+            buildRetryInstruction: (_errors, locale) =>
+              locale === 'zh'
+                ? '请按文档结构契约重写。'
+                : 'Rewrite to satisfy the document contract.',
+          },
+        ],
       });
-      const step = createTestStep(
-        [
-          '---',
-          'id: storyboard-review',
-          'kind: review',
-          '---',
-          '',
-          '| scene | shot | source |',
-          '| --- | --- | --- |',
-          '| 正文 | 1 | P1 |',
-        ].join('\n'),
-      );
+      const step = createTestStep('invalid document');
       const context = createTestContextWithMetadata({
         locale: 'zh',
-        artifactValidationRequirements: ['creative-table.storyboard'],
+        artifactValidationRequirements: ['document.structure'],
       });
       const messageCountBefore = context.messages.length;
 
@@ -435,88 +444,12 @@ describe('ValidationHooks', () => {
       expect(context.messages).toHaveLength(messageCountBefore + 1);
       expect(context.messages.at(-1)).toMatchObject({
         role: 'user',
-        content: expect.stringContaining('请重写为唯一一张 storyboard creative table'),
+        content: '请按文档结构契约重写。',
       });
       expect(context.metadata['outputValidationRetry']).toMatchObject({
         reason: 'artifact-validation',
         attempt: 1,
       });
-    });
-
-    it('records Agent-native feedback for storyboard CreativeTable validators', async () => {
-      const recordValidationFeedback = vi.fn();
-      const hooks = new ValidationHooks({
-        outputConstraints: {
-          mermaidPreValidate: false,
-          onValidationFail: 'retry',
-        },
-        creationFeedback: {
-          recordValidationFeedback,
-        },
-      });
-      const step = createTestStep(
-        [
-          '| 镜号 | 来源页 | 画面内容 |',
-          '| --- | --- | --- |',
-          '| S01 | P1 | 主角站在巨构前 |',
-        ].join('\n'),
-      );
-      const context = createTestContextWithMetadata({
-        artifactValidationRequirements: ['creative-table.storyboard'],
-        agentCreation: {
-          creationId: 'creation-1',
-          iterationId: 'iteration-1',
-        },
-      });
-
-      await expect(hooks.afterThink(step, context)).resolves.toBeUndefined();
-
-      expect(recordValidationFeedback).toHaveBeenCalledWith(
-        expect.objectContaining({
-          validatorId: 'creative-table.storyboard',
-          status: 'failed',
-          diagnostics: expect.arrayContaining([
-            expect.objectContaining({
-              code: 'storyboard-table-required-fields-missing',
-            }),
-          ]),
-          metadata: expect.objectContaining({
-            feedbackAction: 'revise',
-            preserveStreamedOutput: false,
-          }),
-        }),
-      );
-    });
-
-    it('does not require ReadImage evidence from Agent validation hooks', async () => {
-      const hooks = new ValidationHooks({
-        outputConstraints: {
-          mermaidPreValidate: false,
-          onValidationFail: 'retry',
-        },
-      });
-      const step = createTestStep(
-        [
-          '| scene | shot | source | imagePrompt | videoPrompt | duration | dialogue |',
-          '| --- | --- | --- | --- | --- | --- | --- |',
-          '| Opening | 1 | P1 | 黑白工业巨构前的孤独主角 | 场景视频生成：以 P1 为参考，镜头缓慢推近，保持巨构空间关系 | 3s |  |',
-        ].join('\n'),
-      );
-      const context = createTestContextWithMetadata({
-        locale: 'zh',
-        artifactValidationRequirements: ['creative-table.storyboard'],
-      });
-      context.messages.push({
-        role: 'tool',
-        toolCallId: 'read-doc-range',
-        content: JSON.stringify({
-          source: { kind: 'file', path: '${A}/books/story.epub' },
-          mode: 'range',
-          imageInfo: [{ alias: 'P1', label: 'Page 1' }],
-        }),
-      });
-
-      await expect(hooks.afterThink(step, context)).resolves.toBeUndefined();
     });
   });
 

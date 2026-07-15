@@ -7,11 +7,10 @@
 
 import type { ValidationResult, ValidationError } from '../config/config-adapter';
 import { CANVAS_CONNECTION_TYPES, CANVAS_NODE_TYPES } from '../types/canvas';
-import {
-  CANVAS_GENERATED_DRAFT_CANDIDATE_ID_PREFIX,
-  CANVAS_GENERATED_DRAFT_GROUP_ID_PREFIX,
-} from '../types/canvas-generated-draft-groups';
 import { validateNkcNodeDurableResourceIdentity } from '../utils/canvasDurableResourceIdentity';
+
+const LEGACY_RUNTIME_GENERATED_GROUP_ID_PREFIX = 'runtime:canvas-generated-group:';
+const LEGACY_RUNTIME_GENERATED_CANDIDATE_ID_PREFIX = 'runtime:canvas-generated-candidate:';
 
 // =============================================================================
 // Type Guards (internal helpers)
@@ -149,8 +148,8 @@ function validateNode(
   if (!isString(node['id'])) {
     structuralErrors.push({ field: `${path}.id`, message: 'must be a string', severity: 'error' });
   } else if (
-    node['id'].startsWith(CANVAS_GENERATED_DRAFT_GROUP_ID_PREFIX) ||
-    node['id'].startsWith(CANVAS_GENERATED_DRAFT_CANDIDATE_ID_PREFIX)
+    node['id'].startsWith(LEGACY_RUNTIME_GENERATED_GROUP_ID_PREFIX) ||
+    node['id'].startsWith(LEGACY_RUNTIME_GENERATED_CANDIDATE_ID_PREFIX)
   ) {
     structuralErrors.push({
       field: `${path}.id`,

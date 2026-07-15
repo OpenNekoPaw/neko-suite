@@ -14,7 +14,7 @@ import type { SkillProvenance } from './portable-skill';
 export type SkillLifecycleSlot =
   'domainSkill' | 'referenceSkill' | 'ephemeralSkill' | 'promptChainSkill';
 
-export type SkillLifecycleOwner = 'user' | 'agent' | 'creation-profile' | 'runtime';
+export type SkillLifecycleOwner = 'user' | 'agent' | 'runtime';
 
 export type SkillLifecycleRecordStatus = 'active' | 'expiring' | 'expired' | 'blocked';
 

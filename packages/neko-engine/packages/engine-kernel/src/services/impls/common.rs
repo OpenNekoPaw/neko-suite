@@ -4,7 +4,7 @@ use crate::domain::{LoudnessAnalysis, SilenceAnalysis, SilenceRegion};
 use crate::error::{Error, Result};
 use base64::Engine as _;
 use ebur128::{EbuR128, Mode};
-use neko_engine_audio::{AudioDecoder, FfmpegAudioDecoder, SampleFormat};
+use neko_engine_audio::{AudioDecoder, CorruptTailPolicy, FfmpegAudioDecoder, SampleFormat};
 use neko_engine_types::{CoverArtInfo, MediaInfo, WaveformData};
 use neko_runtime_media::MediaInfo as InternalMediaInfo;
 
@@ -84,7 +84,8 @@ pub fn generate_waveform_blocking(path: &str) -> Result<WaveformData> {
     // with multi-channel audio (e.g. 5.1 surround AAC)
     let mut decoder = FfmpegAudioDecoder::new()
         .with_output_format(SampleFormat::F32)
-        .with_output_channels(2);
+        .with_output_channels(2)
+        .with_corrupt_tail_policy(CorruptTailPolicy::RecoverAfterValidOutput);
     let audio_info = decoder.open(path)?;
 
     let channels: usize = 2;
@@ -125,7 +126,30 @@ pub fn generate_waveform_blocking(path: &str) -> Result<WaveformData> {
         sample_offset += frame_samples as u64;
     }
 
+    finalize_waveform(
+        &mut waveform,
+        sample_offset,
+        decoder.recovered_corrupt_tail(),
+    );
+
     Ok(waveform)
+}
+
+fn finalize_waveform(
+    waveform: &mut WaveformData,
+    decoded_samples: u64,
+    recovered_corrupt_tail: bool,
+) {
+    if !recovered_corrupt_tail {
+        return;
+    }
+
+    waveform.duration = decoded_samples as f64 / waveform.sample_rate as f64;
+    let recovered_peak_count =
+        (waveform.duration * waveform.peaks_per_second as f64).ceil() as usize;
+    for channel in &mut waveform.peaks {
+        channel.resize(recovered_peak_count, 0.0);
+    }
 }
 
 /// Analyze audio loudness per ITU-R BS.1770-4 (EBU R128).
@@ -325,6 +349,27 @@ mod tests {
     fn test_generate_waveform_nonexistent_file() {
         let result = generate_waveform_blocking("/nonexistent/file.mp4");
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn recovered_waveform_uses_decoded_sample_duration() {
+        let mut waveform = WaveformData::new(1_000, 2, 100, 10.0);
+
+        finalize_waveform(&mut waveform, 2_505, true);
+
+        assert_eq!(waveform.duration, 2.505);
+        assert_eq!(waveform.num_peaks(), 251);
+        assert!(waveform.peaks.iter().all(|channel| channel.len() == 251));
+    }
+
+    #[test]
+    fn clean_waveform_preserves_metadata_duration() {
+        let mut waveform = WaveformData::new(1_000, 2, 100, 10.0);
+
+        finalize_waveform(&mut waveform, 2_505, false);
+
+        assert_eq!(waveform.duration, 10.0);
+        assert_eq!(waveform.num_peaks(), 1_000);
     }
 
     #[test]

@@ -11,9 +11,7 @@ import type {
   AgentProfileSource,
   AgentProfileVersion,
   ArtifactProfileDescriptor,
-  CreationProfileDescriptor,
   IArtifactProfileRegistry,
-  ICreationProfileRegistry,
   IProviderCardRegistry,
   IProviderExpressionProfileRegistry,
   ISkillRegistry,
@@ -56,7 +54,6 @@ interface RegisteredProvider {
   registeredToolGroups: string[];
   registeredProviderCards: ProviderCardTarget[];
   registeredArtifactProfiles: ProfileTarget[];
-  registeredCreationProfiles: ProfileTarget[];
   registeredProviderExpressionProfiles: ProfileTarget[];
 }
 
@@ -73,7 +70,6 @@ export interface CapabilityRegistryRuntimeDeps {
   };
   providerCardRegistry?: Pick<IProviderCardRegistry, 'register' | 'unregister'>;
   artifactProfileRegistry?: Pick<IArtifactProfileRegistry, 'register' | 'unregister'>;
-  creationProfileRegistry?: Pick<ICreationProfileRegistry, 'register' | 'unregister'>;
   providerExpressionProfileRegistry?: Pick<
     IProviderExpressionProfileRegistry,
     'register' | 'unregister'
@@ -224,7 +220,6 @@ export class CapabilityRegistryRuntime {
     const registeredToolGroups: string[] = [];
     const registeredProviderCards: ProviderCardTarget[] = [];
     const registeredArtifactProfiles: ProfileTarget[] = [];
-    const registeredCreationProfiles: ProfileTarget[] = [];
     const registeredProviderExpressionProfiles: ProfileTarget[] = [];
 
     try {
@@ -322,22 +317,6 @@ export class CapabilityRegistryRuntime {
       }
     }
 
-    if (provider.getCreationProfiles && this.deps.creationProfileRegistry) {
-      try {
-        const profiles: CreationProfileDescriptor[] = provider.getCreationProfiles(context);
-        for (const profile of profiles) {
-          this.recordProfileRegistrationResult(
-            this.deps.creationProfileRegistry.register(profile),
-            id,
-            'creation-profile',
-          );
-          registeredCreationProfiles.push(toProfileTarget(profile));
-        }
-      } catch (err) {
-        this.logger.warn(`Failed to get creation profiles from provider "${id}"`, { error: err });
-      }
-    }
-
     if (this.deps.providerExpressionProfileRegistry) {
       try {
         const profiles: ProviderExpressionProfileDescriptor[] =
@@ -367,7 +346,6 @@ export class CapabilityRegistryRuntime {
       registeredToolGroups,
       registeredProviderCards,
       registeredArtifactProfiles,
-      registeredCreationProfiles,
       registeredProviderExpressionProfiles,
     });
 
@@ -376,7 +354,6 @@ export class CapabilityRegistryRuntime {
         `${registeredTools.length} tools, ${registeredSkills.length} skills, ` +
         `${registeredToolGroups.length} tool groups, ${registeredProviderCards.length} provider cards, ` +
         `${registeredArtifactProfiles.length} artifact profiles, ` +
-        `${registeredCreationProfiles.length} creation profiles, ` +
         `${registeredProviderExpressionProfiles.length} provider expression profiles`,
     );
 
@@ -432,16 +409,6 @@ export class CapabilityRegistryRuntime {
           target.profileId,
           target.source,
           target.version as ArtifactProfileDescriptor['version'],
-        );
-      }
-    }
-
-    if (this.deps.creationProfileRegistry) {
-      for (const target of entry.registeredCreationProfiles) {
-        this.deps.creationProfileRegistry.unregister(
-          target.profileId,
-          target.source,
-          target.version as CreationProfileDescriptor['version'],
         );
       }
     }
@@ -712,7 +679,7 @@ export class CapabilityRegistryRuntime {
   private recordProfileRegistrationResult(
     result: AgentProfileRegistrationResult,
     providerId: string,
-    capabilityKind: 'artifact-profile' | 'creation-profile' | 'provider-expression-profile',
+    capabilityKind: 'artifact-profile' | 'provider-expression-profile',
   ): void {
     for (const diagnostic of result.diagnostics) {
       this.recordCapabilityDiagnostic(toCapabilityDiagnosticLevel(diagnostic.severity), {

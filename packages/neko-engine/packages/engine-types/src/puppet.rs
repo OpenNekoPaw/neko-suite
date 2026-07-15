@@ -406,13 +406,9 @@ pub fn create_nkp_puppet_runtime_adapter_descriptor(
     }
 }
 
-fn default_runtime_adapter_status(
-    id: NkpPuppetRuntimeAdapterId,
-) -> NkpPuppetRuntimeAdapterStatus {
+fn default_runtime_adapter_status(id: NkpPuppetRuntimeAdapterId) -> NkpPuppetRuntimeAdapterStatus {
     match id {
-        NkpPuppetRuntimeAdapterId::Live2dMoc3Compat => {
-            NkpPuppetRuntimeAdapterStatus::Compatibility
-        }
+        NkpPuppetRuntimeAdapterId::Live2dMoc3Compat => NkpPuppetRuntimeAdapterStatus::Compatibility,
         NkpPuppetRuntimeAdapterId::NekoPuppetNative | NkpPuppetRuntimeAdapterId::Live2dCubism => {
             NkpPuppetRuntimeAdapterStatus::Available
         }
@@ -422,8 +418,9 @@ fn default_runtime_adapter_status(
 fn runtime_adapter_source_compatibility(id: NkpPuppetRuntimeAdapterId) -> Vec<PuppetFormat> {
     match id {
         NkpPuppetRuntimeAdapterId::NekoPuppetNative => vec![PuppetFormat::Native],
-        NkpPuppetRuntimeAdapterId::Live2dMoc3Compat
-        | NkpPuppetRuntimeAdapterId::Live2dCubism => vec![PuppetFormat::Moc3],
+        NkpPuppetRuntimeAdapterId::Live2dMoc3Compat | NkpPuppetRuntimeAdapterId::Live2dCubism => {
+            vec![PuppetFormat::Moc3]
+        }
     }
 }
 

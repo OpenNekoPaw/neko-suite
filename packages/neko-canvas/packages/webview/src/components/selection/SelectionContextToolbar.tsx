@@ -36,6 +36,7 @@ import type {
   ContainerActionDescriptor,
   NodeCardActionId,
 } from '../content/node-card';
+import { createBuiltInNodeTypeDescriptors } from '../nodes/nodeTypeDescriptors';
 
 interface SelectionContextToolbarProps {
   readonly nodes: readonly CanvasNode[];
@@ -52,9 +53,11 @@ interface ToolbarAction {
   readonly run: () => void;
   readonly danger?: boolean;
   readonly disabled?: boolean;
+  readonly overflowOnly?: boolean;
 }
 
 const POLICY_REGISTRY = createBuiltInNodeCardPolicyRegistry();
+const NODE_TYPE_DESCRIPTORS = createBuiltInNodeTypeDescriptors();
 const MAX_PRIMARY_ACTIONS = 3;
 
 export function SelectionContextToolbar({
@@ -76,8 +79,7 @@ export function SelectionContextToolbar({
   if (hidden || selectedNodes.length === 0 || actions.length === 0) return null;
 
   const position = resolveToolbarPosition(selectedNodes, viewport, viewportSize);
-  const primary = actions.slice(0, MAX_PRIMARY_ACTIONS);
-  const overflow = actions.slice(MAX_PRIMARY_ACTIONS);
+  const { primary, overflow } = partitionToolbarActions(actions);
 
   return (
     <div
@@ -93,6 +95,7 @@ export function SelectionContextToolbar({
         <Button
           key={action.key}
           data-selection-action={action.key}
+          data-selection-action-location="primary"
           size="xs"
           variant={action.danger ? 'danger' : 'ghost'}
           disabled={action.disabled}
@@ -111,6 +114,7 @@ export function SelectionContextToolbar({
           trigger={
             <IconButton
               data-selection-overflow="true"
+              data-selection-overflow-actions={overflow.map((action) => action.key).join(' ')}
               size="xs"
               variant="ghost"
               label={t('selection.moreActions')}
@@ -123,6 +127,7 @@ export function SelectionContextToolbar({
               <Button
                 key={action.key}
                 data-selection-action={action.key}
+                data-selection-action-location="overflow"
                 size="xs"
                 variant={action.danger ? 'danger' : 'ghost'}
                 disabled={action.disabled}
@@ -142,6 +147,21 @@ export function SelectionContextToolbar({
       )}
     </div>
   );
+}
+
+function partitionToolbarActions(actions: readonly ToolbarAction[]): {
+  primary: ToolbarAction[];
+  overflow: ToolbarAction[];
+} {
+  const primary: ToolbarAction[] = [];
+  const overflow: ToolbarAction[] = [];
+  let overflowStarted = false;
+  for (const action of actions) {
+    overflowStarted =
+      overflowStarted || action.overflowOnly === true || primary.length >= MAX_PRIMARY_ACTIONS;
+    (overflowStarted ? overflow : primary).push(action);
+  }
+  return { primary, overflow };
 }
 
 function resolveToolbarActions(
@@ -185,6 +205,24 @@ function resolveToolbarActions(
       },
       previewSource,
     ),
+    ...(NODE_TYPE_DESCRIPTORS[node.type]?.presentation === 'foundational'
+      ? [
+          {
+            ...createNodeAction(
+              node,
+              parentId,
+              {
+                id: 'open-content-overlay',
+                label: 'action.fullscreen',
+                position: 'bottom',
+                visibleWhen: 'always',
+              },
+              previewSource,
+            ),
+            overflowOnly: true,
+          },
+        ]
+      : []),
     createDeleteAction([node.id]),
   ];
   const containerActions = node.container

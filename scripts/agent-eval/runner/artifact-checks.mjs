@@ -23,7 +23,9 @@ export async function evaluateArtifactChecks(checks, input) {
           ? await evaluateFileCheck(check, input)
           : check.kind === 'file-absent'
             ? await evaluateFileAbsentCheck(check, input)
-          : evaluateStableArtifactCheck(check, input.facts);
+            : check.kind === 'directory-files'
+              ? await evaluateDirectoryFilesCheck(check, input)
+              : evaluateStableArtifactCheck(check, input.facts);
       results.push({
         id: check.id,
         kind: check.kind,
@@ -118,6 +120,53 @@ async function evaluateFileAbsentCheck(check, input) {
     }
   }
   throw new ArtifactCheckFailure(`forbidden artifact path exists: ${check.path}`);
+}
+
+async function evaluateDirectoryFilesCheck(check, input) {
+  assertSafeRelativePath(check.path);
+  const root = await fs.realpath(input.workspace);
+  const target = resolve(root, check.path);
+  assertContained(root, target, check.path);
+  const segments = relative(root, target).split(sep).filter(Boolean);
+  let current = root;
+  for (const segment of segments) {
+    current = resolve(current, segment);
+    let stat;
+    try {
+      stat = await fs.lstat(current);
+    } catch (error) {
+      if (error?.code === 'ENOENT') {
+        throw new ArtifactCheckFailure(`artifact directory does not exist: ${check.path}`);
+      }
+      throw error;
+    }
+    if (stat.isSymbolicLink()) {
+      throw new ArtifactCheckFailure(`artifact directory path crosses a symlink: ${check.path}`);
+    }
+  }
+  const directory = await fs.lstat(target);
+  if (!directory.isDirectory()) {
+    throw new ArtifactCheckFailure(`artifact path is not a directory: ${check.path}`);
+  }
+  const entries = await fs.readdir(target, { withFileTypes: true });
+  if (entries.some((entry) => entry.isSymbolicLink())) {
+    throw new ArtifactCheckFailure(`artifact directory contains a symlink: ${check.path}`);
+  }
+  const fileCount = entries.filter((entry) => entry.isFile()).length;
+  if (fileCount < check.minFiles) {
+    throw new ArtifactCheckFailure(
+      `artifact directory ${check.path} has ${fileCount} regular file(s); expected at least ${check.minFiles}`,
+    );
+  }
+  return {
+    ref: check.path,
+    kind: 'directory-files',
+    path: check.path,
+    fileCount,
+    deliveryStatus: 'delivered',
+    validatorId: 'contained-regular-files',
+    validatorStatus: 'valid',
+  };
 }
 
 function evaluateStableArtifactCheck(check, facts) {

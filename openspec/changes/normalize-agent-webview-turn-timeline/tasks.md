@@ -34,6 +34,7 @@
 - [x] 4.5 Update media projection so tool-returned media, document thumbnails, artifacts, perception cards, and completed task media render at the anchored timeline item when ready.
 - [x] 4.6 Update structured content projection so streamed incomplete composite/gallery/storyboard payloads remain text/code until closed, parsed, validated, and resource-projected.
 - [x] 4.7 Ensure timeline item rendering preserves accessible labels, copy/open/send-to actions, collapse state, and existing i18n strings or adds focused new strings where necessary.
+- [x] 4.8 Insert late-arriving assistant turn projections at their cross-turn chronological position without globally reordering stable history.
 
 ## 5. Non-Timeline Active Path Cleanup
 
@@ -52,6 +53,7 @@
 - [x] 6.5 Run `pnpm test -- --run` or the repository-equivalent affected test command and record residual risk if full test is too large.
 - [x] 6.6 Run a real Extension Development Host functional scenario with `vscode-extension-debugger` evidence for live streaming, tool failure, task progress, media rendering, completion, scroll behavior, and conversation switching.
 - [x] 6.7 Run `pnpm check:legacy-debt` or confirm equivalent coverage from `pnpm check:quality` after removing old fallback/synthetic paths.
+- [x] 6.8 Add and run a regression test proving a late first-turn assistant projection renders before a later second user message.
 
 ## 7. Documentation And Handoff
 

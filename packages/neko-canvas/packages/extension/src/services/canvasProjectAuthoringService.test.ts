@@ -1,5 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { createEmptyCanvasData, loadNkc, saveNkc } from '@neko/shared';
+import {
+  CANVAS_WORKSPACE_BOARD_CONTRACT_VERSION,
+  createEmptyCanvasData,
+  loadNkc,
+  saveNkc,
+  type CanvasWorkspaceProjectionRequest,
+  type ResourceRef,
+} from '@neko/shared';
 import { CanvasProjectAuthoringService } from './canvasProjectAuthoringService';
 import * as vscode from 'vscode';
 
@@ -43,7 +50,9 @@ const vscodeMockState = vi.hoisted(() => {
   });
   const stat = vi.fn(async (uri: MockUri) => {
     if (!files.has(uri.fsPath)) {
-      throw new Error(`ENOENT: ${uri.fsPath}`);
+      const error = new Error(`ENOENT: ${uri.fsPath}`);
+      Reflect.set(error, 'code', 'ENOENT');
+      throw error;
     }
     return { type: 1 };
   });
@@ -113,6 +122,43 @@ function createProvider(activeUri?: vscode.Uri) {
   };
 }
 
+const generatedRef: ResourceRef = {
+  id: 'generated-output:shot-1',
+  scope: 'project',
+  provider: 'generated-output',
+  kind: 'generated',
+  source: {
+    kind: 'generated-asset',
+    generatedAssetId: 'shot-1',
+    projectRelativePath: 'neko/generated/image/shot-1.png',
+  },
+  locator: { kind: 'generated-asset', assetId: 'shot-1' },
+  fingerprint: { strategy: 'hash', value: 'sha256:shot-1' },
+};
+
+function workspaceProjectionRequest(): CanvasWorkspaceProjectionRequest {
+  return {
+    version: CANVAS_WORKSPACE_BOARD_CONTRACT_VERSION,
+    target: { workspaceUri: 'file:///workspace/project/' },
+    provenance: {
+      version: CANVAS_WORKSPACE_BOARD_CONTRACT_VERSION,
+      projectionId: 'projection:shot-1',
+      artifactId: 'shot-1',
+      revision: 'generated:sha256:shot-1',
+      kind: 'image',
+      sourceId: 'generated-output:shot-1',
+      taskId: 'task-1',
+      createdAt: '2026-07-15T00:00:00.000Z',
+    },
+    artifact: {
+      kind: 'image',
+      title: 'Shot 1',
+      mimeType: 'image/png',
+      resourceRef: generatedRef,
+    },
+  };
+}
+
 describe('CanvasProjectAuthoringService', () => {
   beforeEach(() => {
     vscodeMockState.files.clear();
@@ -125,7 +171,7 @@ describe('CanvasProjectAuthoringService', () => {
     vscodeMockState.createDirectory.mockClear();
   });
 
-  it('creates ordinary Board .nkc documents under neko/boards without active Canvas fallback', async () => {
+  it('creates and projects the canonical Workspace Board without an open Webview', async () => {
     const provider = createProvider();
     provider.getActiveCanvasDocumentUri.mockImplementation(() => {
       throw new Error('active Canvas fallback must not be called');
@@ -135,32 +181,52 @@ describe('CanvasProjectAuthoringService', () => {
       canvasEditorProvider: provider,
     });
 
-    const summary = await service.createBoardDocument('Story Notes', {
-      projectId: 'project:1',
-      workId: 'work:1',
+    const result = await service.projectWorkspaceBoard({
+      request: workspaceProjectionRequest(),
+      documentUri: 'file:///workspace/project/neko/boards/workspace.nkc',
+      createIfMissing: true,
     });
 
-    expect(summary.documentRef.path).toBe('neko/boards/Story Notes.nkc');
-    expect(summary.revision).toMatch(/^nkc:/);
-    expect(summary).toMatchObject({
-      title: 'Story Notes',
-      projectId: 'project:1',
-      workId: 'work:1',
-      scopeKind: 'generic',
+    expect(result).toMatchObject({
+      status: 'projected',
+      documentUri: 'file:///workspace/project/neko/boards/workspace.nkc',
+      projectRef: { projectRevision: expect.stringMatching(/^nkc:/) },
     });
     expect(vscodeMockState.createDirectory).toHaveBeenCalledOnce();
     expect(provider.getActiveCanvasDocumentUri).not.toHaveBeenCalled();
     const reopened = loadNkc(
       new TextDecoder().decode(
-        vscodeMockState.files.get('/workspace/project/neko/boards/Story Notes.nkc'),
+        vscodeMockState.files.get('/workspace/project/neko/boards/workspace.nkc'),
       ),
     );
     expect(reopened.validation.valid).toBe(true);
-    expect(reopened.data.creativeScope).toMatchObject({
-      kind: 'generic',
-      projectId: 'project:1',
-      workId: 'work:1',
+    expect(reopened.data.nodes.map((node) => node.type)).toEqual(['group', 'media']);
+    expect(provider.revealCanvasDocument).not.toHaveBeenCalled();
+    expect(provider.applyHostCanvasData).toHaveBeenLastCalledWith(
+      expect.objectContaining({ fsPath: '/workspace/project/neko/boards/workspace.nkc' }),
+      expect.objectContaining({ nodes: expect.any(Array) }),
+    );
+  });
+
+  it('does not overwrite an invalid existing Workspace Board', async () => {
+    const documentPath = '/workspace/project/neko/boards/workspace.nkc';
+    const invalidBytes = new TextEncoder().encode('{"version":999,"nodes":[]}');
+    vscodeMockState.files.set(documentPath, invalidBytes);
+    const provider = createProvider();
+    const service = new CanvasProjectAuthoringService({
+      context: { subscriptions: [] } as never,
+      canvasEditorProvider: provider,
     });
+
+    await expect(
+      service.projectWorkspaceBoard({
+        request: workspaceProjectionRequest(),
+        documentUri: `file://${documentPath}`,
+        createIfMissing: true,
+      }),
+    ).rejects.toThrow('Failed to load Canvas document');
+    expect(vscodeMockState.files.get(documentPath)).toEqual(invalidBytes);
+    expect(provider.applyHostCanvasData).not.toHaveBeenCalled();
   });
 
   it('creates a new nkc file without revealing a Webview when no active target exists', async () => {

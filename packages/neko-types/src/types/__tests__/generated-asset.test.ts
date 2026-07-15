@@ -1,11 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
-  isGeneratedDraftRef,
   resolveGeneratedAssetMediaKind,
   resolveWorkspaceGeneratedAssetRelativeDirectory,
   sanitizeGeneratedAssetPathSegment,
 } from '../generated-asset';
-import { createGeneratedAssetRevisionRef } from '../generated-asset-lifecycle';
 
 describe('generated asset path contracts', () => {
   it('resolves durable workspace generated roots by media kind', () => {
@@ -36,30 +34,5 @@ describe('generated asset path contracts', () => {
       'image',
     );
     expect(sanitizeGeneratedAssetPathSegment(' Story Board! ')).toBe('story-board');
-  });
-
-  it('models generated drafts as runtime projections, not durable result urls', () => {
-    expect(
-      isGeneratedDraftRef({
-        kind: 'generated-draft',
-        draftId: 'draft-1',
-        mediaKind: 'image',
-        mimeType: 'image/png',
-        lifecycle: createGeneratedAssetRevisionRef({
-          assetId: 'draft-1',
-          contentDigest: 'sha256:draft',
-          mediaKind: 'image',
-          mimeType: 'image/png',
-          generation: { taskId: 'task-1' },
-        }),
-      }),
-    ).toBe(true);
-    expect(
-      isGeneratedDraftRef({
-        kind: 'generated-draft',
-        draftId: 'draft-2',
-        mediaKind: 'thumbnail',
-      }),
-    ).toBe(false);
   });
 });

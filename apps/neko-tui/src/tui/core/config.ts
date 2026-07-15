@@ -22,6 +22,7 @@ import type { CLIConfig } from './types';
 import { DEFAULT_CLI_CONFIG } from './types';
 import type { ChatModelOption } from '@neko/shared';
 import { getEnvKeyMap } from '@neko/shared';
+import type { DirectMediaCommandConfig } from './direct-media-command';
 
 // =============================================================================
 // Environment Variable Handling
@@ -297,6 +298,24 @@ export function listChatModelOptions(workDir?: string): ChatModelOption[] {
   const cm = createConfigManager(workDir);
   try {
     return cm.getChatModelOptions();
+  } finally {
+    cm.dispose();
+  }
+}
+
+export function loadDirectMediaCommandConfig(workDir?: string): {
+  readonly config: DirectMediaCommandConfig;
+  readonly modelOptions: readonly ChatModelOption[];
+} {
+  const cm = createConfigManager(workDir);
+  try {
+    return {
+      config: {
+        defaultProviderId: cm.getDefaultProviderScalar(),
+        defaultMediaModels: cm.getDefaultMediaModels(),
+      },
+      modelOptions: cm.getChatModelOptions(),
+    };
   } finally {
     cm.dispose();
   }

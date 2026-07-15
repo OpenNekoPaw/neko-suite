@@ -91,6 +91,8 @@ function runGate(assertion, facts, context) {
       return assertMarkdownPath(assertion, facts);
     case 'artifact':
       return assertArtifact(assertion, facts);
+    case 'workspace-board-projection':
+      return assertWorkspaceBoardProjection(assertion, facts);
     case 'no-fallback':
       return assertNoFallback(assertion, facts);
     default:
@@ -787,6 +789,39 @@ function assertNoFallback(assertion, facts) {
   return { forbiddenRefs: assertion.forbiddenRefs, observedForbiddenRefs: [] };
 }
 
+function assertWorkspaceBoardProjection(assertion, facts) {
+  assertCompleteEvidence(facts, ['workspaceBoardProjections']);
+  const projection = arrayOrEmpty(facts?.workspaceBoardProjections).find(
+    (candidate) =>
+      candidate?.status === assertion.status && candidate?.targetKind === assertion.targetKind,
+  );
+  if (!projection) {
+    throw new Error(
+      `Workspace Board projection ${assertion.status}/${assertion.targetKind} was not observed`,
+    );
+  }
+  if (arrayOrEmpty(projection.nodeIds).length < assertion.minNodeIds) {
+    throw new Error(
+      `Workspace Board projection has ${arrayOrEmpty(projection.nodeIds).length} node id(s); expected at least ${assertion.minNodeIds}`,
+    );
+  }
+  if (assertion.revisionRequired && !projection.revision) {
+    throw new Error('Workspace Board projection has no revision evidence');
+  }
+  if (assertion.diagnosticsEmpty && arrayOrEmpty(projection.diagnosticCodes).length > 0) {
+    throw new Error(
+      `Workspace Board projection diagnostics observed: ${projection.diagnosticCodes.join(', ')}`,
+    );
+  }
+  return {
+    status: projection.status,
+    targetKind: projection.targetKind,
+    revision: projection.revision,
+    nodeIds: projection.nodeIds,
+    diagnosticCodes: projection.diagnosticCodes,
+  };
+}
+
 function assertCompleteEvidence(facts, collections) {
   for (const collection of collections) {
     const completeness = facts?.evidenceCompleteness?.[collection];
@@ -892,6 +927,13 @@ function collectRuntimeRefs(facts) {
       refs,
       artifact?.diagnostics?.map((item) => item?.code),
     );
+  }
+  for (const projection of arrayOrEmpty(facts?.workspaceBoardProjections)) {
+    addValue(refs, projection?.status);
+    addValue(refs, projection?.targetKind);
+    addValue(refs, projection?.revision);
+    addValues(refs, projection?.nodeIds);
+    addValues(refs, projection?.diagnosticCodes);
   }
   for (const diagnostic of arrayOrEmpty(facts?.runtimeErrors)) {
     if (typeof diagnostic === 'string') addValue(refs, diagnostic);

@@ -1,8 +1,8 @@
 import {
   formatChildRunScope,
   formatTaskRunScope,
-  isGeneratedDraftRef,
   isPublicGeneratedAssetResultUri,
+  stripRenderableGeneratedAssetPath,
 } from '@neko/shared';
 import type {
   AgentBackgroundTask,
@@ -401,31 +401,8 @@ function sanitizeAgentMediaTaskResult(
     result.thumbnailUrl && isPublicGeneratedAssetResultUri(result.thumbnailUrl)
       ? result.thumbnailUrl
       : undefined;
-  const assets =
-    result.assets?.map((asset) => {
-      if (!('path' in asset)) return stripNestedRenderableAssetPaths(asset);
-      const { path: _path, ...assetWithoutPath } = asset as typeof asset & {
-        readonly path?: unknown;
-      };
-      return stripNestedRenderableAssetPaths(assetWithoutPath);
-    }) ?? [];
-  const drafts =
-    result.drafts?.flatMap((draft) => {
-      if (!isGeneratedDraftRef(draft.draftRef)) return [];
-      if (!('path' in draft)) return [draft];
-      const { path: _path, ...draftWithoutPath } = draft as typeof draft & {
-        readonly path?: unknown;
-      };
-      return [draftWithoutPath];
-    }) ?? [];
-
-  if (
-    urls.length === 0 &&
-    !thumbnailUrl &&
-    assets.length === 0 &&
-    drafts.length === 0 &&
-    !result.creativeEntity
-  ) {
+  const assets = result.assets?.map(stripRenderableGeneratedAssetPath) ?? [];
+  if (urls.length === 0 && !thumbnailUrl && assets.length === 0) {
     return undefined;
   }
 
@@ -436,26 +413,5 @@ function sanitizeAgentMediaTaskResult(
     ...(result.height !== undefined ? { height: result.height } : {}),
     ...(result.duration !== undefined ? { duration: result.duration } : {}),
     ...(assets.length > 0 ? { assets } : {}),
-    ...(drafts.length > 0 ? { drafts } : {}),
-    ...(result.creativeEntity ? { creativeEntity: result.creativeEntity } : {}),
-  };
-}
-
-function stripNestedRenderableAssetPaths(
-  asset: NonNullable<NonNullable<AgentBackgroundTask['result']>['assets']>[number],
-): NonNullable<NonNullable<AgentBackgroundTask['result']>['assets']>[number] {
-  if (asset.type !== 'generated-storyboard') return asset;
-  return {
-    ...asset,
-    scenes: asset.scenes.map((scene) => ({
-      ...scene,
-      shots: scene.shots.map((shot) => {
-        if (!('path' in shot)) return shot;
-        const { path: _path, ...shotWithoutPath } = shot as typeof shot & {
-          readonly path?: unknown;
-        };
-        return shotWithoutPath;
-      }),
-    })),
   };
 }

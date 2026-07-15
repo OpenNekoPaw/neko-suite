@@ -83,6 +83,8 @@ import { runResourceCacheStartupGc } from './services/resourceCacheStartupGcServ
 import { getEngineClientProvider } from './services/engineClientProvider';
 import { createExtensionAgentContentAccessRuntime } from './services/agentContentAccessRuntime';
 import { createWorkspaceGeneratedAssetIndex } from './services/generatedAssetOpenResolver';
+import { cleanupLegacyCanvasBoardMetadata } from './services/legacyCanvasBoardMetadataCleanup';
+import { registerLegacyGeneratedOutputRetainProjectCommand } from './services/legacyGeneratedOutputRetainProjectService';
 import {
   createHostContentMediaPathContext,
   createHostContentPathResolver,
@@ -144,6 +146,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<NekoAg
   watchLogLevel(logger, context);
 
   logger.info('Activating extension...');
+  const boardMetadataCleanup = await cleanupLegacyCanvasBoardMetadata(context.workspaceState);
+  if (boardMetadataCleanup.removedKeys.length > 0) {
+    logger.info('Removed obsolete Canvas Board routing metadata', {
+      keys: boardMetadataCleanup.removedKeys,
+    });
+  }
   logger.info('Logger configured', {
     level: LOG_LEVEL_NAMES[resolvedLogLevel],
     extensionMode: context.extensionMode,
@@ -248,6 +256,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<NekoAg
           logger,
         })
       : undefined;
+  registerLegacyGeneratedOutputRetainProjectCommand({
+    context,
+    ...(workspaceRoot ? { workspaceRoot } : {}),
+    ...(generatedAssetIndex ? { index: generatedAssetIndex } : {}),
+  });
   const engineClientProvider = getEngineClientProvider();
   await engineClientProvider.setAuthorizedReadRoots?.(
     await getHostContentAuthorizedReadRoots({
@@ -295,7 +308,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<NekoAg
       skillRegistry: capabilityRegistries.skillRegistry,
       toolGroupRegistry: capabilityRegistries.toolGroupRegistry,
       artifactProfileRegistry: capabilityRegistries.artifactProfileRegistry,
-      creationProfileRegistry: capabilityRegistries.creationProfileRegistry,
       providerExpressionProfileRegistry: capabilityRegistries.providerExpressionProfileRegistry,
       mediaService: agentOwnedCapabilityContext.mediaService,
       configManager: agentOwnedCapabilityContext.configManager,

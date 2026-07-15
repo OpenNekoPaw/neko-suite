@@ -316,17 +316,6 @@ function renderProfileProjectionSection(context: PromptGenerationContext): strin
     );
   }
 
-  if (profiles.creationProfile) {
-    lines.push(
-      `- Creation profile: ${profiles.creationProfile.profileId}@${profiles.creationProfile.version}`,
-    );
-    lines.push(
-      `- Creation stages: ${profiles.creationProfile.stages
-        .map((stage) => stage.stageId)
-        .join(' -> ')}`,
-    );
-  }
-
   if (profiles.artifactProfiles && profiles.artifactProfiles.length > 0) {
     lines.push(
       `- Artifact profiles: ${profiles.artifactProfiles

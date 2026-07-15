@@ -133,15 +133,6 @@ describe('extension slash command runtime', () => {
       conversationId: 'conv-1',
       messageText: 'fix bug',
       sessionMode: 'agent',
-      executionOverrides: {
-        metadata: {
-          agentCreation: {
-            entrySignal: 'prompt-chain-skill',
-            taskShape: 'multi-step',
-            creationKind: 'skill:commit-workflow',
-          },
-        },
-      },
     });
   });
 

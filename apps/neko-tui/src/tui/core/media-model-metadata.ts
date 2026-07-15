@@ -1,4 +1,3 @@
-import { mergeCreationExecutionMetadata } from '@neko/agent';
 import type { ChatModelOption } from '@neko/shared';
 import type { MediaUnderstandingModelSelections } from '@neko-agent/types';
 import type { TuiMediaCategory, TuiPerceptionModels } from './types';
@@ -29,10 +28,11 @@ export function mergeTuiMediaModelMetadata(
   if (Object.keys(mediaModels).length === 0 && Object.keys(understandingModels).length === 0) {
     return metadata;
   }
-  return mergeCreationExecutionMetadata(metadata ?? {}, {
+  return {
+    ...(metadata ?? {}),
     ...(Object.keys(mediaModels).length > 0 ? { mediaModels } : {}),
     ...(Object.keys(understandingModels).length > 0 ? { understandingModels } : {}),
-  });
+  };
 }
 
 export function buildTuiMediaModelMetadata(

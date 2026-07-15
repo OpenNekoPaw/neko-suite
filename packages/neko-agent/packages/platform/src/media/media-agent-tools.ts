@@ -688,7 +688,7 @@ const MEDIA_TOOL_LOCALIZATION = {
   GenerateImage: {
     zh: {
       description:
-        '提交异步图像生成 Task（照片、插画、艺术图）。只用于静态图像；视频或动态内容使用 GenerateVideo。此工具立即返回媒体 taskId，图像尚未完成；该 ID 不是 SubAgent ID，禁止传给 subagent 或 subagent_output。等待 Host 通过 Task observation/continuation 投递结果，并告知用户任务已在后台处理。',
+        '提交由当前 Provider/model 执行的生成式异步图像生成 Task。只产出 generated 草稿，不修改项目、不导入资产库，也不证明质量或交付完成；参考输入、限制和当前模型支持必须在 dispatch 前通过校验。此工具立即返回媒体 taskId，图像尚未完成；该 ID 不是 SubAgent ID，禁止传给 subagent 或 subagent_output。等待 Host 通过 Task observation/continuation 投递稳定结果，再观察实际图像和适用的 Quality 证据后决定接受、修复或阻塞。',
       parameters: {
         prompt: '图像生成或编辑提示词。',
         negativePrompt: '可选反向提示词，描述要避免的内容。',
@@ -727,7 +727,7 @@ const MEDIA_TOOL_LOCALIZATION = {
   TransformImage: {
     zh: {
       description:
-        '提交异步图像编辑任务，用源图像、可选 mask、编辑指令、参考图和目标画幅/风格执行 source-bound transform。此 facade 保留 transform lineage；宿主/provider adapter 必须在执行前解析稳定引用。',
+        '提交由当前 Provider/model 执行的生成式、source-bound 异步图像编辑任务。它不是确定性裁切、缩放、旋转或像素合成；源图、mask、参考角色、未修改区域保留语义和当前模型支持必须在 dispatch 前通过校验。结果仅是带 lineage 的 generated 草稿，不等于项目写回或质量完成；必须观察实际图像后再接受或修复。',
       parameters: {
         prompt: '可选提示词；未提供时使用 editInstruction。',
         editInstruction: '针对源图像的自然语言编辑指令。',
@@ -769,7 +769,7 @@ const MEDIA_TOOL_LOCALIZATION = {
   GenerateVideo: {
     zh: {
       description:
-        '提交异步视频生成 Task（短片、动画、动态内容）。用户要求视频、动画或动态内容时使用；静态图像使用 GenerateImage。此工具立即返回媒体 taskId，视频尚未完成；该 ID 不是 SubAgent ID，禁止传给 subagent 或 subagent_output。等待 Host 通过 Task observation/continuation 投递结果，并告知用户任务已在后台处理。',
+        '提交由当前 Provider/model 执行的生成式异步视频生成 Task（单片段）。只有当生成式视频适合当前镜头且所需首帧、尾帧、参考视频、运动、时长和尺寸控制均通过当前支持校验时使用；不要因为目标是“动画”就忽略逐帧、Puppet、分层 2D、3D 场景或合成能力。结果仅是 generated clip 草稿，不是时间线、成片或交付证明。此工具立即返回媒体 taskId，视频尚未完成；该 ID 不是 SubAgent ID，禁止传给 subagent 或 subagent_output。等待稳定结果并观察实际视频和适用的 Quality 证据。',
       parameters: {
         prompt: '视频生成或编辑提示词。',
         taskRef: '可选 Task markdown URI/path，作为生成意图来源。',
@@ -848,9 +848,17 @@ export function registerMediaAgentTools(
     createTool({
       name: 'GenerateImage',
       description:
-        'Submit an async IMAGE generation Task (photos, illustrations, artwork). Only use this for still images — for videos use GenerateVideo instead. This tool returns a media taskId immediately; the image is NOT ready. This is not a SubAgent ID: never pass it to subagent or subagent_output. Wait for the Host Task observation/continuation to deliver results, and tell the user the Task is processing in the background.',
+        'Submit a generative async IMAGE Task to the current Provider/model. It produces only a generated draft: it does not mutate a project, import an asset, satisfy Quality, or complete a deliverable. Reference inputs, limits, and current model support must validate before dispatch. The returned media taskId is not a ready image and is not a SubAgent ID; never pass it to subagent or subagent_output. Wait for the Host Task observation/continuation to deliver a stable result, then observe the actual image and applicable Quality evidence before accepting, repairing, or blocking it.',
       localization: MEDIA_TOOL_LOCALIZATION.GenerateImage,
       category: 'generation',
+      safetyKind: 'non-destructive-mutation',
+      requirements: { mediaService: true },
+      traits: {
+        cost: 'moderate',
+        reversible: true,
+        locality: 'network',
+        impactLevel: 'low',
+      },
       isConcurrencySafe: true,
       parameters: {
         type: 'object',
@@ -1069,9 +1077,17 @@ export function registerMediaAgentTools(
     createTool({
       name: 'TransformImage',
       description:
-        'Submit an async source-bound IMAGE transform task. Use this for editing an existing image with source image, optional mask, edit instruction, references, and target aspect ratio/style. This facade preserves transform lineage; host/provider adapters must resolve stable refs before provider execution.',
+        'Submit a generative, source-bound async IMAGE edit to the current Provider/model. This is not deterministic crop, resize, rotate, or pixel compositing. Source, mask, reference roles, unmodified-region preservation, and current model support must validate before dispatch. The result is a lineage-bound generated draft, not project writeback or Quality completion; observe the actual image before accepting or repairing it.',
       localization: MEDIA_TOOL_LOCALIZATION.TransformImage,
       category: 'generation',
+      safetyKind: 'non-destructive-mutation',
+      requirements: { mediaService: true, contentAccess: true },
+      traits: {
+        cost: 'moderate',
+        reversible: true,
+        locality: 'network',
+        impactLevel: 'low',
+      },
       isConcurrencySafe: true,
       parameters: {
         type: 'object',
@@ -1335,9 +1351,17 @@ export function registerMediaAgentTools(
     createTool({
       name: 'GenerateVideo',
       description:
-        'Submit an async VIDEO generation Task (clips, animations, motion content). Use this for moving content; use GenerateImage for still images. This tool returns a media taskId immediately; the video is NOT ready. This is not a SubAgent ID: never pass it to subagent or subagent_output. Wait for the Host Task observation/continuation to deliver results, and tell the user the Task is processing in the background.',
+        'Submit a generative async single-clip VIDEO Task to the current Provider/model. Use it only when generative video fits the shot and every required first-frame, last-frame, reference-video, motion, duration, and size control validates against current support; an animation goal alone is not a reason to ignore frame animation, Puppet, layered 2D, 3D scene, or compositing capabilities. The result is only a generated clip draft, not a timeline, final cut, or deliverable. The returned media taskId is not ready media and is not a SubAgent ID; never pass it to subagent or subagent_output. Wait for the Host Task observation/continuation to deliver a stable result, then inspect the actual video plus applicable Quality evidence.',
       localization: MEDIA_TOOL_LOCALIZATION.GenerateVideo,
       category: 'generation',
+      safetyKind: 'non-destructive-mutation',
+      requirements: { mediaService: true, contentAccess: true },
+      traits: {
+        cost: 'expensive',
+        reversible: true,
+        locality: 'network',
+        impactLevel: 'low',
+      },
       isConcurrencySafe: true,
       parameters: {
         type: 'object',
@@ -1550,6 +1574,14 @@ export function registerMediaAgentTools(
         'Submit an async music generation Task. This tool returns a media taskId immediately; the music is NOT ready. This is not a SubAgent ID: never pass it to subagent or subagent_output. Wait for the Host Task observation/continuation to deliver results, and tell the user the Task is processing in the background.',
       localization: MEDIA_TOOL_LOCALIZATION.GenerateMusic,
       category: 'generation',
+      safetyKind: 'non-destructive-mutation',
+      requirements: { mediaService: true },
+      traits: {
+        cost: 'moderate',
+        reversible: true,
+        locality: 'network',
+        impactLevel: 'low',
+      },
       isConcurrencySafe: true,
       parameters: {
         type: 'object',
@@ -1635,6 +1667,14 @@ export function registerMediaAgentTools(
         'Submit an async text-to-speech Task. This tool returns a media taskId immediately; the audio is NOT ready. This is not a SubAgent ID: never pass it to subagent or subagent_output. Wait for the Host Task observation/continuation to deliver results, and tell the user the Task is processing in the background.',
       localization: MEDIA_TOOL_LOCALIZATION.GenerateTTS,
       category: 'generation',
+      safetyKind: 'non-destructive-mutation',
+      requirements: { mediaService: true },
+      traits: {
+        cost: 'cheap',
+        reversible: true,
+        locality: 'network',
+        impactLevel: 'low',
+      },
       isConcurrencySafe: true,
       parameters: {
         type: 'object',

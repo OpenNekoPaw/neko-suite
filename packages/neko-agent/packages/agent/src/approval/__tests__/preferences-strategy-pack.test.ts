@@ -105,14 +105,9 @@ describe('preferencesStrategyPack — alwaysApprove → escalate', () => {
     const res = await engine.evaluate(
       makeRequest({
         channel: 'creator-review',
-        binding: {
+        context: {
           contentDigest: 'sha256:creator-review',
-          target: 'creator decision',
-          criticalInputIds: ['conversation:current'],
-          creativeScope: ['proposal'],
-          costRiskCeiling: 'none',
-          mutationScope: ['none'],
-          deliveryBoundary: 'none',
+          documentUri: 'file:///workspace/plan.md',
         },
         paradigm: 'declarative',
         subject: { kind: 'proposal:x', label: 'x', idempotent: true, destructive: false },
