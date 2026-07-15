@@ -1,17 +1,10 @@
-/**
- * GroupNode - Group container node component
- * Displays a dashed container with child node list and label
- */
-
+import { useEffect, useMemo, useState } from 'react';
 import type { CanvasViewport, GroupCanvasNode, CanvasNode } from '@neko/shared';
 import { getContainerChildIds } from '@neko/shared';
-import { toCodiconClassName, type CodiconName } from '@neko/ui/icons';
+import { toCodiconClassName } from '@neko/ui/icons';
 import { BaseNode } from './BaseNode';
+import { useCanvasStore } from '../../stores/canvasStore';
 import { t } from '../../i18n';
-
-// =============================================================================
-// Types
-// =============================================================================
 
 export interface GroupNodeProps {
   node: GroupCanvasNode;
@@ -19,6 +12,7 @@ export interface GroupNodeProps {
   viewport: CanvasViewport;
   isSelected: boolean;
   onSelect?: (nodeId: string, multi: boolean) => void;
+  onTransformStart?: (nodeId: string) => void;
   onDrag?: (nodeId: string, position: { x: number; y: number }) => void;
   onMove?: (nodeId: string, position: { x: number; y: number }) => void;
   onResize?: (
@@ -35,43 +29,44 @@ export interface GroupNodeProps {
   onUpdateData?: (nodeId: string, data: Record<string, unknown>) => void;
 }
 
-// =============================================================================
-// Constants
-// =============================================================================
-
-const NODE_TYPE_ICONS: Record<string, CodiconName> = {
-  media: 'symbol-misc',
-  storyboard: 'symbol-structure',
-  annotation: 'edit',
-  text: 'symbol-misc',
-  artboard: 'symbol-color',
-  group: 'symbol-namespace',
-};
-
-// =============================================================================
-// Component
-// =============================================================================
-
 export function GroupNode({
   node,
   allNodes,
   viewport,
   isSelected,
   onSelect,
+  onTransformStart,
   onDrag,
   onMove,
   onResize,
   onResizeEnd,
   onConnectionStart,
+  onUpdateData,
 }: GroupNodeProps) {
-  const { label, color } = node.data;
+  const setGroupCollapsed = useCanvasStore((state) => state.setGroupCollapsed);
   const childIds = getContainerChildIds(node);
-  const groupColor = color || '#6b7280';
+  const childNodes = useMemo(
+    () =>
+      childIds
+        .map((id) => allNodes.find((candidate) => candidate.id === id))
+        .filter((candidate): candidate is CanvasNode => Boolean(candidate)),
+    [allNodes, childIds],
+  );
+  const [draftLabel, setDraftLabel] = useState(node.data.label ?? t('node.group'));
+  const [editingLabel, setEditingLabel] = useState(false);
 
-  // Resolve child nodes
-  const childNodes = childIds
-    .map((id) => allNodes.find((n) => n.id === id))
-    .filter((n): n is CanvasNode => n != null);
+  useEffect(() => {
+    if (!editingLabel) setDraftLabel(node.data.label ?? t('node.group'));
+  }, [editingLabel, node.data.label]);
+
+  const commitLabel = (): void => {
+    const label = draftLabel.trim() || t('node.group');
+    setDraftLabel(label);
+    setEditingLabel(false);
+    if (label !== node.data.label) onUpdateData?.(node.id, { label });
+  };
+  const renderZIndex = Math.min(node.zIndex, ...childNodes.map((child) => child.zIndex)) - 1;
+  const collapsed = node.container?.collapsed === true;
 
   return (
     <BaseNode
@@ -79,85 +74,99 @@ export function GroupNode({
       viewport={viewport}
       isSelected={isSelected}
       onSelect={onSelect}
+      onTransformStart={onTransformStart}
       onDrag={onDrag}
       onMove={onMove}
       onResize={onResize}
       onResizeEnd={onResizeEnd}
       onConnectionStart={onConnectionStart}
       className="group-node"
+      autoSizeContent={false}
+      presentation="spatial-container"
+      renderZIndex={renderZIndex}
+      renderHeight={collapsed ? 40 : undefined}
     >
       <div
-        className="w-full h-full flex flex-col"
-        style={{
-          backgroundColor: `${groupColor}10`,
-          borderColor: groupColor,
-        }}
+        className="spatial-group-frame h-full w-full"
+        data-spatial-group-frame="true"
+        data-spatial-group-collapsed={collapsed ? 'true' : 'false'}
+        data-spatial-group-empty={childNodes.length === 0 ? 'true' : 'false'}
       >
-        {/* Header */}
         <div
-          className="flex items-center gap-2 px-3 py-1.5 text-xs border-b"
-          style={{
-            backgroundColor: `${groupColor}20`,
-            borderColor: `${groupColor}40`,
-            color: 'var(--toolbar-fg)',
-          }}
+          className="spatial-group-label"
+          data-spatial-group-label={node.id}
+          onMouseDown={(event) => onSelect?.(node.id, event.shiftKey || event.metaKey)}
         >
-          <span
-            className={toCodiconClassName('symbol-namespace')}
-            style={{ color: groupColor }}
-            aria-hidden="true"
-          />
-          <span className="font-medium truncate">{label || t('node.group')}</span>
-          <span
-            className="ml-auto text-[10px] px-1.5 py-0.5 rounded"
-            style={{
-              backgroundColor: `${groupColor}20`,
-              color: 'var(--toolbar-fg-secondary)',
+          <button
+            type="button"
+            className="spatial-group-label-button"
+            data-spatial-group-collapse-toggle={node.id}
+            aria-label={collapsed ? t('group.expand') : t('group.collapse')}
+            aria-expanded={!collapsed}
+            onMouseDown={(event) => event.stopPropagation()}
+            onClick={(event) => {
+              event.stopPropagation();
+              setGroupCollapsed(node.id, !collapsed);
             }}
+          >
+            <span
+              className={toCodiconClassName(collapsed ? 'chevron-right' : 'chevron-down')}
+              aria-hidden="true"
+            />
+          </button>
+          {editingLabel ? (
+            <input
+              autoFocus
+              className="spatial-group-name-input"
+              value={draftLabel}
+              aria-label={t('preset.group.label')}
+              onChange={(event) => setDraftLabel(event.target.value)}
+              onBlur={commitLabel}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') commitLabel();
+                if (event.key === 'Escape') {
+                  setDraftLabel(node.data.label ?? t('node.group'));
+                  setEditingLabel(false);
+                }
+              }}
+              onMouseDown={(event) => event.stopPropagation()}
+            />
+          ) : (
+            <span
+              className="spatial-group-name"
+              title={t('group.rename')}
+              role="button"
+              data-node-drag-allow="true"
+              tabIndex={0}
+              aria-label={t('group.rename')}
+              onDoubleClick={(event) => {
+                event.stopPropagation();
+                setEditingLabel(true);
+              }}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault();
+                  setEditingLabel(true);
+                }
+              }}
+            >
+              {draftLabel}
+            </span>
+          )}
+          <span
+            className="spatial-group-count"
+            aria-label={t('group.childCount', { count: childNodes.length })}
           >
             {childNodes.length}
           </span>
         </div>
-
-        {/* Child node list */}
-        <div className="flex-1 overflow-auto px-2 py-1.5 space-y-0.5">
-          {childNodes.length === 0 ? (
-            <div
-              className="text-[10px] text-center py-2 italic"
-              style={{ color: 'var(--toolbar-fg-secondary)' }}
-            >
-              {t('group.empty')}
-            </div>
-          ) : (
-            childNodes.map((child) => <ChildNodeItem key={child.id} node={child} />)
-          )}
-        </div>
+        {childNodes.length === 0 && !collapsed && (
+          <div className="spatial-group-empty" role="status">
+            <span className={toCodiconClassName('add')} aria-hidden="true" />
+            <span>{t('group.empty')}</span>
+          </div>
+        )}
       </div>
     </BaseNode>
-  );
-}
-
-// =============================================================================
-// Sub-components
-// =============================================================================
-
-function ChildNodeItem({ node }: { node: CanvasNode }) {
-  const nodeType = node.type as string;
-  const icon = NODE_TYPE_ICONS[nodeType] ?? 'circle-large-filled';
-  const data = node.data as Record<string, unknown>;
-  const name =
-    (data.label as string) ?? (data.title as string) ?? (data.name as string) ?? `${nodeType}`;
-
-  return (
-    <div
-      className="flex items-center gap-1.5 px-1.5 py-0.5 rounded text-[10px] truncate"
-      style={{
-        color: 'var(--toolbar-fg)',
-        backgroundColor: 'var(--control-bg)',
-      }}
-    >
-      <span className={`${toCodiconClassName(icon)} text-[10px] opacity-70`} aria-hidden="true" />
-      <span className="truncate">{name}</span>
-    </div>
   );
 }

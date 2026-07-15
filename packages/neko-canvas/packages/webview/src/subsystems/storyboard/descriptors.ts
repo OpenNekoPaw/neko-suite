@@ -22,6 +22,7 @@ export function createStoryboardNodeTypeDescriptors(): NodeTypeDescriptorRegistr
       tagLabel: 'BOARD',
       tagColor: '#f59e0b',
       defaultSize: { width: 240, height: 160 },
+      presentation: 'structured',
     },
     artboard: {
       type: 'artboard',
@@ -30,6 +31,7 @@ export function createStoryboardNodeTypeDescriptors(): NodeTypeDescriptorRegistr
       tagLabel: 'ARTBOARD',
       tagColor: '#a855f7',
       defaultSize: { width: 640, height: 360 },
+      presentation: 'structured',
     },
     table: {
       type: 'table',
@@ -38,6 +40,7 @@ export function createStoryboardNodeTypeDescriptors(): NodeTypeDescriptorRegistr
       tagLabel: 'TABLE',
       tagColor: '#0ea5e9',
       defaultSize: { width: 660, height: 400 },
+      presentation: 'structured',
     },
     shot: {
       type: 'shot',
@@ -46,6 +49,7 @@ export function createStoryboardNodeTypeDescriptors(): NodeTypeDescriptorRegistr
       tagLabel: 'SHOT',
       tagColor: '#ef4444',
       defaultSize: { width: 220, height: 200 },
+      presentation: 'structured',
     },
     scene: {
       type: 'scene',
@@ -54,6 +58,7 @@ export function createStoryboardNodeTypeDescriptors(): NodeTypeDescriptorRegistr
       tagLabel: 'SCENE',
       tagColor: '#10b981',
       defaultSize: { width: 640, height: 400 },
+      presentation: 'structured',
     },
     gallery: {
       type: 'gallery',
@@ -62,6 +67,7 @@ export function createStoryboardNodeTypeDescriptors(): NodeTypeDescriptorRegistr
       tagLabel: 'GALLERY',
       tagColor: '#8b5cf6',
       defaultSize: { width: 290, height: 360 },
+      presentation: 'structured',
     },
     script: {
       type: 'script',
@@ -70,6 +76,7 @@ export function createStoryboardNodeTypeDescriptors(): NodeTypeDescriptorRegistr
       tagLabel: 'SCRIPT',
       tagColor: '#10b981',
       defaultSize: { width: 280, height: 220 },
+      presentation: 'foundational',
     },
     document: {
       type: 'document',
@@ -78,6 +85,7 @@ export function createStoryboardNodeTypeDescriptors(): NodeTypeDescriptorRegistr
       tagLabel: 'DOC',
       tagColor: '#64748b',
       defaultSize: { width: 220, height: 280 },
+      presentation: 'foundational',
     },
     model: {
       type: 'model',
@@ -86,6 +94,7 @@ export function createStoryboardNodeTypeDescriptors(): NodeTypeDescriptorRegistr
       tagLabel: 'MODEL',
       tagColor: '#14b8a6',
       defaultSize: { width: 240, height: 160 },
+      presentation: 'structured',
     },
     'canvas-embed': {
       type: 'canvas-embed',
@@ -94,6 +103,7 @@ export function createStoryboardNodeTypeDescriptors(): NodeTypeDescriptorRegistr
       tagLabel: 'CANVAS',
       tagColor: '#6366f1',
       defaultSize: { width: 260, height: 180 },
+      presentation: 'structured',
     },
     project: {
       type: 'project',
@@ -102,6 +112,7 @@ export function createStoryboardNodeTypeDescriptors(): NodeTypeDescriptorRegistr
       tagLabel: 'PROJECT',
       tagColor: '#d946ef',
       defaultSize: { width: 260, height: 180 },
+      presentation: 'structured',
     },
   };
 }

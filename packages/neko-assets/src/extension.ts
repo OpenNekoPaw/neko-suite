@@ -37,6 +37,8 @@ import {
   resolveStorageLayout,
   parseEntityUri,
   PathResolver,
+  createResourceFingerprint,
+  createResourceRef,
   RECORDING_PROMOTION_COMMAND,
   isRecordingPromotionRequest,
   type CreativeEntityKind,
@@ -91,6 +93,8 @@ import {
 } from './services/EntityFacadeReaders';
 import { registerMarketInstallTargets } from './market/registerMarketInstallTargets';
 import { RecordingPromotionService } from './services/RecordingPromotionService';
+import { GeneratedCandidatePromotionService } from './services/GeneratedCandidatePromotionService';
+import { AssetFileImportService } from './services/AssetFileImportService';
 
 const logger = getLogger('Extension');
 
@@ -348,9 +352,13 @@ export async function activate(
     context.subscriptions.push(settingsService);
 
     // Sync path variables into library (must happen before health check)
-    library.updatePathVariables(await settingsService.getPathVariableMap());
+    library.updatePathVariables(
+      withWorkspacePathVariable(workspaceRoot, await settingsService.getPathVariableMap()),
+    );
     settingsService.onDidChange(async () => {
-      library!.updatePathVariables(await settingsService.getPathVariableMap());
+      library!.updatePathVariables(
+        withWorkspacePathVariable(workspaceRoot, await settingsService.getPathVariableMap()),
+      );
     });
 
     // Run initial health check now that path variables are available
@@ -470,6 +478,94 @@ export async function activate(
   const _onDidChangeEntities = new vscode.EventEmitter<void>();
   const _onDidChangeMediaLibraryRoots = new vscode.EventEmitter<void>();
 
+  const assetLibraryForGeneratedPromotion = library;
+  const assetFileImportService = library
+    ? new AssetFileImportService({
+        library,
+        fs: { assertReadable: (filePath) => fs.access(filePath) },
+        didImport: () => _onDidChangeEntities.fire(),
+      })
+    : undefined;
+  const generatedCandidatePromotionService =
+    assetLibraryForGeneratedPromotion && workspaceRoot
+      ? new GeneratedCandidatePromotionService({
+          assetFilesRoot: path.join(workspaceRoot, 'neko', 'assets', 'files'),
+          fs: {
+            readFile: (filePath) => fs.readFile(filePath),
+            writeFile: async (filePath, data) => fs.writeFile(filePath, data),
+            createDirectory: async (dirPath) => fs.mkdir(dirPath, { recursive: true }),
+            exists: async (filePath) => {
+              try {
+                await fs.access(filePath);
+                return true;
+              } catch {
+                return false;
+              }
+            },
+          },
+          registerAsset: async ({ filePath, source, projectionId }) => {
+            const imported = await assetLibraryForGeneratedPromotion.importFile(filePath, {
+              entityInput: {
+                name: source.title,
+                category: source.mediaKind === 'audio' ? 'audio' : 'object',
+                metadata: {
+                  source: {
+                    type: 'ai-generated',
+                    ...(source.provider ? { provider: source.provider } : {}),
+                    ...(source.prompt ? { prompt: source.prompt } : {}),
+                    generated: {
+                      projectionId,
+                      candidateId: source.candidateId,
+                      taskId: source.taskId,
+                      ...(source.runId ? { runId: source.runId } : {}),
+                      revision: source.revision,
+                      contentDigest: source.contentDigest,
+                    },
+                  },
+                },
+                tags: ['generated', source.mediaKind],
+                ownership: { scope: 'project', access: 'editable' },
+              },
+              variantInput: {
+                name: 'Generated candidate',
+                attributes: {},
+                tags: ['generated'],
+              },
+              fileOptions: {
+                name: path.basename(filePath),
+                purpose: 'main',
+                metadata: { mimeType: source.mimeType },
+              },
+            });
+            await assetLibraryForGeneratedPromotion.flush();
+            _onDidChangeEntities.fire();
+            const resourceRef = createResourceRef({
+              scope: 'project',
+              provider: 'asset-library',
+              kind: 'media',
+              source: {
+                kind: 'media-library',
+                mediaLibraryId: imported.entity.id,
+                filePath: imported.file.path,
+              },
+              locator: { kind: 'file', path: imported.file.path },
+              fingerprint: createResourceFingerprint({
+                strategy: 'hash',
+                value: source.contentDigest,
+              }),
+            });
+            return {
+              entityId: imported.entity.id,
+              variantId: imported.variant.id,
+              fileId: imported.file.id,
+              path: imported.file.path,
+              mediaType: source.mediaKind,
+              resourceRef,
+            };
+          },
+        })
+      : undefined;
+
   // Bridge command for components that can't import entityChangeEmitter directly
   context.subscriptions.push(
     vscode.commands.registerCommand('neko.assets.entityChanged', () => {
@@ -491,15 +587,16 @@ export async function activate(
   const api: import('@neko/shared').NekoAssetsAPI = {
     getAllEntities: async () => (library ? library.getAllEntities() : []),
     importFile: async (uri) => {
-      if (!library) return undefined;
-      try {
-        const result = await library.importFile(uri.fsPath);
-        await library.flush();
-        _onDidChangeEntities.fire();
-        return result.entity;
-      } catch {
-        return undefined;
+      if (!assetFileImportService) {
+        throw new Error('AssetLibrary file import is unavailable.');
       }
+      return assetFileImportService.importFile(uri.fsPath);
+    },
+    promoteGeneratedCandidates: async (input) => {
+      if (!generatedCandidatePromotionService) {
+        throw new Error('AssetLibrary generated candidate promotion is unavailable.');
+      }
+      return generatedCandidatePromotionService.promote(input);
     },
     getThumbnailPath: async (filePath) => {
       if (!thumbnailService) return undefined;

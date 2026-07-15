@@ -1,6 +1,6 @@
 # 素材库架构
 
-更新日期：2026-06-15
+更新日期：2026-07-15
 
 本文定义 Neko Suite 中素材库、素材实体、变体、文件、导入来源、媒体库、市场安装结果、素材搜索投影和素材与统一实体绑定的横切设计。统一实体身份设计见 [`unified-entity.md`](unified-entity.md)；缓存、文件读写和路径变量见 [`cache-file-access-and-paths.md`](cache-file-access-and-paths.md)。
 
@@ -114,6 +114,25 @@ local file / media library / generated output / market package / remote source
 | remote URL         | 保存 remote source、checksum/provenance，必要时 materialize cache |
 
 导入不等于绑定实体。文件名和路径可以产生绑定建议，但 confirmed binding 必须走统一实体层。
+
+### 生成候选的提升边界
+
+未提升 generated output 是 revision/digest 绑定的运行时资源身份，不是 `AssetEntity`。Canvas runtime review Group、Agent task result 和 Webview render URI 都不能据此推断素材库 membership。
+
+```text
+generated candidate + revision + digest + provenance
+  -> AssetLibrary/AssetStore promotion facade
+  -> AssetEntity + Variant + File ownership
+  -> stable Asset identity/source ref
+  -> revision-checked Canvas/领域项目 authoring
+```
+
+- 单项与批量提升使用稳定 request/candidate identity，并返回逐项结果；重放不得重复创建 AssetEntity。
+- 部分成功保留已创建的 Asset，失败项保持可重试并携带诊断；不尝试跨 Asset 与 Canvas 文件写入做虚假全局回滚。
+- Asset 保存成功而 Board revision 冲突时，Asset 继续有效；重试必须显式绑定预期 target，不能改投活动 Canvas。
+- 新提升不得把 `neko/generated/<kind>/` 当作中转或 canonical source root。物理文件位置由 AssetStore ingest policy 决定，消费者只依赖返回的 Asset identity/source ref。
+- 既有 `neko/generated/<kind>/` 是受保护的 legacy durable input：可显式、幂等导入，但不得删除、移动或自动改写原 Canvas 引用。
+- Canvas 删除引用不等于 Asset 删除；AssetEntity/file 删除继续走素材库自己的引用检查与确认策略。
 
 ## 素材技术元数据
 

@@ -158,9 +158,6 @@ class NekoAssetsHeadlessCapabilityProvider implements AgentCapabilityProvider {
               return { success: false, error: 'filePath is required' };
             }
             const asset = await this.api.importFile({ fsPath: filePath });
-            if (!asset) {
-              return { success: false, error: `Failed to import asset: ${filePath}` };
-            }
             return { success: true, data: { asset } };
           } catch (err) {
             return { success: false, error: `Failed to import asset: ${String(err)}` };

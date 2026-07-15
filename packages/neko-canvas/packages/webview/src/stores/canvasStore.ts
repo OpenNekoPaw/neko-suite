@@ -50,11 +50,6 @@ import {
 } from '../utils/containerActions';
 import { autoArrangeContainer, computeContainerChildSize } from '../utils/containerLayout';
 import { NODE_DEFAULT_SIZES } from '../utils/nodeFactory';
-import {
-  canContainerAcceptChild,
-  createBuiltInContainerPolicyRegistry,
-  getContainerPolicy,
-} from '../utils/containerPolicies';
 import { hydrateCanvasNodePreview, refreshCanvasNodePreview } from '../utils/canvasPresetRegistry';
 import {
   createCanvasComposite,
@@ -71,6 +66,15 @@ import {
   resolveNodeMinSize,
 } from '../utils/nodeSizing';
 import { createsDisallowedConnectionCycle } from '../utils/connectionProjection';
+import { resolveCanvasDropContainer } from '../utils/containerMembership';
+import {
+  arrangeSpatialGroup,
+  clampSpatialGroupResize,
+  expandSpatialGroupToIncludeChild,
+  fitSpatialGroupToContent,
+  setSpatialGroupCollapsed,
+  type SpatialGroupSort,
+} from '../utils/spatialGroupLayout';
 
 // =============================================================================
 // Types
@@ -169,6 +173,9 @@ export interface CanvasStore {
   groupNodes: (childIds: string[]) => string;
   /** Ungroup: remove group node, release children */
   ungroupNodes: (groupId: string) => void;
+  arrangeGroup: (groupId: string, sort: SpatialGroupSort) => void;
+  fitGroupToContent: (groupId: string) => void;
+  setGroupCollapsed: (groupId: string, collapsed: boolean) => void;
 
   // ==================== Connection Actions ====================
   addConnection: (connection: Omit<CanvasConnection, 'id'>) => string;
@@ -347,6 +354,44 @@ function getNodeIdsRemovedByDeletePolicy(nodes: CanvasNode[], node: CanvasNode):
   return new Set([node.id, ...getContainerDescendantIds(nodes, node.id)]);
 }
 
+function deleteCanvasSelection(
+  nodes: CanvasNode[],
+  selectedNodeIds: ReadonlySet<string>,
+): { readonly nodes: CanvasNode[]; readonly removedNodeIds: ReadonlySet<string> } {
+  const selectedNodes = nodes.filter((node) => selectedNodeIds.has(node.id));
+  const removedNodeIds = new Set<string>();
+  for (const node of selectedNodes) {
+    for (const nodeId of getNodeIdsRemovedByDeletePolicy(nodes, node)) {
+      removedNodeIds.add(nodeId);
+    }
+  }
+
+  let nextNodes = nodes;
+  for (const node of selectedNodes) {
+    if (isContainerNode(node) && node.container?.deleteBehavior !== 'delete-subtree') {
+      const result = releaseContainerChildren(nextNodes, node.id);
+      if (!result.changed)
+        throw new Error(result.error ?? `Could not release ${node.id} children.`);
+      nextNodes = result.nodes;
+    }
+  }
+
+  for (const node of selectedNodes) {
+    const parentId = getNodeParentId(node);
+    if (!parentId || removedNodeIds.has(parentId)) continue;
+    const result = removeContainerChild(nextNodes, parentId, node.id);
+    if (!result.changed) {
+      throw new Error(result.error ?? `Could not remove ${node.id} from ${parentId}.`);
+    }
+    nextNodes = result.nodes;
+  }
+
+  return {
+    nodes: relinkSceneShotIds(nextNodes.filter((node) => !removedNodeIds.has(node.id))),
+    removedNodeIds,
+  };
+}
+
 function layoutSceneShots(nodes: CanvasNode[], sceneId: string): CanvasNode[] {
   return autoArrangeContainer(relinkSceneShotIds(nodes), {
     containerId: sceneId,
@@ -359,33 +404,16 @@ function layoutSceneShots(nodes: CanvasNode[], sceneId: string): CanvasNode[] {
   });
 }
 
-const CONTAINER_HEADER_PADDING = 48;
-const CONTAINER_POLICIES = createBuiltInContainerPolicyRegistry();
-
-function isNodeInsideContainer(container: CanvasNode, node: CanvasNode): boolean {
-  const centerX = node.position.x + node.size.width / 2;
-  const centerY = node.position.y + node.size.height / 2;
-  return (
-    centerX >= container.position.x &&
-    centerX <= container.position.x + container.size.width &&
-    centerY >= container.position.y + CONTAINER_HEADER_PADDING / 2 &&
-    centerY <= container.position.y + container.size.height
-  );
-}
-
 function syncNodeContainerMembership(nodes: CanvasNode[], movedNodeId: string): CanvasNode[] {
   const movedNode = nodes.find((n) => n.id === movedNodeId);
   if (!movedNode) return nodes;
-
-  const containers = nodes.filter(
-    (n) => n.id !== movedNodeId && getContainerPolicyName(n) !== undefined,
-  );
-
-  const targetContainer = containers.find((container) => {
-    if (!isNodeInsideContainer(container, movedNode)) return false;
-    const policy = getContainerPolicy(CONTAINER_POLICIES, getContainerPolicyName(container));
-    return canContainerAcceptChild(policy, movedNode);
+  const resolution = resolveCanvasDropContainer(nodes, movedNodeId, {
+    movingSubtree: isContainerNode(movedNode),
   });
+  if (resolution.diagnostic) throw new Error(resolution.diagnostic);
+  const targetContainer = resolution.targetContainerId
+    ? nodes.find((node) => node.id === resolution.targetContainerId)
+    : undefined;
 
   let nextNodes = nodes;
 
@@ -399,6 +427,9 @@ function syncNodeContainerMembership(nodes: CanvasNode[], movedNodeId: string): 
     const cellSize = computeContainerChildSize(targetContainer);
     if (cellSize) {
       nextNodes = nextNodes.map((n) => (n.id === movedNodeId ? { ...n, size: cellSize } : n));
+    }
+    if (policyName === 'group') {
+      nextNodes = expandSpatialGroupToIncludeChild(nextNodes, targetContainer.id, movedNodeId);
     }
   } else {
     const currentParentId = getNodeParentId(movedNode);
@@ -712,7 +743,8 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
     if (isContainerNode(oldNode)) {
       const dx = position.x - oldNode.position.x;
       const dy = position.y - oldNode.position.y;
-      const nextNodes = translateContainerSubtree(canvasData.nodes, id, { x: dx, y: dy });
+      const translatedNodes = translateContainerSubtree(canvasData.nodes, id, { x: dx, y: dy });
+      const nextNodes = syncNodeContainerMembership(translatedNodes, id);
       set({ canvasData: { ...canvasData, nodes: nextNodes } });
     } else {
       const movedNodes = canvasData.nodes.map((node) =>
@@ -733,8 +765,15 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
 
     const oldNode = canvasData.nodes.find((n) => n.id === id);
     if (!oldNode) return;
-    const clampedSize = clampNodeSize(size, resolveNodeMinSize(oldNode));
-    if (areSizesEqual(oldNode.size, clampedSize) && arePositionsEqual(oldNode.position, position)) {
+    const minimumSize = clampNodeSize(size, resolveNodeMinSize(oldNode));
+    const spatialClamp =
+      getContainerPolicyName(oldNode) === 'group'
+        ? clampSpatialGroupResize(canvasData.nodes, id, minimumSize, position)
+        : { size: minimumSize, position };
+    if (
+      areSizesEqual(oldNode.size, spatialClamp.size) &&
+      arePositionsEqual(oldNode.position, spatialClamp.position)
+    ) {
       return;
     }
     recordHistory(canvasData);
@@ -743,7 +782,9 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
       canvasData: {
         ...canvasData,
         nodes: canvasData.nodes.map((node) =>
-          node.id === id ? { ...node, size: clampedSize, position } : node,
+          node.id === id
+            ? { ...node, size: spatialClamp.size, position: spatialClamp.position }
+            : node,
         ),
       },
     });
@@ -752,8 +793,8 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
       .getState()
       .recordNodeUpdate(
         id,
-        { size: clampedSize, position } as any,
-        { size: oldNode.size, position: oldNode.position } as any,
+        { size: spatialClamp.size, position: spatialClamp.position },
+        { size: oldNode.size, position: oldNode.position },
       );
   },
 
@@ -1051,6 +1092,36 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
     });
 
     useCanvasOperationStore.getState().recordNodeUngroup(groupId, groupNode, childIds);
+  },
+
+  arrangeGroup: (groupId, sort) => {
+    const { canvasData } = get();
+    if (!canvasData) return;
+    const nextNodes = arrangeSpatialGroup(canvasData.nodes, groupId, sort);
+    if (nextNodes === canvasData.nodes) return;
+    recordHistory(canvasData);
+    set({ canvasData: { ...canvasData, nodes: nextNodes } });
+    recordCanvasDirty('Arrange spatial Group');
+  },
+
+  fitGroupToContent: (groupId) => {
+    const { canvasData } = get();
+    if (!canvasData) return;
+    const nextNodes = fitSpatialGroupToContent(canvasData.nodes, groupId);
+    if (nextNodes === canvasData.nodes) return;
+    recordHistory(canvasData);
+    set({ canvasData: { ...canvasData, nodes: nextNodes } });
+    recordCanvasDirty('Fit spatial Group to content');
+  },
+
+  setGroupCollapsed: (groupId, collapsed) => {
+    const { canvasData } = get();
+    if (!canvasData) return;
+    const nextNodes = setSpatialGroupCollapsed(canvasData.nodes, groupId, collapsed);
+    if (nextNodes === canvasData.nodes) return;
+    recordHistory(canvasData);
+    set({ canvasData: { ...canvasData, nodes: nextNodes } });
+    recordCanvasDirty(collapsed ? 'Collapse spatial Group' : 'Expand spatial Group');
   },
 
   // ==================== Connection Actions ====================
@@ -1509,19 +1580,18 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
 
     recordHistory(canvasData);
 
-    // Remove selected nodes and their connections
-    const nodesToRemove = new Set(selection.nodeIds);
+    const deletion = deleteCanvasSelection(canvasData.nodes, new Set(selection.nodeIds));
     const connectionsToRemove = new Set(selection.connectionIds);
 
     set({
       canvasData: {
         ...canvasData,
-        nodes: canvasData.nodes.filter((node) => !nodesToRemove.has(node.id)),
+        nodes: deletion.nodes,
         connections: canvasData.connections.filter(
           (conn) =>
             !connectionsToRemove.has(conn.id) &&
-            !nodesToRemove.has(conn.sourceId) &&
-            !nodesToRemove.has(conn.targetId),
+            !deletion.removedNodeIds.has(conn.sourceId) &&
+            !deletion.removedNodeIds.has(conn.targetId),
         ),
       },
       selection: { nodeIds: [], connectionIds: [] },

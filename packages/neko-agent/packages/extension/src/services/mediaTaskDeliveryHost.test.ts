@@ -6,7 +6,7 @@ import { MEDIA_TASK_OUTPUT_DIR_SETTING_KEY, type MediaTask } from '@neko/platfor
 vi.mock('vscode', async () => await import('../__mocks__/vscode'));
 
 describe('MediaTaskDeliveryHost', () => {
-  it('saves generated task outputs under the media-specific durable generated root by default', async () => {
+  it('keeps generated task outputs in the media-specific runtime cache by default', async () => {
     vscode.workspace.workspaceFolders = [
       { uri: vscode.Uri.file('/workspace/demo'), name: 'demo', index: 0 },
     ];
@@ -17,7 +17,7 @@ describe('MediaTaskDeliveryHost', () => {
     } as never);
     const saveOutputs = vi
       .fn()
-      .mockResolvedValue(['/workspace/demo/neko/generated/video/video.mp4']);
+      .mockResolvedValue(['/workspace/demo/.neko/.cache/generated/video/video.mp4']);
     const host = new MediaTaskDeliveryHost({
       platform: {
         media: {
@@ -37,13 +37,13 @@ describe('MediaTaskDeliveryHost', () => {
 
     expect(saveOutputs).toHaveBeenCalledWith(
       taskScope('task-1'),
-      '/workspace/demo/neko/generated/video',
+      '/workspace/demo/.neko/.cache/generated/video',
       expect.any(Object),
     );
-    expect(JSON.stringify(saveOutputs.mock.calls)).not.toContain('.neko/.cache/generated');
+    expect(JSON.stringify(saveOutputs.mock.calls)).not.toContain('/neko/generated/');
   });
 
-  it('saves completed image tasks under the generated image directory', async () => {
+  it('keeps completed image tasks under the generated runtime cache', async () => {
     vscode.workspace.workspaceFolders = [
       { uri: vscode.Uri.file('/workspace/demo'), name: 'demo', index: 0 },
     ];
@@ -54,7 +54,7 @@ describe('MediaTaskDeliveryHost', () => {
     } as never);
     const saveOutputs = vi
       .fn()
-      .mockResolvedValue(['/workspace/demo/neko/generated/image/task-1_0.png']);
+      .mockResolvedValue(['/workspace/demo/.neko/.cache/generated/image/task-1_0.png']);
     const host = new MediaTaskDeliveryHost({
       platform: {
         media: {
@@ -74,7 +74,7 @@ describe('MediaTaskDeliveryHost', () => {
 
     expect(saveOutputs).toHaveBeenCalledWith(
       taskScope('task-1'),
-      '/workspace/demo/neko/generated/image',
+      '/workspace/demo/.neko/.cache/generated/image',
       expect.any(Object),
     );
   });
@@ -85,7 +85,7 @@ describe('MediaTaskDeliveryHost', () => {
     ];
     const saveOutputs = vi
       .fn()
-      .mockResolvedValue(['/workspace/demo/neko/generated/image/task-1_0.png']);
+      .mockResolvedValue(['/workspace/demo/.neko/.cache/generated/image/task-1_0.png']);
     const host = new MediaTaskDeliveryHost({
       platform: { media: { saveOutputs } } as never,
       localResourceAccess: {
@@ -99,8 +99,8 @@ describe('MediaTaskDeliveryHost', () => {
 
     for (const configured of [
       '/workspace/demo/generated',
+      '/workspace/demo/neko/generated',
       '/workspace/demo/.neko/generated',
-      '/workspace/demo/.neko/.cache/generated',
       '/workspace/demo/neko/boards/story-media',
     ]) {
       vi.mocked(vscode.workspace.getConfiguration).mockReturnValue({
@@ -116,7 +116,7 @@ describe('MediaTaskDeliveryHost', () => {
 
     expect(saveOutputs).toHaveBeenCalledTimes(4);
     for (const call of saveOutputs.mock.calls) {
-      expect(call[1]).toBe('/workspace/demo/neko/generated/image');
+      expect(call[1]).toBe('/workspace/demo/.neko/.cache/generated/image');
     }
   });
 });

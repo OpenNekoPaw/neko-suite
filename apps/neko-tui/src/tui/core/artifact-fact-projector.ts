@@ -2,7 +2,9 @@ import { createHash } from 'node:crypto';
 import {
   validateCompositeArtifact,
   validateDurableResourceRef,
+  isResourceRef,
   type ResourceRef,
+  type Task,
   type ToolResultArtifactTransfer,
   type ToolResultAttachment,
 } from '@neko/shared';
@@ -24,6 +26,53 @@ export function projectToolResultArtifactFacts(
       projectArtifactTransfer(artifact, toolCallId, result.success),
     ),
   ];
+}
+
+export function projectTaskOutputArtifactFacts(
+  tasks: readonly Task[],
+): readonly TerminalArtifactFact[] {
+  return tasks.flatMap((task) => {
+    const assets = readTaskOutputAssets(task);
+    return assets.flatMap((asset) => {
+      const resource = asset['resourceRef'];
+      if (!isResourceRef(resource)) return [];
+      const validation = validateDurableResourceRef(resource);
+      const metadata = resource.source.metadata;
+      const digest =
+        readString(metadata, 'contentDigest') ??
+        (resource.fingerprint.strategy === 'hash' ? resource.fingerprint.value : undefined);
+      const revision = readString(metadata, 'revision');
+      return [{
+        ref: resource.id,
+        kind: resource.source.kind === 'generated-asset' ? 'generated-asset' : 'resource-ref',
+        ...(digest ? { digest } : {}),
+        ...(revision ? { revision } : {}),
+        provenance: {
+          source: resource.source.kind,
+          taskId: task.id,
+          providerId: resource.provider,
+        },
+        deliveryStatus: task.status === 'completed' ? 'delivered' : 'failed',
+        validator: { id: 'durable-resource-ref', status: validation.ok ? 'valid' : 'invalid' },
+        diagnostics: validation.diagnostics.map((item) => ({
+          code: item.code,
+          severity: item.severity,
+          message: item.message,
+        })),
+      } satisfies TerminalArtifactFact];
+    });
+  });
+}
+
+function readTaskOutputAssets(task: Task): readonly Record<string, unknown>[] {
+  const data = task.output?.data;
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return [];
+  const assets = Object.entries(data).find(([key]) => key === 'assets')?.[1];
+  if (!Array.isArray(assets)) return [];
+  return assets.filter(
+    (asset): asset is Record<string, unknown> =>
+      typeof asset === 'object' && asset !== null && !Array.isArray(asset),
+  );
 }
 
 function projectAttachment(

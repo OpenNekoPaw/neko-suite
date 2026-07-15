@@ -74,6 +74,11 @@ import type { DocumentArchiveResourceRef } from './document-reading';
 import type { SkillCatalogMeta } from './skill';
 import type { ProjectSearchVisualResource } from './project-cache-search';
 import type { ResourceRef, ResourceVariantRequest } from './resource-cache';
+import type {
+  CanvasGeneratedDraftMediaKind,
+  CanvasGeneratedDraftPromotionRequest,
+  CanvasGeneratedDraftPromotionResult,
+} from './canvas-generated-draft-groups';
 
 export interface NekoDisposableLike {
   dispose(): void;
@@ -961,6 +966,27 @@ export type { NekoModelAPI };
 // NekoAssets API
 // =============================================================================
 
+/** Extension-host source evidence for one generated candidate promotion. */
+export interface NekoAssetsGeneratedCandidateSource {
+  readonly candidateId: string;
+  readonly title: string;
+  readonly mediaKind: CanvasGeneratedDraftMediaKind;
+  readonly mimeType: string;
+  readonly revision: string;
+  readonly contentDigest: string;
+  /** Host-local source path. This value must never be projected to a Webview or persisted. */
+  readonly sourcePath: string;
+  readonly taskId: string;
+  readonly runId?: string;
+  readonly provider?: string;
+  readonly prompt?: string;
+}
+
+export interface NekoAssetsGeneratedCandidatePromotionInput {
+  readonly request: CanvasGeneratedDraftPromotionRequest;
+  readonly sources: readonly NekoAssetsGeneratedCandidateSource[];
+}
+
 /**
  * NekoAssets Extension API
  * Exported by neko-assets extension for programmatic asset library access.
@@ -972,9 +998,17 @@ export interface NekoAssetsAPI {
 
   /**
    * Import a file into the asset library.
-   * Returns the newly created entity, or undefined on failure.
+   * Returns the created/existing entity and rejects visibly on unavailable source or import failure.
    */
-  importFile(uri: { fsPath: string }): Promise<import('./asset/entity').AssetEntity | undefined>;
+  importFile(uri: { fsPath: string }): Promise<import('./asset/entity').AssetEntity>;
+
+  /**
+   * Promote selected generated candidates into AssetLibrary ownership.
+   * The caller resolves Host-local source paths; this API validates and materializes them.
+   */
+  promoteGeneratedCandidates(
+    input: NekoAssetsGeneratedCandidatePromotionInput,
+  ): Promise<CanvasGeneratedDraftPromotionResult>;
 
   /** Get the thumbnail file path for a given asset file path. */
   getThumbnailPath(filePath: string): Promise<string | undefined>;
@@ -1040,6 +1074,37 @@ export interface NekoAssetsAPI {
 
   /** Fired when media library roots are added, removed, disabled, or overridden. */
   onDidChangeMediaLibraryRoots: { (listener: () => void): { dispose(): void } };
+}
+
+// =============================================================================
+// NekoAgent API
+// =============================================================================
+
+export type NekoAgentGeneratedOutputResolution =
+  | {
+      readonly status: 'ready';
+      readonly assetId: string;
+      readonly revision: string;
+      readonly contentDigest: string;
+      readonly mediaKind: import('./generated-asset').GeneratedAssetMediaKind;
+      readonly mimeType: string;
+      readonly taskId: string;
+      readonly runId?: string;
+      /** Extension-host path. This value must never be projected to a Webview or persisted. */
+      readonly sourcePath: string;
+    }
+  | {
+      readonly status: 'unavailable';
+      readonly diagnostic: string;
+    };
+
+/** Public Extension Host facade for Agent-owned generated-output lifecycle state. */
+export interface NekoAgentAPI extends ISkillProvider {
+  resolveGeneratedOutput(resourceRef: ResourceRef): Promise<NekoAgentGeneratedOutputResolution>;
+  setGeneratedOutputReviewPin(
+    resourceRef: ResourceRef,
+    input: { readonly pinned: boolean; readonly ownerId: string },
+  ): Promise<void>;
 }
 
 // =============================================================================

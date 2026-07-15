@@ -10,6 +10,8 @@ export async function runStep(step, context) {
       return waitForState(context.webview, step.selector, step.state, timeoutMs);
     case 'click':
       return clickElement(context.webview, step.selector);
+    case 'drag':
+      return dragElement(context.webview, step.selector, step.delta);
     case 'input':
       return inputValue(context.webview, step.selector, step.value);
     case 'select':
@@ -85,6 +87,13 @@ async function clickElement(session, selector) {
     return true;
   })()`);
   return { interacted: true };
+}
+
+async function dragElement(session, selector, delta) {
+  const target = await resolveInteractionTarget(session, selector);
+  const destination = { x: target.x + delta.x, y: target.y + delta.y };
+  await session.dispatchDrag(target, destination);
+  return { interacted: true, origin: target, destination };
 }
 
 async function inputValue(session, selector, value) {

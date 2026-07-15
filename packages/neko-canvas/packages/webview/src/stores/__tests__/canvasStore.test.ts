@@ -4,6 +4,8 @@ import {
   isSceneGroupNode,
   isShotNode,
   type CanvasData,
+  type AnnotationCanvasNode,
+  type GroupCanvasNode,
   type SceneGroupCanvasNode,
   type ShotCanvasNode,
 } from '@neko/shared';
@@ -48,6 +50,42 @@ function createShotNode(id: string, x: number, y: number): ShotCanvasNode {
       generationStatus: 'idle',
       generationHistory: [],
     },
+  };
+}
+
+function createGroupNode(
+  id: string,
+  childIds: string[],
+  x = 0,
+  y = 0,
+  width = 500,
+  height = 400,
+): GroupCanvasNode {
+  return {
+    id,
+    type: 'group',
+    position: { x, y },
+    size: { width, height },
+    zIndex: 0,
+    container: { policy: 'group', childIds, deleteBehavior: 'release-children' },
+    data: { label: id },
+  };
+}
+
+function createAnnotationNode(
+  id: string,
+  parentId: string,
+  x: number,
+  y: number,
+): AnnotationCanvasNode {
+  return {
+    id,
+    type: 'annotation',
+    parentId,
+    position: { x, y },
+    size: { width: 120, height: 80 },
+    zIndex: 1,
+    data: { content: id },
   };
 }
 
@@ -385,6 +423,136 @@ describe('canvasStore scene container actions', () => {
     expect(releasedShot?.parentId).toBeUndefined();
   });
 
+  it('moves a spatial Group and every nested descendant by exactly one delta', () => {
+    useCanvasStore
+      .getState()
+      .setCanvasData(
+        createCanvasData([
+          createGroupNode('outer', ['inner']),
+          { ...createGroupNode('inner', ['child'], 20, 80, 180, 160), parentId: 'outer' },
+          createAnnotationNode('child', 'inner', 50, 140),
+        ]),
+      );
+
+    useCanvasStore.getState().moveNodeEnd('outer', { x: 100, y: 50 });
+
+    const nodes = useCanvasStore.getState().canvasData?.nodes ?? [];
+    expect(nodes.find((node) => node.id === 'outer')?.position).toEqual({ x: 100, y: 50 });
+    expect(nodes.find((node) => node.id === 'inner')?.position).toEqual({ x: 120, y: 130 });
+    expect(nodes.find((node) => node.id === 'child')?.position).toEqual({ x: 150, y: 190 });
+    expect(useHistoryStore.getState().undoStack).toHaveLength(1);
+  });
+
+  it('moves one child without moving siblings or reflowing manual positions on ordinary updates', () => {
+    useCanvasStore
+      .getState()
+      .setCanvasData(
+        createCanvasData([
+          createGroupNode('group', ['a', 'b']),
+          createAnnotationNode('a', 'group', 40, 100),
+          createAnnotationNode('b', 'group', 240, 100),
+        ]),
+      );
+
+    useCanvasStore.getState().moveNodeEnd('a', { x: 80, y: 160 });
+    useCanvasStore.getState().updateNodeData('a', { content: 'updated' });
+
+    const nodes = useCanvasStore.getState().canvasData?.nodes ?? [];
+    expect(nodes.find((node) => node.id === 'a')?.position).toEqual({ x: 80, y: 160 });
+    expect(nodes.find((node) => node.id === 'b')?.position).toEqual({ x: 240, y: 100 });
+  });
+
+  it('preserves exact spatial geometry across collapse and expand', () => {
+    useCanvasStore
+      .getState()
+      .setCanvasData(
+        createCanvasData([
+          createGroupNode('group', ['child']),
+          createAnnotationNode('child', 'group', 80, 140),
+        ]),
+      );
+    const before = structuredClone(useCanvasStore.getState().canvasData?.nodes);
+
+    useCanvasStore.getState().setGroupCollapsed('group', true);
+    useCanvasStore.getState().setGroupCollapsed('group', false);
+
+    const after = useCanvasStore.getState().canvasData?.nodes;
+    expect(
+      after?.map((node) => ({ id: node.id, position: node.position, size: node.size })),
+    ).toEqual(before?.map((node) => ({ id: node.id, position: node.position, size: node.size })));
+    expect(after?.find((node) => node.id === 'group')?.container?.collapsed).toBe(false);
+    expect(useHistoryStore.getState().undoStack).toHaveLength(2);
+  });
+
+  it('records exactly one history entry for each arrange, fit, resize, and collapse action', () => {
+    useCanvasStore
+      .getState()
+      .setCanvasData(
+        createCanvasData([
+          createGroupNode('group', ['b', 'a'], 0, 0, 900, 700),
+          createAnnotationNode('a', 'group', 500, 400),
+          createAnnotationNode('b', 'group', 300, 300),
+        ]),
+      );
+
+    useCanvasStore.getState().arrangeGroup('group', 'name');
+    expect(useHistoryStore.getState().undoStack).toHaveLength(1);
+
+    useCanvasStore.getState().fitGroupToContent('group');
+    expect(useHistoryStore.getState().undoStack).toHaveLength(2);
+
+    const fitted = useCanvasStore.getState().canvasData?.nodes.find((node) => node.id === 'group');
+    if (!fitted) throw new Error('Missing fitted Group');
+    useCanvasStore
+      .getState()
+      .resizeNodeEnd(
+        'group',
+        { width: fitted.size.width + 100, height: fitted.size.height + 100 },
+        fitted.position,
+      );
+    expect(useHistoryStore.getState().undoStack).toHaveLength(3);
+
+    useCanvasStore.getState().setGroupCollapsed('group', true);
+    expect(useHistoryStore.getState().undoStack).toHaveLength(4);
+    useCanvasStore.getState().setGroupCollapsed('group', true);
+    expect(useHistoryStore.getState().undoStack).toHaveLength(4);
+  });
+
+  it('deletes selected containers according to release-children and delete-subtree policies', () => {
+    useCanvasStore.getState().setCanvasData(
+      createCanvasData([
+        createGroupNode('group', ['released']),
+        createAnnotationNode('released', 'group', 40, 100),
+        {
+          id: 'gallery',
+          type: 'gallery',
+          position: { x: 600, y: 0 },
+          size: { width: 400, height: 320 },
+          zIndex: 0,
+          container: { policy: 'gallery', childIds: ['deleted'], deleteBehavior: 'delete-subtree' },
+          data: { preset: 'custom', rows: 1, cols: 1 },
+        },
+        {
+          id: 'deleted',
+          type: 'media',
+          parentId: 'gallery',
+          position: { x: 640, y: 100 },
+          size: { width: 120, height: 80 },
+          zIndex: 1,
+          data: { assetPath: 'neko/assets/files/image/deleted.png', mediaType: 'image' },
+        },
+      ]),
+    );
+
+    useCanvasStore.getState().selectNodes(['group', 'gallery']);
+    useCanvasStore.getState().deleteSelected();
+
+    const nodes = useCanvasStore.getState().canvasData?.nodes ?? [];
+    expect(nodes.map((node) => node.id)).toEqual(['released']);
+    expect(nodes[0]?.parentId).toBeUndefined();
+    expect(useHistoryStore.getState().undoStack).toHaveLength(1);
+  });
+
   it('releases a child from a non-gallery container without deleting child connections', () => {
     useCanvasStore.getState().setCanvasData({
       ...createCanvasData([
@@ -537,6 +705,47 @@ describe('canvasStore scene container actions', () => {
     expect(state?.connections).toEqual([
       createConnection('child-link', 'shot-1', 'shot-2', 'reference'),
     ]);
+  });
+
+  it('removes Canvas Group organization without deleting Asset-backed child identity', () => {
+    const promotedAsset = {
+      entityId: 'asset:entity:1',
+      variantId: 'asset:variant:1',
+      fileId: 'asset:file:1',
+      path: 'neko/assets/files/image/concept.png',
+    };
+    useCanvasStore.getState().setCanvasData(
+      createCanvasData([
+        {
+          id: 'group-1',
+          type: 'group',
+          position: { x: 0, y: 0 },
+          size: { width: 400, height: 320 },
+          zIndex: 0,
+          container: { policy: 'group', childIds: ['media-1'], deleteBehavior: 'release-children' },
+          data: { label: 'Saved candidates' },
+        },
+        {
+          id: 'media-1',
+          type: 'media',
+          position: { x: 20, y: 60 },
+          size: { width: 200, height: 120 },
+          zIndex: 1,
+          parentId: 'group-1',
+          data: { assetPath: promotedAsset.path, promotedAsset },
+        } as CanvasData['nodes'][number],
+      ]),
+    );
+
+    useCanvasStore.getState().removeNode('group-1');
+
+    const remaining = useCanvasStore.getState().canvasData?.nodes;
+    expect(remaining).toHaveLength(1);
+    expect(remaining?.[0]).toMatchObject({
+      id: 'media-1',
+      data: expect.objectContaining({ promotedAsset }),
+    });
+    expect(remaining?.[0]?.parentId).toBeUndefined();
   });
 
   it('deletes delete-subtree containers with descendant connections', () => {

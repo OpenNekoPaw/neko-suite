@@ -178,6 +178,15 @@ export class CdpSession {
     });
   }
 
+  async dispatchDrag(origin, destination) {
+    const sequence = createMouseDragSequence(origin, destination);
+    for (const [index, params] of sequence.entries()) {
+      await this.send('Input.dispatchMouseEvent', params);
+      if (index === 0) await delay(50);
+      else if (params.type === 'mouseMoved') await delay(16);
+    }
+  }
+
   async focusFrame(frameId) {
     const owner = await this.send('DOM.getFrameOwner', { frameId });
     if (typeof owner.backendNodeId !== 'number') {
@@ -289,6 +298,38 @@ export function createKeyDispatchSequence(key) {
     { method: 'Input.dispatchKeyEvent', params: { type: 'keyDown', ...keyIdentity } },
     { method: 'Input.dispatchKeyEvent', params: { type: 'keyUp', ...keyIdentity } },
   ];
+}
+
+export function createMouseDragSequence(origin, destination, steps = 8) {
+  const sequence = [
+    {
+      type: 'mousePressed',
+      x: origin.x,
+      y: origin.y,
+      button: 'left',
+      buttons: 1,
+      clickCount: 1,
+    },
+  ];
+  for (let step = 1; step <= steps; step += 1) {
+    const progress = step / steps;
+    sequence.push({
+      type: 'mouseMoved',
+      x: origin.x + (destination.x - origin.x) * progress,
+      y: origin.y + (destination.y - origin.y) * progress,
+      button: 'left',
+      buttons: 1,
+    });
+  }
+  sequence.push({
+    type: 'mouseReleased',
+    x: destination.x,
+    y: destination.y,
+    button: 'left',
+    buttons: 0,
+    clickCount: 1,
+  });
+  return sequence;
 }
 
 export function selectWebviewContentFrameId(frameTree) {

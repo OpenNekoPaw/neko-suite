@@ -24,6 +24,7 @@ export function NodeShell({ section, context, isCollapsed, onToggleCollapse }: N
 
   const { node } = context;
   const descriptor = context.nodeTypeDescriptors?.[node.type] ?? descriptors[node.type];
+  const presentation = descriptor?.presentation ?? 'structured';
   const preview = node.preview;
 
   const tagLabel = descriptor?.tagLabel ?? node.type.toUpperCase();
@@ -62,6 +63,7 @@ export function NodeShell({ section, context, isCollapsed, onToggleCollapse }: N
       className="flex h-full min-h-0 min-w-0 flex-col"
       data-node-density={context.layout.density}
       data-node-overflow={context.layout.overflow}
+      data-node-shell-presentation={presentation}
     >
       <NodeHeader
         tagLabel={tagLabel}
@@ -73,15 +75,18 @@ export function NodeShell({ section, context, isCollapsed, onToggleCollapse }: N
         onToggleCollapse={onToggleCollapse}
         onOpenPreview={assetInfo ? handleOpenPreview : undefined}
         onExpand={() => openContentOverlay(node.id)}
+        presentation={presentation}
       />
       {!isCollapsed && (
         <div className={bodyClassName} data-node-drag-block="true">
-          <ContainerActionBar
-            node={node}
-            allNodes={context.allNodes}
-            selectedNodeIds={context.selectedNodeIds}
-            isSelected={context.isSelected}
-          />
+          {presentation === 'structured' && (
+            <ContainerActionBar
+              node={node}
+              allNodes={context.allNodes}
+              selectedNodeIds={context.selectedNodeIds}
+              isSelected={context.isSelected}
+            />
+          )}
           {controlSections.length > 0 && (
             <div style={{ borderBottom: '1px solid var(--node-divider)' }}>
               {controlSections.map((s) => (

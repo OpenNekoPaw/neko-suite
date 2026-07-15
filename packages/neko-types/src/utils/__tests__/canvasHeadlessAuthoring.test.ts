@@ -163,6 +163,35 @@ describe('canvasHeadlessAuthoring planner', () => {
     ]);
   });
 
+  it('replays a stable composite id without duplicating its Group or children', () => {
+    const request = {
+      containerId: 'asset-group:task-1',
+      containerType: 'group' as const,
+      position: { x: 100, y: 100 },
+      data: { label: 'Saved candidates' },
+      children: [
+        {
+          id: 'asset-node:entity-1',
+          type: 'media' as const,
+          data: { mediaType: 'image', assetPath: 'neko/assets/files/image/concept.png' },
+        },
+      ],
+    };
+    const created = planCanvasCompositeCreation(
+      { canvasData: emptyCanvas(), generateId: ids() },
+      request,
+    );
+    const replayed = planCanvasCompositeCreation(
+      { canvasData: created.canvasData, generateId: ids() },
+      request,
+    );
+
+    expect(created.canvasData.nodes).toHaveLength(2);
+    expect(replayed.canvasData.nodes).toEqual(created.canvasData.nodes);
+    expect(replayed.batch.operations).toEqual([]);
+    expect(replayed.result).toEqual(created.result);
+  });
+
   it('plans deterministic storyboard scene and shot nodes with prompt-first shot data', () => {
     const plan = planCanvasStoryboardSceneShotCreation(
       { canvasData: emptyCanvas() },
@@ -273,6 +302,85 @@ describe('canvasHeadlessAuthoring planner', () => {
         },
       ),
     ).toThrow(/runtime-only-resource-identity/);
+  });
+
+  it('rejects runtime projection ids and unpromoted generated refs from durable nodes', () => {
+    const generatedRef = createResourceRef({
+      scope: 'project',
+      provider: 'generated-output',
+      kind: 'generated',
+      source: { kind: 'generated-asset', generatedAssetId: 'generated-output:1' },
+      locator: { kind: 'generated-asset', assetId: 'generated-output:1' },
+      fingerprint: createResourceFingerprint({ strategy: 'hash', value: 'sha256:draft' }),
+    });
+
+    expect(
+      validateCanvasDurableResourceIdentity({
+        groupId: 'runtime:canvas-generated-group:task:1',
+        candidateId: 'runtime:canvas-generated-candidate:output:1',
+        resourceRef: generatedRef,
+      }).map(({ code }) => code),
+    ).toEqual([
+      'runtime-only-resource-identity',
+      'runtime-only-resource-identity',
+      'unpromoted-generated-resource-identity',
+    ]);
+
+    expect(() =>
+      planCanvasNodeCreation(
+        { canvasData: emptyCanvas(), generateId: ids() },
+        {
+          type: 'media',
+          data: {
+            mediaType: 'image',
+            resourceRef: generatedRef,
+          },
+        },
+      ),
+    ).toThrow(/unpromoted-generated-resource-identity/);
+  });
+
+  it('accepts stable Asset refs and portable legacy generated-source file refs', () => {
+    const assetRef = createResourceRef({
+      scope: 'project',
+      provider: 'media-library',
+      kind: 'media',
+      source: {
+        kind: 'media-library',
+        mediaLibraryId: 'asset:entity:1',
+        projectRelativePath: 'neko/assets/concept.png',
+      },
+      locator: { kind: 'file', path: 'neko/assets/concept.png' },
+      fingerprint: createResourceFingerprint({ strategy: 'hash', value: 'sha256:asset' }),
+    });
+    const legacyGeneratedSourceRef = createResourceRef({
+      scope: 'project',
+      provider: 'workspace',
+      kind: 'media',
+      source: {
+        kind: 'file',
+        projectRelativePath: 'neko/generated/image/legacy-concept.png',
+      },
+      locator: { kind: 'file', path: 'neko/generated/image/legacy-concept.png' },
+      fingerprint: createResourceFingerprint({ strategy: 'hash', value: 'sha256:legacy' }),
+    });
+
+    expect(validateCanvasDurableResourceIdentity({ assetRef, legacyGeneratedSourceRef })).toEqual(
+      [],
+    );
+    expect(
+      planCanvasNodeCreation(
+        { canvasData: emptyCanvas(), generateId: ids() },
+        {
+          type: 'media',
+          data: {
+            mediaType: 'image',
+            resourceRef: assetRef,
+            legacyGeneratedSourceRef,
+          },
+        },
+      ).result.node,
+    ).toMatchObject({ type: 'media' });
   });
 
   it('applies Agent content through pure headless Canvas data operations', () => {

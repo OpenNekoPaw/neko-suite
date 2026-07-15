@@ -36,6 +36,22 @@ describe('webview functional scenario contract', () => {
     );
   });
 
+  it('accepts a bounded declarative drag and rejects missing or empty deltas', () => {
+    const scenario = createScenario();
+    scenario.steps[0] = {
+      id: 'drag-node',
+      operation: 'drag',
+      selector: { testId: 'canvas-node' },
+      delta: { x: 80, y: -20 },
+    };
+    assert.deepEqual(validateScenario(scenario).steps[0].delta, { x: 80, y: -20 });
+
+    delete scenario.steps[0].delta;
+    assert.throws(() => validateScenario(scenario), /delta must be an object/u);
+    scenario.steps[0].delta = { x: 0, y: 0 };
+    assert.throws(() => validateScenario(scenario), /must move the pointer/u);
+  });
+
   it('rejects target-only smoke as functional acceptance', () => {
     const scenario = createScenario();
     scenario.assertions = [

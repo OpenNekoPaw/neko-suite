@@ -24,6 +24,7 @@ import type { NodeSize } from '../../utils/nodeSizing';
 import clsx from 'clsx';
 import { toCodiconClassName, type CodiconName } from '@neko/ui/icons';
 import { t } from '../../i18n';
+import type { NodePresentation } from './nodeTypeDescriptor';
 
 // =============================================================================
 // Types
@@ -78,6 +79,9 @@ export interface BaseNodeProps {
   minSize?: NodeSize;
   /** Optional visual-only height override. Does not change persisted node.size. */
   renderHeight?: number;
+  presentation?: NodePresentation;
+  renderZIndex?: number;
+  onActivate?: (nodeId: string) => void;
 }
 
 type AnchorPosition = 'top' | 'right' | 'bottom' | 'left';
@@ -251,6 +255,9 @@ export function BaseNode({
   autoSizeContent = true,
   minSize,
   renderHeight,
+  presentation = 'structured',
+  renderZIndex,
+  onActivate,
 }: BaseNodeProps) {
   const activePlayingNodeId = useCanvasStore((state) => state.activePlayingNodeId);
   const isPlaybackActive = activePlayingNodeId === node.id;
@@ -433,6 +440,9 @@ export function BaseNode({
   return (
     <div
       data-node-id={node.id}
+      data-node-presentation={presentation}
+      data-node-selected={isSelected ? 'true' : 'false'}
+      data-node-locked={node.locked ? 'true' : undefined}
       data-playback-active={isPlaybackActive ? 'true' : undefined}
       {...getKeyboardBoundaryMetadata({
         scope: 'node',
@@ -452,18 +462,33 @@ export function BaseNode({
         top: currentPosition.y,
         width: displaySize.width,
         height: displaySize.height,
-        zIndex: isDragging || isResizing || isRotating ? 1000 : node.zIndex,
+        zIndex: isDragging || isResizing || isRotating ? 1000 : (renderZIndex ?? node.zIndex),
         transform: currentRotation ? `rotate(${currentRotation}deg)` : undefined,
         transformOrigin: 'center center',
       }}
       onMouseDown={dragHandlers.onMouseDown}
       onClick={handleClick}
+      onDoubleClick={(event) => {
+        event.stopPropagation();
+        onActivate?.(node.id);
+      }}
+      onKeyDown={(event) => {
+        if (event.target !== event.currentTarget) return;
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          onSelect?.(node.id, event.shiftKey || event.metaKey);
+        }
+      }}
+      tabIndex={0}
+      role="group"
+      aria-label={`${node.type} ${node.id}`}
     >
       {/* Node content */}
       <div
         ref={contentRef}
         className={clsx(
           'node-card w-full h-full overflow-hidden',
+          `node-card--${presentation}`,
           'transition-colors duration-150',
           (isSelected || isPlaybackActive) && 'selected',
           isPlaybackActive && !isSelected && 'ring-2 ring-[var(--node-selected)] ring-offset-2',

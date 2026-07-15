@@ -648,6 +648,76 @@ describe('createTuiAutomationAppPort', () => {
     ]);
   });
 
+  it('collects revision-bound generated-output facts from completed media tasks', async () => {
+    const port = createTuiAutomationAppPort({
+      stores: runtime.conversation.stores,
+      readHandle: () => ({
+        isReady: true,
+        submit: async () => undefined,
+        cancel: () => undefined,
+        listTasks: async () => [
+          {
+            scope: {
+              conversationId: 'conversation-1',
+              runId: 'run-1',
+              parentRunId: 'run-1',
+              childRunId: 'task-1',
+              childKind: 'task' as const,
+            },
+            id: 'task-1',
+            type: 'image_generation' as const,
+            status: 'completed' as const,
+            input: { type: 'image_generation' as const, payload: {} },
+            output: {
+              data: {
+                assets: [
+                  {
+                    localPath: '/private/runtime/generated-1.png',
+                    resourceRef: {
+                      id: 'resource:generated-1:rev-1',
+                      scope: 'project' as const,
+                      provider: 'generated-asset',
+                      kind: 'generated' as const,
+                      source: {
+                        kind: 'generated-asset' as const,
+                        generatedAssetId: 'generated-1',
+                        metadata: { revision: 'rev-1', contentDigest: 'sha256:content' },
+                      },
+                      locator: { kind: 'generated-asset' as const, assetId: 'generated-1' },
+                      fingerprint: { strategy: 'hash' as const, value: 'sha256:content' },
+                    },
+                  },
+                ],
+              },
+            },
+            progress: 100,
+            createdAt: 1,
+            updatedAt: 2,
+          },
+        ],
+        getCurrentConversationId: () => 'conversation-1',
+        getHistory: () => [],
+        getMessageQueueSnapshot: () => null,
+        getConversationPersistenceSnapshot: memoryPersistenceSnapshot,
+      }),
+      readMarkdownFacts: () => ({ pathEvents: [], droppedPathEventCount: 0 }),
+    });
+
+    const facts = await port.readFacts({ sessionId: 'debug-session-1', includeHistory: false });
+
+    expect(facts.artifacts).toEqual([
+      expect.objectContaining({
+        ref: 'resource:generated-1:rev-1',
+        kind: 'generated-asset',
+        digest: 'sha256:content',
+        revision: 'rev-1',
+        provenance: expect.objectContaining({ taskId: 'task-1' }),
+        validator: { id: 'durable-resource-ref', status: 'valid' },
+      }),
+    ]);
+    expect(JSON.stringify(facts.artifacts)).not.toContain('/private/runtime');
+  });
+
   it('bounds fact collections and projects usage, timing, retry, and dropped counts', async () => {
     runtime.conversation.stores.conversation
       .getState()

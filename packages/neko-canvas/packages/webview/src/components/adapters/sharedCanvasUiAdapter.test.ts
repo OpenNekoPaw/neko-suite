@@ -47,6 +47,7 @@ describe('sharedCanvasUiAdapter', () => {
           tagLabel: 'TXT',
           tagColor: '#fff',
           defaultSize: { width: 100, height: 50 },
+          presentation: 'foundational',
         },
       },
       group,

@@ -55,6 +55,7 @@ const DRAG_BLOCK_SELECTOR = [
   '[role="textbox"]',
   '[data-node-drag-block="true"]',
 ].join(',');
+const DRAG_ALLOW_SELECTOR = '[data-node-drag-allow="true"]';
 
 export interface NodeDragStartDecision {
   readonly canStart: boolean;
@@ -103,7 +104,7 @@ export function getNodeDragStartDecision(event: MouseEvent): NodeDragStartDecisi
   if (!isElement(event.target)) {
     return { canStart: true, stopPropagation: false };
   }
-  if (event.target.closest(DRAG_BLOCK_SELECTOR)) {
+  if (event.target.closest(DRAG_BLOCK_SELECTOR) && !event.target.closest(DRAG_ALLOW_SELECTOR)) {
     return { canStart: false, stopPropagation: true };
   }
   if (isInsideScrollableScrollbar(event.target, event)) {

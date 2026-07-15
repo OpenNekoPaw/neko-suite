@@ -198,6 +198,7 @@ export * from './mediaEngine';
 export * from './canvas';
 export * from './canvas-creative-scope';
 export * from './canvas-board-routing';
+export * from './canvas-generated-draft-groups';
 export * from './canvas-playback';
 export * from './canvas-layered';
 export * from './canvas-serializable';

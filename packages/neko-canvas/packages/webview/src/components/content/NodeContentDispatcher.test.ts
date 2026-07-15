@@ -2027,7 +2027,7 @@ describe('NodeContentDispatcher', () => {
     expect(markup).not.toContain('Default path');
   });
 
-  it('renders group children as informative summary cards with remove actions', () => {
+  it('delegates manual Groups to the spatial renderer instead of the summary-card path', () => {
     const group = {
       ...buildCanvasNode({
         type: 'group',
@@ -2067,26 +2067,9 @@ describe('NodeContentDispatcher', () => {
       }),
     );
 
-    expect(markup).toContain('Review Group');
-    expect(markup).toContain('data-child-slot-id="group-children"');
-    expect(markup).toContain('data-child-slot-kind="group-summary"');
-    expect(markup).toContain('data-group-review-surface="true"');
-    expect(markup).toContain('data-group-review-mode="overview"');
-    expect(markup).toContain('Overview');
-    expect(markup).toContain('Type list');
-    expect(markup).toContain('data-child-slot-variant="row"');
-    expect(markup).toContain('data-child-slot-card-height="148"');
-    expect(markup).toContain('data-group-child-card-id="note-1"');
-    expect(markup).toContain('data-group-child-card-id="media-1"');
-    expect(markup).toContain('data-group-child-card-height="148px"');
-    expect(markup).toContain('Check the second beat before exporting.');
-    expect(markup).toContain('ref.png');
-    expect(markup).toContain('overflow-y-auto');
-    expect(markup).toContain('overflow-x-hidden');
-    expect(markup).toContain('Remove from group');
-    expect(markup).toContain('Detail');
-    expect(markup).not.toContain('Default path');
-    expect(markup).not.toContain('group-node');
+    expect(markup).toContain('Default path');
+    expect(markup).not.toContain('data-child-slot-id="group-children"');
+    expect(markup).not.toContain('data-group-review-surface="true"');
   });
 
   it('covers migrated core preset render parity surfaces', () => {
@@ -2206,14 +2189,16 @@ describe('NodeContentDispatcher', () => {
     expect(markup).not.toContain('data-content-block-id="gallery-global-prompt"');
     expect(markup).not.toContain('Character Profile');
     expect(markup).toContain('data-node-id="media-parity"');
+    expect(markup).toContain('data-node-id="media-parity" data-node-presentation="foundational"');
     expect(markup).toContain('data-content-block-id="media-asset-preview"');
-    expect(markup).toContain('data-node-id="group-parity"');
-    expect(markup).toContain('data-child-slot-id="group-children"');
+    expect(markup).not.toContain('data-group-review-surface="true"');
+    expect(markup).not.toContain('data-child-slot-id="group-children"');
     expect(markup).toContain('No children');
     expect(markup).toContain('data-node-id="project-parity"');
+    expect(markup).toContain('data-node-id="scene-parity" data-node-presentation="structured"');
     expect(markup).toContain('data-content-block-id="project-asset-preview"');
     expect(markup).toContain('Puppet');
-    expect(markup).not.toContain('Default path');
+    expect(markup).toContain('Default path');
   });
 });
 

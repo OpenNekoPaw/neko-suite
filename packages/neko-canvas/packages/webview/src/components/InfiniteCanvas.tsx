@@ -17,12 +17,15 @@ import { useViewportCulling } from '../hooks/useViewportCulling';
 import { useConnectionDrag } from '../hooks/useConnectionDrag';
 import { useMarqueeSelect } from '../hooks/useMarqueeSelect';
 import { useThrottledCanvasViewport } from '../hooks/useThrottledCanvasViewport';
-import { isNodeDrawnInsideContainer } from '../utils/canvasOrganization';
+import { projectCanvasNodeRenderPlan } from '../utils/canvasOrganization';
 import { createBuiltInWebviewSubsystemRegistry } from '../subsystems';
 import {
   resolveCanvasRenderRefreshDecision,
   type CanvasInteractionPhase,
 } from '../utils/renderRefreshTiering';
+import { SelectionContextToolbar } from './selection/SelectionContextToolbar';
+import { GeneratedDraftLayer } from './generated/GeneratedDraftLayer';
+import { resolveCanvasDropContainer } from '../utils/containerMembership';
 
 // =============================================================================
 // Types
@@ -136,10 +139,15 @@ export function InfiniteCanvas({
       webviewSubsystemRegistryRef.current.getCoreNodeTypeDescriptors(),
     );
   const [transformingNodeIds, setTransformingNodeIds] = useState<readonly string[]>([]);
+  const [dragPreview, setDragPreview] = useState<{
+    readonly nodeId: string;
+    readonly position: { readonly x: number; readonly y: number };
+  } | null>(null);
   const frozenVisibleNodeIdsRef = useRef<readonly string[] | null>(null);
   const activeSubsystemKey = webviewSubsystemRegistryRef.current
     .getActiveSubsystems({ nodes })
     .join('|');
+  const renderPlan = useMemo(() => projectCanvasNodeRenderPlan(nodes), [nodes]);
 
   // Viewport transform hook
   const { state: viewportState, handlers: viewportHandlers } = useViewportTransform({
@@ -171,7 +179,7 @@ export function InfiniteCanvas({
   } = useMarqueeSelect({
     viewport,
     containerRef: containerRef as React.RefObject<HTMLElement | null>,
-    nodes,
+    nodes: [...renderPlan.nodes],
     onSelect: onMarqueeSelect,
     enabled: !viewportState.isPanning && !isDraggingConnection && !isPanMode,
   });
@@ -198,16 +206,16 @@ export function InfiniteCanvas({
 
   // Viewport culling - 只渲染可见节点
   const { visibleNodes, culledCount, totalCount } = useViewportCulling({
-    nodes,
+    nodes: [...renderPlan.nodes],
     viewport: cullingViewport,
     containerWidth: containerSize.width,
     containerHeight: containerSize.height,
     enabled: enableCulling,
   });
-  const renderedNodes = useMemo(
-    () => visibleNodes.filter((node) => !isNodeDrawnInsideContainer(node)),
-    [visibleNodes],
-  );
+  const renderedNodes = useMemo(() => {
+    const visibleNodeIds = new Set(visibleNodes.map((node) => node.id));
+    return renderPlan.nodes.filter((node) => visibleNodeIds.has(node.id));
+  }, [renderPlan.nodes, visibleNodes]);
   const renderedNodeIds = useMemo(() => renderedNodes.map((node) => node.id), [renderedNodes]);
 
   useEffect(() => {
@@ -223,8 +231,13 @@ export function InfiniteCanvas({
     ? (frozenVisibleNodeIdsRef.current ?? renderedNodeIds)
     : renderedNodeIds;
   const expandedContainerIds = useMemo(
-    () => (expandedNodeId ? [expandedNodeId] : []),
-    [expandedNodeId],
+    () => [
+      ...renderPlan.expandedSpatialContainerIds,
+      ...(expandedNodeId && !renderPlan.expandedSpatialContainerIds.has(expandedNodeId)
+        ? [expandedNodeId]
+        : []),
+    ],
+    [expandedNodeId, renderPlan.expandedSpatialContainerIds],
   );
 
   const handleTransformStart = useCallback((nodeId: string) => {
@@ -235,7 +248,28 @@ export function InfiniteCanvas({
 
   const handleTransformEnd = useCallback((nodeId: string) => {
     setTransformingNodeIds((current) => current.filter((id) => id !== nodeId));
+    setDragPreview((current) => (current?.nodeId === nodeId ? null : current));
   }, []);
+
+  const handleNodeDrag = useCallback(
+    (nodeId: string, position: { x: number; y: number }) => setDragPreview({ nodeId, position }),
+    [],
+  );
+
+  const dropTargetPreview = useMemo(() => {
+    if (!dragPreview) return undefined;
+    const movedNodes = nodes.map((node) =>
+      node.id === dragPreview.nodeId ? { ...node, position: dragPreview.position } : node,
+    );
+    const movedNode = movedNodes.find((node) => node.id === dragPreview.nodeId);
+    if (!movedNode) return undefined;
+    const resolution = resolveCanvasDropContainer(movedNodes, movedNode.id, {
+      movingSubtree: Boolean(movedNode.container),
+    });
+    return resolution.targetContainerId
+      ? movedNodes.find((node) => node.id === resolution.targetContainerId)
+      : undefined;
+  }, [dragPreview, nodes]);
 
   const handleNodeMoveEnd = useCallback(
     (nodeId: string, position: { x: number; y: number }) => {
@@ -411,6 +445,21 @@ export function InfiniteCanvas({
           }
         />
 
+        <GeneratedDraftLayer viewport={viewport} />
+
+        {dropTargetPreview && (
+          <div
+            className="canvas-drop-target-preview"
+            data-canvas-drop-target-preview={dropTargetPreview.id}
+            style={{
+              left: dropTargetPreview.position.x,
+              top: dropTargetPreview.position.y,
+              width: dropTargetPreview.size.width,
+              height: dropTargetPreview.size.height,
+            }}
+          />
+        )}
+
         {/* Node layer - 使用裁剪后的可见节点; container-managed children are summarized by containers */}
         {renderedNodes.map((node) => {
           const isSelected = selectedNodeIds.includes(node.id);
@@ -423,6 +472,7 @@ export function InfiniteCanvas({
             containerRef: containerRef as React.RefObject<HTMLElement | null>,
             onSelect: onNodeSelect,
             onTransformStart: handleTransformStart,
+            onDrag: handleNodeDrag,
             onMove: handleNodeMoveEnd,
             onResizeEnd: handleNodeResizeEnd,
             onRotateEnd: handleNodeRotateEnd,
@@ -444,6 +494,14 @@ export function InfiniteCanvas({
           });
         })}
       </CanvasViewport>
+
+      <SelectionContextToolbar
+        nodes={nodes}
+        selectedNodeIds={selectedNodeIds}
+        viewport={viewport}
+        viewportSize={containerSize}
+        hidden={transformingNodeIds.length > 0 || isMarqueeSelecting}
+      />
 
       {/* Marquee selection rectangle */}
       {marqueeRect && (

@@ -20,6 +20,7 @@
 - **核心功能**：富文本编辑、分组管理、连接标签、图层面板、画板导出（PNG/SVG）、原地粘贴、分镜候选审阅、场景容器排序、输入引用节点投放
 - **布局**：Webview 使用 Creative Workbench Shell：左侧 CanvasToolbar 承接 Pan/Add/Import/Undo/Redo 等全局画布工具，底部显隐组承接 HUD（MiniMap/ZoomControls）与右侧 NodeLibrary 显隐；FloatingPanelHost、PlaybackControllerHost、GenerationPromptPanel、ContentOverlay 保留为主面板控件或 overlay；NodeLibrary 作为右侧创建面板。
 - **Basic 目录**：默认只展示 Media、Annotation、Group、Text、Artboard、Script、Document 等基础入口；Storyboard/Table/Scene/Shot/Gallery、timeline/workflow 和专业子系统入口仅在显式 Professional 路径出现。Basic 不改变 `.nkc` schema，也不隐藏文件中已有的专业节点。
+- **基础展示**：基础内容节点按 descriptor 使用名称加内容的 low-chrome shell；专业节点保持 structured renderer。普通 Group 是半透明空间容器，真实后代继续使用绝对 Canvas 坐标。
 - **状态显示**：subsystem summary 与 projection state 由 Extension 侧 CanvasStatusBar 显示，Webview 不再在无限画布左下角渲染状态徽章。
 - **已落地 AI / 编排能力**：GenerationPromptPanel、BatchGenerationScheduler、ScriptNode TOC、Document/Model/CanvasEmbed 引用、`CanvasProjectAuthoringService` 无 UI `.nkc` 写入路径、`NekoCanvasAPI.importAsset()` 无 UI media 节点导入、`NekoCanvasAPI.storyboard.import()` 内部 API、Canvas Markdown lifecycle capability（`canvas.ingestMarkdown` review-only、`canvas.createStoryboardFromMarkdown` 生产 scene/shot 创建）、`NekoCanvasAPI.storyboard.getExecutionSummary()` 只读执行摘要
 
@@ -82,7 +83,7 @@ Webview 端通过 `canvasOperationStore` 作为运行时桥接层生成 `EditOpe
 
 `NekoCanvasAPI.boards` 是 Agent 的公共 Board 路由边界：Canvas 拥有 `neko/boards/` 的安全索引、确定性解析和 revision-checked delivery。解析顺序为显式目标、有效会话绑定、唯一精确 scope 匹配、创建新 Board。Agent 不读取原始 `.nkc`，也不能退回活动/最近/专业目录 Canvas。Markdown 使用普通 Text/Markdown 内容；文件引用使用支持稳定 `ResourceRef` 的 DocumentNode；图片、音频和视频使用 MediaNode。所有重放按 provenance/artifact identity 幂等。
 
-Board 引用生成媒体时，文件仍在 `neko/generated/<kind>/`；`.nkc` 不保存 cache/render URI，也不会因为引用而自动创建 Asset Library membership。
+未提升生成媒体不会直接写入 Board，而由 Canvas Extension 投影成 runtime review Group。Save to Assets 通过 AssetLibrary/AssetStore 提升后，使用稳定 Asset identity 向冻结 Board revision 写入普通 Group 和 Asset-backed children；`.nkc` 不保存 runtime Group ID、generated-output ref、cache/render URI。`neko/generated/<kind>/` 仅保留历史读取与显式导入。
 
 ### 分镜系统（现状）
 

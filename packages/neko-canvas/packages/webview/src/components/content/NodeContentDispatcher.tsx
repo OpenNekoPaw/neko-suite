@@ -17,6 +17,7 @@ import {
 import type { CanvasNodeDraft } from '../../utils/canvasPresetRegistry';
 import { useCanvasStore } from '../../stores/canvasStore';
 import { clampNodeSize, resolveNodeMinSize } from '../../utils/nodeSizing';
+import { createBuiltInNodeTypeDescriptors } from '../nodes/nodeTypeDescriptors';
 
 export type DefaultNodeRenderer = (context: NodeRendererContext) => React.ReactNode;
 
@@ -26,6 +27,7 @@ export interface NodeContentDispatcherProps {
 }
 
 const PRESET_REGISTRY = createBuiltInCanvasNodePresetRegistry();
+const NODE_TYPE_DESCRIPTORS = createBuiltInNodeTypeDescriptors();
 const COLLAPSED_NODE_RENDER_HEIGHT = 42;
 const SHOT_CANVAS_REVIEW_CONTENT: ContainerSection = {
   id: 'shot-canvas-review-root',
@@ -62,6 +64,9 @@ function resolveCanvasRenderContent(
   node: CanvasNode,
   content: ContainerSection | undefined,
 ): ContainerSection | undefined {
+  if (node.type === 'group') {
+    return undefined;
+  }
   if (node.type === 'shot') {
     return SHOT_CANVAS_REVIEW_CONTENT;
   }
@@ -78,6 +83,7 @@ function ComposableNodeContent({
   content: NonNullable<CanvasNode['content']>;
 }) {
   const updateNode = useCanvasStore((s) => s.updateNode);
+  const openContentOverlay = useCanvasStore((s) => s.openContentOverlay);
   const [isCollapsed, setIsCollapsed] = useState(() => node.container?.collapsed ?? false);
 
   useEffect(() => {
@@ -122,6 +128,10 @@ function ComposableNodeContent({
     onSelectNode: context.onSelect,
     onRemoveChild: context.onRemoveContainerChild,
   };
+  const presentation =
+    context.nodeTypeDescriptors?.[node.type]?.presentation ??
+    NODE_TYPE_DESCRIPTORS[node.type]?.presentation ??
+    'structured';
 
   return (
     <BaseNode
@@ -140,6 +150,8 @@ function ComposableNodeContent({
       onConnectionStart={context.onConnectionStart}
       autoSizeContent={false}
       renderHeight={isCollapsed ? COLLAPSED_NODE_RENDER_HEIGHT : undefined}
+      presentation={presentation}
+      onActivate={presentation === 'foundational' ? openContentOverlay : undefined}
     >
       <NodeShell
         section={content}

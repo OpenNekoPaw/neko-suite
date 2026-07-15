@@ -8,6 +8,7 @@ import {
   getDefaultConnectionOrderSyncMode,
   projectCanvasConnectionView,
 } from './connectionProjection';
+import { projectCanvasNodeRenderPlan } from './canvasOrganization';
 
 function node(
   id: string,
@@ -84,6 +85,40 @@ describe('connectionProjection', () => {
       targetVisibleNodeId: 'external',
       underlyingConnectionIds: ['child-external'],
       count: 1,
+    });
+  });
+
+  it('keeps expanded spatial child connections direct and projects collapsed children to Group bounds', () => {
+    const expandedGroup = container('group-1', ['child']);
+    const child = node('child', { parentId: 'group-1', position: { x: 40, y: 80 } });
+    const external = node('external', { position: { x: 500, y: 0 } });
+    const connectionValue = connection('child-external', 'child', 'external');
+    const expandedPlan = projectCanvasNodeRenderPlan([expandedGroup, child, external]);
+
+    const expanded = projectCanvasConnectionView({
+      nodes: [expandedGroup, child, external],
+      connections: [connectionValue],
+      visibleNodeIds: [...expandedPlan.renderedNodeIds],
+      expandedContainerIds: [...expandedPlan.expandedSpatialContainerIds],
+    });
+    expect(expanded.directConnections.map((view) => view.id)).toEqual(['child-external']);
+    expect(expanded.aggregateConnections).toHaveLength(0);
+
+    const collapsedGroup = {
+      ...expandedGroup,
+      container: { policy: 'group' as const, childIds: ['child'], collapsed: true },
+    };
+    const collapsedPlan = projectCanvasNodeRenderPlan([collapsedGroup, child, external]);
+    const collapsed = projectCanvasConnectionView({
+      nodes: [collapsedGroup, child, external],
+      connections: [connectionValue],
+      visibleNodeIds: [...collapsedPlan.renderedNodeIds],
+      expandedContainerIds: [...collapsedPlan.expandedSpatialContainerIds],
+    });
+    expect(collapsed.directConnections).toHaveLength(0);
+    expect(collapsed.aggregateConnections[0]).toMatchObject({
+      sourceVisibleNodeId: 'group-1',
+      targetVisibleNodeId: 'external',
     });
   });
 

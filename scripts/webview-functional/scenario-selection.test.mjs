@@ -10,6 +10,7 @@ describe('functional P0 scenario selection', () => {
         'scripts/webview-functional/scenarios/canvas/canvas-board-basic-professional.p0.scenario.json',
         'scripts/webview-functional/scenarios/canvas/canvas-edit-save-reopen.p0.scenario.json',
         'scripts/webview-functional/scenarios/canvas/canvas-invalid-project.p0.scenario.json',
+        'scripts/webview-functional/scenarios/canvas/canvas-spatial-groups.p0.scenario.json',
       ],
     );
   });
@@ -38,6 +39,7 @@ describe('functional P0 scenario selection', () => {
       'scripts/webview-functional/scenarios/canvas/canvas-board-basic-professional.p0.scenario.json',
       'scripts/webview-functional/scenarios/canvas/canvas-edit-save-reopen.p0.scenario.json',
       'scripts/webview-functional/scenarios/canvas/canvas-invalid-project.p0.scenario.json',
+      'scripts/webview-functional/scenarios/canvas/canvas-spatial-groups.p0.scenario.json',
       'scripts/webview-functional/scenarios/cut/cut-add-track-save-reopen.p0.scenario.json',
       'scripts/webview-functional/scenarios/cut/cut-engine-unavailable-authoring.p0.scenario.json',
       'scripts/webview-functional/scenarios/story/story-edit-diagnostic-save-reopen.p0.scenario.json',

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { projectToolResultArtifactFacts } from './artifact-fact-projector';
+import { projectTaskOutputArtifactFacts, projectToolResultArtifactFacts } from './artifact-fact-projector';
 
 describe('projectToolResultArtifactFacts', () => {
   it('projects durable generated ResourceRef identity, digest, revision, and provenance', () => {
@@ -141,5 +141,66 @@ describe('projectToolResultArtifactFacts', () => {
     });
     expect(JSON.stringify(fact)).not.toContain('market-version-must-not-project');
     expect(JSON.stringify(fact)).not.toContain('market-package-must-not-project');
+  });
+});
+
+describe('projectTaskOutputArtifactFacts', () => {
+  it('projects a revision-bound generated-output identity without exposing its local path', () => {
+    const [fact] = projectTaskOutputArtifactFacts([
+      {
+        scope: {
+          conversationId: 'conversation-1',
+          runId: 'run-1',
+          parentRunId: 'run-1',
+          childRunId: 'task-1',
+          childKind: 'task',
+        },
+        id: 'task-1',
+        type: 'image_generation',
+        status: 'completed',
+        input: { type: 'image_generation', payload: {} },
+        output: {
+          data: {
+            assets: [
+              {
+                id: 'generated-1',
+                localPath: '/private/runtime/generated-1.png',
+                resourceRef: {
+                  id: 'resource:generated-1:rev-1',
+                  scope: 'project',
+                  provider: 'generated-asset',
+                  kind: 'generated',
+                  source: {
+                    kind: 'generated-asset',
+                    generatedAssetId: 'generated-1',
+                    metadata: { revision: 'rev-1', contentDigest: 'sha256:content' },
+                  },
+                  locator: { kind: 'generated-asset', assetId: 'generated-1' },
+                  fingerprint: { strategy: 'hash', value: 'sha256:content' },
+                },
+              },
+            ],
+          },
+        },
+        progress: 100,
+        createdAt: 1,
+        updatedAt: 2,
+      },
+    ]);
+
+    expect(fact).toMatchObject({
+      ref: 'resource:generated-1:rev-1',
+      kind: 'generated-asset',
+      digest: 'sha256:content',
+      revision: 'rev-1',
+      provenance: {
+        source: 'generated-asset',
+        taskId: 'task-1',
+        providerId: 'generated-asset',
+      },
+      deliveryStatus: 'delivered',
+      validator: { id: 'durable-resource-ref', status: 'valid' },
+    });
+    expect(JSON.stringify(fact)).not.toContain('/private/runtime');
   });
 });

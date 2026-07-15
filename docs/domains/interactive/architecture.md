@@ -37,13 +37,19 @@ Canvas 基础模式不是单一 AI 卡片模式，而是面向多类型创作节
 
 右侧 Dock 按模式暴露不同深度。Basic 只是目录投影和默认创作策略，不写入 `.nkc`，不限制已有节点，也不定义第二套 renderer/validator。含专业节点的 `.nkc` 在 Basic 下仍按现有 renderer 展示；用户显式切换 Professional 后继续使用完整子系统目录。两种模式共享同一 canvas graph，不另建轻量项目格式。
 
+基础节点的展示由 node descriptor 决定：文件/引用、文本/Markdown、剧本呈现、图片、音频和视频使用名称加内容的 low-chrome shell；Scene/Shot、Storyboard、Gallery、Table、Timeline、Workflow、Agent/Tool 和 typed-port 节点继续使用 owning structured renderer。该 presentation 只属于 UI contract，不进入 `.nkc`。
+
+普通 `group` 是半透明空间容器，展开时渲染真实后代而不是摘要行。`position` 始终是绝对 Canvas 坐标；移动 Group 会平移完整后代子树，移动 child 不改变 sibling，排序/自动排列、Fit、折叠都是显式且可撤销的操作。Scene/Gallery/Table 等 managed container 继续使用自己的 layout/render policy。
+
 ## Board 目录约定
 
 Board 与 Canvas 是同一个概念：`neko/boards/*.nkc` 都是普通 `.nkc`，使用现有 codec、revision、source policy、节点和连接语义。`neko/boards/` 只用于 Agent 未指定目标时的默认检索与创建，不产生 Draft、Board profile、`.nkdraft`、升级或转换流程。
 
 未指定目标的创作运行按固定顺序解析：显式 Canvas → 有效会话/任务绑定 → 唯一精确 project/work/scope 匹配 → 创建新的 `neko/boards/<safe-name>.nkc`。不得用活动/最近画布、专业目录画布、文件名或语义相似度静默替代。每次 turn/task/run 在异步工作前冻结 document/canvas/revision 身份，完成时只向该目标写入；冲突或删除返回可见诊断。
 
-Agent 自动写入的 Markdown、选中引用和生成媒体通过 Canvas 公共 headless authoring；不得直接改 `.nkc` JSON。生成媒体文件仍由 Generated Output 保存在 `neko/generated/<kind>/`，Canvas 只保存稳定 `ResourceRef`。Canvas 使用、专业项目使用和 Asset Library 登记是三个独立关系。
+Agent 自动写入的 Markdown 与已持久化文件/引用通过 Canvas 公共 headless authoring；不得直接改 `.nkc` JSON。未提升的图片/音频/视频生成结果只作为 Extension-owned runtime review Group 投影，不进入 `.nkc`。用户显式 Save to Assets 后，AssetLibrary/AssetStore 返回稳定 Asset identity，Canvas 才能向冻结的 Board target revision 写入普通 Group 与 Asset-backed children；不得回退活动 Canvas。
+
+`neko/generated/<kind>/` 只保留历史文件读取和显式导入。新生成结果不得写入该目录作为 Canvas retention；导入历史来源不会删除、移动或静默重写原文件与既有 Canvas 引用。删除 Canvas Group/节点也只删除 Canvas 引用，不删除 AssetLibrary 实体或文件。
 
 ## 与 Scene Live profile 的关系
 

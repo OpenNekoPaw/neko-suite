@@ -161,7 +161,7 @@ export const useClipboardStore = create<ClipboardStore>((set, get) => ({
   },
 
   copy: (selectedNodeIds, allNodes, allConnections) => {
-    const selectedSet = new Set(selectedNodeIds);
+    const selectedSet = expandSelectionWithContainerDescendants(selectedNodeIds, allNodes);
     const selectedNodes = allNodes.filter((n) => selectedSet.has(n.id));
 
     if (selectedNodes.length === 0) return;
@@ -193,7 +193,7 @@ export const useClipboardStore = create<ClipboardStore>((set, get) => ({
   },
 
   duplicate: (selectedNodeIds, allNodes, allConnections) => {
-    const selectedSet = new Set(selectedNodeIds);
+    const selectedSet = expandSelectionWithContainerDescendants(selectedNodeIds, allNodes);
     const selectedNodes = allNodes.filter((n) => selectedSet.has(n.id));
 
     if (selectedNodes.length === 0) return null;
@@ -209,3 +209,26 @@ export const useClipboardStore = create<ClipboardStore>((set, get) => ({
     set({ clipboard: null });
   },
 }));
+
+function expandSelectionWithContainerDescendants(
+  selectedNodeIds: readonly string[],
+  allNodes: readonly CanvasNode[],
+): Set<string> {
+  const selected = new Set(selectedNodeIds);
+  const nodeById = new Map(allNodes.map((node) => [node.id, node]));
+  const visiting = new Set<string>();
+  const visit = (nodeId: string): void => {
+    if (visiting.has(nodeId)) {
+      throw new Error(`Canvas clipboard container cycle detected at "${nodeId}".`);
+    }
+    visiting.add(nodeId);
+    const node = nodeById.get(nodeId);
+    for (const childId of node ? getContainerChildIds(node) : []) {
+      selected.add(childId);
+      visit(childId);
+    }
+    visiting.delete(nodeId);
+  };
+  for (const nodeId of selectedNodeIds) visit(nodeId);
+  return selected;
+}

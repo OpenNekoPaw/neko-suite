@@ -32,10 +32,12 @@ import {
   isJsonPointerPath,
   isProjectFileSnapshotRequestMessage,
   PROJECT_FILE_SNAPSHOT_RESPONSE,
+  validateCanvasGeneratedDraftPromotionResult,
 } from '@neko/shared';
 import { setLocale } from '../i18n';
 import { useCanvasStore } from '../stores/canvasStore';
 import { useCanvasOperationStore } from '../stores/canvasOperationStore';
+import { useGeneratedDraftStore } from '../stores/generatedDraftStore';
 import { normalizeScriptScenes } from '../utils/scriptScenes';
 import { isEditorLevelKeyboardAction } from './keyboardActionPolicy';
 
@@ -346,6 +348,41 @@ export function useVSCodeMessages(options: UseVSCodeMessagesOptions): UseVSCodeM
             onCanvasDataLoadedRef.current?.(hostMessage.data);
             setIsReady(true);
             vscode.postMessage({ type: 'canvasDataReady' });
+            break;
+          }
+          case 'canvas.generatedDraftGroup': {
+            useGeneratedDraftStore.getState().upsert(message.projection);
+            break;
+          }
+          case 'canvas.generatedDraftGroupRemoved': {
+            if (typeof message.projectionId !== 'string') {
+              throw new Error('Invalid generated draft Group removal message.');
+            }
+            useGeneratedDraftStore.getState().remove(message.projectionId);
+            break;
+          }
+          case 'canvas.generatedDraft.promotionResult': {
+            const diagnostics = validateCanvasGeneratedDraftPromotionResult(message.result);
+            if (diagnostics.length > 0 || !isRecord(message.result)) {
+              throw new Error('Invalid generated draft promotion result.');
+            }
+            const projectionId = message.result['projectionId'];
+            if (typeof projectionId !== 'string') {
+              throw new Error('Generated draft promotion result has no projection identity.');
+            }
+            useGeneratedDraftStore.getState().setPromotionDiagnostic(projectionId, undefined);
+            break;
+          }
+          case 'canvas.generatedDraft.promotionFailed': {
+            if (
+              typeof message.projectionId !== 'string' ||
+              typeof message.diagnostic !== 'string'
+            ) {
+              throw new Error('Invalid generated draft promotion failure.');
+            }
+            useGeneratedDraftStore
+              .getState()
+              .setPromotionDiagnostic(message.projectionId, message.diagnostic);
             break;
           }
           case 'keyboardAction':

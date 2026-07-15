@@ -173,6 +173,15 @@ export interface AssetSource {
   sourceUrl?: string;
   /** Stable provenance for promoted Live/Audio recordings. */
   recording?: RecordingProjectFactProvenance;
+  /** Stable provenance for an explicitly promoted generated candidate. */
+  generated?: {
+    readonly projectionId: string;
+    readonly candidateId: string;
+    readonly taskId: string;
+    readonly runId?: string;
+    readonly revision: string;
+    readonly contentDigest: string;
+  };
 }
 
 /** Entity metadata - category-specific information */

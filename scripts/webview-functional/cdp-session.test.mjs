@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
   createKeyDispatchSequence,
+  createMouseDragSequence,
   resolveKeyIdentity,
   selectCdpTarget,
   selectWebviewContentFrameId,
@@ -53,6 +54,29 @@ describe('VS Code Webview CDP frame selection', () => {
           windowsVirtualKeyCode: 46,
           nativeVirtualKeyCode: 46,
         },
+      },
+    ]);
+  });
+
+  it('creates a pressed, interpolated, and released pointer drag sequence', () => {
+    assert.deepEqual(createMouseDragSequence({ x: 10, y: 20 }, { x: 30, y: 40 }, 2), [
+      {
+        type: 'mousePressed',
+        x: 10,
+        y: 20,
+        button: 'left',
+        buttons: 1,
+        clickCount: 1,
+      },
+      { type: 'mouseMoved', x: 20, y: 30, button: 'left', buttons: 1 },
+      { type: 'mouseMoved', x: 30, y: 40, button: 'left', buttons: 1 },
+      {
+        type: 'mouseReleased',
+        x: 30,
+        y: 40,
+        button: 'left',
+        buttons: 0,
+        clickCount: 1,
       },
     ]);
   });

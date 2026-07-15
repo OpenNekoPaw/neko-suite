@@ -82,6 +82,8 @@ export interface CanvasCompositeConnectionSpec {
 }
 
 export interface CanvasCreateCompositeRequest {
+  /** Optional stable container id for idempotent Host-owned composite replay. */
+  containerId?: string;
   containerPreset?: string;
   containerType?: CanvasNodeType;
   position?: CanvasPoint;

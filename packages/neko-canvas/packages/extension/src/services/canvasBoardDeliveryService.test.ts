@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   CANVAS_BOARD_ROUTING_CONTRACT_VERSION,
+  createGeneratedAssetRevisionRef,
   type CanvasBoardDeliveryRequest,
   type CanvasBoardQuerySummary,
 } from '@neko/shared';
@@ -57,19 +58,19 @@ function harness(observed: CanvasBoardQuerySummary | undefined = summary) {
     projectRef: { projectRevision: 'nkc:revision-2' },
     createdNodes: [{ nodeId: 'node:markdown' }],
   });
-  const importAsset = vi.fn().mockResolvedValue({
-    nodeId: 'node:media',
-    projectRef: { projectRevision: 'nkc:revision-2' },
-  });
   const createNode = vi.fn().mockResolvedValue({
     nodeId: 'node:document',
     projectRef: { projectRevision: 'nkc:revision-2' },
   });
+  const upsertFromBoardDelivery = vi.fn().mockResolvedValue({
+    projectionId: 'runtime:canvas-generated-group:task:1',
+  });
   const service = new CanvasBoardDeliveryService({
     index: { get: vi.fn().mockResolvedValue(observed), query: vi.fn() },
-    authoring: { applyAgentContent, createNode, importAsset },
+    authoring: { applyAgentContent, createNode },
+    generatedDrafts: { upsertFromBoardDelivery },
   });
-  return { service, applyAgentContent, createNode, importAsset };
+  return { service, applyAgentContent, createNode, upsertFromBoardDelivery };
 }
 
 describe('CanvasBoardDeliveryService', () => {
@@ -104,36 +105,31 @@ describe('CanvasBoardDeliveryService', () => {
     });
   });
 
-  it('passes only stable resource refs for generated media', async () => {
-    const { service, importAsset } = harness();
-    const resourceRef = {
-      id: 'generated:image:1',
-      scope: 'project',
-      provider: 'generated-output',
-      kind: 'generated-output',
-      source: { kind: 'project-file', path: 'neko/generated/image/1.png' },
-      fingerprint: { algorithm: 'sha256', value: 'abc' },
-    } as never;
+  it('routes unpromoted generated media to the runtime review Group only', async () => {
+    const { service, applyAgentContent, createNode, upsertFromBoardDelivery } = harness();
+    const resourceRef = createGeneratedAssetRevisionRef({
+      assetId: 'generated-output:1',
+      contentDigest: 'sha256:abc',
+      mediaKind: 'image',
+      mimeType: 'image/png',
+      generation: { taskId: 'task:1', runId: 'run:1' },
+    }).resourceRef;
 
     const result = await service.deliver(
       request({ kind: 'image', title: 'Variant 1', mimeType: 'image/png', resourceRef }),
     );
 
-    expect(result.status).toBe('delivered');
-    expect(importAsset).toHaveBeenCalledWith(
-      expect.objectContaining({
-        asset: expect.objectContaining({
-          type: 'image',
-          resourceRef,
-          provenance: expect.objectContaining({ messageId: 'artifact:1' }),
-        }),
-      }),
+    expect(result).toMatchObject({ status: 'delivered', diagnostics: [] });
+    expect(result.nodeIds).toBeUndefined();
+    expect(upsertFromBoardDelivery).toHaveBeenCalledWith(
+      expect.objectContaining({ artifact: expect.objectContaining({ resourceRef }) }),
     );
-    expect(JSON.stringify(importAsset.mock.calls)).not.toMatch(/renderUri|\.neko\/\.cache/);
+    expect(applyAgentContent).not.toHaveBeenCalled();
+    expect(createNode).not.toHaveBeenCalled();
   });
 
   it('blocks stale targets without invoking any authoring path', async () => {
-    const { service, applyAgentContent, importAsset } = harness({
+    const { service, applyAgentContent, createNode } = harness({
       ...summary,
       revision: 'nkc:revision-2',
     });
@@ -145,11 +141,11 @@ describe('CanvasBoardDeliveryService', () => {
     expect(result.status).toBe('blocked');
     expect(result.diagnostics.map(({ code }) => code)).toContain('stale-board-target');
     expect(applyAgentContent).not.toHaveBeenCalled();
-    expect(importAsset).not.toHaveBeenCalled();
+    expect(createNode).not.toHaveBeenCalled();
   });
 
   it('authors file references through the foundational document node with stable refs', async () => {
-    const { service, applyAgentContent, createNode, importAsset } = harness();
+    const { service, applyAgentContent, createNode } = harness();
 
     const result = await service.deliver(
       request({
@@ -174,6 +170,5 @@ describe('CanvasBoardDeliveryService', () => {
       }),
     );
     expect(applyAgentContent).not.toHaveBeenCalled();
-    expect(importAsset).not.toHaveBeenCalled();
   });
 });

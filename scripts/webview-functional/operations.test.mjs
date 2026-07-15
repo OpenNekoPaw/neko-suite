@@ -46,6 +46,29 @@ describe('webview functional operations', () => {
     assert.match(expressions[1], /element\.focus\(\{ preventScroll: true \}\)/u);
   });
 
+  it('drags from the visible element center by the declared screen-space delta', async () => {
+    const drags = [];
+    const session = {
+      evaluate: async () => ({ x: 12, y: 18 }),
+      dispatchDrag: async (origin, destination) => drags.push({ origin, destination }),
+    };
+
+    const result = await runStep(
+      {
+        id: 'drag',
+        operation: 'drag',
+        selector: { testId: 'canvas-node' },
+        delta: { x: 40, y: -16 },
+      },
+      { webview: session, defaultTimeoutMs: 1000 },
+    );
+
+    assert.deepEqual(drags, [
+      { origin: { x: 12, y: 18 }, destination: { x: 52, y: 2 } },
+    ]);
+    assert.deepEqual(result.destination, { x: 52, y: 2 });
+  });
+
   it('times out when a declared state never becomes true', async () => {
     const session = { evaluate: async () => false };
     await assert.rejects(

@@ -116,7 +116,7 @@ Runtime projection
 
 `allowedInputRoots = ["mediaLibrary"]` 只授权 enabled、accessible、已解析的媒体库 root。它不授权 `Downloads`、`Desktop`、系统 temp、未声明外部目录，也不授权 Webview 直接读取媒体库。Webview 展示仍必须通过 `LocalResourceAccessService` 和 `asWebviewUri(...)`；大型视频/音频仍优先走 Engine file access。
 
-Processor 或 Agent 产物写入媒体库不是默认行为。未保存 generated draft 可以落在 Host 管理的 session/cache 投影区，但只能作为当前会话 render projection；用户点击保留、发送到 Canvas/Storyboard、绑定实体、加入素材库、导出或打包前，Host 必须先 Promote/Create Asset，把 source 写入 `neko/generated/<kind>/`、媒体库、AssetStore 或其他 durable root，再写入 workspace-relative path、`${VAR}/path`、`ResourceRef` 或 AssetEntity，并记录 provenance。
+Processor 或 Agent 产物写入媒体库不是默认行为。未保存 generated draft 可以落在 Host 管理的 session/cache 投影区，但只能作为当前会话 render projection；用户点击保留、发送到 Canvas/Storyboard、绑定实体、加入素材库、导出或打包前，Host 必须先通过 AssetLibrary/AssetStore Promote/Create Asset，再写入稳定 Asset identity、workspace-relative path、`${VAR}/path` 或 Asset-backed `ResourceRef`，并记录 provenance。`neko/generated/<kind>/` 不再是新生成结果的 canonical retention root。
 
 ### Agent / Canvas / Storyboard 资源交接
 
@@ -316,10 +316,11 @@ Generated 输出需要先按“用户是否可见、是否确认保留、删除�
 | --- | --- | --- | --- | --- |
 | 运行中 scratch / provider 临时文件 | system temp、provider 私有目录或 extension-private runtime dir | 否，只用于一次调用 | 否 | 可删除，调用失败或重试自行处理 |
 | 未确认但已展示的生成结果 | 有 workspace 时可落 `.neko/.cache/resources/generated-drafts/`；无 workspace 时落 `globalStorageUri/resources/generated-drafts/` | 是，出现在当前会话/任务结果中 | 否，只能用 `ResourceRef`/assetRef 投影 | 可被 TTL/GC 删除；UI 必须提示“未保存/可清理” |
-| 用户点击保存、发送到 Canvas、绑定实体、加入素材库或用于导出/打包的生成结果 | workspace `neko/generated/<media-kind>/`、workspace/media-library `assets/generated/`，或 AssetStore 管理的正式文件目录 | 是 | 是，保存 AssetRef、GeneratedAssetRef、`${VAR}/path` 或 workspace-relative path | 不能因清理 cache 删除 |
+| 用户点击保存、发送到 Canvas、绑定实体、加入素材库或用于导出/打包的生成结果 | AssetStore 管理的正式文件目录，或由 AssetLibrary ingest policy 选择的 workspace/media-library durable root | 是 | 是，保存 Asset identity/source ref、`${VAR}/path` 或 workspace-relative path | 不能因清理 cache 删除 |
+| 历史 `neko/generated/<media-kind>/` 来源 | 保持原位置；仅在用户显式导入时另建 Asset-owned source | 是 | 既有引用继续可读，新项目事实应使用提升后的 Asset identity | 不得静默删除、移动或重写 |
 | 已保存生成结果的缩略图、预览图、代理、metadata | artifact bytes 位于 `.neko/.cache/resources`；variant/metadata 位于 `~/.neko/neko.db` cache tables | 间接可见 | 否 | 可删除并由正式 source/ref 重建 |
 
-因此，`generated-assets/...` 这种返回给 Agent/Webview/Canvas 的稳定 URI 必须指向“已登记的生成资产身份”，不能是 `.neko/.cache/generated/...` 的路径别名。若生成结果还未保存，只能作为 session/runtime projection 展示，并在跨包交付前执行 Promote/Create Asset。
+因此，`generated-assets/...` 这类返回给 Agent/Webview 的稳定 generated-output identity 只证明 revision-bound 运行时资源，不等于 AssetLibrary identity，也不能是 `.neko/.cache/generated/...` 的路径别名。若生成结果还未保存，只能作为 session/runtime projection 展示；进入 Canvas 或其他项目事实前必须执行 AssetLibrary/AssetStore Promote/Create Asset，并使用返回的新 Asset identity。
 
 未 Promote/Create Asset 的 generated output 仍是 scratch/runtime 语义。它可以展示在当前会话，但不能进入 Canvas、Cut、Audio、Sketch、Puppet、Model、Agent durable result、package manifest 或最终导出输入。
 

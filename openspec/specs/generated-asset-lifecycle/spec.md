@@ -22,36 +22,36 @@ The system SHALL classify every generated binary output as provider scratch, uns
 
 ### Requirement: Promoted generated assets are stored outside cache
 
-The system SHALL store user-retained generated source assets in AssetStore, workspace/media-library files, or a generated asset store outside `.neko/.cache`.
+The system SHALL store user-retained generated source assets through AssetLibrary/AssetStore ownership outside `.neko/.cache`. A successful promotion MUST create or idempotently return AssetLibrary identity and MUST NOT create a new Canvas-retained source under `neko/generated/<kind>/`.
 
-#### Scenario: Generated result is sent to Canvas
+#### Scenario: Generated result is saved from Canvas
 
-- **WHEN** a user sends a generated image, video, audio, or storyboard result to Canvas
-- **THEN** the system MUST promote or create a durable generated asset first and Canvas MUST receive a stable generated asset ref, AssetRef, ResourceRef, workspace-relative path, or `${VAR}/path`
+- **WHEN** a user saves a generated image, video, audio, or storyboard candidate from a Canvas runtime Group
+- **THEN** the system MUST promote or create a durable Asset first and Canvas MUST receive a stable Asset identity/source ref before writing a durable node
 
 #### Scenario: Generated result is used for export or package
 
-- **WHEN** a generated output becomes an export input, package entry, entity binding, asset-library item, or project fact
-- **THEN** the system MUST use a promoted generated asset source and MUST reject `.neko/.cache` paths as the source identity
+- **WHEN** a new generated output becomes an export input, package entry, entity binding, or project fact
+- **THEN** the system MUST use its promoted Asset source and MUST reject `.neko/.cache`, runtime render, and new `neko/generated/<kind>/` output paths as the source identity
 
 ### Requirement: Generated asset references are path-transparent
 
-The system SHALL present generated candidates, Board-retained outputs, and Asset-registered items to Agent, Webview, Canvas, Storyboard, Search, and other feature packages through stable refs and host projections rather than cache paths.
+The system SHALL present unpromoted generated candidates and Asset-registered items to Agent, Webview, Canvas, Storyboard, Search, and other feature packages through stable refs and Host projections rather than cache paths, render URIs, or implied Asset identity.
 
 #### Scenario: Agent receives generated task completion
 
-- **WHEN** a background media generation task completes
-- **THEN** Agent backfill MUST contain stable generated-output/resource refs or runtime draft refs and MUST NOT expose `.neko/.cache/generated`, `.neko/.cache/resources`, or system temp paths as persisted result URLs
+- **WHEN** a background media generation task completes before explicit Asset promotion
+- **THEN** Agent backfill MUST contain a stable generated-output `ResourceRef` or runtime draft ref, MUST NOT expose `.neko/.cache/generated`, `.neko/.cache/resources`, system temp, or `neko/generated/<kind>/` as a new persisted result URL, and MUST NOT label the generated-output id as AssetLibrary identity
 
 #### Scenario: Webview renders generated media
 
-- **WHEN** Webview displays a generated candidate, Board-retained output, or Asset-registered item
-- **THEN** it MUST receive a current-session render URI or projection DTO and MUST NOT treat that URI as a portable source identity
+- **WHEN** Webview displays an unpromoted generated candidate or Asset-registered item
+- **THEN** it MUST receive a current-session render URI or projection DTO and MUST NOT treat that runtime value as a portable source identity
 
-#### Scenario: Board Canvas reloads retained output
+#### Scenario: Board Canvas reloads saved generated content
 
-- **WHEN** a Board Canvas is reopened after application restart
-- **THEN** its generated media reference MUST resolve through the owning generated-output projection or return a fail-visible unavailable diagnostic without using a stale render URI
+- **WHEN** a Board Canvas is reopened after generated candidates were saved and authored
+- **THEN** its media nodes MUST resolve through stable Asset identity/source refs or return a fail-visible unavailable diagnostic without using a stale render URI or unpromoted generated-output identity
 
 ### Requirement: Existing generated cache records fail closed for durable use
 
@@ -67,31 +67,21 @@ The system SHALL treat existing durable or Board-retained generated records that
 - **WHEN** the cache file for a legacy generated record still exists on disk
 - **THEN** the system MAY offer a recovery, retain, or Asset registration action using Host services but MUST NOT treat file existence as proof of durable ownership
 
-### Requirement: Durable generated outputs use the canonical generated root
+### Requirement: Legacy generated sources remain protected and explicitly importable
 
-The system SHALL store Board-Canvas-retained generated outputs under the existing `neko/generated/<kind>/` root and MUST NOT introduce a root-level `generated/`, `.neko/generated/`, or Board-local generated media store. Asset Library membership and professional-project usage SHALL remain independent explicit relationships over stable sources.
+The system SHALL preserve existing valuable sources and Canvas references under `neko/generated/<kind>/` as readable legacy durable inputs while preventing new generated-retention producers from writing there. Importing a legacy source into AssetLibrary MUST be explicit, idempotent, and MUST NOT delete or silently move the legacy file.
 
-#### Scenario: Generated result is written to Canvas
+#### Scenario: Existing Board references a legacy generated source
 
-- **WHEN** a retained image, video, audio, or storyboard result is referenced by any Canvas
-- **THEN** Canvas MUST receive a stable generated-output ref, AssetRef, ResourceRef, workspace-relative path, or `${VAR}/path`
+- **WHEN** a valid existing Canvas references an available file under `neko/generated/<kind>/`
+- **THEN** Canvas MUST continue to resolve it as a legacy durable source and MAY offer Save/Import to Assets without rewriting the Canvas automatically
 
-#### Scenario: Generated result is used for export or package
+#### Scenario: New generation completes
 
-- **WHEN** a generated output becomes an export input, package entry, entity binding, asset-library item, or project fact
-- **THEN** the system MUST use a durable generated source and MUST reject `.neko/.cache` paths as the source identity
+- **WHEN** a new image, audio, video, or storyboard candidate completes after this change
+- **THEN** no canonical retention producer may create its durable source under `neko/generated/<kind>/`
 
-#### Scenario: Professional project uses generated source without cataloging it
+#### Scenario: Legacy generated source is missing
 
-- **WHEN** Canvas, Cut, Audio, or another owning professional domain accepts a stable source from `neko/generated/<kind>/`
-- **THEN** the professional document records that usage without requiring or implying Asset Library membership
-
-#### Scenario: Generated source is registered in Asset Library
-
-- **WHEN** the user explicitly adds a generated source to Asset Library
-- **THEN** the Asset owner creates a curated catalog record and MUST NOT imply that the asset is currently used by a professional document or move/copy bytes unless its explicit ingest policy requires it
-
-#### Scenario: Board retention is removed
-
-- **WHEN** the last Canvas/project reference to a retained output that is not Asset-registered is removed
-- **THEN** the system MUST keep or delete the source only according to explicit retention/reference-aware cleanup policy and MUST NOT silently delete valuable user data
+- **WHEN** an existing legacy Canvas reference points to a missing generated source
+- **THEN** the system MUST show a relink/import/unavailable diagnostic and MUST NOT fall back to cache or filename similarity

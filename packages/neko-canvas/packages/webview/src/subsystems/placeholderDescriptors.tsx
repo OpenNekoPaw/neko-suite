@@ -142,6 +142,7 @@ export function createPlaceholderNodeTypeDescriptors(
         tagLabel: item.tagLabel,
         tagColor: item.tagColor,
         defaultSize: item.defaultSize,
+        presentation: 'structured',
       } satisfies NodeTypeDescriptor,
     ]),
   ) as NodeTypeDescriptorRegistry;

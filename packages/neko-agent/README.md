@@ -213,9 +213,9 @@ Transfer payload 必须携带结构化 `target`、`reveal`、stable source/ref �
 
 在 VS Code 宿主中，面向创作者的任务不要求先指定 Canvas。Agent 在异步工作开始前通过 `NekoCanvasAPI.boards` 按“显式目标 → 有效会话绑定 → 唯一精确 scope 匹配 → 新建”解析普通 `neko/boards/*.nkc`，并冻结 conversation/turn/task/run/document/canvas/revision 身份。普通问答不创建 Board；活动或最近打开的 Canvas 不参与默认解析。
 
-运行时按 typed result 自动投递创作者可复用的 Markdown、用户选中的稳定文件引用，以及已保存在 `neko/generated/<kind>/` 的图片/音频/视频。推理、日志、scratch、未选搜索结果、runtime/cache handle 和失败中间态不会成为节点。投递通过 Canvas 公共 authoring API、provenance 和 revision check 完成；重放按 artifact/output identity 幂等，目标删除或冲突只返回可见诊断，不改投其他 Canvas。
+运行时按 typed result 自动投递创作者可复用的 Markdown和用户选中的稳定文件引用。未提升的图片/音频/视频不会成为 `.nkc` 节点，而由 Canvas Extension 在冻结 Board 上投影 runtime review Group；用户显式 Save to Assets 后，AssetLibrary/AssetStore 返回稳定 Asset identity，Canvas 再以普通 Group 和 Asset-backed children 完成 revision-checked authoring。推理、日志、scratch、未选搜索结果、runtime/cache handle 和失败中间态不会成为节点；冲突只返回可见诊断，不改投其他 Canvas。
 
-当前 typed Markdown/媒体结果不再依赖通用 `Send to Canvas` 才能保留。显式历史内容或外部资源仍可使用 Add/Import to Board Canvas；专业结构化 Storyboard 仍要求明确的 professional authoring 意图和 Canvas validator。
+当前 typed Markdown 不依赖通用 `Send to Canvas`；生成媒体需要明确 Save to Assets 才成为 durable Board fact。显式历史内容、外部资源和既有 `neko/generated/<kind>/` 来源仍可使用 Add/Import to Board Canvas 或显式 Asset import；专业结构化 Storyboard 仍要求明确的 professional authoring 意图和 Canvas validator。
 
 ### Canvas Creative Run
 

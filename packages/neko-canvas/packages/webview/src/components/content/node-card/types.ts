@@ -5,12 +5,7 @@ import type { ClipboardStore } from '../../../stores/clipboardStore';
 import type { HistoryStore } from '../../../stores/historyStore';
 
 export type CardPreviewRenderForm =
-  | 'asset-thumbnail'
-  | 'media-poster'
-  | 'waveform'
-  | 'text'
-  | 'icon'
-  | 'none';
+  'asset-thumbnail' | 'media-poster' | 'waveform' | 'text' | 'icon' | 'none';
 
 export type CardPreviewAspectRatio = '3/2' | '16/9' | '1/1';
 
@@ -59,11 +54,7 @@ export interface CardBadge {
 }
 
 export type ActionCondition =
-  | 'always'
-  | 'has-selection'
-  | 'has-preview'
-  | 'not-generating'
-  | 'has-asset';
+  'always' | 'has-selection' | 'has-preview' | 'not-generating' | 'has-asset';
 
 export type NodeCardActionId =
   | 'remove'
@@ -97,13 +88,7 @@ export interface NodeCardPolicy {
 export type NodeCardPolicyRegistry = Partial<Record<CanvasNodeType, NodeCardPolicy>>;
 
 export type NodeCardVariant =
-  | 'thumbnail'
-  | 'compact'
-  | 'row'
-  | 'summary'
-  | 'summary-large'
-  | 'review-full'
-  | 'gallery';
+  'thumbnail' | 'compact' | 'row' | 'summary' | 'summary-large' | 'review-full' | 'gallery';
 
 export interface ActionConditionContext {
   readonly node: CanvasNode;
@@ -133,7 +118,14 @@ export type ContainerActionId =
   | 'add-row'
   | 'add-column'
   | 'remove-row'
-  | 'remove-column';
+  | 'remove-column'
+  | 'arrange-stable'
+  | 'arrange-name'
+  | 'arrange-type'
+  | 'arrange-created'
+  | 'fit-to-content'
+  | 'collapse-group'
+  | 'expand-group';
 
 export type ContainerActionVisibility = 'always' | 'selected' | 'has-children' | 'empty';
 

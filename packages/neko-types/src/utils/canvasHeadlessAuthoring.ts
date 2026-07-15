@@ -39,7 +39,6 @@ import type {
   CanvasUpdateBlockResult,
 } from '../types/canvas-agent-operations';
 import type { CanvasAuthoringDiagnostic } from '../types/canvas-authoring-contracts';
-import { isRuntimeOnlyCanvasAuthoringResourceIdentityValue } from '../types/canvas-authoring-contracts';
 import type {
   CanvasHeadlessAuthoringCreatedConnectionRef,
   CanvasHeadlessAuthoringCreatedNodeRef,
@@ -74,6 +73,14 @@ import {
   writeFieldBinding,
   writeJsonPointer,
 } from './fieldBinding';
+import { assertNoRuntimeResourceIdentity } from './canvasDurableResourceIdentity';
+
+export {
+  assertNoRuntimeResourceIdentity,
+  createCanvasAuthoringDiagnostic,
+  validateCanvasDurableResourceIdentity,
+  type CanvasDurableResourceIdentityValidationOptions,
+} from './canvasDurableResourceIdentity';
 
 export interface CanvasHeadlessAuthoringPlannerContext {
   readonly canvasData: CanvasData;
@@ -83,10 +90,6 @@ export interface CanvasHeadlessAuthoringPlannerContext {
 export interface CanvasHeadlessAuthoringIdFactoryOptions {
   readonly prefix?: string;
   readonly existingIds?: readonly string[];
-}
-
-export interface CanvasDurableResourceIdentityValidationOptions {
-  readonly rootLabel?: string;
 }
 
 const DEFAULT_START_X = 100;
@@ -135,29 +138,6 @@ const DEFAULT_NODE_SIZES: Readonly<Record<CanvasNodeType, { width: number; heigh
 };
 
 const REGISTERED_NODE_TYPES = new Set<string>(REGISTERED_CANVAS_NODE_TYPES);
-
-const STABLE_PATH_PREFIX_PATTERN = /^\$\{[A-Z][A-Z0-9_]*\}\//;
-const PROJECT_RELATIVE_PATH_PATTERN = /^(?:\.\/)?(?!\/)(?![a-zA-Z]:[\\/])[^:?#]+$/;
-
-const RUNTIME_IDENTITY_KEY_PATTERN =
-  /(?:^|\.)(?:cachePath|cacheUri|webviewUri|webviewUrl|blobUrl|objectUrl|runtimeAssetPath|runtimeThumbnailPath|runtimeReferenceImagePath|previewUrl|previewUri|streamId|engineToken|runtimeHandle|rangeUrl|entryBaseUrl|token)$/i;
-
-const RUNTIME_IDENTITY_VALUE_PATTERNS: readonly RegExp[] = [
-  /^vscode-resource:\/\//i,
-  /^vscode-webview-resource:\/\//i,
-  /^vscode-webview:\/\//i,
-  /^blob:/i,
-  /^data:/i,
-  /^https?:\/\/(?:127\.0\.0\.1|0\.0\.0\.0|localhost|\[::1\])(?::|\/)/i,
-  /^https?:\/\/[^/]*\.vscode-cdn\.net\//i,
-  /(?:^|[\\/])\.neko[\\/](?:\.cache|cache)(?:[\\/]|$)/i,
-  /(?:^|[\\/])cachePath(?:[\\/]|$)/i,
-  /^\/tmp(?:\/|$)/i,
-  /^\/private\/tmp(?:\/|$)/i,
-  /^\/var\/folders(?:\/|$)/i,
-  /^\/private\/var\/folders(?:\/|$)/i,
-  /^[A-Z]:\\Users\\[^\\]+\\AppData\\Local\\Temp(?:\\|$)/i,
-];
 
 const TARGETABLE_FIELD_PATHS_BY_TYPE: Partial<Record<CanvasNodeType, readonly JsonPointerPath[]>> =
   {
@@ -292,6 +272,45 @@ export function planCanvasCompositeCreation(
   context: CanvasHeadlessAuthoringPlannerContext,
   request: CanvasCreateCompositeRequest,
 ): CanvasHeadlessAuthoringPlan<CanvasCreateCompositeResult> {
+  if (request.containerId) {
+    const existingContainer = context.canvasData.nodes.find(
+      (node) => node.id === request.containerId,
+    );
+    if (existingContainer) {
+      if (request.containerType && existingContainer.type !== request.containerType) {
+        throw new Error(
+          `Canvas composite replay container "${request.containerId}" has type "${existingContainer.type}", expected "${request.containerType}"`,
+        );
+      }
+      const requestedChildIds = request.children.map((child) => child.id);
+      const existingChildren = requestedChildIds.flatMap((id) => {
+        if (!id) return [];
+        const node = context.canvasData.nodes.find((candidate) => candidate.id === id);
+        return node ? [node] : [];
+      });
+      if (
+        requestedChildIds.some((id) => !id) ||
+        existingChildren.length !== request.children.length ||
+        existingChildren.some(
+          (node, index) =>
+            node.parentId !== existingContainer.id || node.type !== request.children[index]?.type,
+        )
+      ) {
+        throw new Error(
+          `Canvas composite replay conflicts with existing container "${request.containerId}"`,
+        );
+      }
+      return {
+        batch: createBatch([]),
+        canvasData: context.canvasData,
+        result: {
+          containerId: existingContainer.id,
+          childIds: requestedChildIds.filter((id): id is string => Boolean(id)),
+          nodes: [existingContainer, ...existingChildren],
+        },
+      };
+    }
+  }
   const generateId =
     context.generateId ??
     createCanvasHeadlessAuthoringIdFactory({
@@ -318,7 +337,7 @@ export function planCanvasCompositeCreation(
       position: request.position,
       data: request.data,
     },
-    id: generateId(),
+    id: request.containerId ?? generateId(),
     zIndex: nextZIndex(context.canvasData.nodes),
   });
   const childNodes = request.children.map((child, index) =>
@@ -721,39 +740,6 @@ export function applyCanvasHeadlessAuthoringOperations(
   }
   assertNoRuntimeResourceIdentity(nextData, 'canvasData');
   return nextData;
-}
-
-export function validateCanvasDurableResourceIdentity(
-  value: unknown,
-  options: CanvasDurableResourceIdentityValidationOptions = {},
-): readonly CanvasAuthoringDiagnostic[] {
-  const diagnostics: CanvasAuthoringDiagnostic[] = [];
-  collectRuntimeIdentityDiagnostics(value, options.rootLabel ?? 'value', diagnostics, new Set());
-  return diagnostics;
-}
-
-export function assertNoRuntimeResourceIdentity(value: unknown, rootLabel = 'value'): void {
-  const diagnostics = validateCanvasDurableResourceIdentity(value, { rootLabel });
-  const firstError = diagnostics.find((diagnostic) => diagnostic.severity === 'error');
-  if (firstError) {
-    throw new Error(
-      `${firstError.code}: ${firstError.message} (${firstError.target ?? rootLabel})`,
-    );
-  }
-}
-
-export function createCanvasAuthoringDiagnostic(
-  severity: CanvasAuthoringDiagnostic['severity'],
-  code: string,
-  message: string,
-  details: Omit<CanvasAuthoringDiagnostic, 'severity' | 'code' | 'message'> = {},
-): CanvasAuthoringDiagnostic {
-  return {
-    severity,
-    code,
-    message,
-    ...details,
-  };
 }
 
 function validateAgentContentPayload(payload: CanvasAgentContentPayload): void {
@@ -1531,72 +1517,6 @@ function createdConnectionRef(
     targetId: connection.targetId,
     ...(connection.type ? { type: connection.type } : {}),
   };
-}
-
-function collectRuntimeIdentityDiagnostics(
-  value: unknown,
-  path: string,
-  diagnostics: CanvasAuthoringDiagnostic[],
-  seen: Set<object>,
-): void {
-  if (typeof value === 'string') {
-    if (isRuntimeOnlyString(value) || RUNTIME_IDENTITY_KEY_PATTERN.test(path)) {
-      if (isStableStringIdentity(value) && !RUNTIME_IDENTITY_KEY_PATTERN.test(path)) {
-        return;
-      }
-      diagnostics.push(
-        createCanvasAuthoringDiagnostic(
-          'error',
-          'runtime-only-resource-identity',
-          'Canvas authoring data must not persist runtime handles, cache paths, temp paths, preview URLs, or Engine tokens.',
-          { target: path, received: value },
-        ),
-      );
-    }
-    return;
-  }
-
-  if (!value || typeof value !== 'object') {
-    return;
-  }
-  if (seen.has(value)) {
-    return;
-  }
-  seen.add(value);
-
-  if (Array.isArray(value)) {
-    value.forEach((item, index) =>
-      collectRuntimeIdentityDiagnostics(item, `${path}[${index}]`, diagnostics, seen),
-    );
-    return;
-  }
-
-  for (const [key, field] of Object.entries(value)) {
-    const fieldPath = path ? `${path}.${key}` : key;
-    if (RUNTIME_IDENTITY_KEY_PATTERN.test(fieldPath)) {
-      diagnostics.push(
-        createCanvasAuthoringDiagnostic(
-          'error',
-          'runtime-only-resource-identity',
-          `Canvas authoring field "${key}" is runtime-only and cannot be persisted.`,
-          { target: fieldPath, received: field },
-        ),
-      );
-      continue;
-    }
-    collectRuntimeIdentityDiagnostics(field, fieldPath, diagnostics, seen);
-  }
-}
-
-function isRuntimeOnlyString(value: string): boolean {
-  return (
-    isRuntimeOnlyCanvasAuthoringResourceIdentityValue(value) ||
-    RUNTIME_IDENTITY_VALUE_PATTERNS.some((pattern) => pattern.test(value))
-  );
-}
-
-function isStableStringIdentity(value: string): boolean {
-  return STABLE_PATH_PREFIX_PATTERN.test(value) || PROJECT_RELATIVE_PATH_PATTERN.test(value);
 }
 
 function resolveUpdateBinding(request: CanvasUpdateBlockRequest): FieldBinding {

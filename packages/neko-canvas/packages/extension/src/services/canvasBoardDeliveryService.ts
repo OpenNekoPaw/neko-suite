@@ -10,13 +10,12 @@ import {
 } from '@neko/shared';
 import type { CanvasBoardIndexReader } from './canvasBoardResolverService';
 import type { CanvasProjectAuthoringService } from './canvasProjectAuthoringService';
+import type { CanvasGeneratedDraftProjectionService } from './canvasGeneratedDraftProjectionService';
 
 export interface CanvasBoardDeliveryServiceOptions {
   readonly index: CanvasBoardIndexReader;
-  readonly authoring: Pick<
-    CanvasProjectAuthoringService,
-    'applyAgentContent' | 'createNode' | 'importAsset'
-  >;
+  readonly authoring: Pick<CanvasProjectAuthoringService, 'applyAgentContent' | 'createNode'>;
+  readonly generatedDrafts: Pick<CanvasGeneratedDraftProjectionService, 'upsertFromBoardDelivery'>;
 }
 
 export class CanvasBoardDeliveryService {
@@ -118,25 +117,11 @@ export class CanvasBoardDeliveryService {
           },
         ]);
       }
-      const result = await this.options.authoring.importAsset({
-        target,
-        asset: {
-          type: request.artifact.kind,
-          name: request.artifact.title,
-          ...(request.artifact.resourceRef ? { resourceRef: request.artifact.resourceRef } : {}),
-          ...(request.artifact.documentResourceRef
-            ? { documentResourceRef: request.artifact.documentResourceRef }
-            : {}),
-          position,
-          provenance,
-        },
-      });
+      await this.options.generatedDrafts.upsertFromBoardDelivery(request);
       return {
         version: CANVAS_BOARD_ROUTING_CONTRACT_VERSION,
         status: 'delivered',
         target: request.target,
-        revision: result.projectRef.projectRevision,
-        nodeIds: [result.nodeId],
         diagnostics: [],
       };
     } catch (error) {

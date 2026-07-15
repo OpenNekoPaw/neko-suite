@@ -435,9 +435,9 @@ Extension → Webview:
 
 VS Code Extension Host 为创作者任务建立 instance-scoped `AgentCanvasBoardWorkSession`。会话在模型或媒体任务启动前通过公共 `NekoCanvasAPI.boards` 解析 `neko/boards/*.nkc` 并冻结 document/canvas/revision 与 conversation/turn/task/run 身份；每个并发运行独立持有状态，UI active Canvas 只是展示选择，不能成为写入 owner。
 
-typed runtime policy 自动投递 creator-useful Markdown、选中 `ResourceRef` 和 retained generated media。媒体 task completion/continuation 使用任务创建时的工作会话；同一运行只根据成功 authoring 返回的新 revision 前进。目标缺失、权限失败或 revision conflict 时，结果继续保留在 conversation/media task 生命周期中，并投影 `canvas-board-*-failed` diagnostic；不得重新解析或写入其他 Canvas。
+typed runtime policy 自动投递 creator-useful Markdown 和已持久化的选中 `ResourceRef`。媒体 task completion/continuation 使用任务创建时的工作会话，但未提升 binary media 只创建 Canvas Extension-owned runtime review Group；它不是 `.nkc` fact。显式 Save to Assets 返回 Asset identity 后，Canvas 才能对冻结 target revision 应用普通 Group 与 Asset-backed children。目标缺失、权限失败或 revision conflict 时，结果继续保留在 conversation/media task 生命周期中，并投影 `canvas-board-*-failed` diagnostic；不得重新解析或写入其他 Canvas。
 
-普通问答、reasoning、日志、scratch、未选搜索结果、runtime handle 和非 reviewable failure 不建立 Board 工作会话。生成文件只允许由现有 Generated Output owner 保存到 `neko/generated/<kind>/`，Board 引用不创建 Asset Library membership。
+普通问答、reasoning、日志、scratch、未选搜索结果、runtime handle 和非 reviewable failure 不建立 Board 工作会话。Generated Output owner 只提供 revision/digest 绑定的未提升资源与 runtime bytes；新结果不得以 `neko/generated/<kind>/` 作为 Board retention。该目录仅保留 legacy 读取和显式导入，导入不会删除或移动原文件。
 
 下面的 handoff 仅服务未参与当前 typed delivery 的历史/外部内容和显式专业 authoring，不是新结果的默认保留流程。
 

@@ -5,6 +5,7 @@ import type { CanvasNode } from '@neko/shared';
 import { renderCanvasNode } from './nodeRendererRegistry';
 import { createStoryboardNodeRendererRegistry } from '../../subsystems/storyboard/renderers';
 import { createStoryboardNodeTypeDescriptors } from '../../subsystems/storyboard/descriptors';
+import { createBuiltInNodeTypeDescriptors } from './nodeTypeDescriptors';
 import behaviorRegistration from '../../subsystems/behavior';
 import entityRegistration from '../../subsystems/entity';
 import memoryRegistration from '../../subsystems/memory';
@@ -34,6 +35,26 @@ describe('nodeRendererRegistry', () => {
     expect(isValidElement(descriptors.shot?.icon)).toBe(true);
     expect(descriptors.scene?.defaultSize).toEqual({ width: 640, height: 400 });
     expect(descriptors.annotation).toBeUndefined();
+  });
+
+  it('declares foundational and structured presentation without persisting it in Canvas nodes', () => {
+    const descriptors = createBuiltInNodeTypeDescriptors();
+
+    expect(descriptors.media?.presentation).toBe('foundational');
+    expect(descriptors.document?.presentation).toBe('foundational');
+    expect(descriptors.script?.presentation).toBe('foundational');
+    expect(descriptors.group?.presentation).toBe('spatial-container');
+    expect(descriptors.storyboard?.presentation).toBe('structured');
+    expect(descriptors.scene?.presentation).toBe('structured');
+    expect(Object.values(descriptors).every((descriptor) => descriptor?.presentation)).toBe(true);
+
+    const node = buildCanvasNode({
+      type: 'media',
+      position: { x: 0, y: 0 },
+      data: { assetPath: 'neko/assets/reference.png', mediaType: 'image' },
+      zIndex: 1,
+    });
+    expect(node).not.toHaveProperty('presentation');
   });
 
   it('renders an unsupported card for unsupported complete nodes', () => {

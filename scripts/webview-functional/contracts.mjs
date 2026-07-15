@@ -8,6 +8,7 @@ const SCENARIO_TIERS = Object.freeze(['p0', 'p1', 'p2']);
 const STEP_OPERATIONS = Object.freeze([
   'wait-visible',
   'click',
+  'drag',
   'input',
   'select',
   'key',
@@ -236,6 +237,7 @@ function validateSteps(input) {
         'id',
         'operation',
         'selector',
+        'delta',
         'value',
         'key',
         'command',
@@ -258,12 +260,21 @@ function validateSteps(input) {
 }
 
 function validateStepFields(step, path) {
-  const selectorOperations = new Set(['wait-visible', 'click', 'input', 'select', 'wait-state']);
+  const selectorOperations = new Set(['wait-visible', 'click', 'drag', 'input', 'select', 'wait-state']);
   if (selectorOperations.has(step.operation) && step.selector === undefined) {
     throw new Error(`${path}.selector is required for ${step.operation}`);
   }
   if (step.operation === 'input' || step.operation === 'select') {
     requireNonEmptyString(step.value, `${path}.value`);
+  }
+  if (step.operation === 'drag') {
+    const delta = requireRecord(step.delta, `${path}.delta`);
+    rejectUnknownFields(delta, ['x', 'y'], `${path}.delta`);
+    requireFiniteNumber(delta.x, `${path}.delta.x`);
+    requireFiniteNumber(delta.y, `${path}.delta.y`);
+    if (delta.x === 0 && delta.y === 0) {
+      throw new Error(`${path}.delta must move the pointer`);
+    }
   }
   if (step.operation === 'key') {
     requireNonEmptyString(step.key, `${path}.key`);
@@ -487,6 +498,12 @@ function requireExactString(value, expected, path) {
 function requirePositiveInteger(value, path) {
   if (!Number.isInteger(value) || value <= 0) {
     throw new Error(`${path} must be a positive integer`);
+  }
+}
+
+function requireFiniteNumber(value, path) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    throw new Error(`${path} must be a finite number`);
   }
 }
 

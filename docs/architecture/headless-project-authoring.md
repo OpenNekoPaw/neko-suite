@@ -79,6 +79,8 @@ Source-bearing authoring requests must use shared content access, generated asse
 
 Durable facts may store stable refs, `ContentFileSourceRef`, `ContentDocumentSourceRef`, `ResourceRef`, asset/entity IDs, workspace-relative paths, `${VAR}/path`, or project-owned JSON. They must not persist Webview URIs, blob URLs, cache paths, temp paths, Engine tokens, stream IDs, range URLs, preview URLs, or unpromoted generated cache artifacts.
 
+For Canvas Board delivery, Markdown and already-durable file/reference outputs may author automatically. Unpromoted binary media must first remain in an Extension-owned runtime review Group. Explicit promotion returns Asset-backed refs, after which one composite Canvas mutation writes an ordinary manual Group and children to the frozen Board revision. Promotion success never authorizes active-document fallback, and runtime Group/projection IDs must be rejected by the `.nkc` codec.
+
 ## Validation
 
 Acceptance must prove the path, not only the outcome:

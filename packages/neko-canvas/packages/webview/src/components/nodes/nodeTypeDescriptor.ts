@@ -22,6 +22,8 @@ export interface NodeDefaultSize {
   height: number;
 }
 
+export type NodePresentation = 'foundational' | 'spatial-container' | 'structured';
+
 export interface NodeTypeDescriptor {
   /** Canvas node type (matches CanvasNodeType union) */
   type: CanvasNodeType;
@@ -35,6 +37,8 @@ export interface NodeTypeDescriptor {
   tagColor: string;
   /** Default size when creating a new node of this type */
   defaultSize: NodeDefaultSize;
+  /** Renderer chrome policy. Presentation never becomes persisted Canvas data. */
+  presentation: NodePresentation;
 }
 
 /**

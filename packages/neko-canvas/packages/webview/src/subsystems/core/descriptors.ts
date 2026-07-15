@@ -9,6 +9,7 @@ export function createCoreNodeTypeDescriptors(): NodeTypeDescriptorRegistry {
       tagLabel: 'MEDIA',
       tagColor: '#3b82f6',
       defaultSize: { width: 280, height: 200 },
+      presentation: 'foundational',
     },
     annotation: {
       type: 'annotation',
@@ -17,6 +18,7 @@ export function createCoreNodeTypeDescriptors(): NodeTypeDescriptorRegistry {
       tagLabel: 'NOTE',
       tagColor: '#eab308',
       defaultSize: { width: 200, height: 100 },
+      presentation: 'foundational',
     },
     group: {
       type: 'group',
@@ -25,6 +27,7 @@ export function createCoreNodeTypeDescriptors(): NodeTypeDescriptorRegistry {
       tagLabel: 'GROUP',
       tagColor: '#6b7280',
       defaultSize: { width: 320, height: 220 },
+      presentation: 'spatial-container',
     },
     text: {
       type: 'text',
@@ -33,6 +36,7 @@ export function createCoreNodeTypeDescriptors(): NodeTypeDescriptorRegistry {
       tagLabel: 'TEXT',
       tagColor: '#06b6d4',
       defaultSize: { width: 260, height: 120 },
+      presentation: 'foundational',
     },
   };
 }

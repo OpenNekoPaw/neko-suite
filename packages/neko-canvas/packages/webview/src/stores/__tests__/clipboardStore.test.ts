@@ -160,6 +160,49 @@ describe('clipboardStore', () => {
     expect(pastedGroup?.type === 'group' ? 'childIds' in pastedGroup.data : false).toBe(false);
   });
 
+  it('copying or duplicating only a Group includes its complete nested subtree', () => {
+    const outer: CanvasNode = {
+      id: 'outer',
+      type: 'group',
+      position: { x: 0, y: 0 },
+      size: { width: 400, height: 320 },
+      zIndex: 0,
+      container: { policy: 'group', childIds: ['inner'] },
+      data: { label: 'Outer' },
+    };
+    const inner: CanvasNode = {
+      id: 'inner',
+      type: 'group',
+      parentId: 'outer',
+      position: { x: 20, y: 60 },
+      size: { width: 300, height: 220 },
+      zIndex: 1,
+      container: { policy: 'group', childIds: ['child'] },
+      data: { label: 'Inner' },
+    };
+    const child = { ...createNode('child', 40, 120), parentId: 'inner' };
+    const connection = createConnection('inner-link', 'inner', 'child');
+
+    useClipboardStore.getState().copy(['outer'], [outer, inner, child], [connection]);
+    expect(useClipboardStore.getState().clipboard?.nodes.map((node) => node.id)).toEqual([
+      'outer',
+      'inner',
+      'child',
+    ]);
+    expect(useClipboardStore.getState().clipboard?.connections).toHaveLength(1);
+
+    const duplicate = useClipboardStore
+      .getState()
+      .duplicate(['outer'], [outer, inner, child], [connection]);
+    expect(duplicate?.nodes).toHaveLength(3);
+    expect(duplicate?.connections).toHaveLength(1);
+    const duplicatedOuter = duplicate?.nodes.find((node) => !node.parentId);
+    const duplicatedInner = duplicate?.nodes.find((node) => node.type === 'group' && node.parentId);
+    const duplicatedChild = duplicate?.nodes.find((node) => node.type === 'annotation');
+    expect(duplicatedOuter?.container?.childIds).toEqual([duplicatedInner?.id]);
+    expect(duplicatedInner?.container?.childIds).toEqual([duplicatedChild?.id]);
+  });
+
   it('paste should remap migrated Scene canonical children', () => {
     const scene: CanvasNode = {
       id: 'scene-1',

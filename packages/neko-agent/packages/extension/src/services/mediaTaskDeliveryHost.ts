@@ -8,9 +8,11 @@
 
 import * as vscode from 'vscode';
 import * as path from 'node:path';
+import * as os from 'node:os';
 import type { Platform } from '@neko/platform';
 import {
-  resolveWorkspaceGeneratedAssetRelativeDirectory,
+  resolveGeneratedAssetMediaKind,
+  resolveStorageLayout,
   type GeneratedAsset,
   type TaskRunScope,
 } from '@neko/shared';
@@ -146,16 +148,16 @@ export class MediaTaskDeliveryHost {
       MEDIA_TASK_OUTPUT_DIR_SETTING_KEY,
       DEFAULT_MEDIA_TASK_CONFIGURED_OUTPUT_DIR,
     );
-    const durableConfiguredOutputDir =
+    const runtimeConfiguredOutputDir =
       workspaceFolder && defaultOutputDir
-        ? resolveDurableConfiguredOutputDir(
+        ? resolveRuntimeConfiguredOutputDir(
             workspaceFolder.uri.fsPath,
             defaultOutputDir,
             configuredOutputDir,
           )
         : undefined;
-    if (configuredOutputDir && !durableConfiguredOutputDir) {
-      logger.warn('Rejected generated output directory outside the canonical durable root', {
+    if (configuredOutputDir && !runtimeConfiguredOutputDir) {
+      logger.warn('Rejected generated output directory outside the generated runtime cache', {
         configuredOutputDir,
         requiredRoot: defaultOutputDir,
       });
@@ -163,7 +165,7 @@ export class MediaTaskDeliveryHost {
     const settingsPlan = buildMediaTaskDeliverySettingsPlan({
       workspaceRoot: workspaceFolder?.uri.fsPath,
       defaultOutputDir,
-      configuredOutputDir: durableConfiguredOutputDir,
+      configuredOutputDir: runtimeConfiguredOutputDir,
       configuredShowSaveNotification: mediaConfig.get<boolean>(
         MEDIA_TASK_SHOW_SAVE_NOTIFICATION_SETTING_KEY,
         DEFAULT_MEDIA_TASK_SHOW_SAVE_NOTIFICATION,
@@ -206,7 +208,7 @@ export class MediaTaskDeliveryHost {
   }
 }
 
-function resolveDurableConfiguredOutputDir(
+function resolveRuntimeConfiguredOutputDir(
   workspaceRoot: string,
   canonicalRoot: string,
   configuredOutputDir: string,
@@ -224,8 +226,7 @@ function resolveGeneratedOutputDir(
   workspaceRoot: string,
   mediaKind: GeneratedMediaTaskType | 'file',
 ): string {
-  return vscode.Uri.joinPath(
-    vscode.Uri.file(workspaceRoot),
-    resolveWorkspaceGeneratedAssetRelativeDirectory({ mediaKind }),
-  ).fsPath;
+  const runtimeGeneratedRoot = resolveStorageLayout(workspaceRoot, os.homedir()).project.local.cache
+    .generated;
+  return path.join(runtimeGeneratedRoot, resolveGeneratedAssetMediaKind({ mediaKind }));
 }

@@ -17,6 +17,7 @@ import type {
 } from './types';
 import type { TuiConversationPersistenceSnapshot } from '../../host/tui-sqlite-conversation-storage';
 import { TuiDebugAutomationProtocolError } from './protocol';
+import { projectTaskOutputArtifactFacts } from '../artifact-fact-projector';
 
 const FACT_LIMITS = Object.freeze({
   turns: 512,
@@ -137,7 +138,7 @@ export function createTuiAutomationAppPort(
         [...stores.agent.getState().activeSkillLifecycleRecords],
         FACT_LIMITS.skillActivations,
       );
-      const artifacts = bounded(readArtifactFacts(stores), FACT_LIMITS.artifacts);
+      const artifacts = bounded(readArtifactFacts(stores, rawTasks), FACT_LIMITS.artifacts);
       const runtimeErrors = bounded(readRuntimeErrors(stores), FACT_LIMITS.runtimeErrors);
       const canvas = readCanvasFacts(stores);
       const markdown = options.readMarkdownFacts();
@@ -703,12 +704,16 @@ function bounded<T>(
 
 function readArtifactFacts(
   stores: TuiConversationStores,
+  tasks: readonly Task[],
 ): TuiDebugAutomationSessionFacts['artifacts'] {
-  const facts = stores.conversation
-    .getState()
-    .messages.flatMap((message) =>
-      (message.timelineRows ?? []).flatMap((row) => row.artifactFacts ?? []),
-    );
+  const facts = [
+    ...stores.conversation
+      .getState()
+      .messages.flatMap((message) =>
+        (message.timelineRows ?? []).flatMap((row) => row.artifactFacts ?? []),
+      ),
+    ...projectTaskOutputArtifactFacts(tasks),
+  ];
   const unique = new Map<string, (typeof facts)[number]>();
   for (const fact of facts)
     unique.set(`${fact.ref}:${fact.digest ?? ''}:${fact.revision ?? ''}`, fact);

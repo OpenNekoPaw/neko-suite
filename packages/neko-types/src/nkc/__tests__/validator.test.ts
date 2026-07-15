@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { createResourceFingerprint, createResourceRef } from '../../types/resource-cache';
 import { validateNkc } from '../index';
 
 function createValidCanvas(overrides: Record<string, unknown> = {}): Record<string, unknown> {
@@ -45,6 +46,108 @@ describe('NKC validator v2.1', () => {
     expect(result.errors).toContainEqual(
       expect.objectContaining({ field: 'projected', message: 'must be a boolean' }),
     );
+  });
+
+  it('rejects runtime generated Group and candidate identities from durable NKC data', () => {
+    const result = validateNkc(
+      createValidCanvas({
+        nodes: [
+          {
+            ...createCompleteNode('group'),
+            id: 'runtime:canvas-generated-group:task-1',
+          },
+          {
+            ...createCompleteNode('media'),
+            id: 'runtime:canvas-generated-candidate:output-1',
+          },
+        ],
+      }),
+    );
+
+    expect(result.valid).toBe(false);
+    expect(result.errors).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          field: 'nodes[0].id',
+          message: 'runtime generated Group identities cannot be persisted',
+        }),
+        expect.objectContaining({
+          field: 'nodes[1].id',
+          message: 'runtime generated Group identities cannot be persisted',
+        }),
+      ]),
+    );
+  });
+
+  it('rejects runtime projections, cache paths, and unpromoted generated refs in node data', () => {
+    const generatedRef = createResourceRef({
+      scope: 'project',
+      provider: 'generated-output',
+      kind: 'generated',
+      source: { kind: 'generated-asset', generatedAssetId: 'generated-output:1' },
+      locator: { kind: 'generated-asset', assetId: 'generated-output:1' },
+      fingerprint: createResourceFingerprint({ strategy: 'hash', value: 'sha256:draft' }),
+    });
+    const result = validateNkc(
+      createValidCanvas({
+        nodes: [
+          {
+            ...createCompleteNode('media'),
+            data: {
+              projectionId: 'runtime:canvas-generated-group:task:1',
+              cachePath: '.neko/.cache/resources/generated-output.png',
+              resourceRef: generatedRef,
+            },
+          },
+        ],
+      }),
+    );
+
+    expect(result.valid).toBe(false);
+    expect(result.errors).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ message: expect.stringContaining('runtime handles') }),
+        expect.objectContaining({ message: expect.stringContaining('runtime-only') }),
+        expect.objectContaining({ message: expect.stringContaining('promoted Asset identity') }),
+      ]),
+    );
+  });
+
+  it('accepts stable Asset refs and existing legacy generated-source file refs', () => {
+    const assetRef = createResourceRef({
+      scope: 'project',
+      provider: 'media-library',
+      kind: 'media',
+      source: {
+        kind: 'media-library',
+        mediaLibraryId: 'asset:entity:1',
+        projectRelativePath: 'neko/assets/concept.png',
+      },
+      locator: { kind: 'file', path: 'neko/assets/concept.png' },
+      fingerprint: createResourceFingerprint({ strategy: 'hash', value: 'sha256:asset' }),
+    });
+    const legacyRef = createResourceRef({
+      scope: 'project',
+      provider: 'workspace',
+      kind: 'media',
+      source: {
+        kind: 'file',
+        projectRelativePath: 'neko/generated/image/legacy-concept.png',
+      },
+      locator: { kind: 'file', path: 'neko/generated/image/legacy-concept.png' },
+      fingerprint: createResourceFingerprint({ strategy: 'hash', value: 'sha256:legacy' }),
+    });
+    const result = validateNkc(
+      createValidCanvas({
+        nodes: [
+          { ...createCompleteNode('media'), data: { resourceRef: assetRef } },
+          { ...createCompleteNode('media'), id: 'media-legacy', data: { resourceRef: legacyRef } },
+        ],
+      }),
+    );
+
+    expect(result.valid).toBe(true);
+    expect(result.errors).toEqual([]);
   });
 
   it('accepts registered subsystem node and connection types', () => {

@@ -1,4 +1,5 @@
 import { ArrowRightIcon, ChevronDownIcon, ChevronRightIcon, ZoomInIcon } from '@neko/shared/icons';
+import type { NodePresentation } from '../nodes/nodeTypeDescriptor';
 
 export interface NodeHeaderBadge {
   label: string;
@@ -15,6 +16,7 @@ export interface NodeHeaderProps {
   onToggleCollapse?: () => void;
   onOpenPreview?: () => void;
   onExpand?: () => void;
+  presentation?: NodePresentation;
 }
 
 export function NodeHeader({
@@ -27,14 +29,17 @@ export function NodeHeader({
   onToggleCollapse,
   onOpenPreview,
   onExpand,
+  presentation = 'structured',
 }: NodeHeaderProps) {
+  const isFoundational = presentation === 'foundational';
   return (
     <div
-      className="node-header flex items-center gap-2 px-3 py-2"
+      className={`node-header flex items-center gap-2 ${isFoundational ? 'px-1 pb-1 pt-0' : 'px-3 py-2'}`}
+      data-node-header-presentation={presentation}
       tabIndex={-1}
       style={{
-        backgroundColor: 'var(--node-header-bg)',
-        borderBottom: '1px solid var(--node-divider)',
+        backgroundColor: isFoundational ? 'transparent' : 'var(--node-header-bg)',
+        borderBottom: isFoundational ? 'none' : '1px solid var(--node-divider)',
       }}
     >
       {collapsible && (
@@ -55,26 +60,29 @@ export function NodeHeader({
           )}
         </button>
       )}
-      <span
-        className="flex-shrink-0 rounded px-1.5 py-0.5 text-xs font-medium"
-        style={{ backgroundColor: `${tagColor}20`, color: tagColor }}
-      >
-        {tagLabel}
-      </span>
+      {!isFoundational && (
+        <span
+          className="flex-shrink-0 rounded px-1.5 py-0.5 text-xs font-medium"
+          style={{ backgroundColor: `${tagColor}20`, color: tagColor }}
+        >
+          {tagLabel}
+        </span>
+      )}
       <span
         className="min-w-0 flex-1 truncate text-sm font-medium"
         style={{ color: 'var(--node-fg)' }}
       >
         {title}
       </span>
-      {badges?.map((badge) => (
-        <span
-          key={badge.label}
-          className={`flex-shrink-0 rounded px-1 py-0.5 text-[9px] leading-none ${getBadgeClassName(badge.tone)}`}
-        >
-          {badge.label}
-        </span>
-      ))}
+      {!isFoundational &&
+        badges?.map((badge) => (
+          <span
+            key={badge.label}
+            className={`flex-shrink-0 rounded px-1 py-0.5 text-[9px] leading-none ${getBadgeClassName(badge.tone)}`}
+          >
+            {badge.label}
+          </span>
+        ))}
       {onExpand && (
         <button
           type="button"

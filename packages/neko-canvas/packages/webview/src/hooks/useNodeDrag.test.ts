@@ -42,6 +42,17 @@ describe('shouldStartNodeDrag', () => {
     });
   });
 
+  it('allows an explicitly eligible keyboard control to remain Group drag chrome', () => {
+    const name = document.createElement('span');
+    name.setAttribute('role', 'button');
+    name.dataset.nodeDragAllow = 'true';
+
+    expect(getNodeDragStartDecision(mouseDown(name, 10, 10))).toEqual({
+      canStart: true,
+      stopPropagation: false,
+    });
+  });
+
   it('blocks dragging from horizontal scrollbar hit areas', () => {
     const scroller = document.createElement('div');
     Object.defineProperty(scroller, 'clientWidth', { value: 200 });

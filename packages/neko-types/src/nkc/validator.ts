@@ -7,6 +7,11 @@
 
 import type { ValidationResult, ValidationError } from '../config/config-adapter';
 import { CANVAS_CONNECTION_TYPES, CANVAS_NODE_TYPES } from '../types/canvas';
+import {
+  CANVAS_GENERATED_DRAFT_CANDIDATE_ID_PREFIX,
+  CANVAS_GENERATED_DRAFT_GROUP_ID_PREFIX,
+} from '../types/canvas-generated-draft-groups';
+import { validateNkcNodeDurableResourceIdentity } from '../utils/canvasDurableResourceIdentity';
 
 // =============================================================================
 // Type Guards (internal helpers)
@@ -143,6 +148,15 @@ function validateNode(
   // id — required string
   if (!isString(node['id'])) {
     structuralErrors.push({ field: `${path}.id`, message: 'must be a string', severity: 'error' });
+  } else if (
+    node['id'].startsWith(CANVAS_GENERATED_DRAFT_GROUP_ID_PREFIX) ||
+    node['id'].startsWith(CANVAS_GENERATED_DRAFT_CANDIDATE_ID_PREFIX)
+  ) {
+    structuralErrors.push({
+      field: `${path}.id`,
+      message: 'runtime generated Group identities cannot be persisted',
+      severity: 'error',
+    });
   }
 
   // type — required, must be in allowed set
@@ -236,6 +250,16 @@ function validateNode(
   if (node['locked'] !== undefined && !isBoolean(node['locked'])) {
     errors.push({ field: `${path}.locked`, message: 'must be a boolean', severity: 'error' });
   }
+
+  errors.push(
+    ...validateNkcNodeDurableResourceIdentity(node['data'], `${path}.data`).map(
+      (diagnostic): ValidationError => ({
+        field: diagnostic.target ?? `${path}.data`,
+        message: diagnostic.message,
+        severity: 'error',
+      }),
+    ),
+  );
 
   // ports — optional array
   if (node['ports'] !== undefined) {

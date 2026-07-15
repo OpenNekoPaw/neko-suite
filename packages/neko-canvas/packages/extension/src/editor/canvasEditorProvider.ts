@@ -80,6 +80,8 @@ import {
   resolveStorageLayout,
   validateCanvasStoryboardActionIntent,
   validateCanvasBoardRef,
+  validateCanvasGeneratedDraftGroupProjection,
+  isCanvasGeneratedDraftPromotionRequest,
   isCanvasCreativeAiActionId,
   createCreativeAiDiagnostic,
 } from '@neko/shared';
@@ -127,6 +129,9 @@ import type {
   CanvasImportAssetRequest,
   CanvasImportAssetResult,
   CanvasHostAppliedDocumentMessage,
+  CanvasGeneratedDraftGroupProjection,
+  CanvasGeneratedDraftPromotionRequest,
+  CanvasGeneratedDraftPromotionResult,
   DocumentResourceStatusReason,
   DocumentArchiveResourceRef,
   ProjectionAdapter,
@@ -209,6 +214,18 @@ const CANVAS_EDITOR_LEVEL_KEYBOARD_ACTIONS = new Set([
 type CanvasHeadlessAssetImporter = (
   asset: CanvasImportAssetRequest,
 ) => Promise<CanvasImportAssetResult>;
+
+interface CanvasGeneratedDraftProjectionProvider {
+  readonly listForBoardPath: (targetPath: string) => readonly CanvasGeneratedDraftGroupProjection[];
+}
+
+type CanvasGeneratedDraftPromotionHandler = (
+  request: CanvasGeneratedDraftPromotionRequest,
+) => Promise<CanvasGeneratedDraftPromotionResult>;
+type CanvasGeneratedDraftDiscardHandler = (
+  projectionId: string,
+  discardUnsaved: boolean,
+) => Promise<void>;
 
 type CanvasPlaybackPreviewSourceKind =
   'generated-image' | 'generated-media' | 'reference-image' | 'source-media' | 'media-asset';
@@ -730,6 +747,9 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
   private readonly canvasRevisionsByDocumentUri = new Map<string, number>();
   private readonly canvasPreviewFingerprintsByDocumentUri = new Map<string, string>();
   private readonly canvasDataReadyDocumentUris = new Set<string>();
+  private generatedDraftProjectionProvider: CanvasGeneratedDraftProjectionProvider | undefined;
+  private generatedDraftPromotionHandler: CanvasGeneratedDraftPromotionHandler | undefined;
+  private generatedDraftDiscardHandler: CanvasGeneratedDraftDiscardHandler | undefined;
   private pendingEntityBackfills: CanvasEntityPendingBackfill[] = [];
   private readonly narrativePreviewBridge: NarrativePreviewBridge;
 
@@ -1051,6 +1071,98 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
 
   setHeadlessAssetImporter(importer: CanvasHeadlessAssetImporter): void {
     this.headlessAssetImporter = importer;
+  }
+
+  setGeneratedDraftProjectionProvider(provider: CanvasGeneratedDraftProjectionProvider): void {
+    this.generatedDraftProjectionProvider = provider;
+  }
+
+  setGeneratedDraftPromotionHandler(handler: CanvasGeneratedDraftPromotionHandler): void {
+    this.generatedDraftPromotionHandler = handler;
+  }
+
+  setGeneratedDraftDiscardHandler(handler: CanvasGeneratedDraftDiscardHandler): void {
+    this.generatedDraftDiscardHandler = handler;
+  }
+
+  async publishGeneratedDraftProjection(
+    projection: CanvasGeneratedDraftGroupProjection,
+  ): Promise<boolean> {
+    const diagnostics = validateCanvasGeneratedDraftGroupProjection(projection);
+    if (diagnostics.length > 0) {
+      throw new Error(
+        `Invalid generated draft projection: ${diagnostics.map((diagnostic) => diagnostic.code).join(', ')}`,
+      );
+    }
+    const panel = this.getPanelForWorkspacePath(projection.target.documentRef.path);
+    if (!panel) return false;
+
+    const candidates = await Promise.all(
+      projection.candidates.map(async (candidate) => {
+        if (!this.resourceCache) {
+          return candidate.state === 'saved-to-assets' || candidate.state === 'added-to-board'
+            ? candidate
+            : {
+                ...candidate,
+                state: 'unavailable' as const,
+                diagnostic: 'Canvas ResourceCache is unavailable for generated review.',
+              };
+        }
+        const projected = await this.resourceCache.project(
+          panel.webview,
+          candidate.resourceRef,
+          { role: 'source', mimeType: candidate.mimeType },
+          { materializeIfMissing: true },
+        );
+        if (projected.status === 'ready' && projected.uri) {
+          return { ...candidate, renderUri: projected.uri };
+        }
+        return candidate.state === 'saved-to-assets' || candidate.state === 'added-to-board'
+          ? candidate
+          : {
+              ...candidate,
+              state: 'unavailable' as const,
+              diagnostic: projected.error ?? 'Generated candidate preview is unavailable.',
+            };
+      }),
+    );
+    const projected: CanvasGeneratedDraftGroupProjection = { ...projection, candidates };
+    const projectedDiagnostics = validateCanvasGeneratedDraftGroupProjection(projected);
+    if (projectedDiagnostics.length > 0) {
+      throw new Error(
+        `Invalid projected generated draft Group: ${projectedDiagnostics.map((diagnostic) => diagnostic.code).join(', ')}`,
+      );
+    }
+    return panel.webview.postMessage({
+      type: 'canvas.generatedDraftGroup',
+      projection: projected,
+    });
+  }
+
+  async removeGeneratedDraftProjection(projectionId: string, targetPath: string): Promise<boolean> {
+    const panel = this.getPanelForWorkspacePath(targetPath);
+    if (!panel) return false;
+    return panel.webview.postMessage({
+      type: 'canvas.generatedDraftGroupRemoved',
+      projectionId,
+    });
+  }
+
+  private getPanelForWorkspacePath(targetPath: string): vscode.WebviewPanel | undefined {
+    const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+    if (!workspaceFolder) return undefined;
+    const documentUri = vscode.Uri.file(
+      path.join(workspaceFolder.uri.fsPath, targetPath),
+    ).toString();
+    return this.webviewPanelsByDocumentUri.get(documentUri);
+  }
+
+  private getWorkspaceRelativeDocumentPath(documentUri: vscode.Uri): string | undefined {
+    const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+    if (!workspaceFolder) return undefined;
+    const relativePath = path.relative(workspaceFolder.uri.fsPath, documentUri.fsPath);
+    if (relativePath.startsWith('..') || path.isAbsolute(relativePath)) return undefined;
+    return relativePath.replace(/\\/g, '/');
   }
 
   private setActiveCanvasEditor(
@@ -2846,6 +2958,51 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
         if (webviewPanel.active) {
           this.setActiveCanvasEditor(webviewPanel, document);
         }
+        const boardPath = this.getWorkspaceRelativeDocumentPath(document.uri);
+        if (boardPath && this.generatedDraftProjectionProvider) {
+          for (const projection of this.generatedDraftProjectionProvider.listForBoardPath(
+            boardPath,
+          )) {
+            await this.publishGeneratedDraftProjection(projection);
+          }
+        }
+        break;
+      }
+      case 'canvas.generatedDraft.saveToAssets': {
+        if (!isCanvasGeneratedDraftPromotionRequest(message.request)) {
+          throw new Error('Invalid canvas.generatedDraft.saveToAssets request.');
+        }
+        if (!this.generatedDraftPromotionHandler) {
+          throw new Error('Canvas generated draft promotion handler is unavailable.');
+        }
+        try {
+          const result = await this.generatedDraftPromotionHandler(message.request);
+          await webviewPanel.webview.postMessage({
+            type: 'canvas.generatedDraft.promotionResult',
+            requestId: message.request.requestId,
+            result,
+          });
+        } catch (error) {
+          await webviewPanel.webview.postMessage({
+            type: 'canvas.generatedDraft.promotionFailed',
+            requestId: message.request.requestId,
+            projectionId: message.request.projectionId,
+            diagnostic: error instanceof Error ? error.message : String(error),
+          });
+        }
+        break;
+      }
+      case 'canvas.generatedDraft.discard': {
+        if (
+          typeof message.projectionId !== 'string' ||
+          typeof message.discardUnsaved !== 'boolean'
+        ) {
+          throw new Error('Invalid canvas.generatedDraft.discard request.');
+        }
+        if (!this.generatedDraftDiscardHandler) {
+          throw new Error('Canvas generated draft discard handler is unavailable.');
+        }
+        await this.generatedDraftDiscardHandler(message.projectionId, message.discardUnsaved);
         break;
       }
       case 'webviewKeyboardFocus': {

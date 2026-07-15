@@ -26,7 +26,7 @@ import {
   LogLevel,
   projectLocalMetadataUserDiagnostic,
   withTimeout,
-  type ISkillProvider,
+  type NekoAgentAPI,
   type ProjectQualityFacade,
   type QualityProjectRef,
 } from '@neko/shared';
@@ -128,7 +128,7 @@ async function resolveOwningProjectQualityFacade(
   return api?.projectQuality;
 }
 
-export async function activate(context: vscode.ExtensionContext): Promise<ISkillProvider> {
+export async function activate(context: vscode.ExtensionContext): Promise<NekoAgentAPI> {
   // Initialize logger
   const logLevelSetting = inspectLogLevelSetting(context.extensionMode);
   const resolvedLogLevel = logLevelSetting.level;
@@ -526,6 +526,63 @@ export async function activate(context: vscode.ExtensionContext): Promise<ISkill
   return {
     getSkills() {
       return skillCatalogProvider.getSkills();
+    },
+    async resolveGeneratedOutput(resourceRef) {
+      if (
+        resourceRef.kind !== 'generated' ||
+        resourceRef.source.kind !== 'generated-asset' ||
+        !resourceRef.source.generatedAssetId
+      ) {
+        return {
+          status: 'unavailable',
+          diagnostic: 'Generated output resolution requires generated-output ResourceRef identity.',
+        };
+      }
+      const asset = generatedAssetIndex?.get(resourceRef.source.generatedAssetId);
+      const lifecycle = asset?.lifecycle;
+      if (!asset || !lifecycle) {
+        return {
+          status: 'unavailable',
+          diagnostic: 'Generated output lifecycle metadata is unavailable.',
+        };
+      }
+      if (
+        lifecycle.resourceRef.id !== resourceRef.id ||
+        lifecycle.contentDigest !== resourceRef.fingerprint.value
+      ) {
+        return {
+          status: 'unavailable',
+          diagnostic: 'Generated output ResourceRef no longer matches its lifecycle revision.',
+        };
+      }
+      return {
+        status: 'ready',
+        assetId: lifecycle.assetId,
+        revision: lifecycle.revision,
+        contentDigest: lifecycle.contentDigest,
+        mediaKind: lifecycle.mediaKind,
+        mimeType: lifecycle.mimeType,
+        taskId: lifecycle.generation.taskId,
+        ...(lifecycle.generation.runId ? { runId: lifecycle.generation.runId } : {}),
+        sourcePath: asset.path,
+      };
+    },
+    async setGeneratedOutputReviewPin(resourceRef, input) {
+      if (!agentContentAccess.resourceCache) {
+        throw new Error('Generated output review pinning requires ResourceCache.');
+      }
+      const result = await agentContentAccess.resourceCache.updateLifecycle({
+        ref: resourceRef,
+        variant: { role: 'source' },
+        pinned: input.pinned,
+        sessionActive: input.pinned,
+        ...(input.pinned ? { retentionHint: 'pinned' as const } : {}),
+        reason: input.pinned ? 'canvas-generated-review-open' : 'canvas-generated-review-closed',
+        ownerId: input.ownerId,
+      });
+      if (result.status !== 'ready') {
+        throw new Error(result.error ?? 'Generated output review pin update failed.');
+      }
     },
   };
 }

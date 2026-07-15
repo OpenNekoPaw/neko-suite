@@ -142,6 +142,13 @@ export const CONTAINER_ACTION_DISPATCHER: ContainerActionDispatcher = {
   'remove-column': (ctx) => {
     updateTableDimension(ctx, 'columnCount', -1);
   },
+  'arrange-stable': (ctx) => ctx.canvasStore.arrangeGroup(ctx.containerId, 'stable'),
+  'arrange-name': (ctx) => ctx.canvasStore.arrangeGroup(ctx.containerId, 'name'),
+  'arrange-type': (ctx) => ctx.canvasStore.arrangeGroup(ctx.containerId, 'type'),
+  'arrange-created': (ctx) => ctx.canvasStore.arrangeGroup(ctx.containerId, 'created'),
+  'fit-to-content': (ctx) => ctx.canvasStore.fitGroupToContent(ctx.containerId),
+  'collapse-group': (ctx) => ctx.canvasStore.setGroupCollapsed(ctx.containerId, true),
+  'expand-group': (ctx) => ctx.canvasStore.setGroupCollapsed(ctx.containerId, false),
 };
 
 export function dispatchNodeCardAction(
