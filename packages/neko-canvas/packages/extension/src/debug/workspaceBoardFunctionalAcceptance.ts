@@ -8,7 +8,7 @@ import {
 } from '@neko/shared';
 import type { WorkspaceBoardProjector } from '../services/workspaceBoardProjector';
 
-export const WORKSPACE_BOARD_FUNCTIONAL_ACCEPTANCE_COMMAND =
+const WORKSPACE_BOARD_FUNCTIONAL_ACCEPTANCE_COMMAND =
   'neko.canvas.debug.projectWorkspaceBoardGeneratedImage';
 
 export function registerWorkspaceBoardFunctionalAcceptance(options: {
