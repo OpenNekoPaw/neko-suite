@@ -90,7 +90,7 @@ describe('ContentBlockItem Canvas transfer actions', () => {
     expect(screen.queryByRole('button', { name: /Canvas/ })).toBeNull();
   });
 
-  it('routes assistant Markdown Send to Canvas through Agent-led handoff', () => {
+  it('does not retain generic Send to Canvas for current assistant Markdown', () => {
     renderContentBlock({
       id: 'storyboard',
       type: 'text',
@@ -98,30 +98,8 @@ describe('ContentBlockItem Canvas transfer actions', () => {
       content: createStoryboardCreativeTable(),
     });
 
-    fireEvent.click(screen.getByRole('button', { name: /Canvas/ }));
-
-    expect(mockPostMessage).toHaveBeenCalledWith(
-      expect.objectContaining({
-        type: 'requestCanvasAuthoringHandoff',
-        conversationId: 'conv-1',
-        requestId: expect.stringMatching(/^canvas-authoring-handoff:/),
-        sourceKind: 'markdown',
-        content: expect.stringContaining('| scene | shot | source |'),
-        sourceFormat: 'gfm-table',
-        targetHints: { sourceFormat: 'gfm-table' },
-      }),
-    );
-    expect(JSON.stringify(mockPostMessage.mock.calls)).not.toContain('declaredIntentHint');
-    expect(JSON.stringify(mockPostMessage.mock.calls)).not.toContain('declaredProfileHint');
-    expect(JSON.stringify(mockPostMessage.mock.calls)).not.toContain('capabilityId');
-    expect(JSON.stringify(mockPostMessage.mock.calls)).not.toContain('intentHint');
-    expect(JSON.stringify(mockPostMessage.mock.calls)).not.toContain('profileHint');
-    expect(mockPostMessage).not.toHaveBeenCalledWith(
-      expect.objectContaining({ type: 'invokeCanvasMarkdownCapability' }),
-    );
-    expect(mockPostMessage).not.toHaveBeenCalledWith(
-      expect.objectContaining({ type: 'invokeAgentCapabilityLifecycle' }),
-    );
+    expect(screen.queryByRole('button', { name: /Canvas/ })).toBeNull();
+    expect(mockPostMessage).not.toHaveBeenCalled();
   });
 
   it('routes embedded canonical Storyboard actions without Markdown reconstruction or asset flattening', () => {
@@ -176,7 +154,7 @@ describe('ContentBlockItem Canvas transfer actions', () => {
     }
   });
 
-  it('renders Canvas transfer for storyboard-ready markdown', () => {
+  it('does not show generic Canvas transfer for storyboard-ready Markdown', () => {
     renderContentBlock({
       id: 'storyboard',
       type: 'text',
@@ -184,10 +162,10 @@ describe('ContentBlockItem Canvas transfer actions', () => {
       content: createStoryboardCreativeTable(),
     });
 
-    expect(screen.getByRole('button', { name: /Canvas/ })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Canvas/ })).toBeNull();
   });
 
-  it('renders Agent-led Canvas transfer for simplified storyboard display tables', () => {
+  it('keeps simplified storyboard display tables as auto-delivered Markdown', () => {
     renderContentBlock({
       id: 'weak-storyboard',
       type: 'text',
@@ -195,7 +173,7 @@ describe('ContentBlockItem Canvas transfer actions', () => {
       content: ['| 镜头 | 画面 |', '| --- | --- |', '| 1 | 角色进入森林 |'].join('\n'),
     });
 
-    expect(screen.getByRole('button', { name: /Canvas/ })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Canvas/ })).toBeNull();
   });
 
   it('renders composite artifact transfers as review-only artifact cards', () => {

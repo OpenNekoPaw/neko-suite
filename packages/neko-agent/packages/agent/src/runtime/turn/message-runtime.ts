@@ -241,6 +241,7 @@ export interface AgentMessageTurnMediaExecutionInput {
   readonly conversationId: string;
   readonly prompt: string;
   readonly mediaModel: ModelRef<MediaModelCategory>;
+  readonly selectedFileReferences?: readonly AgentFileReference[];
 }
 
 export interface AgentMessageTurnAgentExecutionInput {
@@ -258,6 +259,7 @@ export interface AgentMessageTurnAgentExecutionInput {
   readonly mediaModels?: AgentMediaModelSelections;
   readonly executionOverrides?: AgentMessageExecutionOverrides;
   readonly locale?: AgentRuntimePromptLocale | string;
+  readonly selectedFileReferences?: readonly AgentFileReference[];
 }
 
 export type AgentMessageTurnAgentExecutionResult =
@@ -991,6 +993,9 @@ export async function runAgentMessageTurnRuntime(
       conversationId,
       prompt: prepared.enhancedMessage,
       mediaModel: prepared.route.mediaModel,
+      ...(input.request.fileReferences
+        ? { selectedFileReferences: input.request.fileReferences }
+        : {}),
     });
     return { status: 'media-dispatched' };
   }
@@ -1015,6 +1020,9 @@ export async function runAgentMessageTurnRuntime(
         input.request.locale,
       ),
       locale: input.request.locale,
+      ...(input.request.fileReferences
+        ? { selectedFileReferences: input.request.fileReferences }
+        : {}),
     });
     if (result?.status === 'queued') {
       input.removeUserMessage?.(conversationId, prepared.userMessage.id);

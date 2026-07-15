@@ -78,7 +78,7 @@ function projectTurnWorkItems(turn: ConversationTurnProjection): AgentWorkItem[]
 
 function mergeProjectedMessage(messages: readonly Message[], projection: Message): Message[] {
   const targetIndex = messages.findIndex((message) => message.id === projection.id);
-  if (targetIndex === -1) return [...messages, projection];
+  if (targetIndex === -1) return insertProjectedMessage(messages, projection);
   return messages.map((message, index) =>
     index === targetIndex
       ? {
@@ -90,6 +90,12 @@ function mergeProjectedMessage(messages: readonly Message[], projection: Message
         }
       : message,
   );
+}
+
+function insertProjectedMessage(messages: readonly Message[], projection: Message): Message[] {
+  const insertionIndex = messages.findIndex((message) => message.timestamp > projection.timestamp);
+  if (insertionIndex === -1) return [...messages, projection];
+  return [...messages.slice(0, insertionIndex), projection, ...messages.slice(insertionIndex)];
 }
 
 function mergeProjectedWorkItems(

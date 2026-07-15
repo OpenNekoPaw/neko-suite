@@ -315,7 +315,7 @@ describe('MessageList auto-scroll lifecycle', () => {
     expect(screen.getByText('/books/a.epub')).toBeTruthy();
   });
 
-  it('passes plugin availability into markdown storyboard Canvas transfer actions', () => {
+  it('does not require a Canvas transfer action for auto-delivered storyboard Markdown', () => {
     virtualItems = [{ index: 0, key: 'storyboard', start: 0 }];
     registerDefaultRenderers();
 
@@ -330,7 +330,7 @@ describe('MessageList auto-scroll lifecycle', () => {
       </MessageActionsProvider>,
     );
 
-    expect(screen.getByRole('button', { name: /Canvas/ })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Canvas/ })).toBeNull();
   });
 
   it('renders storyboard resources from prior assistant ReadImage context', () => {

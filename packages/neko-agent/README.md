@@ -209,6 +209,14 @@ Agent/plugin transfer 只选择能力和投影诊断，不直接调用领域 Web
 
 Transfer payload 必须携带结构化 `target`、`reveal`、stable source/ref 和 provenance。命令返回 `ok: false` 时，Agent/Extension/TUI/Electron adapter 展示 diagnostic，不允许 fallback 到旧 `neko.cut.importGeneratedClip`、`neko.sketch.importAsset`、`neko.model.importAsset`、打开隐藏 Webview 或声称发送成功。
 
+### Board Canvas 自动投递
+
+在 VS Code 宿主中，面向创作者的任务不要求先指定 Canvas。Agent 在异步工作开始前通过 `NekoCanvasAPI.boards` 按“显式目标 → 有效会话绑定 → 唯一精确 scope 匹配 → 新建”解析普通 `neko/boards/*.nkc`，并冻结 conversation/turn/task/run/document/canvas/revision 身份。普通问答不创建 Board；活动或最近打开的 Canvas 不参与默认解析。
+
+运行时按 typed result 自动投递创作者可复用的 Markdown、用户选中的稳定文件引用，以及已保存在 `neko/generated/<kind>/` 的图片/音频/视频。推理、日志、scratch、未选搜索结果、runtime/cache handle 和失败中间态不会成为节点。投递通过 Canvas 公共 authoring API、provenance 和 revision check 完成；重放按 artifact/output identity 幂等，目标删除或冲突只返回可见诊断，不改投其他 Canvas。
+
+当前 typed Markdown/媒体结果不再依赖通用 `Send to Canvas` 才能保留。显式历史内容或外部资源仍可使用 Add/Import to Board Canvas；专业结构化 Storyboard 仍要求明确的 professional authoring 意图和 Canvas validator。
+
 ### Canvas Creative Run
 
 Canvas Shot overlay AI 按钮通过 `external-creative-package` invocation 进入 Agent creative run/workItem，不使用前台选中会话、`sendToAgent` 文本意图或 Canvas Webview store mutation 作为成功路径。

@@ -197,6 +197,7 @@ export * from './mediaEngine';
 // Canvas types (infinite canvas editor)
 export * from './canvas';
 export * from './canvas-creative-scope';
+export * from './canvas-board-routing';
 export * from './canvas-playback';
 export * from './canvas-layered';
 export * from './canvas-serializable';

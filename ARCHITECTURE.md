@@ -95,6 +95,7 @@ Key invariants:
 - Agent tools operate through package capabilities and shared contracts, not direct Webview coupling.
 - `brief.md`, `plan.md`, and TODOs are optional user content or progress projections; they do not own execution state or prove delivery.
 - Generated files are directly usable results identified by the actual file, `ResourceRef`, digest, and lineage. Owning packages retain `.nk*` project facts and revisions, and asset-library promotion occurs only when explicitly requested.
+- `neko/boards/*.nkc` is an Agent default-directory convention over ordinary Canvas documents, not a Draft/Board format. Unspecified creator work resolves only through the public Canvas index in this order: explicit target, valid binding, one exact scope match, then creation; the active or recent Canvas is never an implicit write target.
 
 ## Creative Data Flow
 

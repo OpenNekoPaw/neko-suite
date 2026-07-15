@@ -45,12 +45,18 @@ import {
 } from './editor/narrativePreviewFeatureGate';
 import { CanvasCreativeAiApplyAdapter } from './creativeAiCanvasAdapter';
 import { CanvasProjectAuthoringService } from './services/canvasProjectAuthoringService';
+import { CanvasBoardIndexService } from './services/canvasBoardIndexService';
+import { CanvasBoardResolverService } from './services/canvasBoardResolverService';
+import { CanvasBoardDeliveryService } from './services/canvasBoardDeliveryService';
 
 // Extension state
 let canvasEditorProvider: CanvasEditorProvider;
 let canvasOutlineProvider: CanvasOutlineProvider;
 let canvasStatusBar: CanvasStatusBar;
 let canvasProjectAuthoringService: CanvasProjectAuthoringService;
+let canvasBoardIndexService: CanvasBoardIndexService;
+let canvasBoardResolverService: CanvasBoardResolverService;
+let canvasBoardDeliveryService: CanvasBoardDeliveryService;
 
 /** Cached assets API reference (resolved once, reused across calls). */
 let assetsAPI: NekoAssetsAPI | undefined;
@@ -198,6 +204,15 @@ export async function activate(
     canvasEditorProvider,
     logger,
   });
+  canvasBoardIndexService = new CanvasBoardIndexService({ logger });
+  canvasBoardResolverService = new CanvasBoardResolverService({
+    index: canvasBoardIndexService,
+    creator: canvasProjectAuthoringService,
+  });
+  canvasBoardDeliveryService = new CanvasBoardDeliveryService({
+    index: canvasBoardIndexService,
+    authoring: canvasProjectAuthoringService,
+  });
   canvasEditorProvider.setHeadlessAssetImporter((asset) =>
     canvasProjectAuthoringService.importAsset({ asset }),
   );
@@ -292,6 +307,11 @@ export async function activate(
     importAsset: (asset) => canvasProjectAuthoringService.importAsset({ asset }),
     authoring: {
       importAsset: (request) => canvasProjectAuthoringService.importAssetAuthoring(request),
+    },
+    boards: {
+      query: (query) => canvasBoardIndexService.query(query),
+      resolve: (input) => canvasBoardResolverService.resolve(input),
+      deliver: (input) => canvasBoardDeliveryService.deliver(input),
     },
     canvas: {
       create: (config) => createCanvas(config),

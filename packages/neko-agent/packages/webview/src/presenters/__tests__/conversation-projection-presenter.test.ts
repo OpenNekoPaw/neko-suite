@@ -33,6 +33,23 @@ describe('conversation projection presenter', () => {
     expect(result).toMatchObject({ isThinking: true, streamingMessageId: 'message-1' });
   });
 
+  it('inserts a late-arriving assistant turn at its chronological position', () => {
+    const history: Message[] = [
+      { id: 'user-1', role: 'user', content: 'first prompt', timestamp: 1 },
+      { id: 'user-2', role: 'user', content: 'second prompt', timestamp: 3 },
+    ];
+
+    const result = projectConversationProjectionRenderState({
+      messages: history,
+      workItems: [],
+      isThinking: false,
+      streamingMessageId: null,
+      projection: projection('first response', { createdAt: 2 }),
+    });
+
+    expect(result.messages.map((message) => message.id)).toEqual(['user-1', 'message-1', 'user-2']);
+  });
+
   it('replaces matching work items with the projection-owned value', () => {
     const stale = workItem('work-1', 10, 'queued');
     const canonical = workItem('work-1', 75, 'processing');
@@ -107,10 +124,15 @@ function projection(
   content: string,
   options: {
     readonly completed?: boolean;
+    readonly createdAt?: number;
     readonly extraItems?: readonly AgentTurnTimelineTaskItem[];
   } = {},
 ): ConversationProjectionSnapshot {
-  const text = textItem(content, options.completed ? 'complete' : 'streaming');
+  const text = textItem(
+    content,
+    options.completed ? 'complete' : 'streaming',
+    options.createdAt ?? 1,
+  );
   return {
     conversationId: 'conv-1',
     projectionVersion: 1,
@@ -130,6 +152,7 @@ function projection(
 function textItem(
   content: string,
   status: AgentTurnTimelineAssistantTextItem['status'],
+  createdAt = 1,
 ): AgentTurnTimelineAssistantTextItem {
   return {
     conversationId: 'conv-1',
@@ -141,8 +164,8 @@ function textItem(
     kind: 'assistant_text',
     status,
     payload: { content, format: 'markdown', sourceGeneration: 1 },
-    createdAt: 1,
-    updatedAt: 1,
+    createdAt,
+    updatedAt: createdAt,
   };
 }
 

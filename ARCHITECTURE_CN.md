@@ -96,6 +96,7 @@ Agent 通过普通 session / turn / ReAct 对话循环读取当前证据、选�
 - Agent 工具通过包能力和共享契约工作，不直接耦合 Webview。
 - `brief.md`、`plan.md` 和 TODO 是可选的用户内容或进度投影，不拥有执行状态，也不证明交付完成。
 - 生成文件通过实际文件、`ResourceRef`、digest 和 lineage 成为可直接使用的结果；`.nk*` 项目事实与 revision 由 owning package 管理，资产入库只在用户明确要求时发生。
+- `neko/boards/*.nkc` 是普通 Canvas 文档的 Agent 默认目录，不是 Draft/Board 新格式。未指定目标的创作运行只能通过 Canvas 公共索引按显式目标、有效绑定、唯一精确 scope、新建的顺序解析；活动/最近 Canvas 不能成为隐式写入目标。
 
 ## 创作数据流
 

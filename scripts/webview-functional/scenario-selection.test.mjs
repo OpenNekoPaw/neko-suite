@@ -7,6 +7,7 @@ describe('functional P0 scenario selection', () => {
     assert.deepEqual(
       await selectFunctionalScenarios(['packages/neko-canvas/packages/webview/src/CanvasApp.tsx']),
       [
+        'scripts/webview-functional/scenarios/canvas/canvas-board-basic-professional.p0.scenario.json',
         'scripts/webview-functional/scenarios/canvas/canvas-edit-save-reopen.p0.scenario.json',
         'scripts/webview-functional/scenarios/canvas/canvas-invalid-project.p0.scenario.json',
       ],
@@ -34,6 +35,7 @@ describe('functional P0 scenario selection', () => {
     assert.deepEqual(fromRunner, [
       'scripts/webview-functional/scenarios/agent/agent-lifecycle-reload.p0.scenario.json',
       'scripts/webview-functional/scenarios/agent/agent-view-submit.p0.scenario.json',
+      'scripts/webview-functional/scenarios/canvas/canvas-board-basic-professional.p0.scenario.json',
       'scripts/webview-functional/scenarios/canvas/canvas-edit-save-reopen.p0.scenario.json',
       'scripts/webview-functional/scenarios/canvas/canvas-invalid-project.p0.scenario.json',
       'scripts/webview-functional/scenarios/cut/cut-add-track-save-reopen.p0.scenario.json',

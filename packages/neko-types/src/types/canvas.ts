@@ -336,6 +336,8 @@ export interface TextCanvasNode extends CanvasNodeBase {
     content: string;
     format?: 'plain' | 'markdown';
     style?: TextNodeStyle;
+    title?: string;
+    provenance?: CanvasSerializableRecord;
   };
 }
 
@@ -655,11 +657,16 @@ export interface ScriptCanvasNode extends CanvasNodeBase {
 export interface DocumentCanvasNode extends CanvasNodeBase {
   type: 'document';
   data: {
+    /** Portable source path. Empty when a stable resource reference owns the source. */
     docPath: string;
-    docType: 'pdf' | 'docx' | 'epub' | 'cbz';
+    docType: 'pdf' | 'docx' | 'epub' | 'cbz' | 'file';
     title: string;
+    mimeType?: string;
+    documentResourceRef?: DocumentArchiveResourceRef;
+    resourceRef?: ResourceRef;
     /** Base64 cover thumbnail */
     thumbnailData?: string;
+    provenance?: CanvasSerializableRecord;
   };
 }
 

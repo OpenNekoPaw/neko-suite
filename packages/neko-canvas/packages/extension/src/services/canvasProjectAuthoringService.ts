@@ -1,6 +1,7 @@
 import * as path from 'path';
 import * as vscode from 'vscode';
 import {
+  CANVAS_BOARD_DIRECTORY,
   applyCanvasHeadlessAuthoringOperations,
   assertNoRuntimeResourceIdentity,
   createDefaultProjectFormatCodecRegistry,
@@ -25,6 +26,8 @@ import {
   type CanvasProjectAuthoringImportAssetResult,
   type QualityProjectRef,
   type CanvasAgentApplyContentResult,
+  type CanvasBoardQueryFilter,
+  type CanvasBoardQuerySummary,
   type CanvasAgentContentPayload,
   type CanvasHeadlessApplyOperationsRequest,
   type CanvasHeadlessApplyOperationsResult,
@@ -46,6 +49,10 @@ import {
 import type { ILogger } from '@neko/shared';
 import { createVSCodeProjectFileIoAdapter } from '@neko/shared/vscode/extension';
 import type { CanvasEditorProvider } from '../editor';
+import {
+  applyCanvasBoardQueryFilter,
+  projectCanvasBoardQuerySummary,
+} from './canvasBoardProjection';
 
 export interface CanvasProjectAuthoringServiceOptions {
   readonly context: vscode.ExtensionContext;
@@ -74,6 +81,29 @@ export class CanvasProjectAuthoringService {
   });
 
   constructor(private readonly options: CanvasProjectAuthoringServiceOptions) {}
+
+  async createBoardDocument(
+    title: string,
+    filter?: CanvasBoardQueryFilter,
+  ): Promise<CanvasBoardQuerySummary> {
+    const folder = vscode.workspace.workspaceFolders?.[0];
+    if (!folder) {
+      throw new Error('No workspace folder open for creating a Canvas Board document.');
+    }
+    const boardDirectory = path.join(folder.uri.fsPath, CANVAS_BOARD_DIRECTORY);
+    await vscode.workspace.fs.createDirectory(vscode.Uri.file(boardDirectory));
+    const filePath = await this.createAvailableCanvasFilePath(boardDirectory, title);
+    const uri = vscode.Uri.file(filePath);
+    const canvasData = applyCanvasBoardQueryFilter(createEmptyCanvasData(title), filter);
+    assertNoRuntimeResourceIdentity(canvasData, 'canvasData');
+    await this.saveCanvasData(uri, canvasData);
+    this.options.canvasEditorProvider.applyHostCanvasData(uri, canvasData);
+    return projectCanvasBoardQuerySummary({
+      workspaceRelativePath: path.relative(folder.uri.fsPath, filePath),
+      canvasData,
+      updatedAt: new Date().toISOString(),
+    });
+  }
 
   async resolveTarget(
     target: CanvasHeadlessAuthoringTarget | undefined,
@@ -435,6 +465,14 @@ export class CanvasProjectAuthoringService {
         )}`,
       );
     }
+    if (target?.expectedRevision) {
+      const actualRevision = `nkc:${hashStableValue(loaded.document)}`;
+      if (actualRevision !== target.expectedRevision) {
+        throw new Error(
+          `stale-board-target: expected Canvas revision ${target.expectedRevision}, received ${actualRevision}.`,
+        );
+      }
+    }
     return {
       ...resolved,
       canvasData: loaded.document,
@@ -458,6 +496,8 @@ export class CanvasProjectAuthoringService {
       ...(asset.documentResourceRef ? { documentResourceRef: asset.documentResourceRef } : {}),
       ...(asset.resourceRef ? { resourceRef: asset.resourceRef } : {}),
       mediaType,
+      ...(asset.name ? { title: asset.name } : {}),
+      ...(asset.provenance ? { provenance: asset.provenance } : {}),
     };
   }
 

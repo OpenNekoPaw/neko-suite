@@ -29,6 +29,7 @@ export interface CanvasHeadlessAuthoringTarget {
   readonly documentUri?: string;
   readonly title?: string;
   readonly reveal?: boolean;
+  readonly expectedRevision?: string;
 }
 
 export interface ResolvedCanvasHeadlessAuthoringTarget {

@@ -8,6 +8,7 @@ const repoRoot = resolve(import.meta.dirname, '../..');
 const pilotScenarioPaths = [
   'scripts/webview-functional/scenarios/agent/agent-view-submit.p0.scenario.json',
   'scripts/webview-functional/scenarios/agent/agent-lifecycle-reload.p0.scenario.json',
+  'scripts/webview-functional/scenarios/canvas/canvas-board-basic-professional.p0.scenario.json',
   'scripts/webview-functional/scenarios/canvas/canvas-edit-save-reopen.p0.scenario.json',
   'scripts/webview-functional/scenarios/canvas/canvas-invalid-project.p0.scenario.json',
 ];
@@ -57,6 +58,7 @@ describe('Agent and Canvas functional pilot boundaries', () => {
       'NEKO_FUNCTIONAL_CONTROLLER',
       'agent.view-submit.p0',
       'agent.lifecycle-reload.p0',
+      'canvas.board-basic-professional.p0',
       'canvas.edit-save-reopen.p0',
       'canvas.invalid-project.p0',
       'vscode-functional-controller',

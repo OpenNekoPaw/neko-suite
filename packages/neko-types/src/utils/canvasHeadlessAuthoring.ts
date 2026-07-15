@@ -220,6 +220,19 @@ export function planCanvasNodeCreation(
   context: CanvasHeadlessAuthoringPlannerContext,
   request: CanvasNodeCreateSpec,
 ): CanvasHeadlessAuthoringPlan<{ nodeId: string; node: CanvasNode }> {
+  const provenanceMessageId = readProvenanceMessageId(request.data);
+  if (provenanceMessageId) {
+    const existing = context.canvasData.nodes.find(
+      (node) => readProvenanceMessageId(node.data) === provenanceMessageId,
+    );
+    if (existing) {
+      return {
+        batch: createBatch([]),
+        canvasData: context.canvasData,
+        result: { nodeId: existing.id, node: existing },
+      };
+    }
+  }
   const generateId =
     context.generateId ??
     createCanvasHeadlessAuthoringIdFactory({
@@ -447,6 +460,24 @@ function planAgentContentNodeInsert(
   target: CanvasAgentTargetRef | undefined,
   mode: CanvasAgentMutationMode,
 ): CanvasHeadlessAuthoringPlan<CanvasAgentApplyContentResult> {
+  const provenanceMessageId = payload.provenance?.messageId;
+  if (provenanceMessageId) {
+    const existing = context.canvasData.nodes.find(
+      (candidate) => readProvenanceMessageId(candidate.data) === provenanceMessageId,
+    );
+    if (existing) {
+      return {
+        batch: createBatch([]),
+        canvasData: context.canvasData,
+        result: {
+          changed: false,
+          mode,
+          nodeId: existing.id,
+          target,
+        },
+      };
+    }
+  }
   const generateId =
     context.generateId ??
     createCanvasHeadlessAuthoringIdFactory({
@@ -459,6 +490,8 @@ function planAgentContentNodeInsert(
       data: {
         content: renderAgentContent(payload),
         format: payload.format === 'markdown' ? 'markdown' : 'plain',
+        ...(payload.title ? { title: payload.title } : {}),
+        ...(payload.provenance ? { provenance: payload.provenance } : {}),
       },
     },
     id: generateId(),
@@ -937,6 +970,10 @@ function createNodeFromSpec(input: {
           content: asString(data['content']),
           format: data['format'] === 'markdown' ? 'markdown' : 'plain',
           ...(isRecord(data['style']) ? { style: data['style'] } : {}),
+          ...(asString(data['title']) ? { title: asString(data['title']) } : {}),
+          ...(isRecord(data['provenance'])
+            ? { provenance: toCanvasSerializableRecord(data['provenance']) }
+            : {}),
         },
       };
     case 'artboard':
@@ -1136,8 +1173,16 @@ function createNodeFromSpec(input: {
           docPath: asString(data['docPath']),
           docType: inferDocumentType(data['docType']),
           title: asString(data['title']),
+          ...(asString(data['mimeType']) ? { mimeType: asString(data['mimeType']) } : {}),
+          ...(isDocumentArchiveResourceRef(data['documentResourceRef'])
+            ? { documentResourceRef: data['documentResourceRef'] }
+            : {}),
+          ...(isResourceRef(data['resourceRef']) ? { resourceRef: data['resourceRef'] } : {}),
           ...(asString(data['thumbnailData'])
             ? { thumbnailData: asString(data['thumbnailData']) }
+            : {}),
+          ...(isRecord(data['provenance'])
+            ? { provenance: toCanvasSerializableRecord(data['provenance']) }
             : {}),
         },
       };
@@ -1771,11 +1816,25 @@ function inferMediaType(value: unknown): 'image' | 'video' | 'audio' {
   return value === 'video' || value === 'audio' ? value : 'image';
 }
 
-function inferDocumentType(value: unknown): 'pdf' | 'docx' | 'epub' | 'cbz' {
-  if (value === 'pdf' || value === 'docx' || value === 'epub' || value === 'cbz') {
+function inferDocumentType(value: unknown): 'pdf' | 'docx' | 'epub' | 'cbz' | 'file' {
+  if (
+    value === 'pdf' ||
+    value === 'docx' ||
+    value === 'epub' ||
+    value === 'cbz' ||
+    value === 'file'
+  ) {
     return value;
   }
-  return 'pdf';
+  return 'file';
+}
+
+function readProvenanceMessageId(value: unknown): string | undefined {
+  if (!isRecord(value)) return undefined;
+  const provenance = value['provenance'];
+  if (!isRecord(provenance)) return undefined;
+  const messageId = provenance['messageId'];
+  return typeof messageId === 'string' && messageId.length > 0 ? messageId : undefined;
 }
 
 function inferModelType(value: unknown): 'lora' | 'checkpoint' | 'controlnet' | 'vae' {

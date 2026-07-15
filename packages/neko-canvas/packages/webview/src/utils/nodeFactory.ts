@@ -125,11 +125,17 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function inferDocumentType(value: unknown): 'pdf' | 'docx' | 'epub' | 'cbz' {
-  if (value === 'pdf' || value === 'docx' || value === 'epub' || value === 'cbz') {
+function inferDocumentType(value: unknown): 'pdf' | 'docx' | 'epub' | 'cbz' | 'file' {
+  if (
+    value === 'pdf' ||
+    value === 'docx' ||
+    value === 'epub' ||
+    value === 'cbz' ||
+    value === 'file'
+  ) {
     return value;
   }
-  return 'pdf';
+  return 'file';
 }
 
 function inferMediaType(value: unknown): 'image' | 'video' | 'audio' {
@@ -244,6 +250,10 @@ export function buildCanvasNode(options: BuildCanvasNodeOptions): CanvasNodeDraf
             content: asString(data.content, ''),
             format: data.format === 'markdown' ? 'markdown' : 'plain',
             style: typeof data.style === 'object' && data.style ? data.style : undefined,
+            title: asString(data.title) || undefined,
+            provenance: isRecord(data.provenance)
+              ? toCanvasSerializableRecord(data.provenance)
+              : undefined,
           },
         },
         preset,
@@ -484,7 +494,15 @@ export function buildCanvasNode(options: BuildCanvasNodeOptions): CanvasNodeDraf
           docPath: asString(data.docPath, ''),
           docType: inferDocumentType(data.docType),
           title: asString(data.title, ''),
+          mimeType: asString(data.mimeType) || undefined,
+          documentResourceRef: isDocumentArchiveResourceRef(data.documentResourceRef)
+            ? data.documentResourceRef
+            : undefined,
+          resourceRef: isResourceRef(data.resourceRef) ? data.resourceRef : undefined,
           thumbnailData: asString(data.thumbnailData) || undefined,
+          provenance: isRecord(data.provenance)
+            ? toCanvasSerializableRecord(data.provenance)
+            : undefined,
         },
       };
     case 'model':

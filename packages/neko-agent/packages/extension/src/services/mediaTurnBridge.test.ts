@@ -178,6 +178,72 @@ describe('MediaTurnBridge', () => {
       },
     });
   });
+
+  it('resolves Board work before direct generation and delivers retained outputs to that session', async () => {
+    const created = createMediaTask({ status: 'pending', progress: 0 });
+    const completed = createMediaTask({ status: 'completed', progress: 100 });
+    const asset = createGeneratedImageAsset('/workspace/neko/generated/image/asset-1.png');
+    const deliverGeneratedAssets = vi.fn(async () => undefined);
+    const begin = vi.fn(async () => ({
+      deliverGeneratedAssets,
+      deliverSelectedReferences: vi.fn(async () => undefined),
+    }));
+    const generateImage = vi.fn().mockResolvedValue(created);
+    const bridge = new MediaTurnBridge({
+      platform: {
+        media: {
+          generateImage,
+          getTask: vi.fn().mockResolvedValue(completed),
+          onProgress: vi.fn().mockReturnValue(vi.fn()),
+        },
+      } as never,
+      mediaDeliveryHost: {
+        createTaskView: vi.fn(async (_webview: vscode.Webview, task: MediaTask) => ({
+          id: task.id,
+          type: 'image',
+          status: task.status,
+          progress: task.progress,
+          providerId: task.providerId,
+          modelId: task.modelId,
+          createdAt: task.createdAt.toISOString(),
+          updatedAt: task.updatedAt.toISOString(),
+          request: { prompt: task.request.prompt },
+        })),
+        createTaskViewDelivery: vi.fn(async (_webview: vscode.Webview, task: MediaTask) => ({
+          view: {
+            id: task.id,
+            type: 'image',
+            status: task.status,
+            progress: task.progress,
+            providerId: task.providerId,
+            modelId: task.modelId,
+            createdAt: task.createdAt.toISOString(),
+            updatedAt: task.updatedAt.toISOString(),
+            request: { prompt: task.request.prompt },
+          },
+          deliveryPlan: {
+            resultUrls: ['generated-assets/asset-1.png'],
+            hostOutputPaths: [asset.path],
+            generatedAssets: [asset],
+            shouldPersistResultUrls: true,
+            shouldUnsubscribe: true,
+          },
+        })),
+      } as never,
+      canvasBoardWork: { begin } as never,
+      generateMessageId: () => 'run:1',
+    });
+
+    await bridge.execute({
+      webview: createWebview(),
+      conversationId: 'conv-1',
+      prompt: 'generate a cat image',
+      mediaModel: { providerId: 'openai', modelId: 'gpt-image-1', category: 'image' },
+    });
+
+    expect(begin).toHaveBeenCalledBefore(generateImage);
+    expect(deliverGeneratedAssets).toHaveBeenCalledWith('task-1', [asset]);
+  });
 });
 
 function createWebview(): vscode.Webview & {

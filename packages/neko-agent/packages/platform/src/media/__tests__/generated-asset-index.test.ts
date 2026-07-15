@@ -11,6 +11,7 @@ import {
 import {
   GeneratedAssetIndex,
   ResourceCacheGeneratedAssetIndexStore,
+  createResourceCacheGeneratedAssetIndex,
   generateAssetId,
   migrateLegacyGeneratedAssetIndex,
 } from '../generated-asset-index';
@@ -44,7 +45,7 @@ async function createTempDir(): Promise<string> {
 }
 
 describe('GeneratedAssetIndex', () => {
-  it('persists generated draft projection metadata without absolute Host paths', async () => {
+  it('persists generated output projection metadata without absolute Host paths', async () => {
     const workspaceRoot = await createTempDir();
     const manifest = createManifestStore();
     const store = new ResourceCacheGeneratedAssetIndexStore({
@@ -63,13 +64,83 @@ describe('GeneratedAssetIndex', () => {
     expect(JSON.stringify(manifest.current())).not.toContain(workspaceRoot);
     expect(Object.values(manifest.current().entries)).toEqual([
       expect.objectContaining({
-        resource: expect.objectContaining({ provider: 'generated-draft-index' }),
+        resource: expect.objectContaining({
+          id: 'generated-output:asset-1',
+          provider: 'generated-output-index',
+        }),
         variants: [],
       }),
     ]);
     const restored = new GeneratedAssetIndex(store);
     await restored.load();
     expect(restored.get(asset.id)).toEqual(asset);
+  });
+
+  it('loads and rewrites legacy generated-draft manifest projections without losing outputs', async () => {
+    const workspaceRoot = await createTempDir();
+    const asset = imageAsset({
+      path: path.join(workspaceRoot, 'neko', 'generated', 'image', 'legacy.png'),
+    });
+    const manifest = createManifestStore({
+      version: 1,
+      createdAt: '2026-07-13T00:00:00.000Z',
+      updatedAt: '2026-07-13T00:00:00.000Z',
+      entries: {
+        'generated-draft:asset-1': {
+          resource: {
+            id: 'generated-draft:asset-1',
+            scope: 'project',
+            provider: 'generated-draft-index',
+            kind: 'generated',
+            source: {
+              kind: 'generated-asset',
+              generatedAssetId: 'asset-1',
+              projectRelativePath: 'neko/generated/image/legacy.png',
+            },
+            locator: { kind: 'generated-asset', assetId: 'asset-1' },
+            fingerprint: { strategy: 'provider', value: 'asset-1:legacy' },
+          },
+          variants: [],
+          createdAt: asset.generatedAt,
+          updatedAt: asset.generatedAt,
+          status: 'ready',
+          providerMetadata: {
+            generatedDraftProjection: {
+              version: 1,
+              asset: {
+                id: asset.id,
+                type: asset.type,
+                mimeType: asset.mimeType,
+                generatedAt: asset.generatedAt,
+                width: 1024,
+                height: 1024,
+                ratio: '1:1',
+              },
+              pathKey: '${WORKSPACE}/neko/generated/image/legacy.png',
+            },
+          },
+        },
+      },
+    });
+
+    const binding = await createResourceCacheGeneratedAssetIndex({
+      manifestStore: manifest.store,
+      workspaceRoot,
+      homedir: workspaceRoot,
+    });
+
+    expect(binding.index.get(asset.id)).toEqual(asset);
+    expect(Object.values(manifest.current().entries)).toEqual([
+      expect.objectContaining({
+        resource: expect.objectContaining({ provider: 'generated-output-index' }),
+        providerMetadata: expect.objectContaining({
+          generatedOutputProjection: expect.any(Object),
+        }),
+      }),
+    ]);
+    expect(JSON.stringify(manifest.current())).not.toMatch(
+      /generatedDraftProjection|generated-draft-index|generated-draft:asset-1/,
+    );
   });
 
   it('backs up, imports, verifies, and archives the legacy generated asset index', async () => {
@@ -187,11 +258,11 @@ describe('GeneratedAssetIndex', () => {
   });
 });
 
-function createManifestStore(): {
+function createManifestStore(initial?: ResourceCacheManifest): {
   readonly store: ResourceCacheManifestStore;
   readonly current: () => ResourceCacheManifest;
 } {
-  let manifest: ResourceCacheManifest = {
+  let manifest: ResourceCacheManifest = initial ?? {
     version: 1,
     createdAt: '2026-07-13T00:00:00.000Z',
     updatedAt: '2026-07-13T00:00:00.000Z',

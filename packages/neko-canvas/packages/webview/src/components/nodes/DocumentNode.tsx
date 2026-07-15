@@ -43,6 +43,7 @@ const DOC_TYPE_LABEL: Record<string, string> = {
   docx: 'Word',
   epub: 'EPUB',
   cbz: 'Comic',
+  file: 'File',
 };
 
 // =============================================================================
@@ -64,7 +65,8 @@ export function DocumentNode({
   const { docPath, docType, title, thumbnailData } = node.data;
 
   const typeLabel = DOC_TYPE_LABEL[docType] ?? docType.toUpperCase();
-  const fileName = docPath.split('/').pop() ?? docPath;
+  const stableRefLabel = node.data.resourceRef?.id ?? node.data.documentResourceRef?.entryPath;
+  const fileName = docPath.split('/').pop() || stableRefLabel || title;
 
   return (
     <BaseNode
@@ -124,6 +126,7 @@ export function DocumentNode({
             {title || fileName}
           </span>
           <button
+            disabled={!docPath}
             onClick={(e) => {
               e.stopPropagation();
               onOpenDocument?.(docPath);
@@ -135,7 +138,8 @@ export function DocumentNode({
               border: '1px solid var(--node-border)',
               backgroundColor: 'transparent',
               color: 'var(--neko-fg-secondary)',
-              cursor: 'pointer',
+              cursor: docPath ? 'pointer' : 'default',
+              opacity: docPath ? 1 : 0.55,
               flexShrink: 0,
             }}
           >

@@ -306,6 +306,71 @@ describe('canvasHeadlessAuthoring planner', () => {
     expect(appended.canvasData.nodes[0]?.data.content).toBe('first note\nsecond note');
   });
 
+  it('keeps replayed Agent artifacts idempotent by stable provenance identity', () => {
+    const payload = {
+      kind: 'text' as const,
+      text: '# Notes',
+      title: 'Notes',
+      format: 'markdown' as const,
+      provenance: {
+        source: 'agent' as const,
+        conversationId: 'conversation:1',
+        messageId: 'artifact:1',
+        label: 'delivery:1',
+      },
+    };
+    const inserted = planCanvasAgentContentApplication(
+      { canvasData: emptyCanvas(), generateId: ids() },
+      payload,
+    );
+    const replayed = planCanvasAgentContentApplication(
+      { canvasData: inserted.canvasData, generateId: ids() },
+      payload,
+    );
+
+    expect(inserted.canvasData.nodes[0]?.data).toMatchObject({
+      title: 'Notes',
+      provenance: { messageId: 'artifact:1' },
+    });
+    expect(replayed.result.changed).toBe(false);
+    expect(replayed.result.nodeId).toBe(inserted.result.nodeId);
+    expect(replayed.canvasData.nodes).toHaveLength(1);
+    expect(replayed.batch.operations).toEqual([]);
+  });
+
+  it('keeps replayed stable file and media node imports idempotent by provenance', () => {
+    const resourceRef = createResourceRef({
+      scope: 'project',
+      provider: 'workspace',
+      kind: 'document',
+      source: { kind: 'file', projectRelativePath: 'docs/reference.pdf' },
+      locator: { kind: 'file', path: 'docs/reference.pdf' },
+      fingerprint: createResourceFingerprint({ strategy: 'none', value: 'docs/reference.pdf' }),
+    });
+    const request = {
+      type: 'document' as const,
+      data: {
+        docPath: '',
+        docType: 'pdf',
+        title: 'Reference',
+        resourceRef,
+        provenance: { source: 'agent', messageId: 'artifact:file:1' },
+      },
+    };
+    const inserted = planCanvasNodeCreation(
+      { canvasData: emptyCanvas(), generateId: ids() },
+      request,
+    );
+    const replayed = planCanvasNodeCreation(
+      { canvasData: inserted.canvasData, generateId: ids() },
+      request,
+    );
+
+    expect(replayed.result.nodeId).toBe(inserted.result.nodeId);
+    expect(replayed.canvasData.nodes).toHaveLength(1);
+    expect(replayed.batch.operations).toEqual([]);
+  });
+
   it('fails visibly for editor-only Agent content slot targets', () => {
     expect(() =>
       planCanvasAgentContentApplication(

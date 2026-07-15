@@ -137,6 +137,7 @@ export type {
 export {
   CacheArtifactContentIngestProvider,
   DocumentEntryContentAccessProvider,
+  GeneratedAssetSourceContentAccessProvider,
   ExportStagingContentIngestProvider,
   GeneratedOutputContentIngestProvider,
   ImportSourceContentIngestProvider,
@@ -153,6 +154,7 @@ export type {
   ContentAccessWebviewResolver,
   ContentIngestFileProviderOptions,
   DocumentEntryContentAccessProviderOptions,
+  GeneratedAssetSourceContentAccessProviderOptions,
   PreviewVariantContentAccessProviderOptions,
   ResourceCacheContentAccessProviderOptions,
   SourceFileContentAccessProviderOptions,

@@ -8,6 +8,12 @@ import type {
   CanvasAgentActiveContextResult,
   CanvasAgentApplyContentResult,
   CanvasAgentContentPayload,
+  CanvasBoardQuery,
+  CanvasBoardQueryResult,
+  CanvasBoardDeliveryRequest,
+  CanvasBoardDeliveryResult,
+  CanvasBoardResolutionInput,
+  CanvasBoardResolutionResult,
   CanvasCutDraftPayload,
   CanvasCreateCompositeRequest,
   CanvasCreateCompositeResult,
@@ -132,6 +138,13 @@ export interface NekoCanvasAPI {
 
   /** Explicit-target, Webview-independent durable .nkc authoring. */
   readonly authoring: NekoCanvasAuthoringAPI;
+
+  /** Canvas-owned query and deterministic resolution for ordinary Board `.nkc` documents. */
+  readonly boards: {
+    query(query: CanvasBoardQuery): Promise<CanvasBoardQueryResult>;
+    resolve(input: CanvasBoardResolutionInput): Promise<CanvasBoardResolutionResult>;
+    deliver(input: CanvasBoardDeliveryRequest): Promise<CanvasBoardDeliveryResult>;
+  };
 
   /**
    * Canvas operations

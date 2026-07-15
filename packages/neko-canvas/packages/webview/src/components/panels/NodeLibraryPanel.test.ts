@@ -10,6 +10,7 @@ import { setLocale } from '../../i18n';
 import { createCoreNodeTypeDescriptors } from '../../subsystems/core/descriptors';
 import { createPlaceholderNodeTypeDescriptors } from '../../subsystems/placeholderDescriptors';
 import { createStoryboardNodeTypeDescriptors } from '../../subsystems/storyboard/descriptors';
+import { createBasicNodeLibraryDescriptors } from '../../subsystems/basicNodeLibraryCatalog';
 import { t } from '../../i18n';
 import {
   createNodeLibraryGroups,
@@ -93,7 +94,7 @@ describe('NodeLibraryPanel', () => {
     expect(markup).not.toContain('aria-label="Unlocked"');
   });
 
-  it('groups basic mode entries into basic, storyboard, and file references', () => {
+  it('groups the complete Professional storyboard manifest without changing it', () => {
     setLocale('zh-cn');
 
     const storyboardManifest = BUILT_IN_CANVAS_SUBSYSTEM_MANIFESTS.find(
@@ -127,6 +128,72 @@ describe('NodeLibraryPanel', () => {
       'canvas-embed',
       'project',
     ]);
+  });
+
+  it('renders only foundational creation and file/reference entries for Basic', () => {
+    setLocale('zh-cn');
+    const basicDescriptors = createBasicNodeLibraryDescriptors(
+      createCoreNodeTypeDescriptors(),
+      createStoryboardNodeTypeDescriptors(),
+    );
+
+    const markup = renderToStaticMarkup(
+      React.createElement(NodeLibraryPanel, {
+        coreDescriptors: basicDescriptors,
+        subsystemManifests: [],
+        onCreateNode: () => undefined,
+      }),
+    );
+
+    expect(markup).toContain('基础');
+    expect(markup).toContain('文件引用');
+    expect(markup).toContain('媒体');
+    expect(markup).toContain('文本');
+    expect(markup).toContain('画板');
+    expect(markup).toContain('剧本');
+    expect(markup).toContain('文件');
+    expect(markup).toContain('aria-expanded="true"');
+    expect(markup).toContain('role="tree"');
+    expect(markup).not.toContain('分镜板');
+    expect(markup).not.toContain('表格');
+    expect(markup).not.toContain('镜头');
+    expect(markup).not.toContain('场景');
+    expect(markup).not.toContain('画廊');
+    expect(markup).not.toContain('模型');
+    expect(markup).not.toContain('项目');
+    expect(markup).not.toContain('data-node-library-subsystem-state');
+  });
+
+  it('keeps Basic groups keyboard accessible and on shared theme foundations', () => {
+    setLocale('en');
+    const onCreateNode = vi.fn();
+    const basicDescriptors = createBasicNodeLibraryDescriptors(
+      createCoreNodeTypeDescriptors(),
+      createStoryboardNodeTypeDescriptors(),
+    );
+
+    act(() => {
+      root.render(
+        React.createElement(NodeLibraryPanel, {
+          coreDescriptors: basicDescriptors,
+          subsystemManifests: [],
+          onCreateNode,
+        }),
+      );
+    });
+
+    const basicTree = host.querySelector<HTMLElement>('[role="tree"][aria-label="Basic"]');
+    expect(basicTree?.tabIndex).toBe(0);
+    expect(basicTree?.getAttribute('data-neko-keyboard-scope')).toBe('tree');
+    expect(basicTree?.getAttribute('data-neko-keyboard-owned-keys')).toContain('Enter');
+    expect(basicTree?.className).toContain('bg-[var(--vscode-editor-background)]');
+
+    act(() => {
+      basicTree?.focus();
+      basicTree?.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'Enter' }));
+    });
+
+    expect(onCreateNode).toHaveBeenCalledWith('annotation');
   });
 
   it('sizes each expanded tree to actual node rows without extra footer whitespace', () => {

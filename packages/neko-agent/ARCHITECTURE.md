@@ -431,14 +431,22 @@ Extension → Webview:
   conversations, activeConversation, settings, tabState
 ```
 
-### Canvas Authoring Handoff
+### Board Canvas 自动投递与历史 Authoring Handoff
 
-Agent 是 Canvas Skill activation 和 tool selection 的拥有者。Agent Webview 的 `Send to Canvas` 不直接调用 Canvas command，也不选择 `canvas.ingestMarkdown`、`canvas_create_node` 或 `neko.canvas.importAsset`。它只发送 `requestCanvasAuthoringHandoff`，携带 source content、source kind、stable resource refs、semantic stable refs、diagnostics、prompt spans、provenance、user intent 和 target hints。
+VS Code Extension Host 为创作者任务建立 instance-scoped `AgentCanvasBoardWorkSession`。会话在模型或媒体任务启动前通过公共 `NekoCanvasAPI.boards` 解析 `neko/boards/*.nkc` 并冻结 document/canvas/revision 与 conversation/turn/task/run 身份；每个并发运行独立持有状态，UI active Canvas 只是展示选择，不能成为写入 owner。
+
+typed runtime policy 自动投递 creator-useful Markdown、选中 `ResourceRef` 和 retained generated media。媒体 task completion/continuation 使用任务创建时的工作会话；同一运行只根据成功 authoring 返回的新 revision 前进。目标缺失、权限失败或 revision conflict 时，结果继续保留在 conversation/media task 生命周期中，并投影 `canvas-board-*-failed` diagnostic；不得重新解析或写入其他 Canvas。
+
+普通问答、reasoning、日志、scratch、未选搜索结果、runtime handle 和非 reviewable failure 不建立 Board 工作会话。生成文件只允许由现有 Generated Output owner 保存到 `neko/generated/<kind>/`，Board 引用不创建 Asset Library membership。
+
+下面的 handoff 仅服务未参与当前 typed delivery 的历史/外部内容和显式专业 authoring，不是新结果的默认保留流程。
+
+Agent 是 Canvas Skill activation 和 tool selection 的拥有者。Agent Webview 的显式 Add/Import to Board Canvas 不直接调用 Canvas command，也不选择 `canvas.ingestMarkdown`、`canvas_create_node` 或 `neko.canvas.importAsset`。它只发送 `requestCanvasAuthoringHandoff`，携带 source content、source kind、stable resource refs、semantic stable refs、diagnostics、prompt spans、provenance、user intent 和 target hints。
 
 Extension Host 路由该消息时只创建普通 Agent user message + `document-selection` context payload：
 
 ```text
-Agent Webview button
+Historical/external Add to Board button
   -> requestCanvasAuthoringHandoff
   -> Extension message route
   -> Agent-visible user message + context payload
@@ -452,7 +460,7 @@ Agent Webview button
 - Extension/Webview 不通过关键词、表头、profile hint 或资源类型预激活 Canvas Skill。
 - Markdown projections from `@neko/markdown` are metadata only：stable refs、diagnostics、prompt spans 和 `declared*Hint` 可帮助 Agent 决策，但不成为 Canvas validation/mutation authority。
 - Canvas authoring tool results are rendered read-only in Agent Webview: refs、diagnostics、blocked reason、prompt-field alignment 和 next actions 会展示给用户，但 approval-gated next actions 不能因渲染自动执行。
-- 直接素材导入必须使用显式 Import / Add Source affordance；`Send to Canvas` 对资源型内容仍先进入 Agent handoff。
+- 历史/外部素材导入必须使用显式 Import / Add Source affordance；当前 typed result 已由 Board 自动投递，不再显示通用 `Send to Canvas`。
 
 ### Package Authoring Transfer
 

@@ -75,20 +75,24 @@ export const CREATIVE_MEDIA_WORKFLOW_STAGES: readonly CreativeMediaWorkflowStage
 
 const storyboardContent = `# Storyboard
 
-Turn a prompt, prose, script, document, comic, ordered image sequence, or existing storyboard revision into one canonical Storyboard.
+Interpret a prompt, prose, script, document, comic, ordered image sequence, or existing storyboard revision as reviewable visual planning. Keep exploratory planning flexible; materialize the canonical structured Storyboard only when the creator explicitly requests professional structured authoring.
 
 ## Method
 
 1. Identify the source profile and preserve source order, scene boundaries, dialogue context, and visual evidence appropriate to that profile.
-2. Produce stable scene and shot identities, visual intent, narrative context, camera and duration guidance, source trace, and a revision identity.
-3. Use stable resource references for source and reference media. Cache paths, render URIs, provider task handles, and session handles are never Storyboard truth.
-4. Validate the canonical Storyboard before projecting it. Invalid or unsupported sources must return visible diagnostics rather than an invented table.
-5. Treat Canvas as a review projection and Cut as a one-way authoring handoff. Neither becomes a second writable Storyboard truth.
+2. For unspecified exploration, analysis, planning, alternatives, or a first draft, produce ordinary Markdown. Preserve useful narrative, visual, action, camera, dialogue, sound, duration, reference, source-trace, and uncertainty content without requiring fixed columns, complete production fields, or stable scene/shot identities.
+3. For explicit professional structured creation or revision, produce stable scene and shot identities, visual intent, narrative context, camera and duration guidance, source trace, and a revision identity, then validate the canonical structure before mutation.
+4. Use stable resource references for source and reference media. Cache paths, render URIs, provider task handles, and session handles are never Storyboard truth.
+5. Invalid, unsupported, or weakly evidenced source claims must remain explicit uncertainties or visible diagnostics. Do not invent production facts merely to fill a table.
+6. Source Markdown never silently creates or rewrites structured production facts. Later edits remain review input until an explicit validated structured apply is requested.
 
-## Review table and prompt invariants
+## Markdown planning and structured invariants
 
-- The canonical artifact is nested \`scenes[] -> shots[]\`: a scene owns its ordered shots, and a scene cell in a review table never replaces the scene record. Shot media references remain shot facts.
-- A reviewable Storyboard keeps distinct \`scene\`, \`shot\`, \`source\`, \`imagePrompt\`, \`videoPrompt\`, \`duration\`, and \`dialogue\` semantics. Never collapse image and video intent into one generic generation-prompt column.
+- Exploratory Markdown may use headings, prose, lists, or a table. Choose the smallest structure that helps review, and retain source-specific columns when useful. Missing duration, voice, media binding, or production identity is an uncertainty, not a reason to invent values or reject a useful draft.
+- Preserve distinct narrative, visual, action, camera, dialogue, sound, duration, reference, image-generation, and video-generation meaning when present. Neither generation prompt is mandatory for an exploratory plan.
+
+- After explicit structured authoring, the canonical artifact is nested \`scenes[] -> shots[]\`: a scene owns its ordered shots, and a scene cell in a review table never replaces the scene record. Shot media references remain shot facts.
+- A structured review projection keeps distinct \`scene\`, \`shot\`, \`source\`, \`imagePrompt\`, \`videoPrompt\`, \`duration\`, and \`dialogue\` semantics. Never collapse image and video intent into one generic generation-prompt column.
 - \`imagePrompt\` is shot-level and only describes an executable image generation or edit task. Include subject/appearance, scene, composition, style/light, reference role, preserved details, ordered edit steps when applicable, and constraints.
 - \`videoPrompt\` is scene-level. Write at most one per scene, normally on its first shot, and aggregate the ordered shot beats, subject motion, camera transitions, environmental change, dialogue/audio or silence, total duration, reference roles, and constraints.
 - Visual description, camera notes, action summaries, review states, and diagnostics do not substitute for either prompt. Leave a prompt empty when no generation/edit operation is intended; do not fill it with status codes or analysis fragments.
@@ -96,7 +100,7 @@ Turn a prompt, prose, script, document, comic, ordered image sequence, or existi
 
 ## Comic source profile
 
-- Require actual pixel-level visual evidence, OCR, or panel boundaries before claiming panel count, dialogue, action, or camera. Metadata, thumbnails, filenames, dimensions, and page labels alone are not visual evidence. When evidence is unavailable, return plain diagnostics and do not invent or output a Storyboard table.
+- Require actual pixel-level visual evidence, OCR, or panel boundaries before claiming panel count, dialogue, action, or camera. Metadata, thumbnails, filenames, dimensions, and page labels alone are not visual evidence. When evidence is unavailable, record the limitation and avoid authoritative panel/shot claims; a partial Markdown review may still preserve known source facts and next evidence needs.
 - Determine orientation and reading order before mapping panels. Classify dialogue, narration/caption, visible SFX, signs/background text, and unknown text separately; only spoken dialogue belongs in \`dialogue\`.
 - Decide keep, skip, merge, split, or transition-only use before creating shots. A page may produce multiple shots, and covers, copyright/contents pages, blanks, ads, duplicates, or pure metadata do not become story shots by default.
 - Build source trace from stable scoped resource identities. Attachment order and guessed filenames are not identity; a full-page source may be referenced by a stable page-plus-panel locator without pretending that a separate panel asset exists.
@@ -108,25 +112,29 @@ Turn a prompt, prose, script, document, comic, ordered image sequence, or existi
 - Scene video prompts cover source/reference roles, characters and emotion, ordered or time-coded action beats, camera transitions, environmental change/effects, dialogue/narration/SFX or silence, pacing, total duration, and constraints. Long scenes should use explicit beat or time segments instead of an overloaded paragraph.
 - When a reference image is directly usable and no image operation is intended, leave \`imagePrompt\` empty instead of inventing edit work.
 
-Finish the single reviewable Storyboard projection before any requested Canvas handoff. The visible review projection is not a substitute for durable Canvas authoring, and Canvas authoring cannot replace the initial Storyboard review. A Canvas projection keeps each scene as a container and each shot as its owned child while preserving revision, prompt intent, and stable image/media references; never flatten a canonical Storyboard into a gallery or asset list. Existing-storyboard refinement always creates a new revision when intent or ordering changes.
+Default to one reviewable Markdown document. Only explicit professional structured authoring applies the validated canonical Storyboard; it keeps each scene as a container and each shot as its owned child while preserving revision, prompt intent, and stable media references. Never flatten a canonical Storyboard into a gallery or asset list. Existing structured Storyboard refinement creates a new revision when intent or ordering changes.
 `;
 
 const storyboardZhCnContent = `# 分镜
 
-把提示词、文本、剧本、文档、漫画、有序图片序列或已有分镜修订版归一化为同一种 canonical Storyboard。
+把提示词、文本、剧本、文档、漫画、有序图片序列或已有分镜修订版解释为可审阅的视觉规划。探索阶段保持灵活；只有创作者明确要求专业结构化创作时，才物化 canonical Storyboard。
 
 ## 方法
 
 1. 识别来源 profile，并按该 profile 保留来源顺序、场景边界、对白上下文和视觉证据。
-2. 产出稳定的场景/镜头身份、视觉意图、叙事上下文、镜头与时长指导、来源追踪和修订身份。
-3. 来源与参考媒体只使用稳定资源引用；cache path、render URI、provider task handle 和 session handle 都不是分镜真值。
-4. 投影前验证 canonical Storyboard；无效或不支持的来源必须返回明确诊断，不能编造表格。
-5. Canvas 只是审阅投影，Cut 只是单向 authoring handoff，二者都不能成为第二份可写分镜真值。
+2. 未指定结构化创作的探索、分析、规划、方案或初稿，产出普通 Markdown；按实际需要保留叙事、画面、动作、镜头、对白、声音、时长、引用、来源追踪和不确定性，不强制固定列、完整制作字段或稳定场景/镜头 ID。
+3. 明确要求专业结构化创建或修订时，才产出稳定场景/镜头身份、视觉意图、叙事上下文、镜头与时长指导、来源追踪和修订身份，并在 mutation 前验证 canonical 结构。
+4. 来源与参考媒体只使用稳定资源引用；cache path、render URI、provider task handle 和 session handle 都不是分镜真值。
+5. 无效、不支持或证据不足的主张必须保留为不确定性或明确诊断，不能为了填表编造制作事实。
+6. 来源 Markdown 不会静默创建或改写结构化制作事实；后续编辑仍是审阅输入，直到用户明确确认一次经过验证的结构化应用。
 
-## 审阅表与提示词不变量
+## Markdown 规划与结构化不变量
 
-- canonical 产物必须保持 \`scenes[] -> shots[]\` 嵌套：scene 拥有按顺序排列的 shots，审阅表中的 scene 单元格不能替代 scene 记录；shot 的媒体引用始终属于该 shot。
-- 可审阅分镜必须保持 \`scene\`、\`shot\`、\`source\`、\`imagePrompt\`、\`videoPrompt\`、\`duration\`、\`dialogue\` 的独立语义；禁止把图片与视频意图合并成一个笼统的“生成提示词”列。
+- 探索性 Markdown 可以使用标题、段落、列表或表格；选择最利于审阅的最小结构，并按来源保留有用的可变列。缺少时长、声音、媒体绑定或制作身份应记录为不确定性，不能编造，也不应因此拒绝有价值的初稿。
+- 已有叙事、画面、动作、镜头、对白、声音、时长、引用、图片生成和视频生成语义应分别保留；探索性规划不强制两类生成提示词都存在。
+
+- 明确完成结构化 authoring 后，canonical 产物必须保持 \`scenes[] -> shots[]\` 嵌套：scene 拥有按顺序排列的 shots，审阅表中的 scene 单元格不能替代 scene 记录；shot 的媒体引用始终属于该 shot。
+- 结构化审阅投影保持 \`scene\`、\`shot\`、\`source\`、\`imagePrompt\`、\`videoPrompt\`、\`duration\`、\`dialogue\` 的独立语义；禁止把图片与视频意图合并成一个笼统的“生成提示词”列。
 - \`imagePrompt\` 是 shot 级字段，只描述可执行的图片生成或编辑任务；应包含主体/人物外观、场景、构图、风格与光影、参考素材用途、必须保留的细节、必要时按顺序排列的编辑步骤，以及约束。
 - \`videoPrompt\` 是 scene 级字段；每个 scene 最多一个，通常写在第一条 shot，并汇总按镜号排列的动作节拍、主体运动、运镜连接、环境变化、对白/音频或无声、总时长、参考素材用途和约束。
 - 画面描述、景别/运镜备注、动作摘要、审阅状态和诊断都不能替代提示词。没有生成/编辑意图时允许留空，不得用状态码、分析碎片或“待优化”占位。
@@ -134,7 +142,7 @@ const storyboardZhCnContent = `# 分镜
 
 ## 漫画来源 profile
 
-- 只有获得实际像素级视觉证据、OCR 或分格边界后，才能判断分格数、对白、动作或镜头；metadata、缩略图、文件名、尺寸和页码本身不是视觉证据。证据不可用时只返回明确诊断，不得编造或输出分镜表。
+- 只有获得实际像素级视觉证据、OCR 或分格边界后，才能判断分格数、对白、动作或镜头；metadata、缩略图、文件名、尺寸和页码本身不是视觉证据。证据不可用时记录限制，不得给出权威分格/镜头断言；仍可用 Markdown 保留已知来源事实和下一步证据需求。
 - 映射分格前先判断方向和阅读顺序。对白、旁白/字幕框、可见音效字、标牌/环境文字和未知文字必须分别分类；只有明确说出的内容进入 \`dialogue\`。
 - 创建镜头前先决定 keep、skip、merge、split 或仅作为转场证据。一页可以产生多个镜头；封面、版权/目录页、空白、广告、重复页和纯 metadata 默认不进入正文镜头。
 - 来源追踪只使用稳定且有 scope 的资源身份；附件顺序和猜测文件名不是身份。整页来源可以用稳定的“页+分格”定位引用，但不得假装独立分格素材已经存在。
@@ -146,7 +154,7 @@ const storyboardZhCnContent = `# 分镜
 - scene 视频提示词覆盖来源/参考用途、人物与情绪、按镜号或时间段排列的动作节拍、运镜连接、环境变化/特效、对白/旁白/音效或无声、节奏、总时长和约束；长 scene 应使用明确节拍或时间段，不能堆成过载段落。
 - 参考图可直接使用且没有图片处理意图时，\`imagePrompt\` 应留空，不得为了填表编造编辑任务。
 
-用户要求 Canvas 交付时，也必须先完成唯一的可审阅 Storyboard 投影。可见审阅投影不能冒充持久 Canvas authoring，Canvas authoring 也不能替代首次分镜审阅。Canvas 投影必须把 scene 保持为容器、shot 保持为其子节点，并保留 revision、提示词意图和稳定图片/媒体引用；禁止把 canonical Storyboard 压平成图库或素材列表。已有分镜一旦改变意图或顺序，必须创建新修订版。
+默认产出一份可审阅的普通 Markdown 文档。只有明确的专业结构化 authoring 才应用经过验证的 canonical Storyboard；结构化结果把 scene 保持为容器、shot 保持为其子节点，并保留 revision、提示词意图和稳定媒体引用。禁止把 canonical Storyboard 压平成图库或素材列表。已有结构化分镜一旦改变意图或顺序，必须创建新修订版。
 `;
 
 const imageContent = `# Image
@@ -302,7 +310,7 @@ const qualityZhCnContent = `# 媒体质量审查
 export const storyboardSkill: Skill = {
   name: 'storyboard',
   description:
-    'Create or refine the canonical Storyboard from prompts, text, scripts, documents, comics, image sequences, or an existing Storyboard revision.',
+    'Explore prompts, text, scripts, documents, comics, image sequences, or existing Storyboards as flexible Markdown, and create canonical structured Storyboards only on explicit professional intent.',
   content: storyboardContent,
   allowedTools: [
     TOOL_NAMES_SYSTEM.READ,
@@ -325,7 +333,7 @@ export const storyboardSkill: Skill = {
       'image-sequence',
       'storyboard',
     ],
-    producedArtifacts: ['storyboard-table'],
+    producedArtifacts: ['storyboard-markdown', 'storyboard-table'],
     artifactProfiles: STORYBOARD_SOURCE_PROFILE_IDS.map((profile) => `storyboard/${profile}`),
     referencedCapabilities: [
       'story.planning',

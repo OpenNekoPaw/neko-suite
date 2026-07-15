@@ -46,6 +46,7 @@ import { getLogger } from '../../base';
 import type { ConversationBridge } from '../conversationBridge';
 import type { AgentMessageTurnHandler } from '../agentMessageTurnHandler';
 import type { IAgentManager } from '../../ai/agentManager';
+import type { AgentCanvasBoardCoordinator } from '../../services/agentCanvasBoardCoordinator';
 
 const logger = getLogger('ConversationMessageHandler');
 
@@ -74,6 +75,7 @@ export interface ConversationMessageHandlerDeps {
   agentManager?: IAgentManager;
   messages?: AgentMessageTurnHandler;
   creativeAiLifecycle?: ConversationLifecycleCommandHandler;
+  canvasBoards?: Pick<AgentCanvasBoardCoordinator, 'removeConversationBinding'>;
   getWebview: () => vscode.Webview | undefined;
 }
 
@@ -103,16 +105,17 @@ export class ConversationMessageHandler {
     );
   }
 
-  handleDeleteConversation(
+  async handleDeleteConversation(
     conversationId: string,
     options?: DeleteConversationRuntimeOptions,
   ): Promise<void> {
-    return this._runConversationRuntime(() =>
+    await this._runConversationRuntime(() =>
       runDeleteConversationRuntime(
         { conversationId, activateNext: options?.activateNext },
         this._createConversationRuntimeEffects(),
       ),
     );
+    await this.deps.canvasBoards?.removeConversationBinding(conversationId);
   }
 
   async handleConversationLifecycle(
@@ -141,6 +144,9 @@ export class ConversationMessageHandler {
 
     try {
       const result = await this.deps.creativeAiLifecycle.handleCommand(command);
+      if (result.ok && (result.state === 'archived' || result.state === 'deleted')) {
+        await this.deps.canvasBoards?.removeConversationBinding(result.conversationId);
+      }
       await webview.postMessage(
         buildConversationLifecycleResultMessage({
           conversationId: message.conversationId,
@@ -177,9 +183,15 @@ export class ConversationMessageHandler {
   }
 
   handleClearAllConversations(webview: vscode.Webview): Promise<void> {
-    return this._runConversationRuntime(() =>
-      runClearAllConversationsRuntime(this._createConversationRuntimeEffects(webview)),
-    );
+    const conversationIds = this.deps.conversations.list().map((conversation) => conversation.id);
+    return this._runConversationRuntime(async () => {
+      await runClearAllConversationsRuntime(this._createConversationRuntimeEffects(webview));
+      await Promise.all(
+        conversationIds.map((conversationId) =>
+          this.deps.canvasBoards?.removeConversationBinding(conversationId),
+        ),
+      );
+    });
   }
 
   // ---- Agent Control ----

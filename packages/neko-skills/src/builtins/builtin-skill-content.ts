@@ -43,5 +43,11 @@ export function localizeBuiltinSkill(
   return {
     ...skill,
     content: selectedContent,
+    portableDefinition: skill.portableDefinition ?? {
+      name: skill.name,
+      description: skill.description,
+      body: skill.content,
+      ...(skill.allowedTools === undefined ? {} : { allowedTools: [...skill.allowedTools] }),
+    },
   };
 }

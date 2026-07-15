@@ -643,7 +643,7 @@ describe('handleChatWebviewMessage', () => {
     expect(sendGeneratedAssetToPlugin).toHaveBeenCalledWith('cut', undefined, undefined, payload);
   });
 
-  it('routes storyboard Markdown Send to Canvas through Agent handoff toward scene/shot creation', async () => {
+  it('routes unspecified storyboard Markdown as a normal document without structured fallback', async () => {
     const deps = createDeps();
     const invoke = vi.fn();
     vi.mocked(vscode.extensions.getExtension).mockReturnValue({
@@ -713,12 +713,13 @@ describe('handleChatWebviewMessage', () => {
     );
     const routedRequest = (deps.messages?.handleUserMessage as any).mock.calls[0]?.[1];
     expect(routedRequest.messageText).toContain('Canvas authoring handoff intent');
-    expect(routedRequest.messageText).toContain('storyboard creative table');
-    expect(routedRequest.messageText).toContain('canvas.createStoryboardFromMarkdown');
-    expect(routedRequest.messageText).toContain('mode=create-nodes');
-    expect(routedRequest.messageText).toContain('scene.basic + shot.basic');
-    expect(routedRequest.messageText).toContain('canvas.ingestMarkdown');
-    expect(routedRequest.messageText).toContain('只用于审阅表格');
+    expect(routedRequest.messageText).toContain('普通 Storyboard Markdown 文档交接');
+    expect(routedRequest.messageText).toContain('不创建专用 storyboard/table/scene/shot 节点');
+    expect(routedRequest.messageText).toContain('只有用户明确要求创建结构化生产节点时才升级');
+    expect(routedRequest.messageText).not.toContain('canvas.createStoryboardFromMarkdown');
+    expect(routedRequest.messageText).not.toContain('mode=create-nodes');
+    expect(routedRequest.messageText).not.toContain('scene.basic + shot.basic');
+    expect(routedRequest.messageText).not.toContain('canvas.ingestMarkdown');
     expect(routedRequest.messageText).toContain('documentResourceRef');
     expect(routedRequest.messageText).not.toContain('Decide whether to call Canvas');
     expect(routedRequest.messageText).not.toContain('Do not assume a generic table');
@@ -802,7 +803,7 @@ describe('handleChatWebviewMessage', () => {
     expect(JSON.stringify(handoffData)).not.toContain('toolName');
   });
 
-  it('treats Markdown wording as source format instead of review-only Canvas ingestion', async () => {
+  it('treats Markdown wording as normal document intent rather than structured production', async () => {
     const deps = createDeps();
 
     handleChatWebviewMessage(
@@ -829,15 +830,11 @@ describe('handleChatWebviewMessage', () => {
     await flushAsyncWork();
 
     const routedRequest = (deps.messages?.handleUserMessage as any).mock.calls[0]?.[1];
-    expect(routedRequest.messageText).toContain('“作为 Markdown/Markdown 发送”只表示来源格式');
-    expect(routedRequest.messageText).toContain('默认仍使用 canvas.createStoryboardFromMarkdown');
-    expect(routedRequest.messageText).toContain(
-      '没有暴露为可调用工具时，报告 Canvas tool-surface blocked',
-    );
-    expect(routedRequest.messageText).toContain(
-      '不要降级调用 canvas.ingestMarkdown 或把 review table 当作成功',
-    );
-    expect(routedRequest.messageText).not.toContain('这是 storyboard creative table 的审阅交接');
+    expect(routedRequest.messageText).toContain('普通 Storyboard Markdown 文档交接');
+    expect(routedRequest.messageText).toContain('只有用户明确要求创建结构化生产节点时才升级');
+    expect(routedRequest.messageText).not.toContain('canvas.createStoryboardFromMarkdown');
+    expect(routedRequest.messageText).not.toContain('canvas.ingestMarkdown');
+    expect(routedRequest.messageText).not.toContain('scene.basic + shot.basic');
   });
 
   it('routes general Canvas authoring handoff through Agent context without choosing Canvas tools', async () => {

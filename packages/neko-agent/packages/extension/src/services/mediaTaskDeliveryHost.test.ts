@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import * as vscode from 'vscode';
 import { MediaTaskDeliveryHost } from './mediaTaskDeliveryHost';
-import type { MediaTask } from '@neko/platform';
+import { MEDIA_TASK_OUTPUT_DIR_SETTING_KEY, type MediaTask } from '@neko/platform';
 
 vi.mock('vscode', async () => await import('../__mocks__/vscode'));
 
@@ -77,6 +77,47 @@ describe('MediaTaskDeliveryHost', () => {
       '/workspace/demo/neko/generated/image',
       expect.any(Object),
     );
+  });
+
+  it('rejects legacy root, cache, and Board-local configured output directories', async () => {
+    vscode.workspace.workspaceFolders = [
+      { uri: vscode.Uri.file('/workspace/demo'), name: 'demo', index: 0 },
+    ];
+    const saveOutputs = vi
+      .fn()
+      .mockResolvedValue(['/workspace/demo/neko/generated/image/task-1_0.png']);
+    const host = new MediaTaskDeliveryHost({
+      platform: { media: { saveOutputs } } as never,
+      localResourceAccess: {
+        toWebviewUri: vi.fn(),
+        toWebviewAsset: vi.fn(({ path: _path, ...asset }) => ({
+          ...asset,
+          renderUri: `webview:generated:${asset.id}`,
+        })),
+      } as never,
+    });
+
+    for (const configured of [
+      '/workspace/demo/generated',
+      '/workspace/demo/.neko/generated',
+      '/workspace/demo/.neko/.cache/generated',
+      '/workspace/demo/neko/boards/story-media',
+    ]) {
+      vi.mocked(vscode.workspace.getConfiguration).mockReturnValue({
+        get: vi.fn((key: string, fallback: unknown) =>
+          key === MEDIA_TASK_OUTPUT_DIR_SETTING_KEY ? configured : fallback,
+        ),
+        inspect: vi.fn(),
+        update: vi.fn(),
+      } as never);
+
+      await host.createProgressViewDelivery(createWebview(), createCompletedImageTask(), 'image');
+    }
+
+    expect(saveOutputs).toHaveBeenCalledTimes(4);
+    for (const call of saveOutputs.mock.calls) {
+      expect(call[1]).toBe('/workspace/demo/neko/generated/image');
+    }
   });
 });
 

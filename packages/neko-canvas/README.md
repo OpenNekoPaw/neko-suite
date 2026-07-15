@@ -12,12 +12,14 @@
 - **职责**：无限画布编辑、节点图编排、媒体资产预览、故事板管理
 - **入口**：`packages/extension/src/extension.ts`
 - **项目格式**：`.nkc`（JSON Visual Canvas）
+- **Board 约定**：`neko/boards/*.nkc` 是普通 Canvas 文档，仅作为 Agent 默认检索/创建目录；不存在 Draft 格式、Board profile 或升级转换
 - **子包**：`extension/`（Host）、`webview/`（React UI）
 - **依赖**：`@neko/shared`
 - **激活依赖**：neko-engine、neko-tools、neko-preview
 - **节点类型（现有）**：Media / Storyboard / Annotation / Text / Artboard / Group / Shot / Scene / Gallery / Script / Document / Model / CanvasEmbed（13 种）
 - **核心功能**：富文本编辑、分组管理、连接标签、图层面板、画板导出（PNG/SVG）、原地粘贴、分镜候选审阅、场景容器排序、输入引用节点投放
 - **布局**：Webview 使用 Creative Workbench Shell：左侧 CanvasToolbar 承接 Pan/Add/Import/Undo/Redo 等全局画布工具，底部显隐组承接 HUD（MiniMap/ZoomControls）与右侧 NodeLibrary 显隐；FloatingPanelHost、PlaybackControllerHost、GenerationPromptPanel、ContentOverlay 保留为主面板控件或 overlay；NodeLibrary 作为右侧创建面板。
+- **Basic 目录**：默认只展示 Media、Annotation、Group、Text、Artboard、Script、Document 等基础入口；Storyboard/Table/Scene/Shot/Gallery、timeline/workflow 和专业子系统入口仅在显式 Professional 路径出现。Basic 不改变 `.nkc` schema，也不隐藏文件中已有的专业节点。
 - **状态显示**：subsystem summary 与 projection state 由 Extension 侧 CanvasStatusBar 显示，Webview 不再在无限画布左下角渲染状态徽章。
 - **已落地 AI / 编排能力**：GenerationPromptPanel、BatchGenerationScheduler、ScriptNode TOC、Document/Model/CanvasEmbed 引用、`CanvasProjectAuthoringService` 无 UI `.nkc` 写入路径、`NekoCanvasAPI.importAsset()` 无 UI media 节点导入、`NekoCanvasAPI.storyboard.import()` 内部 API、Canvas Markdown lifecycle capability（`canvas.ingestMarkdown` review-only、`canvas.createStoryboardFromMarkdown` 生产 scene/shot 创建）、`NekoCanvasAPI.storyboard.getExecutionSummary()` 只读执行摘要
 
@@ -77,6 +79,10 @@ Webview 端通过 `canvasOperationStore` 作为运行时桥接层生成 `EditOpe
 | 文档类型（ScriptNode 等）| ✅ | Explorer 拖入或工具栏选择均可创建 `ScriptNode` / `DocumentNode` / `ModelNode` / `CanvasEmbedNode` |
 
 外部 `neko.canvas.importAsset` / `NekoCanvasAPI.importAsset()` 不再要求 Canvas Webview 已打开；它通过 `CanvasProjectAuthoringService` 创建 media 节点，只持久化 `${VAR}/path`、workspace-relative path、`ResourceRef` 或 `DocumentArchiveResourceRef`。Webview URI、blob、cache path 和 temp path 不能作为 `.nkc` 身份写入。
+
+`NekoCanvasAPI.boards` 是 Agent 的公共 Board 路由边界：Canvas 拥有 `neko/boards/` 的安全索引、确定性解析和 revision-checked delivery。解析顺序为显式目标、有效会话绑定、唯一精确 scope 匹配、创建新 Board。Agent 不读取原始 `.nkc`，也不能退回活动/最近/专业目录 Canvas。Markdown 使用普通 Text/Markdown 内容；文件引用使用支持稳定 `ResourceRef` 的 DocumentNode；图片、音频和视频使用 MediaNode。所有重放按 provenance/artifact identity 幂等。
+
+Board 引用生成媒体时，文件仍在 `neko/generated/<kind>/`；`.nkc` 不保存 cache/render URI，也不会因为引用而自动创建 Asset Library membership。
 
 ### 分镜系统（现状）
 

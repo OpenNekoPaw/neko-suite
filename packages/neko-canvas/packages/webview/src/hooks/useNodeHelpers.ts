@@ -12,6 +12,7 @@ import type {
   CanvasNode,
   ContainerChildPlacement,
   DocumentArchiveResourceRef,
+  DocumentCanvasNode,
   NkProjectType,
   ResourceRef,
 } from '@neko/shared';
@@ -53,7 +54,7 @@ export interface UseNodeHelpersReturn {
     pos: { x: number; y: number },
     docPath?: string,
     title?: string,
-    docType?: 'pdf' | 'docx' | 'epub' | 'cbz',
+    docType?: DocumentCanvasNode['data']['docType'],
   ) => void;
   addModelAt: (
     pos: { x: number; y: number },
@@ -278,7 +279,7 @@ export function useNodeHelpers(options: UseNodeHelpersOptions): UseNodeHelpersRe
       pos: { x: number; y: number },
       docPath = '',
       title = 'Document',
-      docType: 'pdf' | 'docx' | 'epub' | 'cbz' = 'pdf',
+      docType: DocumentCanvasNode['data']['docType'] = 'pdf',
     ) => {
       const w = 220,
         h = 280;

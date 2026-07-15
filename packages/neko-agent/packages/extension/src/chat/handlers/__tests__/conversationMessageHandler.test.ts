@@ -148,6 +148,7 @@ describe('ConversationMessageHandler', () => {
   });
 
   it('handles creative conversation lifecycle commands with full shared command identity', async () => {
+    const canvasBoards = { removeConversationBinding: vi.fn().mockResolvedValue(undefined) };
     const lifecycle = {
       handleCommand: vi.fn().mockResolvedValue({
         ok: true,
@@ -156,7 +157,7 @@ describe('ConversationMessageHandler', () => {
         diagnostics: [],
       }),
     };
-    handler.updateDeps({ creativeAiLifecycle: lifecycle });
+    handler.updateDeps({ creativeAiLifecycle: lifecycle, canvasBoards });
 
     await handler.handleConversationLifecycle(webview as any, {
       type: 'conversationLifecycle',
@@ -188,6 +189,7 @@ describe('ConversationMessageHandler', () => {
       diagnostics: [],
     });
     expect(conversations.sendConversationList).toHaveBeenCalledWith(webview);
+    expect(canvasBoards.removeConversationBinding).toHaveBeenCalledWith('background-1');
   });
 
   it('reports lifecycle service availability instead of silently succeeding', async () => {
@@ -274,10 +276,12 @@ describe('ConversationMessageHandler', () => {
 
   it('deletes a conversation and clears scoped agent state', async () => {
     const messages = { clearAgentState: vi.fn() };
+    const canvasBoards = { removeConversationBinding: vi.fn().mockResolvedValue(undefined) };
     handler = new ConversationMessageHandler({
       conversations: conversations as any,
       agentManager: agentManager as any,
       messages: messages as any,
+      canvasBoards,
       getWebview: () => webview as any,
     });
 
@@ -288,6 +292,7 @@ describe('ConversationMessageHandler', () => {
     expect(conversations.delete).toHaveBeenCalledWith('conv-a', { activateNext: true });
     expect(conversations.sendConversationList).toHaveBeenCalledWith(webview);
     expect(conversations.sendActiveConversation).toHaveBeenCalledWith(webview, undefined);
+    expect(canvasBoards.removeConversationBinding).toHaveBeenCalledWith('conv-a');
   });
 
   it('deletes the final closed tab without activating another conversation', async () => {

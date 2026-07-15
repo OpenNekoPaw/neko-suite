@@ -58,6 +58,7 @@ const vscodeMockState = vi.hoisted(() => {
   const deleteFile = vi.fn(async (uri: MockUri) => {
     files.delete(uri.fsPath);
   });
+  const createDirectory = vi.fn(async () => undefined);
 
   return {
     MockUri,
@@ -68,6 +69,7 @@ const vscodeMockState = vi.hoisted(() => {
     stat,
     rename,
     deleteFile,
+    createDirectory,
   };
 });
 
@@ -87,6 +89,7 @@ vi.mock('vscode', () => ({
       stat: vscodeMockState.stat,
       rename: vscodeMockState.rename,
       delete: vscodeMockState.deleteFile,
+      createDirectory: vscodeMockState.createDirectory,
     },
   },
   commands: {
@@ -119,6 +122,45 @@ describe('CanvasProjectAuthoringService', () => {
     vscodeMockState.stat.mockClear();
     vscodeMockState.rename.mockClear();
     vscodeMockState.deleteFile.mockClear();
+    vscodeMockState.createDirectory.mockClear();
+  });
+
+  it('creates ordinary Board .nkc documents under neko/boards without active Canvas fallback', async () => {
+    const provider = createProvider();
+    provider.getActiveCanvasDocumentUri.mockImplementation(() => {
+      throw new Error('active Canvas fallback must not be called');
+    });
+    const service = new CanvasProjectAuthoringService({
+      context: { subscriptions: [] } as never,
+      canvasEditorProvider: provider,
+    });
+
+    const summary = await service.createBoardDocument('Story Notes', {
+      projectId: 'project:1',
+      workId: 'work:1',
+    });
+
+    expect(summary.documentRef.path).toBe('neko/boards/Story Notes.nkc');
+    expect(summary.revision).toMatch(/^nkc:/);
+    expect(summary).toMatchObject({
+      title: 'Story Notes',
+      projectId: 'project:1',
+      workId: 'work:1',
+      scopeKind: 'generic',
+    });
+    expect(vscodeMockState.createDirectory).toHaveBeenCalledOnce();
+    expect(provider.getActiveCanvasDocumentUri).not.toHaveBeenCalled();
+    const reopened = loadNkc(
+      new TextDecoder().decode(
+        vscodeMockState.files.get('/workspace/project/neko/boards/Story Notes.nkc'),
+      ),
+    );
+    expect(reopened.validation.valid).toBe(true);
+    expect(reopened.data.creativeScope).toMatchObject({
+      kind: 'generic',
+      projectId: 'project:1',
+      workId: 'work:1',
+    });
   });
 
   it('creates a new nkc file without revealing a Webview when no active target exists', async () => {

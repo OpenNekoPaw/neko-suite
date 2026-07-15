@@ -73,6 +73,8 @@ import {
   resolveAgentLlmConfigForTurn,
 } from './agentLlmConfigResolver';
 import { getCapabilityRuntimeBindings } from '../bootstrap/capabilityBootstrap';
+import type { AgentCanvasBoardCoordinator } from '../services/agentCanvasBoardCoordinator';
+import { AgentCanvasBoardWorkRuntime } from '../services/agentCanvasBoardWorkRuntime';
 
 const logger = getLogger('AgentMessageTurnHandler');
 
@@ -80,6 +82,7 @@ export interface AgentMessageTurnHandlerOptions {
   readonly accountAiCatalog?: AccountAiCatalogCache;
   readonly generatedAssetIndex?: GeneratedAssetIndex;
   readonly taskResultObservationCoordinator?: TaskResultObservationCoordinator;
+  readonly canvasBoards?: AgentCanvasBoardCoordinator;
 }
 
 export class AgentMessageTurnHandler {
@@ -98,6 +101,7 @@ export class AgentMessageTurnHandler {
   private readonly _mediaDeliveryHost: MediaTaskDeliveryHost;
   private readonly _mediaTurnBridge: MediaTurnBridge;
   private readonly _agentTurnBridge: AgentTurnBridge;
+  private readonly _canvasBoardWork: AgentCanvasBoardWorkRuntime | undefined;
   private readonly _subAgentEventSubscriptions = new Map<string, vscode.Disposable>();
   private readonly _disposables: vscode.Disposable[] = [];
   private _lastTextEditorUri: vscode.Uri | undefined = vscode.window.activeTextEditor?.document.uri;
@@ -123,6 +127,9 @@ export class AgentMessageTurnHandler {
     private readonly _localResourceAccess?: AgentLocalResourceAccess,
     private readonly _options: AgentMessageTurnHandlerOptions = {},
   ) {
+    this._canvasBoardWork = this._options.canvasBoards
+      ? new AgentCanvasBoardWorkRuntime({ coordinator: this._options.canvasBoards })
+      : undefined;
     this._attachmentProcessor = new AttachmentProcessor({
       contentAccessRuntime: getCapabilityRuntimeBindings().contentAccessRuntime,
     });
@@ -145,6 +152,7 @@ export class AgentMessageTurnHandler {
         : {}),
       generateMessageId: () => createAgentMessageId(),
       now: () => Date.now(),
+      canvasBoardWork: this._canvasBoardWork,
     });
 
     const agentManager = this._agentManager;
@@ -194,6 +202,7 @@ export class AgentMessageTurnHandler {
       ensureSubAgentEventSubscription: (webview, conversationId, agentRunner) =>
         this._ensureSubAgentEventSubscription(webview, conversationId, agentRunner),
       generateMessageId: () => createAgentMessageId(),
+      canvasBoardWork: this._canvasBoardWork,
     });
     this._disposables.push(
       vscode.window.onDidChangeActiveTextEditor((editor) => {
@@ -284,12 +293,13 @@ export class AgentMessageTurnHandler {
         void webview.postMessage(message);
       },
       executeMediaTurn: this._platform?.media
-        ? ({ conversationId, prompt, mediaModel }) =>
+        ? ({ conversationId, prompt, mediaModel, selectedFileReferences }) =>
             this._mediaTurnBridge.execute({
               webview,
               conversationId,
               prompt,
               mediaModel,
+              ...(selectedFileReferences ? { selectedFileReferences } : {}),
             })
         : undefined,
       executeAgentTurn:
@@ -308,6 +318,7 @@ export class AgentMessageTurnHandler {
               understandingModels,
               executionOverrides,
               locale,
+              selectedFileReferences,
             }) =>
               this._agentTurnBridge.execute({
                 webview,
@@ -324,6 +335,7 @@ export class AgentMessageTurnHandler {
                 understandingModels,
                 executionOverrides,
                 locale,
+                ...(selectedFileReferences ? { selectedFileReferences } : {}),
                 settings: turnSettings,
               })
           : undefined,

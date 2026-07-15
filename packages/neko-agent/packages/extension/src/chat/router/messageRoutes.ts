@@ -192,7 +192,7 @@ function defaultCanvasAuthoringHandoffTitle(
 function projectCanvasAuthoringSourceGuidanceZh(
   message: CanvasAuthoringHandoffRouteMessage,
 ): readonly string[] {
-  if (message.canonicalStoryboard) {
+  if (message.canonicalStoryboard && isExplicitStructuredCanvasHandoffIntent(message.userIntent)) {
     return [
       '这是 canonical Storyboard 生产交接；必须把 handoff 上下文中的 canonicalStoryboard 原样传给现有 Canvas 分镜创建 capability。',
       '不得压平为 asset batch，不得从可见 Markdown 重建 scene/shot，也不得丢弃 shot media refs。',
@@ -200,20 +200,15 @@ function projectCanvasAuthoringSourceGuidanceZh(
     ];
   }
   if (isStoryboardCreativeTableHandoff(message)) {
-    if (isReviewOnlyCanvasHandoffIntent(message.userIntent)) {
-      return [
-        '这是 storyboard creative table 的审阅交接；仅在用户明确要求审阅表格/草稿时使用 canvas.ingestMarkdown。',
-        '如果用户要把分镜发送为 Canvas 生产节点，应改用 canvas.createStoryboardFromMarkdown，传入 profileHint=storyboard、mode=create-nodes，并带显式 approval context。',
-      ];
-    }
-    return [
-      '这是 storyboard creative table 的 Send to Canvas；默认目标是创建 Canvas 分镜生产节点，而不是审阅 table 节点。',
-      '“作为 Markdown/Markdown 发送”只表示来源格式，不表示 review-only；默认仍使用 canvas.createStoryboardFromMarkdown 创建 scene/shot。',
-      '可先调用 canvas.validateMarkdownStoryboard 做只读校验；校验通过后调用 canvas.createStoryboardFromMarkdown，传入 profileHint=storyboard、mode=create-nodes，并用本次明确 Send to Canvas 指令作为 creation-apply approval context。',
-      'canvas.ingestMarkdown 只用于审阅表格/草稿，不会创建 scene/shot；用户要求发送为分镜时不要停在 ingestMarkdown 的 table 节点。',
-      'canvas.createStoryboardFromMarkdown 没有暴露为可调用工具时，报告 Canvas tool-surface blocked，不要降级调用 canvas.ingestMarkdown 或把 review table 当作成功。',
-      '创建结果应返回 scene.basic + shot.basic 节点引用；没有新增/变更 Canvas refs 时按阻塞处理。',
-    ];
+    return isExplicitStructuredCanvasHandoffIntent(message.userIntent)
+      ? [
+          '这是用户明确要求的专业结构化 Storyboard authoring；先验证来源，再创建 scene/shot 生产节点。',
+          '调用 canvas.createStoryboardFromMarkdown 时传入 profileHint=storyboard、mode=create-nodes 和显式 approval context；失败时不得降级为其他结构化路径。',
+        ]
+      : [
+          '这是普通 Storyboard Markdown 文档交接；保留灵活列、未决选择、来源追踪与引用，不创建专用 storyboard/table/scene/shot 节点。',
+          '不得因为内容包含分镜表或 Storyboard 术语就推断专业结构化 authoring；只有用户明确要求创建结构化生产节点时才升级。',
+        ];
   }
   if (message.sourceKind === 'markdown') {
     return [
@@ -226,7 +221,7 @@ function projectCanvasAuthoringSourceGuidanceZh(
 function projectCanvasAuthoringSourceGuidanceEn(
   message: CanvasAuthoringHandoffRouteMessage,
 ): readonly string[] {
-  if (message.canonicalStoryboard) {
+  if (message.canonicalStoryboard && isExplicitStructuredCanvasHandoffIntent(message.userIntent)) {
     return [
       'This is a canonical Storyboard production handoff; pass canonicalStoryboard from the handoff context unchanged to the existing Canvas storyboard creation capability.',
       'Do not flatten it to an asset batch, reconstruct scene/shot facts from visible Markdown, or drop shot media refs.',
@@ -234,20 +229,15 @@ function projectCanvasAuthoringSourceGuidanceEn(
     ];
   }
   if (isStoryboardCreativeTableHandoff(message)) {
-    if (isReviewOnlyCanvasHandoffIntent(message.userIntent)) {
-      return [
-        'This is a storyboard creative table review handoff; use canvas.ingestMarkdown only when the user explicitly asks for table/draft review.',
-        'If the user wants the storyboard sent as production Canvas nodes, use canvas.createStoryboardFromMarkdown with profileHint=storyboard, mode=create-nodes, and explicit approval context.',
-      ];
-    }
-    return [
-      'This is a storyboard creative table Send to Canvas handoff; the default target is production Canvas storyboard nodes, not a review table node.',
-      '"Send as Markdown" describes the source format, not a review-only intent; still default to canvas.createStoryboardFromMarkdown for scene/shot creation.',
-      'You may call canvas.validateMarkdownStoryboard first for read-only validation; after validation, call canvas.createStoryboardFromMarkdown with profileHint=storyboard, mode=create-nodes, and use this explicit Send to Canvas instruction as creation-apply approval context.',
-      'canvas.ingestMarkdown is only for table/draft review and does not create scene/shot nodes; do not stop at an ingestMarkdown table node when the user asked to send a storyboard.',
-      'If canvas.createStoryboardFromMarkdown is not exposed as a callable tool, report Canvas tool-surface blocked; do not downgrade to canvas.ingestMarkdown or treat a review table as success.',
-      'Creation should return scene.basic + shot.basic node refs; if no created/changed Canvas refs are returned, treat the result as blocked.',
-    ];
+    return isExplicitStructuredCanvasHandoffIntent(message.userIntent)
+      ? [
+          'This is explicit professional structured Storyboard authoring; validate the source before creating production scene/shot nodes.',
+          'Call canvas.createStoryboardFromMarkdown with profileHint=storyboard, mode=create-nodes, and explicit approval context; do not downgrade to another structured path on failure.',
+        ]
+      : [
+          'This is an ordinary Storyboard Markdown document handoff. Preserve flexible columns, unresolved choices, source trace, and references without creating specialized storyboard/table/scene/shot nodes.',
+          'Do not infer professional structured authoring from a table or Storyboard terminology; upgrade only when the user explicitly requests structured production nodes.',
+        ];
   }
   if (message.sourceKind === 'markdown') {
     return [
@@ -269,39 +259,20 @@ function isStoryboardCreativeTableHandoff(message: CanvasAuthoringHandoffRouteMe
   );
 }
 
-function isReviewOnlyCanvasHandoffIntent(userIntent: string | undefined): boolean {
+function isExplicitStructuredCanvasHandoffIntent(userIntent: string | undefined): boolean {
   if (!userIntent) return false;
   const normalized = userIntent.toLowerCase();
-  const asksForMarkdownSourceFormat =
-    normalized.includes('as markdown') ||
-    normalized.includes('作为 markdown') ||
-    normalized.includes('markdown 发送') ||
-    normalized.includes('发送为 markdown') ||
-    normalized.includes('send markdown') ||
-    normalized.includes('send as markdown');
-  const asksForReviewArtifact =
-    normalized.includes('review-only') ||
-    normalized.includes('review only') ||
-    normalized.includes('review table') ||
-    normalized.includes('table review') ||
-    normalized.includes('draft table') ||
-    normalized.includes('table node') ||
-    normalized.includes('审阅表格') ||
-    normalized.includes('表格审阅') ||
-    normalized.includes('草稿表格') ||
-    normalized.includes('表格节点');
-  const asksForOnly =
-    normalized.includes('only') || normalized.includes('只') || normalized.includes('仅');
-
-  if (asksForMarkdownSourceFormat && !asksForReviewArtifact && !asksForOnly) return false;
-
   return (
-    asksForReviewArtifact ||
-    (asksForOnly &&
-      (normalized.includes('review') ||
-        normalized.includes('审阅') ||
-        normalized.includes('draft') ||
-        normalized.includes('草稿')))
+    normalized.includes('structured storyboard') ||
+    normalized.includes('structured production') ||
+    normalized.includes('production nodes') ||
+    normalized.includes('scene/shot nodes') ||
+    normalized.includes('professional storyboard') ||
+    normalized.includes('结构化 storyboard') ||
+    normalized.includes('结构化分镜') ||
+    normalized.includes('生产节点') ||
+    normalized.includes('scene/shot 节点') ||
+    normalized.includes('专业分镜')
   );
 }
 

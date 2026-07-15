@@ -17,12 +17,18 @@ import {
 import type { MediaTaskProgressDeliveryPlan } from '@neko/platform/media/media-task-progress-plan';
 import type { MediaModelCategory, ModelRef } from '@neko-agent/types';
 import { runAgentMediaTurn } from '@neko/agent/runtime';
+import type { AgentFileReference } from '@neko-agent/types';
 import type { AgentTaskResultDeliveryPolicy, Task } from '@neko/shared';
 import { getLogger } from '../base';
 import { MediaTaskDeliveryHost } from './mediaTaskDeliveryHost';
 import type { AgentDashboardWorkItemSource } from './dashboardWorkItemSource';
 import type { AgentLocalResourceAccess } from './localResourceAccess';
 import type { ConversationBridge } from '../chat/conversationBridge';
+import type {
+  AgentCanvasBoardWorkRuntime,
+  AgentCanvasBoardWorkSession,
+} from './agentCanvasBoardWorkRuntime';
+import { createSelectedWorkspaceResourceRefs } from './selectedWorkspaceResourceRefs';
 
 const logger = getLogger('MediaTurnBridge');
 
@@ -43,6 +49,7 @@ export interface MediaTurnBridgeDeps {
   };
   generateMessageId?: () => string;
   now?: () => number;
+  canvasBoardWork?: AgentCanvasBoardWorkRuntime;
 }
 
 export interface ExecuteMediaTurnForWebviewInput {
@@ -50,6 +57,7 @@ export interface ExecuteMediaTurnForWebviewInput {
   conversationId: string;
   prompt: string;
   mediaModel: ModelRef<MediaModelCategory>;
+  selectedFileReferences?: readonly AgentFileReference[];
 }
 
 interface MediaTurnTaskDelivery {
@@ -62,6 +70,32 @@ export class MediaTurnBridge {
 
   async execute(input: ExecuteMediaTurnForWebviewInput): Promise<void> {
     const media = this.deps.platform?.media;
+    const runId = `media-board-run:${this.deps.generateMessageId?.() ?? Date.now()}`;
+    const boardWork = await this.deps.canvasBoardWork?.begin({
+      conversationId: input.conversationId,
+      turnId: runId,
+      runId,
+      message: input.prompt,
+      forceMedia: true,
+      onDiagnostic: (diagnostic) => {
+        void input.webview.postMessage({
+          type: 'sessionDiagnostic',
+          code:
+            diagnostic.phase === 'resolution'
+              ? 'canvas-board-routing-failed'
+              : 'canvas-board-delivery-failed',
+          severity: 'warning',
+          conversationId: diagnostic.conversationId,
+          message: diagnostic.message,
+        });
+      },
+    });
+    const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    if (boardWork && workspaceRoot && input.selectedFileReferences?.length) {
+      await boardWork.deliverSelectedReferences(
+        createSelectedWorkspaceResourceRefs(workspaceRoot, input.selectedFileReferences),
+      );
+    }
 
     await runAgentMediaTurn({
       conversationId: input.conversationId,
@@ -88,7 +122,7 @@ export class MediaTurnBridge {
                 prompt: runtimeInput.prompt,
                 mediaModel: runtimeInput.mediaModel,
                 conversationId: runtimeInput.conversationId,
-                createTaskView: (task) => this.createTaskDelivery(input.webview, task),
+                createTaskView: (task) => this.createTaskDelivery(input.webview, task, boardWork),
                 createRecoveryTaskView: (task): MediaTurnTaskDelivery => ({
                   view: createMediaTaskView(task),
                 }),
@@ -196,12 +230,14 @@ export class MediaTurnBridge {
   private async createTaskDelivery(
     webview: vscode.Webview,
     task: Parameters<MediaTaskDeliveryHost['createTaskView']>[1],
+    boardWork?: AgentCanvasBoardWorkSession,
   ): Promise<MediaTurnTaskDelivery> {
     if (
       isTerminalMediaTaskStatus(task.status) &&
       typeof this.deps.mediaDeliveryHost.createTaskViewDelivery === 'function'
     ) {
       const delivery = await this.deps.mediaDeliveryHost.createTaskViewDelivery(webview, task);
+      await boardWork?.deliverGeneratedAssets(task.id, delivery.deliveryPlan.generatedAssets);
       return {
         view: delivery.view,
         deliveryPlan: delivery.deliveryPlan,

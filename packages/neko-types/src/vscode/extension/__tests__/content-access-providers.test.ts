@@ -100,6 +100,57 @@ describe('content access providers', () => {
     });
     expect(text(result.bytes)).toBe('generated-source');
     expect(resolveAsset).toHaveBeenCalledWith(generated);
+
+    await expect(
+      provider.resolve({
+        request: {
+          ref: generated,
+          intent: 'agent-context',
+          target: 'local-path',
+          variant: { role: 'preview' },
+        },
+      }),
+    ).resolves.toMatchObject({ status: 'ready', localPath: sourcePath });
+  });
+
+  it('projects generated image sources directly through authorized Webview access', async () => {
+    const sourcePath = '/workspace/demo/neko/generated/image/shot.png';
+    const webview = { id: 'agent' };
+    const localResourceAccess = {
+      toWebviewUri: vi.fn(async () => ({
+        ok: true as const,
+        kind: 'local' as const,
+        source: sourcePath,
+        uri: 'webview:/generated/shot.png',
+      })),
+    } as unknown as LocalResourceAccessService;
+    const provider = new GeneratedAssetSourceContentAccessProvider({
+      resolveAsset: async () => ({ path: sourcePath, mimeType: 'image/png' }),
+      localResourceAccess,
+      webviewResolver: () => webview as never,
+    });
+    const generated = createResourceRef({
+      scope: 'project',
+      provider: 'generated-asset',
+      kind: 'generated',
+      source: { kind: 'generated-asset', assetId: 'asset-1' },
+      fingerprint: createResourceFingerprint({ strategy: 'provider', value: 'asset-1' }),
+    });
+
+    const result = await provider.resolve({
+      request: {
+        ref: generated,
+        intent: 'interactive-preview',
+        target: 'webview-uri',
+        variant: { role: 'preview' },
+        caller: 'agent-card',
+      },
+    });
+
+    expect(result).toMatchObject({ status: 'ready', uri: 'webview:/generated/shot.png' });
+    expect(localResourceAccess.toWebviewUri).toHaveBeenCalledWith(webview, sourcePath, {
+      caller: 'agent-card',
+    });
   });
 
   it('resolves preview cache variants and materializes missing cache', async () => {

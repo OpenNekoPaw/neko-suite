@@ -1,6 +1,6 @@
 # 互动画布领域架构
 
-更新日期：2026-06-17
+更新日期：2026-07-15
 
 互动画布领域关注用户在无限画布上组织可执行创作结构。它以 `neko-canvas` 的节点、连接、容器、route、preview session 和执行摘要为核心；Live、Scene、Character、Image、Audio、Video 是可引用能力或资产来源，不属于 `interactive` 领域自身真值。
 
@@ -32,10 +32,18 @@ Canvas 基础模式不是单一 AI 卡片模式，而是面向多类型创作节
 
 | 模式     | 定位                                               | 能力边界                                                                                                                                                                                                                          |
 | -------- | -------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 基础模式 | 多类型创作画布，用于组织创意、素材、分镜和生成结果 | 支持 Shot、Script、Document、Image、Video、Audio、Model、Character、Scene、Group、Artboard、Gallery 等创作语义节点；支持轻量语义连接、AI 生成、素材候选、基础属性和自动排布；默认隐藏 typed ports、执行状态、route/debug 等复杂度 |
+| 基础模式 | 快速创作与素材组织                                 | 右侧创建目录只显示文件/引用、文本与 Markdown 文档、剧本呈现、图片/音频/视频，以及中性的 Group/Artboard；不显示 Storyboard 表、Scene/Shot/Gallery、timeline/workflow、Agent/Tool/Skill/Model/Provider 等专业创建入口 |
 | 专业模式 | 交互创作和工作流画布，用于构建可执行结构           | 在基础节点之上开放 workflow nodes、interaction nodes、typed ports、connection schema、variables、routes、preview session、execution summary、validation/debug 和子系统节点库                                                      |
 
-右侧 Dock 应按模式暴露不同深度：基础模式优先显示创作节点库、当前节点基础属性、AI 生成/变体和素材候选；专业模式显示完整节点库、Inspector、ports/schema、变量、route、preview session、执行摘要和调试信息。两种模式共享同一 canvas graph，不另建轻量项目格式。
+右侧 Dock 按模式暴露不同深度。Basic 只是目录投影和默认创作策略，不写入 `.nkc`，不限制已有节点，也不定义第二套 renderer/validator。含专业节点的 `.nkc` 在 Basic 下仍按现有 renderer 展示；用户显式切换 Professional 后继续使用完整子系统目录。两种模式共享同一 canvas graph，不另建轻量项目格式。
+
+## Board 目录约定
+
+Board 与 Canvas 是同一个概念：`neko/boards/*.nkc` 都是普通 `.nkc`，使用现有 codec、revision、source policy、节点和连接语义。`neko/boards/` 只用于 Agent 未指定目标时的默认检索与创建，不产生 Draft、Board profile、`.nkdraft`、升级或转换流程。
+
+未指定目标的创作运行按固定顺序解析：显式 Canvas → 有效会话/任务绑定 → 唯一精确 project/work/scope 匹配 → 创建新的 `neko/boards/<safe-name>.nkc`。不得用活动/最近画布、专业目录画布、文件名或语义相似度静默替代。每次 turn/task/run 在异步工作前冻结 document/canvas/revision 身份，完成时只向该目标写入；冲突或删除返回可见诊断。
+
+Agent 自动写入的 Markdown、选中引用和生成媒体通过 Canvas 公共 headless authoring；不得直接改 `.nkc` JSON。生成媒体文件仍由 Generated Output 保存在 `neko/generated/<kind>/`，Canvas 只保存稳定 `ResourceRef`。Canvas 使用、专业项目使用和 Asset Library 登记是三个独立关系。
 
 ## 与 Scene Live profile 的关系
 

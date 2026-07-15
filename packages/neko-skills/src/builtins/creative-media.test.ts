@@ -54,7 +54,9 @@ describe('canonical creative media Skill content boundaries', () => {
       expect(storyboard?.content).toMatch(/multiple resources|匹配多个资源/);
       expect(storyboard?.content).toContain('`scenes[] -> shots[]`');
       expect(storyboard?.content).toMatch(/scene as a container|scene 保持为容器/);
-      expect(storyboard?.content).toMatch(/never flatten|禁止把 canonical Storyboard 压平/);
+      expect(storyboard?.content).toMatch(/Never flatten|禁止把 canonical Storyboard 压平/);
+      expect(storyboard?.content).toMatch(/ordinary Markdown|普通 Markdown/);
+      expect(storyboard?.content).toMatch(/explicit professional|明确.*专业结构化/);
     },
   );
 
@@ -65,4 +67,19 @@ describe('canonical creative media Skill content boundaries', () => {
     expect(skills.get('video')?.content).not.toContain('startFrameRef:');
     expect(skills.get('image')?.content).not.toContain('outpaintExpansion:');
   });
+
+  it.each([undefined, 'zh-CN'])(
+    'keeps Board routing and package protocol out of Storyboard methodology (%s)',
+    (locale) => {
+      const content = getCanonicalCreativeMediaSkills(locale).find(
+        (skill) => skill.name === 'storyboard',
+      )?.content;
+      expect(content).not.toContain('neko/boards');
+      expect(content).not.toContain('requestCanvasAuthoringHandoff');
+      expect(content).not.toContain('canvas.createStoryboardFromMarkdown');
+      expect(content).not.toContain('canvas.ingestMarkdown');
+      expect(content).not.toContain('documentUri');
+      expect(content).not.toContain('taskId');
+    },
+  );
 });

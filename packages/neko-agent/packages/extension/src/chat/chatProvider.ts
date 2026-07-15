@@ -106,6 +106,11 @@ import type {
 } from '@neko/shared/types/creative-ai-invocation';
 import { updateWebviewKeyboardEditableOwner } from '@neko/shared/vscode/extension';
 import { AccountAiCatalogCache } from '../services/accountAiCatalogCache';
+import {
+  AgentCanvasBoardCoordinator,
+  MementoCanvasBoardBindingStorage,
+  getCanvasBoardApi,
+} from '../services/agentCanvasBoardCoordinator';
 
 const logger = getLogger('ChatProvider');
 const AGENT_KEYBOARD_EDITABLE_CONTEXT = 'neko.agent.keyboardEditable';
@@ -386,6 +391,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
   private _capabilityRefreshRuntime?: CapabilityRuntimeRefreshRuntime;
   private readonly _dashboardWorkItems = new AgentDashboardWorkItemSource();
   private readonly _taskDeliveryBridge: TaskDeliveryBridge;
+  private readonly _canvasBoards: AgentCanvasBoardCoordinator;
   // Note: _routerAskBroker and _workflowPlanHandler were removed alongside
   // the workflow/orchestrator layer. Pipeline intents now flow through the
   // Agent + Skill stack; no separate plan handler is needed.
@@ -447,6 +453,10 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
         this._context.globalState,
       ),
     });
+    this._canvasBoards = new AgentCanvasBoardCoordinator({
+      bindings: new MementoCanvasBoardBindingStorage(this._context.workspaceState),
+      getCanvasApi: getCanvasBoardApi,
+    });
 
     // Initialize handlers with empty deps (will be updated after service init)
     this._taskHandler = new TaskHandler({});
@@ -460,6 +470,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
       conversations: this._conversations,
       onConversationCreated: (conversationId) =>
         this._bindCreatedConversationToForegroundTab(conversationId),
+      canvasBoards: this._canvasBoards,
       getWebview: () => this._view?.webview,
     });
     this._characterDialogue = new CharacterDialogueController({
@@ -611,6 +622,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
             ...(this._taskResultObservationCoordinator
               ? { taskResultObservationCoordinator: this._taskResultObservationCoordinator }
               : {}),
+            canvasBoards: this._canvasBoards,
           },
         );
         this._taskResultObservationCoordinator?.setContinuationPort({

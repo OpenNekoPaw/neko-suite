@@ -292,7 +292,8 @@ describe('agentCapabilityProvider storyboard export contracts', () => {
     const localized = fragment?.locales?.['zh']?.content;
 
     expect(fragment?.content).toContain('canvas.createStoryboardFromMarkdown');
-    expect(fragment?.content).toContain('profileHint=storyboard');
+    expect(fragment?.content).toContain('ordinary Markdown document content');
+    expect(fragment?.content).toContain('Only explicit professional structured intent');
     expect(fragment?.content).toContain('mode=create-nodes');
     expect(fragment?.content).toContain('documentResourceRef');
     expect(localized).toContain('canvas.createStoryboardFromMarkdown');
@@ -428,19 +429,19 @@ describe('agentCapabilityProvider storyboard export contracts', () => {
 
     expect(authoringSkill).toBeDefined();
     expect(authoringSkill?.content).toContain(
-      'A completed source storyboard creative table must already exist before Canvas handoff.',
+      'A completed canonical source Storyboard must already exist before explicit professional structured authoring.',
     );
     expect(authoringSkill?.content).toContain(
-      'The source storyboard table must be visible as an assistant Markdown block or UI handoff source.',
+      'A source Storyboard used for structured authoring must be visible as an assistant Markdown block or UI handoff source.',
     );
     expect(authoringSkill?.content).toContain(
       'Do not use Canvas handoff to skip comic/page visual analysis or storyboard table generation.',
     );
     expect(authoringSkillZh?.content).toContain(
-      'Canvas handoff 前，必须已经存在完成的来源分镜 creative table。',
+      '明确执行专业结构化 authoring 前，必须已经存在完成的 canonical 来源 Storyboard。',
     );
     expect(authoringSkillZh?.content).toContain(
-      '来源分镜表必须是可见 assistant Markdown 块或 UI handoff 来源。',
+      '用于结构化 authoring 的来源 Storyboard 必须是可见 assistant Markdown 块或 UI handoff 来源',
     );
     expect(authoringSkillZh?.content).toContain(
       '不要用 Canvas handoff 跳过漫画/页面视觉分析或分镜表生成。',
@@ -1183,9 +1184,12 @@ describe('agentCapabilityProvider storyboard export contracts', () => {
     expect(authoringSkill?.content).toContain('Inspect the Canvas-owned authoring catalog');
     expect(authoringSkill?.content).toContain('scene and shot nodes');
     expect(authoringSkill?.content).toContain(
-      '"Send as Markdown" means Markdown is the source format/transport',
+      'Markdown is the default unspecified Storyboard result.',
     );
-    expect(authoringSkill?.content).toContain('review-only Canvas ingestion');
+    expect(authoringSkill?.content).toContain('requires explicit user intent');
+    expect(authoringSkill?.content).toContain(
+      'Use structured scene/shot authoring only when the user explicitly asks',
+    );
     expect(authoringSkill?.content).toContain('prompt-first');
     expect(authoringSkill?.content).toContain('Semantic Prompt Document');
     expect(authoringSkill?.content).toContain('videoPrompt is scene-scoped');
@@ -1208,12 +1212,11 @@ describe('agentCapabilityProvider storyboard export contracts', () => {
     expect(authoringSkill?.content).toContain('# Canvas Authoring');
     expect(authoringSkill?.content).toContain('先查看 Canvas 拥有的 authoring catalog');
     expect(authoringSkill?.content).toContain(
-      '完成的分镜 creative table 应成为 Canvas scene 和 shot 节点',
+      '未指定结构化创作的分镜探索、分析、规划、方案和初稿保持为普通 Markdown 文档内容',
     );
-    expect(authoringSkill?.content).toContain(
-      '“作为 Markdown/Markdown 发送”表示 Markdown 是来源格式/传输格式',
-    );
-    expect(authoringSkill?.content).toContain('review-only Canvas 摄入');
+    expect(authoringSkill?.content).toContain('必须有用户明确意图');
+    expect(authoringSkill?.content).toContain('Markdown 是未指定分镜请求的默认结果');
+    expect(authoringSkill?.content).toContain('只有用户明确要求创建或更新专业结构化 Storyboard');
     expect(authoringSkill?.content).toContain('prompt-first');
     expect(authoringSkill?.content).not.toContain('canvas.createStoryboardFromMarkdown');
     expect(authoringSkill?.content).not.toContain('canvas.ingestMarkdown');

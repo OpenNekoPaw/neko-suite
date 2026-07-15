@@ -31,7 +31,7 @@ export interface GeneratedAssetIndexStore {
   ): Promise<readonly GeneratedAsset[]>;
 }
 
-interface GeneratedDraftProjectionPayload {
+interface GeneratedOutputProjectionPayload {
   readonly version: 1;
   readonly asset: PathlessGeneratedAsset;
   readonly pathKey: string;
@@ -51,8 +51,10 @@ export interface ResourceCacheGeneratedAssetIndexBinding {
 }
 
 const INDEX_FILE_NAME = 'index.json';
-const GENERATED_DRAFT_INDEX_PROVIDER = 'generated-draft-index';
-const GENERATED_DRAFT_PROJECTION_FIELD = 'generatedDraftProjection';
+const GENERATED_OUTPUT_INDEX_PROVIDER = 'generated-output-index';
+const GENERATED_OUTPUT_PROJECTION_FIELD = 'generatedOutputProjection';
+const LEGACY_GENERATED_DRAFT_INDEX_PROVIDER = 'generated-draft-index';
+const LEGACY_GENERATED_DRAFT_PROJECTION_FIELD = 'generatedDraftProjection';
 
 export class ResourceCacheGeneratedAssetIndexStore implements GeneratedAssetIndexStore {
   private readonly now: () => string;
@@ -99,7 +101,7 @@ export class ResourceCacheGeneratedAssetIndexStore implements GeneratedAssetInde
 
   private encodeEntry(asset: GeneratedAsset): ResourceCacheEntry {
     const pathKey = this.toPortablePathKey(asset.path);
-    const projection: GeneratedDraftProjectionPayload = {
+    const projection: GeneratedOutputProjectionPayload = {
       version: 1,
       asset: stripGeneratedAssetPath(asset),
       pathKey,
@@ -114,9 +116,9 @@ export class ResourceCacheGeneratedAssetIndexStore implements GeneratedAssetInde
     const projectRelativePath = this.toProjectRelativePath(pathKey);
     return {
       resource: {
-        id: `generated-draft:${asset.id}`,
+        id: `generated-output:${asset.id}`,
         scope: 'project',
-        provider: GENERATED_DRAFT_INDEX_PROVIDER,
+        provider: GENERATED_OUTPUT_INDEX_PROVIDER,
         kind: 'generated',
         source: {
           kind: 'generated-asset',
@@ -133,14 +135,14 @@ export class ResourceCacheGeneratedAssetIndexStore implements GeneratedAssetInde
       createdAt: asset.generatedAt,
       updatedAt: this.now(),
       status: 'ready',
-      providerMetadata: { [GENERATED_DRAFT_PROJECTION_FIELD]: projection },
+      providerMetadata: { [GENERATED_OUTPUT_PROJECTION_FIELD]: projection },
     };
   }
 
   private decodeEntry(entry: ResourceCacheEntry): GeneratedAsset | null {
     if (!this.isProjectionEntry(entry)) return null;
-    const projection = entry.providerMetadata?.[GENERATED_DRAFT_PROJECTION_FIELD];
-    if (!isGeneratedDraftProjectionPayload(projection)) return null;
+    const projection = readGeneratedOutputProjection(entry);
+    if (!projection) return null;
     const assetPath = this.resolvePathKey(projection.pathKey);
     switch (projection.asset.type) {
       case 'generated-image':
@@ -180,9 +182,11 @@ export class ResourceCacheGeneratedAssetIndexStore implements GeneratedAssetInde
 
   private isProjectionEntry(entry: ResourceCacheEntry): boolean {
     return (
-      entry.resource.provider === GENERATED_DRAFT_INDEX_PROVIDER &&
       entry.resource.kind === 'generated' &&
-      entry.providerMetadata?.[GENERATED_DRAFT_PROJECTION_FIELD] !== undefined
+      ((entry.resource.provider === GENERATED_OUTPUT_INDEX_PROVIDER &&
+        entry.providerMetadata?.[GENERATED_OUTPUT_PROJECTION_FIELD] !== undefined) ||
+        (entry.resource.provider === LEGACY_GENERATED_DRAFT_INDEX_PROVIDER &&
+          entry.providerMetadata?.[LEGACY_GENERATED_DRAFT_PROJECTION_FIELD] !== undefined))
     );
   }
 
@@ -379,6 +383,7 @@ export async function createResourceCacheGeneratedAssetIndex(options: {
     ...(options.now ? { now: options.now } : {}),
   });
   const index = new GeneratedAssetIndex(store);
+  await store.update((assets) => assets);
   await index.load();
   return { index, migrationReport };
 }
@@ -416,9 +421,9 @@ function isGeneratedAssetIndexStore(value: unknown): value is GeneratedAssetInde
   );
 }
 
-function isGeneratedDraftProjectionPayload(
+function isGeneratedOutputProjectionPayload(
   value: unknown,
-): value is GeneratedDraftProjectionPayload {
+): value is GeneratedOutputProjectionPayload {
   return (
     isRecord(value) &&
     value['version'] === 1 &&
@@ -431,6 +436,18 @@ function isGeneratedDraftProjectionPayload(
           (scene) => Array.isArray(scene) && scene.every(isPortablePathKey),
         )))
   );
+}
+
+function readGeneratedOutputProjection(
+  entry: ResourceCacheEntry,
+): GeneratedOutputProjectionPayload | undefined {
+  const value =
+    entry.resource.provider === GENERATED_OUTPUT_INDEX_PROVIDER
+      ? entry.providerMetadata?.[GENERATED_OUTPUT_PROJECTION_FIELD]
+      : entry.resource.provider === LEGACY_GENERATED_DRAFT_INDEX_PROVIDER
+        ? entry.providerMetadata?.[LEGACY_GENERATED_DRAFT_PROJECTION_FIELD]
+        : undefined;
+  return isGeneratedOutputProjectionPayload(value) ? value : undefined;
 }
 
 function isGeneratedAsset(value: unknown): value is GeneratedAsset {

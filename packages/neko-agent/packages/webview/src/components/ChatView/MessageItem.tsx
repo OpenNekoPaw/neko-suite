@@ -32,9 +32,6 @@ import {
   projectMessageContextReferenceToken,
 } from '@/presenters/reference-token-presenter';
 import { AgentHostMessages } from '@/messages';
-import { SendToMenu } from '@/components/ChatView/SendToMenu';
-import { projectCanvasContentTransferTarget } from '@/presenters/plugin-transfer-presenter';
-import { projectCanvasMarkdownHandoffRequest } from '@/presenters/canvas-markdown-handoff-presenter';
 import { projectMarkdownResourceRendering } from '@/presenters/markdown-resource-rendering-presenter';
 import {
   DEFAULT_MESSAGE_IDENTITIES,
@@ -133,7 +130,6 @@ function ContentBlockRenderer({
   conversationId,
   messageId,
   workItemIds,
-  pluginsAvailable,
   contextChips,
   ambientNodes,
   onAcceptDiff,
@@ -143,7 +139,6 @@ function ContentBlockRenderer({
   conversationId: string | null;
   messageId: string;
   workItemIds?: string[];
-  pluginsAvailable?: PluginsAvailable;
   contextChips?: ReturnType<typeof useMessageActions>['contextChips'];
   ambientNodes?: ReturnType<typeof useMessageActions>['ambientNodes'];
   onAcceptDiff?: (filePath: string) => void;
@@ -175,17 +170,6 @@ function ContentBlockRenderer({
             ambientNodes,
           })
         : undefined;
-      const canvasMarkdownHandoff =
-        !projection.renderStreaming && pluginsAvailable?.canvas
-          ? projectCanvasMarkdownHandoffRequest({
-              markdown: projection.content,
-              markdownResources,
-              target: projectCanvasContentTransferTarget({ ambientNodes, contextChips }),
-              provenance: { source: 'webview', label: 'assistant-markdown-block' },
-              title: 'Assistant Markdown',
-            })
-          : null;
-
       return (
         <div className="agent-bubble agent-bubble-assistant block w-fit max-w-full min-w-0 rounded-2xl rounded-tl-md px-2.5 py-1.5 text-[13px] leading-relaxed">
           <MarkdownRenderer
@@ -198,17 +182,6 @@ function ContentBlockRenderer({
               itemId: projection.id,
             })}
           />
-          {canvasMarkdownHandoff && pluginsAvailable && (
-            <div className="mt-1.5 flex flex-wrap gap-1.5 border-t border-[var(--agent-divider)] pt-1">
-              <SendToMenu
-                canvasMarkdownHandoff={canvasMarkdownHandoff}
-                conversationId={conversationId}
-                mediaType="image"
-                plugins={pluginsAvailable}
-                allowedTargets={['canvas']}
-              />
-            </div>
-          )}
         </div>
       );
     }
@@ -316,7 +289,6 @@ function AssistantContentBlocks({
               conversationId={conversationId}
               messageId={message.id}
               workItemIds={message.workItemIds}
-              pluginsAvailable={pluginsAvailable}
               contextChips={contextChips}
               ambientNodes={ambientNodes}
               onAcceptDiff={onAcceptDiff}

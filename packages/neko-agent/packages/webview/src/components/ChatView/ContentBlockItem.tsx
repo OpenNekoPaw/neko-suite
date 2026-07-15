@@ -21,9 +21,7 @@ import { useMessageActions } from '@/components/ChatView/MessageActionsContext';
 import { SendToMenu } from '@/components/ChatView/SendToMenu';
 import { useTranslation } from '@/i18n/I18nContext';
 import { AgentHostMessages } from '@/messages';
-import { projectCanvasContentTransferTarget } from '@/presenters/plugin-transfer-presenter';
 import { projectCanonicalStoryboardCanvasAuthoringHandoff } from '@/presenters/storyboard-transfer-presenter';
-import { projectCanvasMarkdownHandoffRequest } from '@/presenters/canvas-markdown-handoff-presenter';
 import { projectMarkdownResourceRendering } from '@/presenters/markdown-resource-rendering-presenter';
 import {
   formatCanvasLifecycleActionLabel,
@@ -242,22 +240,6 @@ function renderBlockContent(
               siblingBlocks: projection.siblingBlocks,
             })
           : null;
-      const canvasMarkdownHandoff =
-        !canonicalStoryboardHandoff &&
-        !projection.renderStreaming &&
-        callbacks.pluginsAvailable?.canvas
-          ? projectCanvasMarkdownHandoffRequest({
-              markdown: projection.content,
-              markdownResources,
-              target: projectCanvasContentTransferTarget({
-                ambientNodes: callbacks.ambientNodes,
-                contextChips: callbacks.contextChips,
-              }),
-              provenance: { source: 'webview', label: 'assistant-markdown-block' },
-              title: 'Assistant Markdown',
-            })
-          : null;
-
       return (
         <div className="agent-bubble agent-bubble-assistant block w-fit max-w-full min-w-0 rounded-2xl rounded-tl-md px-2.5 py-1.5 text-[13px] leading-relaxed">
           <MarkdownRenderer
@@ -274,11 +256,10 @@ function renderBlockContent(
               itemId: projection.id,
             })}
           />
-          {(canonicalStoryboardHandoff || canvasMarkdownHandoff) && callbacks.pluginsAvailable && (
+          {canonicalStoryboardHandoff && callbacks.pluginsAvailable && (
             <div className="mt-1.5 flex flex-wrap gap-1.5 border-t border-[var(--agent-divider)] pt-1">
               <SendToMenu
                 canvasAuthoringHandoff={canonicalStoryboardHandoff ?? undefined}
-                canvasMarkdownHandoff={canvasMarkdownHandoff ?? undefined}
                 conversationId={conversationId}
                 mediaType="image"
                 plugins={callbacks.pluginsAvailable}

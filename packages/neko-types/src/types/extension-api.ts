@@ -22,6 +22,7 @@ import type {
   CanvasAgentActiveContextResult,
   CanvasAgentApplyContentResult,
   CanvasAgentContentPayload,
+  CanvasAgentProvenance,
   CanvasCreateCompositeRequest,
   CanvasCreateCompositeResult,
   CanvasCreateConnectionRequest,
@@ -33,6 +34,14 @@ import type {
   CanvasUpdateBlockRequest,
   CanvasUpdateBlockResult,
 } from './canvas-agent-operations';
+import type {
+  CanvasBoardDeliveryRequest,
+  CanvasBoardDeliveryResult,
+  CanvasBoardQuery,
+  CanvasBoardQueryResult,
+  CanvasBoardResolutionInput,
+  CanvasBoardResolutionResult,
+} from './canvas-board-routing';
 import type { CanvasHeadlessAuthoringTarget } from './canvas-headless-authoring';
 import type {
   CanvasMarkdownCapabilityInput,
@@ -335,6 +344,7 @@ export interface CanvasImportAssetRequest {
   readonly resourceRef?: ResourceRef;
   readonly target?: CanvasHeadlessAuthoringTarget;
   readonly position?: { readonly x: number; readonly y: number };
+  readonly provenance?: CanvasAgentProvenance;
 }
 
 export interface CanvasImportAssetResult {
@@ -441,6 +451,13 @@ export interface NekoCanvasAPI {
 
   /** Explicit-target, Webview-independent durable .nkc authoring. */
   readonly authoring: NekoCanvasAuthoringAPI;
+
+  /** Canvas-owned query and deterministic resolution for ordinary Board `.nkc` documents. */
+  readonly boards: {
+    query(query: CanvasBoardQuery): Promise<CanvasBoardQueryResult>;
+    resolve(input: CanvasBoardResolutionInput): Promise<CanvasBoardResolutionResult>;
+    deliver(input: CanvasBoardDeliveryRequest): Promise<CanvasBoardDeliveryResult>;
+  };
 
   canvas: {
     /**

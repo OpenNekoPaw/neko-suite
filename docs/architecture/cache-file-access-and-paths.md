@@ -351,6 +351,10 @@ Generated 输出需要先按“用户是否可见、是否确认保留、删除�
 
 同一 `ResourceRef` 可以有多个 variant。比如一个 PDF 页面可以派生 `thumbnail`、`page-image` 和 OCR sidecar；一个视频 source 可以派生 `thumbnail`、`proxy` 和 preview clip。variant 可以删除和重建，source identity 不能被 variant path 替代。
 
+图片 source 不因 UI 或 Agent 需要完整查看而复制进 ResourceCache。未变换的完整图片通过 Host 授权后的 source bytes、local path 或 Webview URI 投影访问；`thumbnail` 必须是带明确尺寸边界并经过缩放/转码的派生物。若 Host 缺少图片变体生成能力，thumbnail 请求应返回 diagnostic，不得把原图复制到缓存并伪装为成功。`preview` 只有在发生限尺寸、转码、裁切或其他可验证变换时才进入缓存，否则走 source projection。
+
+视频 thumbnail 是抽取并缩放后的代表帧；文档 `page-image` / `document-entry` 是从容器或页面定位物化的独立派生内容。这两类内容即使视觉上是图片，也不同于复制一个已经独立存在的图片 source。
+
 Generated source asset 本身不是 ResourceCache variant。ResourceCache 只允许保存 generated source 的派生 variant，例如 thumbnail、preview、proxy 或 probe metadata。需要长期使用的 generated source 必须先成为 AssetStore/GeneratedAssetStore 管理的正式 source，再通过该 source 创建派生 variant。
 
 ## 缓存生命周期

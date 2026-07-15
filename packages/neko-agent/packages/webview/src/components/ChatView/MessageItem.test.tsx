@@ -101,7 +101,7 @@ describe('MessageItem tool aggregation', () => {
     expect(screen.queryByRole('button', { name: /Canvas/ })).toBeNull();
   });
 
-  it('renders Canvas handoff on canonical storyboard creative table messages', () => {
+  it('does not show generic Canvas handoff on storyboard Markdown messages', () => {
     renderMessageItem({
       message: createMessage({
         role: 'assistant',
@@ -119,7 +119,7 @@ describe('MessageItem tool aggregation', () => {
       pluginsAvailable: { canvas: true },
     });
 
-    expect(screen.getByRole('button', { name: /Canvas/ })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Canvas/ })).toBeNull();
   });
 
   it('does not render Canvas handoff for empty storyboard skeletons or metadata tables', () => {

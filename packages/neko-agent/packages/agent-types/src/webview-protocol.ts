@@ -731,6 +731,8 @@ export type AgentSessionDiagnosticCode =
   | 'stale-tab-state-revision'
   | 'invalid-conversation-activation'
   | 'queued-edit-draft-conflict'
+  | 'canvas-board-routing-failed'
+  | 'canvas-board-delivery-failed'
   | 'projection-attachment-protocol-fatal';
 
 export interface AgentSessionDiagnosticMessage {

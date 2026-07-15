@@ -49,6 +49,7 @@ import {
 } from './entityMemoryContributionAutomation';
 import { projectValueForWebviewResourceDisplay } from './webviewResourceProjection';
 import { getLogger } from '../../base';
+import type { AgentCanvasBoardWorkSession } from '../../services/agentCanvasBoardWorkRuntime';
 
 const logger = getLogger('AgentStreamProcessor');
 
@@ -68,6 +69,7 @@ interface MediaUnderstandingModelOverrides {
  * conversation projection and delivered independently by Tab attachments.
  */
 export interface StreamProcessingResult {
+  messageId: string;
   accumulatedResponse: string;
   accumulatedThinking: string;
   hasError: boolean;
@@ -167,6 +169,7 @@ export class AgentStreamProcessor {
     conversationId: string,
     events: AsyncIterable<AgentEvent>,
     callbacks: StreamCallbacks,
+    canvasBoardWork?: AgentCanvasBoardWorkSession,
   ): Promise<StreamProcessingResult> {
     const media = this.deps.platform?.media;
     const conversationProjection = this.deps.getConversationProjection(conversationId);
@@ -291,6 +294,12 @@ export class AgentStreamProcessor {
               understandingModels: readMediaTaskUnderstandingModels(task),
             });
           }
+          if (delivery.deliveryPlan.generatedAssets.length > 0) {
+            await canvasBoardWork?.deliverGeneratedAssets(
+              context.taskId,
+              delivery.deliveryPlan.generatedAssets,
+            );
+          }
           return {
             progress: delivery.view,
             deliveryPlan: delivery.deliveryPlan,
@@ -345,6 +354,7 @@ export class AgentStreamProcessor {
 
     return {
       ...result,
+      messageId: callbacks.messageId,
       terminalStatus: result.terminalStatus,
     };
   }

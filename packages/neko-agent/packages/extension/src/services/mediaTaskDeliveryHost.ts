@@ -7,6 +7,7 @@
  */
 
 import * as vscode from 'vscode';
+import * as path from 'node:path';
 import type { Platform } from '@neko/platform';
 import {
   resolveWorkspaceGeneratedAssetRelativeDirectory,
@@ -138,15 +139,31 @@ export class MediaTaskDeliveryHost {
   ) {
     const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
     const mediaConfig = vscode.workspace.getConfiguration(MEDIA_TASK_DELIVERY_CONFIG_SECTION);
+    const defaultOutputDir = workspaceFolder
+      ? resolveGeneratedOutputDir(workspaceFolder.uri.fsPath, taskType)
+      : undefined;
+    const configuredOutputDir = mediaConfig.get<string>(
+      MEDIA_TASK_OUTPUT_DIR_SETTING_KEY,
+      DEFAULT_MEDIA_TASK_CONFIGURED_OUTPUT_DIR,
+    );
+    const durableConfiguredOutputDir =
+      workspaceFolder && defaultOutputDir
+        ? resolveDurableConfiguredOutputDir(
+            workspaceFolder.uri.fsPath,
+            defaultOutputDir,
+            configuredOutputDir,
+          )
+        : undefined;
+    if (configuredOutputDir && !durableConfiguredOutputDir) {
+      logger.warn('Rejected generated output directory outside the canonical durable root', {
+        configuredOutputDir,
+        requiredRoot: defaultOutputDir,
+      });
+    }
     const settingsPlan = buildMediaTaskDeliverySettingsPlan({
       workspaceRoot: workspaceFolder?.uri.fsPath,
-      defaultOutputDir: workspaceFolder
-        ? resolveGeneratedOutputDir(workspaceFolder.uri.fsPath, taskType)
-        : undefined,
-      configuredOutputDir: mediaConfig.get<string>(
-        MEDIA_TASK_OUTPUT_DIR_SETTING_KEY,
-        DEFAULT_MEDIA_TASK_CONFIGURED_OUTPUT_DIR,
-      ),
+      defaultOutputDir,
+      configuredOutputDir: durableConfiguredOutputDir,
       configuredShowSaveNotification: mediaConfig.get<boolean>(
         MEDIA_TASK_SHOW_SAVE_NOTIFICATION_SETTING_KEY,
         DEFAULT_MEDIA_TASK_SHOW_SAVE_NOTIFICATION,
@@ -187,6 +204,20 @@ export class MediaTaskDeliveryHost {
       },
     };
   }
+}
+
+function resolveDurableConfiguredOutputDir(
+  workspaceRoot: string,
+  canonicalRoot: string,
+  configuredOutputDir: string,
+): string | undefined {
+  const trimmed = configuredOutputDir.trim();
+  if (!trimmed) return undefined;
+  const resolved = path.resolve(workspaceRoot, trimmed);
+  const relative = path.relative(canonicalRoot, resolved);
+  return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative))
+    ? resolved
+    : undefined;
 }
 
 function resolveGeneratedOutputDir(

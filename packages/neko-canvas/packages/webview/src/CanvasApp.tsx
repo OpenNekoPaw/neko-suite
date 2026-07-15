@@ -76,6 +76,7 @@ import { appendSelectedGenerationCandidate } from './utils/generationHistory';
 import { getGlobalVSCodeApi } from './utils/vscode';
 import { createBuiltInWebviewSubsystemRegistry } from './subsystems';
 import { createStoryboardNodeTypeDescriptors } from './subsystems/storyboard/descriptors';
+import { createBasicNodeLibraryDescriptors } from './subsystems/basicNodeLibraryCatalog';
 import type { FloatingPanelDefinition } from './subsystems';
 import type { NodeTypeDescriptorRegistry } from './components/nodes/nodeTypeDescriptor';
 import { DEFAULT_RUNTIME_VIEWPORT } from './stores/runtimeViewportStore';
@@ -109,7 +110,6 @@ const DEFAULT_CANVAS_DATA: CanvasData = {
 };
 
 const WEBVIEW_SUBSYSTEM_REGISTRY = createBuiltInWebviewSubsystemRegistry();
-const BASIC_CANVAS_SUBSYSTEM_IDS: readonly CanvasSubsystemId[] = ['storyboard'];
 const logger = getLogger('CanvasApp');
 type CanvasRightDockMode = 'basic' | 'professional';
 
@@ -402,15 +402,14 @@ export function CanvasApp() {
     () => WEBVIEW_SUBSYSTEM_REGISTRY.getCoreNodeTypeDescriptors(),
     [],
   );
-  const basicNodeLibrarySubsystemManifests = useMemo(
+  const basicNodeLibraryDescriptors = useMemo(
     () =>
-      BASIC_CANVAS_SUBSYSTEM_IDS.flatMap((id) => {
-        const manifest = WEBVIEW_SUBSYSTEM_REGISTRY.getManifest(id);
-        return manifest ? [manifest] : [];
-      }),
-    [],
+      createBasicNodeLibraryDescriptors(
+        coreNodeTypeDescriptors,
+        createStoryboardNodeTypeDescriptors(),
+      ),
+    [coreNodeTypeDescriptors],
   );
-  const basicNodeLibraryDescriptors = useMemo(() => createStoryboardNodeTypeDescriptors(), []);
 
   useEffect(() => {
     let cancelled = false;
@@ -2033,16 +2032,16 @@ export function CanvasApp() {
                 },
                 children: (
                   <NodeLibraryPanel
-                    coreDescriptors={coreNodeTypeDescriptors}
-                    subsystemManifests={
+                    coreDescriptors={
                       rightDockMode === 'professional'
-                        ? WEBVIEW_SUBSYSTEM_REGISTRY.manifests
-                        : basicNodeLibrarySubsystemManifests
+                        ? coreNodeTypeDescriptors
+                        : basicNodeLibraryDescriptors
+                    }
+                    subsystemManifests={
+                      rightDockMode === 'professional' ? WEBVIEW_SUBSYSTEM_REGISTRY.manifests : []
                     }
                     nodeTypeDescriptors={
-                      rightDockMode === 'professional'
-                        ? subsystemNodeTypeDescriptors
-                        : basicNodeLibraryDescriptors
+                      rightDockMode === 'professional' ? subsystemNodeTypeDescriptors : {}
                     }
                     activeSubsystemIds={rightDockMode === 'professional' ? activeSubsystemIds : []}
                     onCreateNode={handleCreateLibraryNode}

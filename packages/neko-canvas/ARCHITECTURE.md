@@ -8,6 +8,8 @@
 
 neko-canvas 是 Neko Suite 的可视化编排工具。以 VSCode CustomEditor 方式打开 `.nkc` 画布文件，提供无限画布上的节点摆放、连接、媒体内联播放、分镜生成审阅、上下文引用组织等能力。它也是连接 neko-agent、neko-story、neko-sketch、neko-cut 的语义中枢。
 
+`neko/boards/*.nkc` 不构成新文档类型。Canvas Extension 拥有该目录的索引、解析、创建和 revision-checked authoring；Agent 只消费 `NekoCanvasAPI.boards` 的安全摘要与不可变写入目标。未指定目标时不允许退回活动/最近/专业目录 Canvas，也不允许 Agent 解析或直接写 `.nkc`。
+
 Canvas 编辑与预览共享同一个 `neko.canvasEditor` Webview。播放预览不是第二个独立 Webview，而是 Canvas Editor Webview 内的 `PlaybackWorkspace`：上方可显示/隐藏画布区与预览播放区，下方可显示/隐藏 Canvas 预览路线条。该决策遵循系统级 ADR：[`../../docs/architecture/adr-canvas-cut-playback-route-and-timeline-boundary.md`](../../docs/architecture/adr-canvas-cut-playback-route-and-timeline-boundary.md)。
 
 旧的 `openNarrativePreview` 命令只保留为迁移 shim，行为必须转发到 `neko.canvas.revealPlaybackWorkspace` / `playback:revealWorkspace`，不得再作为独立 Canvas Preview Webview 的成功路径。`NarrativePreviewBridge` 只允许作为迁移来源、协议测试对象和后续删除候选；owner 为 `neko-canvas`，移除条件是同 Webview `PlaybackWorkspace` 覆盖 narrative/media route 渲染与真实 VS Code Webview 功能场景，验证命令至少包括 `pnpm --dir packages/neko-canvas exec vitest run packages/extension/src/__tests__/protocol.test.ts` 和聚焦 `pnpm test:webview:functional` 场景。
@@ -102,6 +104,8 @@ packages/neko-canvas/
 ---
 
 ## 节点系统
+
+Canvas Basic/Professional 共用下列节点 schema 与 renderer。Basic 仅把右侧创建目录投影为 Media、Annotation、Group、Text、Artboard、Script 和 Document 等基础入口；已有 Storyboard/Scene/Shot/Gallery 等节点仍正常渲染。Professional 继续组合完整子系统目录。
 
 ### 支持的节点类型
 

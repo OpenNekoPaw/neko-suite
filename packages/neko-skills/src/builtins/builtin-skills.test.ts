@@ -162,6 +162,23 @@ describe('@neko/skills builtins', () => {
     );
   });
 
+  it('keeps locale-neutral portable package identity when localizing content', () => {
+    const english = getBuiltinSkills({ locale: 'en-US' }).find(
+      (skill) => skill.name === 'storyboard',
+    );
+    const localized = getBuiltinSkills({ locale: 'zh-CN' }).find(
+      (skill) => skill.name === 'storyboard',
+    );
+
+    expect(localized?.content).not.toBe(english?.content);
+    expect(localized?.portableDefinition).toEqual({
+      name: english?.name,
+      description: english?.description,
+      body: english?.content,
+      allowedTools: english?.allowedTools,
+    });
+  });
+
   it('projects localized builtin skill descriptions into runtime skill definitions', () => {
     const zhCnSkills = getBuiltinSkills({ locale: 'zh-CN' });
 
@@ -187,14 +204,16 @@ describe('@neko/skills builtins', () => {
     expect(english).toContain(
       'Metadata, thumbnails, filenames, dimensions, and page labels alone are not visual evidence.',
     );
-    expect(english).toContain('do not invent or output a Storyboard table');
+    expect(english).toContain('avoid authoritative panel/shot claims');
+    expect(english).toContain('partial Markdown review');
     expect(english).not.toContain('ReadDocument');
     expect(english).not.toContain('ReadImage');
     expect(english).not.toContain('QuerySemanticCoverage');
 
     expect(zhCn).toContain('实际像素级视觉证据、OCR 或分格边界');
     expect(zhCn).toContain('metadata、缩略图、文件名、尺寸和页码本身不是视觉证据。');
-    expect(zhCn).toContain('不得编造或输出分镜表');
+    expect(zhCn).toContain('不得给出权威分格/镜头断言');
+    expect(zhCn).toContain('仍可用 Markdown 保留已知来源事实');
     expect(zhCn).not.toContain('ReadDocument');
     expect(zhCn).not.toContain('ReadImage');
     expect(zhCn).not.toContain('QuerySemanticCoverage');
@@ -229,21 +248,21 @@ describe('@neko/skills builtins', () => {
     expect(zhCn).toContain('`videoPrompt` 是 scene 级字段');
   });
 
-  it('keeps Canvas handoff after the canonical review projection', () => {
+  it('defaults to flexible Markdown and gates structured Storyboard authoring on explicit intent', () => {
     const english = storyboardSkill.content;
     const zhCn = getBuiltinSkills({ locale: 'zh-CN' }).find(
       (skill) => skill.name === 'storyboard',
     )?.content;
 
-    expect(english).toContain(
-      'Finish the single reviewable Storyboard projection before any requested Canvas handoff.',
-    );
-    expect(english).toContain('Canvas authoring cannot replace the initial Storyboard review');
+    expect(english).toContain('Default to one reviewable Markdown document.');
+    expect(english).toContain('Only explicit professional structured authoring');
+    expect(english).toContain('without requiring fixed columns');
     expect(english).not.toContain('canvas.createStoryboardFromMarkdown');
     expect(english).not.toContain('canvas.ingestMarkdown');
 
-    expect(zhCn).toContain('必须先完成唯一的可审阅 Storyboard 投影');
-    expect(zhCn).toContain('Canvas authoring 也不能替代首次分镜审阅');
+    expect(zhCn).toContain('默认产出一份可审阅的普通 Markdown 文档');
+    expect(zhCn).toContain('只有明确的专业结构化 authoring');
+    expect(zhCn).toContain('不强制固定列');
     expect(zhCn).not.toContain('canvas.createStoryboardFromMarkdown');
     expect(zhCn).not.toContain('canvas.ingestMarkdown');
   });

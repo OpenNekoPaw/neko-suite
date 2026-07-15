@@ -303,6 +303,7 @@ function runBoundaryCheck() {
       findings.push(...findWebviewReExportShimViolations(scope, file, content));
       findings.push(...findHostNeutralResidualViolations(scope, file, content));
       findings.push(...findAgentContentAccessResidualViolations(scope, file, content));
+      findings.push(...findCanvasBoardRetiredPathViolations(scope, file, content));
     }
   }
   findings.push(...findLegacyCentralizedToolRegistrationViolations());
@@ -427,6 +428,14 @@ function runSelfTest() {
       content: "const args = { image_paths: ['/tmp/page.png'] };\n",
       expectedRuleIds: ['agent-no-content-access-residuals'],
     },
+    {
+      name: 'Canvas Board runtime cannot restore retired active/raw/structured fallbacks',
+      scope: 'extension',
+      file: fakeFile('extension', 'src/services/agentCanvasBoardLegacy.ts'),
+      content:
+        "import { writeFile } from 'node:fs/promises';\nconst target = activeCanvas ?? recentCanvas;\nvoid requestCanvasAuthoringHandoff(target);\nvoid canvas_create_node(target);\nvoid writeFile('board.nkc', '{}');\n",
+      expectedRuleIds: ['extension-no-retired-canvas-board-path'],
+    },
   ];
 
   const failures = [];
@@ -437,6 +446,7 @@ function runSelfTest() {
       ...findWebviewReExportShimViolations(testCase.scope, testCase.file, testCase.content),
       ...findHostNeutralResidualViolations(testCase.scope, testCase.file, testCase.content),
       ...findAgentContentAccessResidualViolations(testCase.scope, testCase.file, testCase.content),
+      ...findCanvasBoardRetiredPathViolations(testCase.scope, testCase.file, testCase.content),
     ];
     const actualIds = [...new Set(violations.map((violation) => violation.ruleId))].sort();
     const expectedIds = [...testCase.expectedRuleIds].sort();
@@ -1285,6 +1295,44 @@ function findAgentContentAccessResidualViolations(scope, file, content) {
     });
   }
   return violations;
+}
+
+function findCanvasBoardRetiredPathViolations(scope, file, content) {
+  if (scope !== 'extension') {
+    return [];
+  }
+  const relativeFile = relative(repoRoot, file).replaceAll('\\', '/');
+  if (
+    !/\/services\/agentCanvasBoard[^/]*\.ts$/u.test(relativeFile) ||
+    /\.test\.ts$/u.test(relativeFile)
+  ) {
+    return [];
+  }
+  const forbiddenPatterns = [
+    /\bactiveCanvas\b/u,
+    /\brecentCanvas\b/u,
+    /\bprofessionalCanvas\b/u,
+    /\bsendToCanvas\b/u,
+    /\blegacyStoryboardCompiler\b/u,
+    /\brequestCanvasAuthoringHandoff\b/u,
+    /\bcanvas_create_(?:node|composite)\b/u,
+    /\bcanvas\.(?:ingestMarkdown|createStoryboardFromMarkdown)\b/u,
+    /from\s+['"]node:fs(?:\/promises)?['"]/u,
+    /\b(?:writeFile|appendFile|rename|copyFile)\s*\(/u,
+  ];
+  const matched = forbiddenPatterns.filter((pattern) => pattern.test(content));
+  if (matched.length === 0) {
+    return [];
+  }
+  return [
+    {
+      ruleId: 'extension-no-retired-canvas-board-path',
+      file: relativeFile,
+      specifier: matched.map((pattern) => pattern.source).join(', '),
+      reason:
+        'Canvas Board runtime must use public resolver/delivery contracts and cannot restore active/recent targets, generic Send-to-Canvas, structured Storyboard fallback, or raw .nkc mutation.',
+    },
+  ];
 }
 
 function isTestOrFixtureFile(relativeFile) {

@@ -282,13 +282,13 @@ describe('Canvas creative workbench layout boundary', () => {
     expect(appSource).not.toMatch(/nodeTreeMode=\{rightDockMode\}/);
     expect(canvasSettingsPanelSource).not.toMatch(/settings\.nodeTree/);
     expect(canvasSettingsPanelSource).not.toMatch(/canvas-right-node-tree-panel/);
-    expect(appSource).toMatch(
-      /const BASIC_CANVAS_SUBSYSTEM_IDS: readonly CanvasSubsystemId\[] = \['storyboard'\]/,
-    );
-    expect(appSource).toMatch(/basicNodeLibrarySubsystemManifests/);
+    expect(appSource).not.toMatch(/BASIC_CANVAS_SUBSYSTEM_IDS/);
     expect(appSource).toMatch(/basicNodeLibraryDescriptors/);
     expect(appSource).toMatch(
-      /rightDockMode === 'professional'\s*\?\s*WEBVIEW_SUBSYSTEM_REGISTRY\.manifests\s*:\s*basicNodeLibrarySubsystemManifests/,
+      /rightDockMode === 'professional'\s*\?\s*WEBVIEW_SUBSYSTEM_REGISTRY\.manifests\s*:\s*\[\]/,
+    );
+    expect(appSource).toMatch(
+      /rightDockMode === 'professional'\s*\?\s*coreNodeTypeDescriptors\s*:\s*basicNodeLibraryDescriptors/,
     );
     expect(appSource).toMatch(/<NodeLibraryPanel/);
     expect(appSource).toMatch(/'data-canvas-right-node-tree': 'true'/);
